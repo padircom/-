@@ -1,0 +1,304 @@
+@import "tailwindcss";
+
+/* ══════════════════════════════════════════════════════════════
+   THEME VARIABLE ENGINE
+   data-theme="dark"  → Lightened Royal Blue #2E3D70 executive canvas
+   data-theme="light" → premium high-contrast light canvas
+   ══════════════════════════════════════════════════════════════ */
+:root,
+html[data-theme="dark"] {
+  --bg-glow-a: #4a5ea8;
+  --bg-glow-b: #3a4c8f;
+  --bg-a: #2e3d70;
+  --bg-b: #263258;
+  --bg-c: #1d2748;
+
+  --ink: #eef2fd;
+  --ink2: rgba(238, 242, 253, 0.85);
+  --ink3: rgba(213, 223, 255, 0.6);
+  --ink4: rgba(199, 213, 255, 0.38);
+
+  --line: rgba(255, 255, 255, 0.13);
+  --line-soft: rgba(255, 255, 255, 0.08);
+
+  --panel: linear-gradient(145deg, rgba(255, 255, 255, 0.11), rgba(255, 255, 255, 0.045));
+  --panel-border: rgba(255, 255, 255, 0.14);
+  --panel-shadow: 0 10px 40px -18px rgba(8, 13, 32, 0.85), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  --panel2: linear-gradient(145deg, rgba(16, 22, 46, 0.62), rgba(16, 22, 46, 0.36));
+  --panel2-border: rgba(255, 255, 255, 0.1);
+
+  --row: rgba(255, 255, 255, 0.04);
+  --row-border: rgba(255, 255, 255, 0.07);
+  --row-hover: rgba(255, 255, 255, 0.11);
+  --row-active: rgba(255, 255, 255, 0.15);
+
+  --chip-bg: rgba(255, 255, 255, 0.1);
+  --scrim: rgba(0, 0, 0, 0.2);
+  --accent: #a9c4ff;
+  --accent-soft: rgba(147, 180, 255, 0.12);
+  --ok: #6ee7b7;
+  --ok-dim: rgba(110, 231, 183, 0.7);
+
+  --ring-line: rgba(190, 212, 255, 0.55);
+  --ring-line-soft: rgba(190, 212, 255, 0.26);
+  --ring-hair: rgba(255, 255, 255, 0.09);
+  --ring-track: rgba(255, 255, 255, 0.12);
+  --node-fill: rgba(16, 22, 46, 0.72);
+  --spoke: rgba(255, 255, 255, 0.16);
+  --spoke-2: rgba(190, 212, 255, 0.42);
+  --hub-edge: rgba(255, 255, 255, 0.2);
+
+  --toggle-on: rgba(255, 255, 255, 0.18);
+  --scroll-thumb: rgba(255, 255, 255, 0.2);
+}
+
+/* ══ LIGHT THEME — "Architect Paper"
+   Warm ivory drafting paper · deep teal-slate ink · bronze accents
+   Deliberately distinct from the royal-blue dark theme.            ══ */
+html[data-theme="light"] {
+  --bg-glow-a: #f2e3c8;
+  --bg-glow-b: #dfe7dd;
+  --bg-a: #f7f1e4;
+  --bg-b: #efe7d6;
+  --bg-c: #e3d9c6;
+
+  --ink: #000000;
+  --ink2: rgba(0, 0, 0, 0.86);
+  --ink3: rgba(0, 0, 0, 0.66);
+  --ink4: rgba(0, 0, 0, 0.45);
+
+  --line: rgba(28, 54, 48, 0.22);
+  --line-soft: rgba(28, 54, 48, 0.12);
+
+  --panel: linear-gradient(145deg, rgba(255, 253, 246, 0.86), rgba(250, 244, 231, 0.6));
+  --panel-border: rgba(28, 54, 48, 0.18);
+  --panel-shadow: 0 12px 28px -18px rgba(58, 47, 24, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  --panel2: linear-gradient(145deg, rgba(252, 247, 236, 0.78), rgba(243, 235, 219, 0.55));
+  --panel2-border: rgba(28, 54, 48, 0.16);
+
+  --row: rgba(120, 96, 52, 0.09);
+  --row-border: rgba(28, 54, 48, 0.14);
+  --row-hover: rgba(120, 96, 52, 0.16);
+  --row-active: rgba(120, 96, 52, 0.22);
+
+  --chip-bg: rgba(120, 96, 52, 0.14);
+  --scrim: rgba(247, 241, 228, 0.78);
+  --accent: #0f6b5c;
+  --accent-soft: rgba(15, 107, 92, 0.12);
+  --ok: #0f766e;
+  --ok-dim: rgba(15, 118, 110, 0.78);
+
+  --ring-line: rgba(28, 54, 48, 0.5);
+  --ring-line-soft: rgba(160, 122, 54, 0.42);
+  --ring-hair: rgba(28, 54, 48, 0.16);
+  --ring-track: rgba(28, 54, 48, 0.15);
+  --node-fill: rgba(255, 253, 246, 0.96);
+  --spoke: rgba(160, 122, 54, 0.42);
+  --spoke-2: rgba(28, 54, 48, 0.45);
+  --hub-edge: rgba(160, 122, 54, 0.55);
+
+  --toggle-on: rgba(15, 107, 92, 0.16);
+  --scroll-thumb: rgba(28, 54, 48, 0.28);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: "Vazirmatn", ui-sans-serif, system-ui, sans-serif;
+  font-weight: 200;
+  letter-spacing: 0.01em;
+  color: var(--ink);
+  background:
+    radial-gradient(1200px 800px at 15% -10%, var(--bg-glow-a) 0%, transparent 55%),
+    radial-gradient(900px 700px at 90% 110%, var(--bg-glow-b) 0%, transparent 55%),
+    linear-gradient(160deg, var(--bg-a) 0%, var(--bg-b) 55%, var(--bg-c) 100%);
+  background-attachment: fixed;
+  -webkit-font-smoothing: antialiased;
+  transition: color 0.3s ease;
+}
+
+/* Light theme gets a faint engineering-paper grid for a distinct identity */
+html[data-theme="light"] body {
+  background:
+    linear-gradient(rgba(28, 54, 48, 0.045) 1px, transparent 1px) 0 0 / 26px 26px,
+    linear-gradient(90deg, rgba(28, 54, 48, 0.045) 1px, transparent 1px) 0 0 / 26px 26px,
+    radial-gradient(1100px 760px at 12% -8%, var(--bg-glow-a) 0%, transparent 58%),
+    radial-gradient(900px 700px at 92% 108%, var(--bg-glow-b) 0%, transparent 58%),
+    linear-gradient(165deg, var(--bg-a) 0%, var(--bg-b) 55%, var(--bg-c) 100%);
+  background-attachment: fixed;
+}
+
+/* ══ LIGHT THEME: force all typography to pure black ══
+   Colour is kept only for indicators (dots, bars, rings, charts, borders). */
+html[data-theme="light"] body,
+html[data-theme="light"] h1,
+html[data-theme="light"] h2,
+html[data-theme="light"] h3,
+html[data-theme="light"] h4,
+html[data-theme="light"] h5,
+html[data-theme="light"] h6,
+html[data-theme="light"] p,
+html[data-theme="light"] span,
+html[data-theme="light"] div,
+html[data-theme="light"] a,
+html[data-theme="light"] li,
+html[data-theme="light"] td,
+html[data-theme="light"] th,
+html[data-theme="light"] label,
+html[data-theme="light"] button,
+html[data-theme="light"] input,
+html[data-theme="light"] select,
+html[data-theme="light"] textarea,
+html[data-theme="light"] option,
+html[data-theme="light"] b,
+html[data-theme="light"] strong,
+html[data-theme="light"] small {
+  color: #000000 !important;
+}
+
+/* Keep SVG chart text black too, but never touch fills/strokes of shapes */
+html[data-theme="light"] svg text {
+  fill: #000000 !important;
+}
+
+/* Icon strokes that rely on currentColor stay visible (not forced black text) */
+html[data-theme="light"] svg {
+  color: inherit;
+}
+
+/* Inputs / selects keep a neutral caret and placeholder */
+html[data-theme="light"] ::placeholder {
+  color: rgba(0, 0, 0, 0.42) !important;
+}
+
+/* ---------- Glass system (theme-variable driven) ---------- */
+.glass {
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  box-shadow: var(--panel-shadow);
+  transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+}
+.glass-dark {
+  background: var(--panel2);
+  border: 1px solid var(--panel2-border);
+  backdrop-filter: blur(16px) saturate(130%);
+  -webkit-backdrop-filter: blur(16px) saturate(130%);
+  box-shadow: var(--panel-shadow);
+  transition: background 0.3s ease, border-color 0.3s ease;
+}
+.glass-row {
+  background: var(--row);
+  border: 1px solid var(--row-border);
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    transform 160ms ease;
+}
+.glass-row:hover {
+  background: var(--row-hover);
+  border-color: var(--line);
+}
+.row-on {
+  background: var(--row-active) !important;
+}
+
+/* ---------- Text / line theme tokens ---------- */
+.tx1 { color: var(--ink); }
+.tx2 { color: var(--ink2); }
+.tx3 { color: var(--ink3); }
+.tx4 { color: var(--ink4); }
+.b-line { border-color: var(--line); }
+.b-line-soft { border-color: var(--line-soft); }
+.hair { background: linear-gradient(to left, transparent, var(--line), transparent); }
+.hline { background: var(--line); }
+.chip-bg { background: var(--chip-bg); }
+.scrim { background: var(--scrim); }
+.accent-t { color: var(--accent); }
+.ok-t { color: var(--ok); }
+.ok-dim-t { color: var(--ok-dim); }
+.connect-btn {
+  border: 1px dashed var(--line);
+  background: var(--accent-soft);
+  color: var(--accent);
+  transition: background 160ms ease;
+}
+.connect-btn:hover { background: var(--row-hover); }
+
+/* ---------- Header widgets ---------- */
+.wchip {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  border-radius: 12px;
+  padding: 6px 11px;
+  background: var(--row);
+  border: 1px solid var(--row-border);
+  white-space: nowrap;
+  transition: background 0.2s ease;
+}
+.toggle-shell {
+  background: var(--row);
+  border: 1px solid var(--line);
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+.toggle-on { background: var(--toggle-on); }
+
+/* ---------- SVG ring theme tokens ---------- */
+.s-ring { stroke: var(--ring-line); }
+.s-ring-soft { stroke: var(--ring-line-soft); }
+.s-hair { stroke: var(--ring-hair); }
+.s-track { stroke: var(--ring-track); }
+.s-hub { stroke: var(--hub-edge); }
+.f-node { fill: var(--node-fill); }
+.f-ink { fill: var(--ink); }
+
+/* ---------- INTEGRITY LOOP 1: rotation bound to these classes only ---------- */
+@keyframes pmbok-rotate {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+.ring-dashed-spin {
+  transform-origin: 50% 50%;
+  transform-box: view-box;
+  animation: pmbok-rotate 30s linear infinite;
+}
+.ring-dashed-spin-rev {
+  transform-origin: 50% 50%;
+  transform-box: view-box;
+  animation: pmbok-rotate 52s linear infinite reverse;
+}
+.ring-static-layer {
+  animation: none !important;
+  transform: none !important;
+}
+
+@keyframes soft-pulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.5); }
+  50% { opacity: 0.75; box-shadow: 0 0 0 5px rgba(52, 211, 153, 0); }
+}
+.pulse-dot { animation: soft-pulse 2.4s ease-in-out infinite; }
+
+@keyframes fade-rise {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.fade-rise { animation: fade-rise 240ms ease-out both; }
+
+/* ---------- Scrollbars ---------- */
+.thin-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scroll-thumb) transparent;
+}
+.thin-scroll::-webkit-scrollbar { width: 5px; }
+.thin-scroll::-webkit-scrollbar-thumb {
+  background: var(--scroll-thumb);
+  border-radius: 99px;
+}
+.thin-scroll::-webkit-scrollbar-track { background: transparent; }

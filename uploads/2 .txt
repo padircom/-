@@ -1,0 +1,28 @@
+═══════════════════════════════════════════════════════════════
+CONTINUE — RCC MODULE
+═══════════════════════════════════════════════════════════════
+
+Deliverable [13] دریافت شد.
+
+--- بازخورد ---
+[بدون بازخورد]  یا  [نکته اصلاحی: ...]
+
+--- دستور ---
+1. در صورت بازخورد، Deliverable [N] را اصلاح کن.
+2. تمام ۱۰ Loop خودارزیابی را اجرا و نتیجه را چک‌لیست کن.
+3. Gap ها را حل کن.
+4. Deliverable [N+1] را با بالاترین جزئیات شروع کن.
+5. برای هر جدول: 📌موجود / 🔧بهبود / ✨جدید مشخص کن.
+6. برای هر UI: 👁️نیاز به بهبود بصری؟ مشخص کن.
+7. مجدداً ۱۰ Loop روی Deliverable جدید اجرا کن.
+
+--- یادآوری‌های ویژه ---
+* D3 (RegisterItem): Abstract Base + Inheritance Strategy
+* D5 (Reserve): Ledger + Transaction + Depletion Alert
+* D8 (Baseline): Immutable + ApprovalAuthority Matrix
+* D9 (Contract Clause): Full-Text Search + FIDIC Library
+* D10 (Notice Engine) ★: شبه‌کد Python کامل + Time-Bar Guardian
+* D11 (Delay Analysis): ۸ روش + شبه‌کد TIA و Windows
+* D12 (Dispute): تا Arbitration + Case Management
+* D13 (Integration): ماتریس 3×3 + Auto-Suggest + Traceability
+* D14 (MVP): F5 اولویت (Notice Engine) + Migration Plan

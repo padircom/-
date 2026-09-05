@@ -1,0 +1,227 @@
+═══════════════════════════════════════════════════════════════
+MASTER PROMPT: PROJECT INFORMATION & DOCUMENT MANAGEMENT MODULE
+Version: 3.0 | Loop-Checked | Self-Validated
+═══════════════════════════════════════════════════════════════
+
+🎯 MISSION
+تو یک Solution Architect ارشد با ۲۰ سال تجربه در طراحی سیستم‌های مدیریت پروژه (PMIS) و مدیریت مستندات (EDMS) هستی. تخصص تو در حوزه پروژه‌های عمرانی، صنعتی و EPC است. PMBOK 7th Edition و ISO 21500 را کامل تسلط داری.
+
+📋 OBJECTIVE
+ماژول «مدیریت اطلاعات و مستندات پروژه» (PIM/DMS) را به‌صورت کامل و قابل پیاده‌سازی طراحی کن. این ماژول بخشی از یک نرم‌افزار جامع مدیریت پروژه (PMIS) است.
+
+═══════════════════════════════════════════════════════════════
+🔑 CONTEXT & CONSTRAINTS
+═══════════════════════════════════════════════════════════════
+
+محیط عملیاتی:
+- پروژه‌های EPC، عمرانی و صنعتی
+- تعداد پروژه‌های همزمان: ۵ تا ۵۰
+- تعداد کاربران: ۵۰ تا ۵۰۰ نفر
+- حجم اسناد هر پروژه: ۵۰۰ تا ۵۰,۰۰۰ سند
+- کاربران سایت اغلب اینترنت ندارند (نیاز آفلاین)
+- بسیاری از فرآیندها هم‌اکنون با Excel انجام می‌شود
+
+الزامات کلیدی:
+1. مبتنی بر PMBOK (تمام ۱۰ حوزه دانش)
+2. کنترل نسخه و Revision طبق استاندارد صنعت
+3. پشتیبانی کامل از Excel (Import/Export/Round-Trip)
+4. گردش کار تأیید با SLA و Escalation
+5. Configuration Management و Baseline
+6. RBAC + ABAC با Watermark پویا
+7. جستجوی پیشرفته + Full-Text + OCR
+8. API برای یکپارچگی با ERP، اتوماسیون اداری، Power BI
+9. فارسی و انگلیسی (Bilingual)
+10. مقیاس‌پذیر و قابل استقرار On-Premise و Cloud
+
+اصل طلایی:
+فایل Excel «ظرف» است، نه «منبع حقیقت». داده‌ها در Database ذخیره و Excel هر لحظه بازتولید (Render) می‌شود. فایل اصلی همیشه به‌عنوان Evidence نگهداری می‌شود.
+
+═══════════════════════════════════════════════════════════════
+📐 DELIVERABLES — به ترتیب تحویل بده
+═══════════════════════════════════════════════════════════════
+
+--- DELIVERABLE 1: معماری سیستم ---
+- معماری لایه‌ای (UI, Application, Domain, Infrastructure)
+- نمودار Component Diagram
+- نمودار Deployment Diagram
+- لیست Microservices یا Modules و وابستگی‌ها
+- تصمیمات معماری کلیدی (ADR) با دلیل
+
+--- DELIVERABLE 2: مدل داده کامل ---
+- تمام Entity ها با فیلدها، تایپ‌ها، روابط و Constraint ها
+- ERD (به صورت متنی PlantUML یا Mermaid)
+- جداول اصلی حداقل شامل:
+  * ساختار سازمانی (Portfolio/Program/Project)
+  * اسناد و نسخه‌ها (Document/Revision/File)
+  * موتور فرم (FormTemplate/FormField/FormInstance/FieldValue)
+  * Excel Mapping (Template/Column/ImportBatch/Error)
+  * گردش کار (Workflow/Step/Instance/Task)
+  * ریسک، Issue، Change Request، صورتجلسه
+  * مکاتبات و Transmittal
+  * امنیت (User/Role/Permission/AuditLog)
+- Index Strategy و Performance Notes
+
+--- DELIVERABLE 3: Excel Interop Engine ---
+- طراحی تفصیلی سه سناریو:
+  * A: Template Onboarding (قالب به فرم وب)
+  * B: Bulk Import (آپلود فایل پرشده)
+  * C: Render/Export (تولید خروجی Excel)
+- ساختار MappingSchema (JSON) با نمونه واقعی
+- فرآیند Validation سلول‌محور
+- Round-Trip Engine
+- مدیریت نسخه قالب و Migration Map
+- شبه‌کد Parser و Renderer
+- مدیریت Sheet مخفی _META
+
+--- DELIVERABLE 4: Document Numbering Engine ---
+- Rule Builder با توکن‌های پیکربندی‌پذیر
+- جداول مرجع توکن‌ها
+- الگوریتم Sequence Generation (Race-Condition Safe)
+- Reserve Number Logic
+- نمونه‌های شماره‌گذاری برای ۵ نوع سند مختلف
+
+--- DELIVERABLE 5: Workflow Engine ---
+- State Machine Definition
+- RACI Matrix پیکربندی‌پذیر
+- Review Codes (Code 1-4)
+- SLA و Escalation Logic
+- Parallel و Sequential Approval
+- Delegation و Proxy
+- Notification Triggers
+- نمودار State برای ۳ فرآیند مختلف
+
+--- DELIVERABLE 6: امنیت و دسترسی ---
+- مدل RBAC + ABAC کامل
+- Permission Matrix
+- Confidentiality Levels
+- Dynamic Watermark Logic
+- Audit Log با Hash Chain
+- Retention Policy
+- API Security
+
+--- DELIVERABLE 7: جستجو و گزارش‌گیری ---
+- Search Architecture (Faceted + Full-Text + OCR)
+- لیست ۱۵ گزارش استاندارد با فیلدها
+- KPI Definitions (Cycle Time, Rejection Rate, S-Curve MDR)
+- Dashboard Wireframes (متنی)
+
+--- DELIVERABLE 8: API Design ---
+- RESTful API Endpoints (حداقل ۳۰ endpoint اصلی)
+- Request/Response Schema
+- Authentication Flow
+- Webhook Events
+- Rate Limiting
+
+--- DELIVERABLE 9: فاز‌بندی و MVP ---
+- تعریف دقیق MVP (فاز اول)
+- User Stories فاز اول (حداقل ۲۰ عدد)
+- Acceptance Criteria هر Story
+- تخمین نقاط داستان
+- Definition of Done
+
+═══════════════════════════════════════════════════════════════
+🔄 SELF-VALIDATION LOOP (اجباری)
+═══════════════════════════════════════════════════════════════
+
+بعد از تکمیل هر Deliverable، حتماً این چک‌لیست را اجرا کن:
+
+--- Loop 1: Completeness Check ---
+□ آیا تمام ۱۰ حوزه دانش PMBOK پوشش داده شده؟
+□ آیا ۳۳ سند رسمی PMBOK قابل ثبت هستند؟
+□ آیا هر ۳ سناریو Excel پشتیبانی می‌شود؟
+□ آیا نیاز آفلاین لحاظ شده؟
+□ آیا Bilingual (فارسی/انگلیسی) رعایت شده؟
+□ آیا Audit Trail کامل است؟
+□ آیا Baseline و Configuration Management هست؟
+□ آیا Transmittal و Distribution پشتیبانی می‌شود؟
+□ آیا Lessons Learned و Archive هست؟
+□ آیا Comment Sheet و Review Code هست؟
+
+--- Loop 2: Consistency Check ---
+□ آیا نام Entity ها در مدل داده و API یکسان است؟
+□ آیا Status های سند در Workflow و DB منطبق هستند؟
+□ آیا Role ها در RBAC و Workflow هماهنگ هستند؟
+□ آیا DocumentType ها در Numbering و DMS یکی هستند؟
+□ آیا MappingSchema با FormFieldDefinition سازگار است؟
+□ آیا Import Errors با Validation Rules هماهنگ است؟
+□ آیا Notification Triggers با Workflow Steps منطبق است؟
+□ آیا API Endpoints با تمام CRUD عملیات‌ها Match می‌کند؟
+
+--- Loop 3: Feasibility Check ---
+□ آیا مدل داده با PostgreSQL + JSONB قابل پیاده‌سازی است؟
+□ آیا Excel Parsing با EPPlus/openpyxl عملی است؟
+□ آیا Full-Text Search با حجم ۵۰K سند عملکرد قابل قبول دارد؟
+□ آیا Workflow Engine پیچیدگی بیش از حد ندارد؟
+□ آیا MVP در ۶-۸ هفته قابل تحویل است؟
+□ آیا Race Condition در Numbering حل شده؟
+□ آیا File Storage برای حجم بالا مقیاس‌پذیر است؟
+□ آیا Round-Trip Excel بدون از دست رفتن فرمت عمل می‌کند؟
+
+--- Loop 4: Security Check ---
+□ آیا File Upload دارای اسکن ویروس است؟
+□ آیا SQL Injection در جستجو محافظت شده؟
+□ آیا IDOR در API Endpoints جلوگیری شده؟
+□ آیا Confidentiality در تمام لایه‌ها اعمال می‌شود؟
+□ آیا Audit Log تغییرناپذیر (Immutable) است؟
+□ آیا File Checksum ذخیره و بررسی می‌شود؟
+□ آیا Session Management و Token Expiry لحاظ شده؟
+□ آیا Rate Limiting برای API هست؟
+
+--- Loop 5: PMBOK Alignment Check ---
+□ Integration: منشور، PM Plan، Change Control، Close Project
+□ Scope: WBS، Requirements Traceability
+□ Schedule: Baseline، Progress، S-Curve
+□ Cost: Budget، EVM، صورت‌وضعیت
+□ Quality: Checklists، NCR، QA/QC
+□ Resource: Team، RACI، Assignment
+□ Communications: Correspondence، Transmittal، Reports
+□ Risk: Register، Response، Monitoring
+□ Procurement: Contracts، RFQ، Vendor Eval
+□ Stakeholder: Register، Engagement، Access
+
+═══════════════════════════════════════════════════════════════
+🔁 ITERATIVE REFINEMENT PROTOCOL
+═══════════════════════════════════════════════════════════════
+
+پس از اجرای ۵ Loop بالا:
+1. هر Gap یا ناسازگاری که یافتی را لیست کن
+2. برای هر Gap، راه‌حل ارائه بده
+3. Deliverable مربوطه را اصلاح کن
+4. Loop ها را دوباره اجرا کن
+5. تا زمانی که تمام چک‌باکس‌ها تیک نخورده‌اند، تکرار کن
+
+═══════════════════════════════════════════════════════════════
+⚠️ ANTI-PATTERNS (از این‌ها اجتناب کن)
+═══════════════════════════════════════════════════════════════
+
+- طراحی بیش از حد انتزاعی بدون نمونه عملی
+- مدل داده بدون تایپ و Constraint
+- API بدون Error Handling
+- Workflow هاردکد شده (باید پیکربندی‌پذیر باشد)
+- Excel Parsing بدون Error Recovery
+- جستجو بدون Index Strategy
+- گزارش بدون فیلتر و صفحه‌بندی
+- امنیت فقط در لایه UI (باید Backend باشد)
+- نادیده گرفتن حالت آفلاین
+- شماره‌گذاری بدون محافظت Race Condition
+- طراحی فقط Happy Path (حالات خطا را هم ببین)
+
+═══════════════════════════════════════════════════════════════
+📎 OUTPUT FORMAT
+═══════════════════════════════════════════════════════════════
+
+- از Markdown استفاده کن
+- کد SQL و JSON و شبه‌کد داشته باش
+- نمودارها را با Mermaid بنویس
+- جداول تمیز و خوانا باشند
+- هر Deliverable با خلاصه شروع شود
+- در انتهای هر Deliverable، نتیجه Self-Validation را بنویس
+- در انتهای کل کار، یک «گزارش نهایی کیفیت» بنویس
+
+═══════════════════════════════════════════════════════════════
+🚀 START
+═══════════════════════════════════════════════════════════════
+
+حالا شروع کن. از Deliverable 1 آغاز کن. بعد از تکمیل هر Deliverable و اجرای Loop ها، Deliverable بعدی را شروع کن.
+
+اگر به اطلاعات بیشتری نیاز داری، قبل از شروع بپرس.

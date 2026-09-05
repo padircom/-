@@ -1,0 +1,251 @@
+═══════════════════════════════════════════════════════════════
+FINAL QUALITY REPORT — RCC MODULE (v3.0)
+═══════════════════════════════════════════════════════════════
+
+تمام ۱۴ Deliverable ماژول «مدیریت ریسک، تغییرات و ادعا» (RCC)
+تحویل شد. اکنون مرحله جمع‌بندی نهایی، کنترل کیفیت و تولید بسته
+اجرایی برای تیم توسعه است.
+
+═══════════════════════════════════════════════════════════════
+📋 بخش ۱: اعتبارسنجی جامع (Cross-Deliverable Validation)
+═══════════════════════════════════════════════════════════════
+
+1. تمام ۱۰ Loop خودارزیابی را بر روی کل طراحی اجرا کن:
+   - L1: PMBOK Coverage (11.1-11.7, 4.6, 12.3, 10.2, PMBOK 7)
+   - L2: RegisterItem Pattern & Data Model
+   - L3: Risk Management (RBS, Analysis, Response, Reserve)
+   - L4: Change Management (CR, Impact, CCB, Baseline)
+   - L5: Claim Management (Notice, Delay, Quantum, Dispute)
+   - L6: Cross-Module Integration
+   - L7: Time-Bar & Notice Engine ★ (بحرانی)
+   - L8: Reports, KPI & Business Rules
+   - L9: Consistency Check
+   - L10: Redesign & Migration
+
+2. Cross-Deliverable Consistency:
+   - آیا RegisterItem (D3) در تمام Entity های Risk/Change/Claim اعمال شده؟
+   - آیا Reserve Ledger (D5) با EAC (MOD-06) هماهنگ است؟
+   - آیا Baseline Config (D8) با CR Approval (D8) و PEX Baseline منطبق؟
+   - آیا Notice Engine (D10) با EWS-CLM (D13) و Contract Clause (D9) کامل هماهنگ؟
+   - آیا Delay Analysis (D11) با Schedule Baseline (PEX) قابل اجرا است؟
+   - آیا Claim Quantum (D11) با Reserve Impact (D12) و EAC (MOD-06) هماهنگ؟
+   - آیا Auto-Suggest Rules (D13) با Variance Critical (MON) trigger می‌شود؟
+   - آیا Traceability Graph (D13) کامل Risk→Issue→Change→Claim→Evidence را پوشش می‌دهد؟
+   - آیا API Endpoints (D14) با تمام Entity ها تطابق دارند؟
+   - آیا MVP (D14) با معماری (D1) قابل تحقق است؟
+
+═══════════════════════════════════════════════════════════════
+🔍 بخش ۲: Gap Analysis
+═══════════════════════════════════════════════════════════════
+
+3. جدول شکاف‌های کشف‌شده:
+| # | شرح مشکل | سطح اثر (H/M/L) | Deliverable درگیر | راه‌حل | تلاش اصلاح |
+
+4. برای همه Gap های High، برنامه اصلاح فوری ارائه کن.
+
+═══════════════════════════════════════════════════════════════
+📄 بخش ۳: سند خلاصه اجرایی (Executive Summary)
+═══════════════════════════════════════════════════════════════
+
+5. سند خلاصه اجرایی جامع شامل:
+
+الف) معرفی ماژول (۲ پاراگراف):
+   - نقش RCC به‌عنوان حلقه سوم و نهایی PMIS
+   - نحوه بستن Closed-Loop (Risk → Change → Claim ↔ MON ↔ PEX)
+
+ب) معماری نهایی:
+   - نمودار Mermaid جامع Cross-Module Integration
+   - RegisterItem Pattern (نوآوری کلیدی)
+   - جریان داده بین ۱۵ زیرماژول
+
+ج) لیست جداول DB:
+   - تفکیک وضعیت: 📌موجود | 🔧بهبود | ✨جدید
+   - گروه‌بندی: Core / Risk / Change / Claim / Integration
+   - تعداد کل جداول
+
+د) لیست API Endpoints:
+   - RESTful (Method + Path)
+   - Webhook Events (Notice Time-Bar, CR Decision, Claim Settlement)
+   - Cross-Module APIs
+
+ه) ماتریس گزارش‌ها (۱۷ گزارش):
+   - Risk Reports (4)
+   - Change Reports (5)
+   - Claim Reports (5) — شامل **Time-Bar Watchlist روزانه**
+   - Integrated (3) — شامل RPT-RCC-01 (Bi-Weekly ۱۰ بخشی) + RPT-EXEC
+
+و) سیستم Notice + Time-Bar Guardian ★:
+   - ۴ سطح هشدار (14/7/3/1 روز)
+   - Emergency Auto-Escalate
+   - Auto-Draft Notice از Template
+   - Chain of Custody کامل
+
+ز) Delay Analysis Suite (۸ روش):
+   - خلاصه هر روش
+   - کاربرد در FIDIC / نشریه ۴۳۱۱
+   - Recommended Method per Claim Type
+
+ح) Claim Quantum (۱۴ سرفصل):
+   - محاسبه دقیق هر سرفصل
+   - Supporting Documents
+
+ط) MVP Scope (فاز F1 + F5):
+   - F1: Risk Foundation
+   - F5: Notice Engine (اولویت حیاتی)
+   - In-Scope / Out-of-Scope / DoD / Timeline
+
+ی) Risk Register طراحی (۱۵ ریسک):
+   - ریسک‌های فنی، داده‌ای، حقوقی، سازمانی
+   - جدول: # | شرح | احتمال | اثر | استراتژی | مسئول
+
+ک) تخمین منابع:
+   - تیم توسعه (نقش + تعداد)
+   - تخصص‌های ویژه (Legal Expert, FIDIC Consultant)
+   - زمان کل ۳۸ هفته
+   - مایلستون‌های ۸ فاز
+   - بودجه نفر-ساعت
+
+ل) توصیه‌های کلیدی موفقیت (۱۲ توصیه):
+   - Data Migration Strategy
+   - Legal Review Integration
+   - Contract Template Customization
+   - Time-Bar Guardian Testing
+   - CCB Workflow Setup
+   - و ...
+
+═══════════════════════════════════════════════════════════════
+📦 بخش ۴: بسته تحویل (Handover Package)
+═══════════════════════════════════════════════════════════════
+
+6. فهرست تحویلی به تیم توسعه:
+
+الف) مستندات فنی:
+   - Architecture Document + ADR
+   - Data Model + ERD کامل
+   - API Specification (OpenAPI 3.0)
+   - RegisterItem Pattern Implementation Guide
+   - Notice Engine Algorithm + Cron Setup
+   - Delay Analysis Algorithms (۸ روش)
+   - CCB Workflow State Machines
+   - Auto-Suggest Rules Configuration (JSON)
+
+ب) Database Assets:
+   - Migration Scripts (V001, V002, ...)
+   - Data Migration ETL (از ساختار موجود)
+   - Seed Data (RBS پیش‌فرض, ۲۰ Business Rules, ۱۲ EWS, ۱۸ KPI)
+   - Contract Clause Library (FIDIC Red/Yellow/Silver)
+   - Index & Partitioning Scripts
+
+ج) Code Samples:
+   - RegisterItem Base Class (Python/C#)
+   - Notice Time-Bar Guardian (Cron Job)
+   - Delay Analysis Engine (TIA + Windows)
+   - Reserve Ledger Calculator
+   - CCB Voting Engine
+   - Excel Import/Render
+
+د) Templates & Forms:
+   - Notice Letter Templates (Bilingual) per Clause
+   - Claim Detail Template
+   - CCB Meeting Agenda Template
+   - Report Templates (Bi-Weekly, EXEC)
+   - ۲۱ Excel Import/Export Templates
+
+ه) Test Suites:
+   - Unit Tests (حداقل ۵۰ سناریو)
+   - Integration Tests (۳۰ سناریو با MON/PEX/DMS)
+   - E2E Tests (۱۵ سناریو کامل — از ریسک تا تسویه)
+   - Notice Time-Bar Tests (۲۰ سناریو حیاتی)
+   - Migration Tests
+
+و) راهنماها:
+   - Developer Onboarding Guide
+   - DBA Guide + Migration Guide
+   - Notice Engine Operations Manual
+   - CCB Coordinator Manual
+   - Legal Team Manual
+   - Contract Manager Manual
+   - End-User Manual (Risk Owner, PM, Contractor)
+
+ز) UI/UX Transformation Guide:
+   - صفحات موجود + دستورالعمل بهبود بصری
+   - Wireframes صفحات جدید:
+     * Risk Register Dashboard
+     * Risk Heat Map
+     * CCB Meeting Interface
+     * Time-Bar Watchlist ★
+     * Claim Detail Editor
+     * Delay Analysis Workbench
+     * Traceability Graph Viewer
+     * Reserve Ledger View
+
+═══════════════════════════════════════════════════════════════
+🗺️ بخش ۵: نقشه راه بصری (Roadmap)
+═══════════════════════════════════════════════════════════════
+
+7. Mermaid Gantt Chart:
+   - ۸ فاز (F1-F8) در ۳۸ هفته
+   - وابستگی‌های بین فازها
+   - Milestone های کلیدی
+   - Decision Gates
+   - نمایش اولویت‌های بحرانی:
+     * F1: Risk Foundation
+     * F5: Notice Engine ⚡ (بحرانی)
+
+═══════════════════════════════════════════════════════════════
+📊 بخش ۶: KPI های موفقیت پروژه (Success Metrics)
+═══════════════════════════════════════════════════════════════
+
+8. متریک‌های سنجش موفقیت نرم‌افزار:
+
+الف) کارایی فنی:
+   - Time-Bar Guardian: 0 false negative
+   - Auto-Suggest Accuracy: > 85%
+   - Notice Generation: < 30 ثانیه
+   - Delay Analysis: < 2 دقیقه برای TIA
+   - API Response: < 500ms
+   - Uptime: > 99.5%
+
+ب) پذیرش کاربری:
+   - Risk Owner Coverage: 100% ریسک‌ها دارای Owner
+   - CR Cycle Time: کاهش ۴۰%
+   - Notice Compliance: 100% (بدون Time-Bar)
+   - Report Timeliness: > 95%
+   - User Satisfaction (NPS): > 40
+
+ج) اثرات کسب‌وکاری:
+   - Prevented Claims (از Time-Bar): تعداد
+   - Reserve Efficiency: کاهش ۲۰% مصرف
+   - Change Impact Reduction: کاهش ۳۰% Scope Creep
+   - Claim Recovery Rate: > 60%
+   - Dispute Reduction: کاهش ۵۰%
+   - ROI: بازگشت سرمایه در ۱۸ ماه
+
+═══════════════════════════════════════════════════════════════
+📃 بخش ۷: Executive One-Pager Template
+═══════════════════════════════════════════════════════════════
+
+9. قالب استاندارد گزارش تک‌صفحه‌ای مدیریت ارشد:
+   - [هدر] نام پروژه + Health Score + وضعیت رنگی
+   - [بلوک ۱] ۳ ریسک بحرانی + ۳ CR معلق + ۲ Claim Time-Bar
+   - [بلوک ۲] Cumulative Change Impact ($ + Days)
+   - [بلوک ۳] Reserve Status + Claim Exposure
+   - [بلوک ۴] تصمیمات فوری (Deadline < 7 روز)
+   - [بلوک ۵] Recovery Plan Status (AP-3M)
+   - [بلوک ۶] Trend ۶ دوره (Risk Count, Change Value, Claim Exposure)
+
+═══════════════════════════════════════════════════════════════
+✅ الزامات خروجی نهایی
+═══════════════════════════════════════════════════════════════
+
+این گزارش باید:
+✅ کاملاً خودکفا و مبنای قرارداد فنی با تیم توسعه باشد
+✅ برای مدیر پروژه، مدیر PMO، مدیر قرارداد و کارفرما قابل استفاده
+✅ در قالب Markdown با نمودارهای Mermaid
+✅ برای Notice Engine و Time-Bar Guardian شبه‌کد کامل ارائه شود
+✅ برای Delay Analysis نمونه محاسبه واقعی داشته باشد
+✅ الزامات بازطراحی (حفظ ساختار موجود + بهبود) صریح باشد
+✅ حداکثر ۲۰ صفحه A4 (خلاصه، مفید، عملیاتی)
+✅ در انتها Executive One-Pager آماده چاپ
+
+شروع کن و گزارش نهایی جامع را تولید کن.

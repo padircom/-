@@ -1,0 +1,924 @@
+import { useState } from "react";
+import { useSystem } from "../context/SystemContext";
+import SqlConnectionPanel from "./SqlConnectionPanel";
+import { pmisApiClient } from "../services/pmisApiClient";
+import AccessControlPanel from "./AccessControlPanel";
+import OperationsReadinessPanel from "./OperationsReadinessPanel";
+import MasterDataSyncPanel from "./MasterDataSyncPanel";
+import ProjectKnowledgePanel from "./ProjectKnowledgePanel";
+import NotificationOpsPanel from "./NotificationOpsPanel";
+import ProductionDeploymentPanel from "./ProductionDeploymentPanel";
+import {
+  statusMeta,
+  t,
+  type Bi,
+  type Cluster,
+  type Lang,
+  type Project,
+  type ProjectStatus,
+} from "../data/framework";
+
+type Props = {
+  lang: Lang;
+  subId?: string;
+  onBack?: () => void;
+};
+
+type TabKey = "clusters" | "projects" | "metadata" | "typography" | "ai" | "access" | "sync" | "operations" | "deployment";
+
+export default function AdminWorkspace({ lang, subId, onBack }: Props) {
+  const rtl = lang === "fa";
+  const {
+    clusters,
+    projectsByCluster,
+    settings,
+    addCluster,
+    updateCluster,
+    deleteCluster,
+    addProject,
+    updateProject,
+    deleteProject,
+    updateSettings,
+    resetToDefaults,
+  } = useSystem();
+
+  // Pick initial tab from subId if provided
+  const initialTab: TabKey =
+    subId === "d7-p1-s1"
+      ? "clusters"
+      : subId === "d7-p2-s1"
+      ? "projects"
+      : subId === "d7-p3-s1"
+      ? "metadata"
+      : subId === "d7-p4-s1"
+      ? "typography"
+      : subId === "d7-p5-s1"
+      ? "ai"
+      : subId === "d7-p6-s1"
+      ? "operations"
+      : subId === "d7-p7-s1"
+      ? "sync"
+      : subId === "d7-p8-s1"
+      ? "deployment"
+      : "clusters";
+
+  const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
+
+  // Cluster Form State
+  const [editingClusterId, setEditingClusterId] = useState<string | null>(null);
+  const [clusterFa, setClusterFa] = useState("");
+  const [clusterEn, setClusterEn] = useState("");
+  const [clusterIcon, setClusterIcon] = useState("🏗");
+  const [clusterColor, setClusterColor] = useState("#38BDF8");
+  const [isAddingCluster, setIsAddingCluster] = useState(false);
+
+  // Project Form State
+  const [selectedClusterForProjects, setSelectedClusterForProjects] = useState<string>(
+    clusters[0]?.id ?? "c1"
+  );
+  const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
+  const [isAddingProject, setIsAddingProject] = useState(false);
+
+  const [prjCode, setPrjCode] = useState("");
+  const [prjNameFa, setPrjNameFa] = useState("");
+  const [prjNameEn, setPrjNameEn] = useState("");
+  const [prjClientFa, setPrjClientFa] = useState("");
+  const [prjClientEn, setPrjClientEn] = useState("");
+  const [prjLocFa, setPrjLocFa] = useState("");
+  const [prjLocEn, setPrjLocEn] = useState("");
+  const [prjBudget, setPrjBudget] = useState("$500M");
+  const [prjStatus, setPrjStatus] = useState<ProjectStatus>("active");
+  const [prjProgress, setPrjProgress] = useState(50);
+
+  // Notification Banner
+  const [toast, setToast] = useState<string | null>(null);
+
+  const showToast = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 3000);
+  };
+
+  /* ─────────── Handlers for Cluster ─────────── */
+  const startEditCluster = (c: Cluster) => {
+    setEditingClusterId(c.id);
+    setClusterFa(c.title.fa);
+    setClusterEn(c.title.en);
+    setClusterIcon(c.icon);
+    setClusterColor(c.color);
+    setIsAddingCluster(false);
+  };
+
+  const handleSaveCluster = async () => {
+    if (!clusterFa.trim()) return;
+    if (editingClusterId) {
+      updateCluster(editingClusterId, {
+        title: { fa: clusterFa, en: clusterEn || clusterFa },
+        icon: clusterIcon,
+        color: clusterColor,
+      });
+      pmisApiClient.updateIndustry(editingClusterId, {
+        titleFa: clusterFa,
+        titleEn: clusterEn || clusterFa,
+        icon: clusterIcon,
+        color: clusterColor,
+      }).catch(() => {});
+      showToast(rtl ? "خوشه صنعتی با موفقیت ویرایش شد" : "Industry cluster updated");
+      setEditingClusterId(null);
+    } else {
+      const newId = `c${Date.now().toString().slice(-4)}`;
+      const newCluster: Cluster = {
+        id: newId,
+        icon: clusterIcon,
+        color: clusterColor,
+        title: { fa: clusterFa, en: clusterEn || clusterFa },
+        progress: 0,
+        active: 0,
+        tender: 0,
+        stopped: 0,
+        completed: 0,
+      };
+      addCluster(newCluster);
+      pmisApiClient.createIndustry({
+        code: newId,
+        titleFa: clusterFa,
+        titleEn: clusterEn || clusterFa,
+        icon: clusterIcon,
+        color: clusterColor,
+        isActive: true,
+      }).catch(() => {});
+      showToast(rtl ? "خوشه صنعتی جدید ایجاد شد" : "New industry cluster created");
+      setIsAddingCluster(false);
+    }
+    setClusterFa("");
+    setClusterEn("");
+  };
+
+  /* ─────────── Handlers for Projects ─────────── */
+  const startEditProject = (p: Project) => {
+    setEditingProjectId(p.id);
+    setPrjCode(p.code);
+    setPrjNameFa(p.name.fa);
+    setPrjNameEn(p.name.en);
+    setPrjClientFa(p.client.fa);
+    setPrjClientEn(p.client.en);
+    setPrjLocFa(p.location.fa);
+    setPrjLocEn(p.location.en);
+    setPrjBudget(p.budget);
+    setPrjStatus(p.status);
+    setPrjProgress(p.progress);
+    setIsAddingProject(false);
+  };
+
+  const handleSaveProject = async () => {
+    if (!prjCode.trim() || !prjNameFa.trim()) return;
+    const projectPayload: Project = {
+      id: editingProjectId ?? `p-${Date.now().toString().slice(-5)}`,
+      code: prjCode,
+      name: { fa: prjNameFa, en: prjNameEn || prjNameFa },
+      client: { fa: prjClientFa || "کارفرما", en: prjClientEn || "Client" },
+      location: { fa: prjLocFa || "ایران", en: prjLocEn || "Iran" },
+      budget: prjBudget || "$100M",
+      status: prjStatus,
+      progress: Number(prjProgress) || 0,
+    };
+
+    if (editingProjectId) {
+      updateProject(selectedClusterForProjects, editingProjectId, projectPayload);
+      pmisApiClient.updateProject(editingProjectId, {
+        nameFa: prjNameFa,
+        nameEn: prjNameEn || prjNameFa,
+        clientFa: prjClientFa,
+        locationFa: prjLocFa,
+        status: prjStatus,
+        progress: Number(prjProgress) || 0,
+      }).catch(() => {});
+      showToast(rtl ? "پروژه با موفقیت به‌روزرسانی شد" : "Project updated successfully");
+      setEditingProjectId(null);
+    } else {
+      addProject(selectedClusterForProjects, projectPayload);
+      pmisApiClient.createProject({
+        industryId: selectedClusterForProjects,
+        code: prjCode,
+        nameFa: prjNameFa,
+        nameEn: prjNameEn || prjNameFa,
+        clientFa: prjClientFa,
+        locationFa: prjLocFa,
+        status: prjStatus,
+        progress: Number(prjProgress) || 0,
+      }).catch(() => {});
+      showToast(rtl ? "پروژه جدید با موفقیت ثبت شد" : "New project added successfully");
+      setIsAddingProject(false);
+    }
+
+    // Reset fields
+    setPrjCode("");
+    setPrjNameFa("");
+    setPrjNameEn("");
+    setPrjClientFa("");
+    setPrjClientEn("");
+    setPrjLocFa("");
+    setPrjLocEn("");
+  };
+
+  const currentClusterProjects = projectsByCluster[selectedClusterForProjects] ?? [];
+
+  return (
+    <div className="glass flex h-full min-h-0 flex-col rounded-2xl p-4" dir={rtl ? "rtl" : "ltr"}>
+      {/* ── Top Bar ── */}
+      <header className="b-line-soft mb-3 flex flex-wrap items-center justify-between gap-3 border-b pb-3">
+        <div className="flex items-center gap-2.5">
+          {onBack && (
+            <button
+              onClick={onBack}
+              className="glass-row flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[10.5px] font-light tx2 transition hover:tx1"
+            >
+              <span className={rtl ? "" : "rotate-180"}>→</span>
+              {rtl ? "بازگشت" : "Back"}
+            </button>
+          )}
+          <span className="grid h-9 w-9 place-items-center rounded-xl border border-sky-400/50 bg-sky-400/15 text-[17px] text-sky-300">
+            ⚙️
+          </span>
+          <div>
+            <h1 className="text-[14.5px] font-medium tx1">
+              {rtl ? "مدیریت سامانه و پیکربندی داده‌های پایه" : "System Administration & Master Config"}
+            </h1>
+            <p className="text-[9.5px] font-extralight tx3">
+              {rtl
+                ? "ویرایش و تعریف صنایع، پروژه‌ها، متادیتا، فونت‌ها و اتصالات SQL Server"
+                : "Manage industries, projects, metadata, typography, and SQL Server connections"}
+            </p>
+          </div>
+        </div>
+
+        {/* Action Controls */}
+        <div className="flex items-center gap-2">
+          {toast && (
+            <span className="fade-rise rounded-lg border border-emerald-400/40 bg-emerald-400/15 px-3 py-1 text-[10px] font-medium text-emerald-300">
+              ✓ {toast}
+            </span>
+          )}
+          <button
+            onClick={() => {
+              if (
+                window.confirm(
+                  rtl
+                    ? "آیا از بازنشانی داده‌ها به مقادیر اولیه اطمینان دارید؟"
+                    : "Reset all configurations to factory defaults?"
+                )
+              ) {
+                resetToDefaults();
+                showToast(rtl ? "داده‌ها به تنظیمات پیش‌فرض بازگشت" : "Reset to defaults");
+              }
+            }}
+            className="rounded-lg border border-rose-400/30 bg-rose-400/10 px-2.5 py-1 text-[9.5px] font-light text-rose-300 transition hover:bg-rose-400/20"
+          >
+            ↺ {rtl ? "بازنشانی به پیش‌فرض" : "Reset Defaults"}
+          </button>
+        </div>
+      </header>
+
+      {/* ── Navigation Tabs ── */}
+      <nav className="mb-3 flex shrink-0 flex-wrap items-center gap-1.5 rounded-xl bg-black/15 p-1">
+        {[
+          { key: "clusters" as TabKey, label: { fa: "۱. خوشه‌ها و صنایع", en: "1. Industry Clusters" }, icon: "🏭" },
+          { key: "projects" as TabKey, label: { fa: "۲. مدیریت پروژه‌ها", en: "2. Projects Master" }, icon: "📊" },
+          { key: "metadata" as TabKey, label: { fa: "۳. متادیتا و اسکیمای SQL", en: "3. SQL & Schema" }, icon: "🗄" },
+          { key: "typography" as TabKey, label: { fa: "۴. تنظیمات فونت و ظاهر", en: "4. Typography & Theme" }, icon: "🎨" },
+          { key: "ai" as TabKey, label: { fa: "۵. هوش مصنوعی و یکپارچگی", en: "5. AI & Integrations" }, icon: "✨" },
+          { key: "access" as TabKey, label: { fa: "۶. کاربران و دسترسی", en: "6. Users & Access" }, icon: "🛡" },
+          { key: "sync" as TabKey, label: { fa: "۷. همگام‌سازی", en: "7. Data Sync" }, icon: "↕" },
+          { key: "operations" as TabKey, label: { fa: "۸. آمادگی استقرار", en: "8. Operations" }, icon: "⚙" },
+          { key: "deployment" as TabKey, label: { fa: "۹. استقرار نهایی", en: "9. Production Deploy" }, icon: "🚀" },
+        ].map((tItem) => (
+          <button
+            key={tItem.key}
+            onClick={() => setActiveTab(tItem.key)}
+            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11px] font-light transition ${
+              activeTab === tItem.key ? "toggle-on tx1 shadow-sm" : "tx3 hover:tx2"
+            }`}
+          >
+            <span>{tItem.icon}</span>
+            <span>{t(tItem.label as Bi, lang)}</span>
+          </button>
+        ))}
+      </nav>
+
+      {/* ── Main Tab Content ── */}
+      <div className="thin-scroll flex-1 overflow-y-auto pr-1">
+        {/* ═════════ TAB 1: CLUSTERS & INDUSTRIES ═════════ */}
+        {activeTab === "clusters" && (
+          <div className="fade-rise space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-[12px] font-medium tx1">
+                  {rtl ? "لیست صنایع و خوشه‌های تعریف‌شده" : "Defined Industry Clusters"}
+                </h2>
+                <p className="text-[9px] font-extralight tx3">
+                  {rtl ? "می‌توانید نام، رنگ سازمانی و آیکون هر خوشه را ویرایش یا صنعت جدید اضافه کنید." : "Add or edit clusters and customize icons and colors."}
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setIsAddingCluster(true);
+                  setEditingClusterId(null);
+                  setClusterFa("");
+                  setClusterEn("");
+                  setClusterIcon("🏭");
+                  setClusterColor("#38BDF8");
+                }}
+                className="rounded-lg border border-sky-400/50 bg-sky-400/15 px-3 py-1.5 text-[10.5px] font-light text-sky-200 transition hover:bg-sky-400/25"
+              >
+                + {rtl ? "افزودن خوشه جدید" : "Add New Cluster"}
+              </button>
+            </div>
+
+            {/* Cluster Add/Edit Form */}
+            {(isAddingCluster || editingClusterId) && (
+              <div className="glass-dark rounded-2xl border border-sky-400/40 p-3.5 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11.5px] font-medium text-sky-300">
+                    {editingClusterId
+                      ? rtl
+                        ? "ویرایش خوشه صنعتی"
+                        : "Edit Industry Cluster"
+                      : rtl
+                      ? "تعریف خوشه صنعتی جدید"
+                      : "Define New Industry Cluster"}
+                  </span>
+                  <button
+                    onClick={() => {
+                      setIsAddingCluster(false);
+                      setEditingClusterId(null);
+                    }}
+                    className="text-[11px] tx4 hover:tx2"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
+                  <div>
+                    <label className="mb-1 block text-[9px] font-extralight tx3">{rtl ? "نام فارسی:" : "Name (FA):"}</label>
+                    <input
+                      value={clusterFa}
+                      onChange={(e) => setClusterFa(e.target.value)}
+                      placeholder="مثال: معادن و فلزات"
+                      className="w-full rounded-lg border b-line-soft bg-[var(--row)] px-2.5 py-1.5 text-[11px] tx1 outline-none focus:border-sky-400"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-[9px] font-extralight tx3">{rtl ? "نام انگلیسی:" : "Name (EN):"}</label>
+                    <input
+                      value={clusterEn}
+                      onChange={(e) => setClusterEn(e.target.value)}
+                      placeholder="e.g. Mining & Metals"
+                      dir="ltr"
+                      className="w-full rounded-lg border b-line-soft bg-[var(--row)] px-2.5 py-1.5 text-[11px] tx1 outline-none focus:border-sky-400"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-[9px] font-extralight tx3">{rtl ? "آیکون یا ایموجی:" : "Icon:"}</label>
+                    <input
+                      value={clusterIcon}
+                      onChange={(e) => setClusterIcon(e.target.value)}
+                      placeholder="🪨"
+                      className="w-full rounded-lg border b-line-soft bg-[var(--row)] px-2.5 py-1.5 text-[13px] tx1 outline-none focus:border-sky-400 text-center"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-[9px] font-extralight tx3">{rtl ? "رنگ نشانگر سازمانی:" : "Theme Color:"}</label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="color"
+                        value={clusterColor}
+                        onChange={(e) => setClusterColor(e.target.value)}
+                        className="h-8 w-10 cursor-pointer rounded border b-line-soft bg-transparent p-0"
+                      />
+                      <input
+                        value={clusterColor}
+                        onChange={(e) => setClusterColor(e.target.value)}
+                        dir="ltr"
+                        className="w-full rounded-lg border b-line-soft bg-[var(--row)] px-2.5 py-1.5 text-[10px] tx1 outline-none"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-2 pt-1">
+                  <button
+                    onClick={() => {
+                      setIsAddingCluster(false);
+                      setEditingClusterId(null);
+                    }}
+                    className="rounded-lg border b-line-soft px-3 py-1.5 text-[10px] font-light tx3 hover:tx1"
+                  >
+                    {rtl ? "انصراف" : "Cancel"}
+                  </button>
+                  <button
+                    onClick={handleSaveCluster}
+                    disabled={!clusterFa.trim()}
+                    className="rounded-lg border border-sky-400 bg-sky-400/20 px-4 py-1.5 text-[10.5px] font-medium text-sky-200 transition hover:bg-sky-400/30 disabled:opacity-40"
+                  >
+                    💾 {rtl ? "ذخیره تغییرات" : "Save Changes"}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Clusters Grid */}
+            <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2 xl:grid-cols-3">
+              {clusters.map((c) => {
+                const pCount = (projectsByCluster[c.id] ?? []).length;
+                return (
+                  <div
+                    key={c.id}
+                    className="glass-dark flex flex-col justify-between rounded-2xl p-3.5 border transition hover:-translate-y-0.5"
+                    style={{ borderColor: `${c.color}55` }}
+                  >
+                    <div className="flex items-start gap-3">
+                      <span
+                        className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl text-[20px]"
+                        style={{ background: `${c.color}1f`, border: `1px solid ${c.color}66` }}
+                      >
+                        {c.icon}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between">
+                          <h3 className="truncate text-[13px] font-medium" style={{ color: c.color }}>
+                            {t(c.title, lang)}
+                          </h3>
+                          <span className="rounded bg-black/25 px-1.5 py-0.5 text-[8.5px] font-extralight tx3" dir="ltr">
+                            ID: {c.id}
+                          </span>
+                        </div>
+                        <div className="mt-1 text-[10px] font-extralight tx3" dir="ltr">
+                          {c.title.en}
+                        </div>
+                        <div className="mt-2 flex items-center gap-2 text-[9px] font-light tx2">
+                          <span>
+                            {pCount} {rtl ? "پروژه ثبت‌شده" : "projects"}
+                          </span>
+                          <span>·</span>
+                          <span>
+                            {c.progress}% {rtl ? "میانگین پیشرفت" : "progress"}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="b-line-soft mt-3 flex items-center justify-end gap-1.5 border-t pt-2">
+                      <button
+                        onClick={() => startEditCluster(c)}
+                        className="rounded-lg border b-line-soft px-2.5 py-1 text-[9.5px] font-light tx2 transition hover:tx1 hover:border-sky-400"
+                      >
+                        ✏️ {rtl ? "ویرایش" : "Edit"}
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (
+                            window.confirm(
+                              rtl
+                                ? `آیا از حذف خوشه «${t(c.title, lang)}» و پروژه‌های آن مطمئن هستید؟`
+                                : `Delete cluster ${c.title.en}?`
+                            )
+                          ) {
+                            deleteCluster(c.id);
+                            showToast(rtl ? "خوشه حذف شد" : "Cluster deleted");
+                          }
+                        }}
+                        className="rounded-lg border border-rose-400/30 px-2.5 py-1 text-[9.5px] font-light text-rose-300 transition hover:bg-rose-400/15"
+                      >
+                        🗑 {rtl ? "حذف" : "Delete"}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* ═════════ TAB 2: PROJECTS MANAGEMENT ═════════ */}
+        {activeTab === "projects" && (
+          <div className="fade-rise space-y-3.5">
+            {/* Filter by Industry / Add Project */}
+            <div className="glass-dark flex flex-wrap items-center justify-between gap-3 rounded-2xl p-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-[11px] font-light tx2">{rtl ? "انتخاب خوشه صنعتی:" : "Select Industry:"}</span>
+                <select
+                  value={selectedClusterForProjects}
+                  onChange={(e) => setSelectedClusterForProjects(e.target.value)}
+                  className="rounded-lg border b-line-soft bg-[var(--row)] px-3 py-1.5 text-[11px] font-normal tx1 outline-none focus:border-sky-400"
+                  style={{ colorScheme: "dark" }}
+                >
+                  {clusters.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.icon} {t(c.title, lang)} ({c.id})
+                    </option>
+                  ))}
+                </select>
+                <span className="text-[9.5px] font-extralight tx3">
+                  · {currentClusterProjects.length} {rtl ? "پروژه در این صنعت" : "projects in cluster"}
+                </span>
+              </div>
+
+              <button
+                onClick={() => {
+                  setIsAddingProject(true);
+                  setEditingProjectId(null);
+                  setPrjCode(`PRJ-${Date.now().toString().slice(-4)}`);
+                  setPrjNameFa("");
+                  setPrjNameEn("");
+                  setPrjClientFa("");
+                  setPrjClientEn("");
+                  setPrjLocFa("");
+                  setPrjLocEn("");
+                  setPrjBudget("$350M");
+                  setPrjStatus("active");
+                  setPrjProgress(25);
+                }}
+                className="rounded-lg border border-emerald-400/50 bg-emerald-400/15 px-3 py-1.5 text-[10.5px] font-medium text-emerald-300 transition hover:bg-emerald-400/25"
+              >
+                + {rtl ? "ثبت پروژه جدید" : "Add New Project"}
+              </button>
+            </div>
+
+            {/* Project Add/Edit Form */}
+            {(isAddingProject || editingProjectId) && (
+              <div className="glass-dark rounded-2xl border border-emerald-400/40 p-4 space-y-3">
+                <div className="flex items-center justify-between border-b b-line-soft pb-2">
+                  <span className="text-[12px] font-medium text-emerald-300">
+                    {editingProjectId
+                      ? rtl
+                        ? `ویرایش مشخصات پروژه (${prjCode})`
+                        : `Edit Project (${prjCode})`
+                      : rtl
+                      ? "ثبت مشخصات پروژه جدید"
+                      : "Define New Project"}
+                  </span>
+                  <button
+                    onClick={() => {
+                      setIsAddingProject(false);
+                      setEditingProjectId(null);
+                    }}
+                    className="text-[11px] tx4 hover:tx2"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
+                  <div>
+                    <label className="mb-1 block text-[9px] font-extralight tx3">{rtl ? "کد پروژه (یکتا):" : "Project Code:"}</label>
+                    <input
+                      value={prjCode}
+                      onChange={(e) => setPrjCode(e.target.value)}
+                      dir="ltr"
+                      placeholder="OG-2401"
+                      className="w-full rounded-lg border b-line-soft bg-[var(--row)] px-2.5 py-1.5 text-[11px] tx1 outline-none focus:border-emerald-400"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-[9px] font-extralight tx3">{rtl ? "نام پروژه (فارسی):" : "Name (FA):"}</label>
+                    <input
+                      value={prjNameFa}
+                      onChange={(e) => setPrjNameFa(e.target.value)}
+                      placeholder="مثال: توسعه میدان نفتی"
+                      className="w-full rounded-lg border b-line-soft bg-[var(--row)] px-2.5 py-1.5 text-[11px] tx1 outline-none focus:border-emerald-400"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-[9px] font-extralight tx3">{rtl ? "نام پروژه (انگلیسی):" : "Name (EN):"}</label>
+                    <input
+                      value={prjNameEn}
+                      onChange={(e) => setPrjNameEn(e.target.value)}
+                      placeholder="Oilfield Development"
+                      dir="ltr"
+                      className="w-full rounded-lg border b-line-soft bg-[var(--row)] px-2.5 py-1.5 text-[11px] tx1 outline-none focus:border-emerald-400"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-[9px] font-extralight tx3">{rtl ? "کارفرما (فارسی):" : "Client (FA):"}</label>
+                    <input
+                      value={prjClientFa}
+                      onChange={(e) => setPrjClientFa(e.target.value)}
+                      placeholder="شرکت ملی نفت"
+                      className="w-full rounded-lg border b-line-soft bg-[var(--row)] px-2.5 py-1.5 text-[11px] tx1 outline-none focus:border-emerald-400"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-[9px] font-extralight tx3">{rtl ? "موقعیت جغرافیایی:" : "Location:"}</label>
+                    <input
+                      value={prjLocFa}
+                      onChange={(e) => setPrjLocFa(e.target.value)}
+                      placeholder="خوزستان / عسلویه"
+                      className="w-full rounded-lg border b-line-soft bg-[var(--row)] px-2.5 py-1.5 text-[11px] tx1 outline-none focus:border-emerald-400"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-[9px] font-extralight tx3">{rtl ? "برآورد بودجه:" : "Budget:"}</label>
+                    <input
+                      value={prjBudget}
+                      onChange={(e) => setPrjBudget(e.target.value)}
+                      dir="ltr"
+                      placeholder="$1.2B یا $450M"
+                      className="w-full rounded-lg border b-line-soft bg-[var(--row)] px-2.5 py-1.5 text-[11px] tx1 outline-none focus:border-emerald-400"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-[9px] font-extralight tx3">{rtl ? "وضعیت پروژه:" : "Status:"}</label>
+                    <select
+                      value={prjStatus}
+                      onChange={(e) => setPrjStatus(e.target.value as ProjectStatus)}
+                      className="w-full rounded-lg border b-line-soft bg-[var(--row)] px-2.5 py-1.5 text-[11px] tx1 outline-none focus:border-emerald-400"
+                      style={{ colorScheme: "dark" }}
+                    >
+                      <option value="active">{rtl ? "🟢 فعال (Active)" : "🟢 Active"}</option>
+                      <option value="tender">{rtl ? "🟡 مناقصه / مطالعه (Tender/Study)" : "🟡 Tender/Study"}</option>
+                      <option value="stopped">{rtl ? "🔴 متوقف (Stopped)" : "🔴 Stopped"}</option>
+                      <option value="completed">{rtl ? "⚫ خاتمه‌یافته (Completed)" : "⚫ Completed"}</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-[9px] font-extralight tx3">
+                      {rtl ? "درصد پیشرفت فیزیکی:" : "Progress (%):"} {prjProgress}%
+                    </label>
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      value={prjProgress}
+                      onChange={(e) => setPrjProgress(Number(e.target.value))}
+                      className="h-2 w-full cursor-pointer accent-emerald-400"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2">
+                  <button
+                    onClick={() => {
+                      setIsAddingProject(false);
+                      setEditingProjectId(null);
+                    }}
+                    className="rounded-lg border b-line-soft px-3 py-1.5 text-[10px] font-light tx3 hover:tx1"
+                  >
+                    {rtl ? "انصراف" : "Cancel"}
+                  </button>
+                  <button
+                    onClick={handleSaveProject}
+                    disabled={!prjCode.trim() || !prjNameFa.trim()}
+                    className="rounded-lg border border-emerald-400 bg-emerald-400/20 px-4 py-1.5 text-[10.5px] font-medium text-emerald-300 transition hover:bg-emerald-400/30 disabled:opacity-40"
+                  >
+                    💾 {rtl ? "ذخیره پروژه" : "Save Project"}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Projects Table View */}
+            <div className="glass-dark rounded-2xl overflow-hidden">
+              <table className="w-full text-start text-[11px]">
+                <thead>
+                  <tr className="border-b b-line-soft bg-black/25 text-[9.5px] font-extralight tx3">
+                    <th className="px-3 py-2.5 text-start">{rtl ? "کد" : "Code"}</th>
+                    <th className="px-3 py-2.5 text-start">{rtl ? "عنوان پروژه" : "Project Name"}</th>
+                    <th className="px-3 py-2.5 text-start">{rtl ? "کارفرما / محل" : "Client / Location"}</th>
+                    <th className="px-3 py-2.5 text-center">{rtl ? "بودجه" : "Budget"}</th>
+                    <th className="px-3 py-2.5 text-center">{rtl ? "پیشرفت" : "Progress"}</th>
+                    <th className="px-3 py-2.5 text-center">{rtl ? "وضعیت" : "Status"}</th>
+                    <th className="px-3 py-2.5 text-end">{rtl ? "عملیات" : "Actions"}</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y b-line-soft">
+                  {currentClusterProjects.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="px-3 py-6 text-center text-[11px] font-extralight tx4">
+                        {rtl ? "هیچ پروژه‌ای در این خوشه تعریف نشده است." : "No projects defined in this cluster."}
+                      </td>
+                    </tr>
+                  ) : (
+                    currentClusterProjects.map((p) => {
+                      const meta = statusMeta[p.status];
+                      return (
+                        <tr key={p.id} className="transition hover:bg-white/[0.02]">
+                          <td className="px-3 py-2 font-mono text-[10px] tx2" dir="ltr">
+                            {p.code}
+                          </td>
+                          <td className="px-3 py-2 font-normal tx1">{t(p.name, lang)}</td>
+                          <td className="px-3 py-2 text-[10px] tx3">
+                            {t(p.client, lang)} · {t(p.location, lang)}
+                          </td>
+                          <td className="px-3 py-2 text-center font-mono text-[10.5px] tx2" dir="ltr">
+                            {p.budget}
+                          </td>
+                          <td className="px-3 py-2 text-center">
+                            <div className="flex items-center justify-center gap-2">
+                              <div className="h-1.5 w-16 overflow-hidden rounded-full bg-black/30">
+                                <div
+                                  className="h-full rounded-full"
+                                  style={{ width: `${p.progress}%`, background: meta.color }}
+                                />
+                              </div>
+                              <span className="font-mono text-[10px] tx2">{p.progress}%</span>
+                            </div>
+                          </td>
+                          <td className="px-3 py-2 text-center">
+                            <span
+                              className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[9.5px]"
+                              style={{ background: `${meta.color}15`, color: meta.color }}
+                            >
+                              <i className="h-1.5 w-1.5 rounded-full" style={{ background: meta.color }} />
+                              {t(meta.label, lang)}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2 text-end">
+                            <div className="inline-flex items-center gap-1.5">
+                              <button
+                                onClick={() => startEditProject(p)}
+                                className="rounded px-2 py-1 text-[9.5px] font-light tx2 hover:bg-white/10 hover:tx1"
+                              >
+                                ✏️
+                              </button>
+                              <button
+                                onClick={() => {
+                                  if (
+                                    window.confirm(
+                                      rtl
+                                        ? `آیا از حذف پروژه «${t(p.name, lang)}» مطمئن هستید؟`
+                                        : `Delete project ${p.code}?`
+                                    )
+                                  ) {
+                                    deleteProject(selectedClusterForProjects, p.id);
+                                    showToast(rtl ? "پروژه حذف شد" : "Project deleted");
+                                  }
+                                }}
+                                className="rounded px-2 py-1 text-[9.5px] font-light text-rose-300 hover:bg-rose-400/20"
+                              >
+                                🗑
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* ═════════ TAB 3: METADATA & DATABASE CONFIG ═════════ */}
+        {activeTab === "metadata" && (
+          <div className="fade-rise flex min-h-0 flex-1 flex-col">
+            <SqlConnectionPanel lang={lang} />
+          </div>
+        )}
+
+        {/* ═════════ TAB 4: TYPOGRAPHY & THEME ═════════ */}
+        {activeTab === "typography" && (
+          <div className="fade-rise space-y-3.5">
+            <div className="glass-dark rounded-2xl p-4 space-y-3">
+              <h3 className="text-[12px] font-medium tx1">
+                {rtl ? "تنظیمات اندازه فونت سراسری" : "Global Font Scaling"}
+              </h3>
+              <p className="text-[9.5px] font-extralight tx3">
+                {rtl
+                  ? "با انتخاب هر گزینه، اندازه متون در کل داشبورد و سایدبارها به صورت زنده تغییر می‌کند."
+                  : "Change the overall font scale live across the entire application."}
+              </p>
+
+              <div className="grid grid-cols-3 gap-2.5">
+                {[
+                  { key: "normal" as const, title: rtl ? "عادی (Standard - 15px)" : "Standard (15px)" },
+                  { key: "large" as const, title: rtl ? "بزرگ سازمانی (Large - 16.5px)" : "Large (16.5px)" },
+                  { key: "xlarge" as const, title: rtl ? "خیلی بزرگ (Extra Large - 17.5px)" : "Extra Large (17.5px)" },
+                ].map((scale) => (
+                  <button
+                    key={scale.key}
+                    onClick={() => {
+                      updateSettings({ fontScale: scale.key });
+                      showToast(rtl ? "اندازه فونت اعمال شد" : "Font scale updated");
+                    }}
+                    className={`rounded-xl border p-3 text-center transition ${
+                      settings.fontScale === scale.key
+                        ? "border-sky-400 bg-sky-400/20 text-sky-200 ring-1 ring-sky-400/50"
+                        : "b-line-soft glass-row tx3 hover:tx1"
+                    }`}
+                  >
+                    <div className="text-[12px] font-medium">{scale.title}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Typography Preview */}
+            <div className="glass-dark rounded-2xl p-4 space-y-2">
+              <h3 className="text-[11px] font-normal tx3">{rtl ? "پیش‌نمایش زنده متون:" : "Live Typography Preview:"}</h3>
+              <div className="rounded-xl bg-black/15 p-4 space-y-1.5">
+                <div className="text-[18px] font-semibold tx1">
+                  {rtl ? "پلتفرم جامع مدیریت و کنترل پروژه (عنوان اصلی)" : "Comprehensive Project Management Platform"}
+                </div>
+                <div className="text-[13px] font-normal tx2">
+                  {rtl
+                    ? "زیرفرآیند برنامه‌ریزی و زمان‌بندی: استخراج ساختار شکست کار با هوش مصنوعی و تراز منابع"
+                    : "Planning & Scheduling Sub-process: Automated WBS extraction with AI Co-Pilot"}
+                </div>
+                <div className="text-[10.5px] font-light tx3">
+                  {rtl ? "متن راهنما: محل ذخیره‌سازی داده‌ها SQL Server (.\\SQL2008EXPRESS)" : "Caption text: Storage engine SQL Server"}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ═════════ TAB 5: AI & INTEGRATION GATEWAY ═════════ */}
+        {activeTab === "ai" && (
+          <div className="fade-rise space-y-3.5">
+            <div className="glass-dark rounded-2xl p-4 space-y-3">
+              <div className="flex items-center gap-2 text-fuchsia-300">
+                <span className="text-[14px]">✨</span>
+                <h3 className="text-[12px] font-medium tx1">
+                  {rtl ? "پیکربندی هوش مصنوعی و مدل‌های تخصصی PMO" : "AI Provider & PMO Model Gateway"}
+                </h3>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-[9.5px] font-extralight tx3">
+                    {rtl ? "سرویس‌دهنده هوش مصنوعی (AI Provider):" : "AI Provider:"}
+                  </label>
+                  <select
+                    value={settings.aiProvider}
+                    onChange={(e) => updateSettings({ aiProvider: e.target.value as any })}
+                    className="w-full rounded-lg border b-line-soft bg-[var(--row)] px-3 py-2 text-[11px] tx1 outline-none focus:border-fuchsia-400"
+                    style={{ colorScheme: "dark" }}
+                  >
+                    <option value="openai">OpenAI (GPT-4o / GPT-4-turbo)</option>
+                    <option value="deepseek">DeepSeek AI (DeepSeek-V3 / R1)</option>
+                    <option value="local">Local On-Premises LLM (Ollama / vLLM)</option>
+                    <option value="mock">سرویس هوش مصنوعی شبیه‌سازی‌شده (Built-in Simulator)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-[9.5px] font-extralight tx3">
+                    {rtl ? "شناسه مدل انتخابی (Model ID):" : "Active Model ID:"}
+                  </label>
+                  <input
+                    value={settings.aiModel}
+                    onChange={(e) => updateSettings({ aiModel: e.target.value })}
+                    dir="ltr"
+                    className="w-full rounded-lg border b-line-soft bg-[var(--row)] px-3 py-2 font-mono text-[11px] tx1 outline-none focus:border-fuchsia-400"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-[9.5px] font-extralight tx3">
+                  {rtl ? "کلید دسترسی (API Key):" : "API Key:"}
+                </label>
+                <input
+                  type="password"
+                  value={settings.aiApiKey}
+                  onChange={(e) => updateSettings({ aiApiKey: e.target.value })}
+                  dir="ltr"
+                  className="w-full rounded-lg border b-line-soft bg-[var(--row)] px-3 py-2 font-mono text-[11px] tx1 outline-none focus:border-fuchsia-400"
+                />
+                <p className="mt-1 text-[8.5px] font-extralight text-amber-300">
+                  {rtl
+                    ? "کلید فقط در نشست فعلی قرار می‌گیرد و در localStorage ذخیره نمی‌شود؛ در محیط عملیاتی باید در Backend Secret Vault نگهداری شود."
+                    : "The key is session-only and is not written to localStorage; production keys must be stored in the backend secret vault."}
+                </p>
+              </div>
+
+              <div className="flex justify-end pt-2">
+                <button
+                  onClick={() => showToast(rtl ? "پیکربندی هوش مصنوعی با موفقیت تست و ذخیره شد" : "AI Configuration verified")}
+                  className="rounded-lg border border-fuchsia-400 bg-fuchsia-400/20 px-4 py-2 text-[10.5px] font-medium text-fuchsia-200 hover:bg-fuchsia-400/30"
+                >
+                  ⚡ {rtl ? "تست اتصال و اعتبارسنجی مدل" : "Test AI Gateway"}
+                </button>
+              </div>
+            </div>
+            <ProjectKnowledgePanel lang={lang} />
+            <div className="h-[560px]"><NotificationOpsPanel lang={lang} /></div>
+          </div>
+        )}
+
+        {/* ═════════ TAB 6: ACCESS CONTROL ═════════ */}
+        {activeTab === "access" && <AccessControlPanel lang={lang} />}
+
+        {/* ═════════ TAB 7: MASTER DATA SYNC ═════════ */}
+        {activeTab === "sync" && <MasterDataSyncPanel lang={lang} />}
+
+        {/* ═════════ TAB 8: OPERATIONS READINESS ═════════ */}
+        {activeTab === "operations" && <OperationsReadinessPanel lang={lang} />}
+
+        {/* ═════════ TAB 9: PRODUCTION DEPLOYMENT ═════════ */}
+        {activeTab === "deployment" && <ProductionDeploymentPanel lang={lang} />}
+      </div>
+    </div>
+  );
+}

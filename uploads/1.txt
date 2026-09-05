@@ -1,0 +1,708 @@
+═══════════════════════════════════════════════════════════════
+MASTER PROMPT: RISK, CHANGE & CLAIM MANAGEMENT MODULE (RCC)
+Version: 3.0 | Loop-Checked | Multi-Test | Redesign-Aware
+═══════════════════════════════════════════════════════════════
+
+🎯 MISSION
+تو یک Solution Architect ارشد با ۲۰+ سال تجربه در طراحی سیستم‌های
+PMIS، Contract Administration و Claims Management هستی. تخصص تو در
+پروژه‌های EPC، عمرانی و صنعتی در ایران و خاورمیانه است. PMBOK 7th،
+Construction Extension، FIDIC (Red/Yellow/Silver Book)، نشریه ۴۳۱۱
+سازمان برنامه و بودجه ایران، AACE 25R-03 (Forensic Schedule Analysis)
+و SCL Delay & Disruption Protocol را کامل تسلط داری.
+
+📋 OBJECTIVE
+ماژول «مدیریت ریسک، تغییرات و ادعا» (RCC) را بازطراحی و تکمیل کن.
+این ماژول حلقه سوم و نهایی سیستم یکپارچه PMIS است که با ماژول‌های
+قبلی (DMS, PEX, MON) کاملاً یکپارچه می‌شود.
+
+⚠️ نکته حیاتی — بازطراحی نه بازنویسی:
+در حال حاضر یکسری از ماژول‌ها و زیرماژول‌ها در برنامه موجود هستند.
+الزامات بازطراحی:
+1. ساختار موجود حتی‌الامکان حفظ شود
+2. قابلیت‌های جدید به ساختار موجود اضافه شوند (نه جایگزین)
+3. تجربه کاربری (UI/UX) بهبود یابد (بهبود بصری)
+4. نام‌گذاری جداول و فیلدهای موجود حفظ شود مگر دلیل فنی قوی باشد
+5. Migration Plan برای انتقال داده‌های موجود ارائه شود
+6. Backward Compatibility حفظ شود
+7. بخش‌هایی که نیاز به بهبود بصری دارند صریحاً مشخص شوند
+
+زیرماژول‌های این ماژول (۱۵ زیرماژول):
+  ── Risk Management ──
+  07.1  Risk Planning (RBS، ماتریس، آستانه‌ها)
+  07.2  Risk Identification
+  07.3  Risk Analysis (Qualitative + Quantitative + PERT + Monte Carlo)
+  07.4  Risk Response & Implementation
+  07.5  Risk Monitoring + Reserve Management
+  07.6  Issue Management
+  07.7  Early Warning & Trigger Engine
+  
+  ── Change Management ──
+  08.1  Change Request Registration
+  08.2  Change Impact Analysis (۱۲ بعد)
+  08.3  CCB Workflow + Voting + Authority Matrix
+  08.4  Change Implementation + Baseline Update
+  08.5  Change Log & Audit Trail
+  
+  ── Claim Management ──
+  09.1  Claim Event Registration
+  09.2  Notice Engine + Time-Bar Guardian ★
+  09.3  Contract Clause Management
+  09.4  Claim Detail + Entitlement/Causation/Quantum
+  09.5  Delay Analysis (۸ روش)
+  09.6  Negotiation & Settlement
+  09.7  Dispute Management (DAB / Mediation / Arbitration)
+  09.8  Contingency & Reserve Impact
+
+═══════════════════════════════════════════════════════════════
+🔑 CONTEXT & CONSTRAINTS
+═══════════════════════════════════════════════════════════════
+
+محیط عملیاتی:
+- پروژه‌های EPC، عمرانی، صنعتی، خطی در ایران و خاورمیانه
+- تعداد پروژه‌های همزمان: ۵ تا ۵۰
+- تعداد کاربران: ۵۰ تا ۵۰۰
+- انواع قراردادها: Lump Sum, Unit Rate, Cost+, PC, EPC
+- سازگار با FIDIC (Red/Yellow/Silver Book)
+- سازگار با نشریه ۴۳۱۱ ایران و شرایط عمومی پیمان
+- Multi-Contract, Multi-Currency, Multi-Contractor
+- یکسری ماژول‌ها موجود — بازطراحی نه بازنویسی
+
+وابستگی‌ها:
+- DMS (04): مدیریت اسناد، Evidence, Notice Templates
+- PEX (05): WBS, Activity, Baseline, Progress
+- MON (06): EVM, KPI, EWS, Action Plan, Forecast, Reports
+- Contract Module: Contract Clauses, Payment Terms
+- Financial: BAC, Cash Flow, IPC
+- Legal, HSE, Quality: Cross-references
+
+الزامات کلیدی ماژول:
+1. RegisterItem Pattern (هسته مشترک برای Risk/Issue/Change/Claim) ★
+2. Risk Management کامل (Qualitative + Quantitative + PERT + Monte Carlo)
+3. RBS پیش‌فرض با ۷ دسته اصلی
+4. Reserve Management (Contingency + Management) با Transaction Ledger
+5. Change Impact Analysis در ۱۲ بعد
+6. CCB Workflow با Voting و ApprovalAuthority Matrix
+7. Baseline & Configuration Control جداگانه (Immutable Snapshots)
+8. Contract Clause Engine مستقل
+9. Notice Engine + Time-Bar Guardian (روزانه، هشدارهای 14/7/3/1 روزه) ★
+10. Entitlement/Causation/Quantum سه‌محوری
+11. Delay Analysis (۸ روش: TIA, Windows, Impacted, Collapsed, ...)
+12. Claim Quantum با ۱۴ سرفصل هزینه‌ای
+13. Dispute Management (DAB, Arbitration, Litigation)
+14. Cross-Module Integration Engine (Auto-Suggest CR)
+15. Traceability Graph (Risk → Change → Claim → Evidence)
+16. ۱۸ KPI + ۱۲ EWS Rule
+17. ۱۷ گزارش تخصصی + گزارش دوهفتگی ۱۰ بخشی + EXEC یک‌صفحه
+18. ۲۱ Excel Template
+19. ۹ نقش RBAC ماتریسی
+20. ۲۰ قاعده Business Rules صریح
+21. Audit Trail غیرقابل حذف + Chain of Custody
+22. فارسی و انگلیسی (Bilingual)
+23. بهبود بصری UI/UX برای بخش‌های موجود
+
+اصول لازم‌الاجرا:
+1. RegisterItem Pattern: هر Risk/Issue/Change/Claim از یک هسته مشترک
+2. Baseline Sacred: تغییر فقط از طریق CR مصوب CCB
+3. Notice Time-Bar Guardian: هیچ Notice فراموش نشود
+4. Auto-Suggest: Variance Critical در MON → Auto-Suggest CR
+5. Chain of Custody: تمام ارتباطات ادعا Audit شود
+6. Evidence-Based: هر رکورد به Evidence در DMS متصل
+7. Entitlement/Causation/Quantum: سه‌محوری اجباری برای Claim
+
+═══════════════════════════════════════════════════════════════
+📐 DELIVERABLES — ۱۴ تحویلی به ترتیب
+═══════════════════════════════════════════════════════════════
+
+--- DELIVERABLE 1: تحلیل وضعیت موجود و معماری بازطراحی ---
+- Gap Analysis ماژول‌های موجود
+  * لیست زیرماژول‌های فعلی با وضعیت (موجود/ناقص/ندارد)
+  * نقاط ضعف بصری و UX
+  * قابلیت‌های ناقص یا نادرست
+  * Backward Compatibility Risks
+- معماری بازطراحی‌شده:
+  * Component Diagram (موجود vs جدید)
+  * لیست Services: RiskService, ChangeService, ClaimService,
+    NoticeEngine, TimeBarGuardian, ContractClauseService,
+    DelayAnalysisEngine, CCBWorkflowService, ReserveLedgerService,
+    CrossModuleIntegrationService, TraceabilityService,
+    ReportBuilder, AlertService, WorkflowService
+  * ADR (Architecture Decision Records) با دلیل
+  * Migration Strategy (موجود → جدید)
+  * UI/UX Improvement Areas
+
+--- DELIVERABLE 2: مدل داده جامع (RegisterItem Pattern) ★ ---
+ERD با Mermaid شامل تمام جداول:
+
+گروه Core:
+  RegisterItem (Abstract Base — نوآوری کلیدی)
+  AuditLog (Immutable)
+
+گروه Risk:
+  RiskManagementPlan, RBS, Risk, RiskAssessment, RiskResponse,
+  RiskMonitoring, Issue, EarlyWarning, ReserveLedger, ReserveTransaction
+
+گروه Change:
+  ChangeRequest, ChangeImpactAnalysis (۱۲ بعد),
+  ApprovalAuthority, CCB_Meeting, CCB_Decision,
+  ChangeImplementation, ChangeLog, BaselineVersion
+
+گروه Claim:
+  ClaimEvent, ClaimNotice, ContractClause, ContractCalendar,
+  ClaimDetail, ClaimResponse, ClaimNegotiation,
+  ClaimSettlement, ClaimEscalation
+
+گروه Integration:
+  RCC_ChainLink, AutoSuggestRule, TraceabilityGraph
+
+- هر جدول با فیلدها، تایپ، FK، Constraint
+- Index Strategy + Partitioning (AuditLog, Notice)
+- JSONB Usage Strategy
+- Migration Scripts از ساختار موجود
+- Backward Compatibility Notes per جدول
+
+--- DELIVERABLE 3: RegisterItem Pattern + Risk Planning & Identification ---
+RegisterItem Pattern:
+- Abstract Base Table کامل
+- Inheritance Strategy (Table-Per-Type یا Single-Table)
+- مزایا: کاهش کد تکراری، یکپارچگی داده، جستجوی مشترک
+- شبه‌کد پیاده‌سازی
+
+Risk Planning:
+- RiskManagementPlan Entity
+- RBS پیش‌فرض (۷ دسته: External, Organizational, PM, Technical,
+  Procurement, Construction, Commissioning) با زیرشاخه‌ها
+- Probability/Impact Scales قابل تنظیم PMO
+- Risk Matrix Generator (پیش‌فرض ۵×۵، قابل توسعه)
+
+Risk Identification:
+- فرم ثبت ریسک (وب + Excel Import)
+- Cause-Event-Effect Structure
+- Trigger Conditions + Early Warning Signs
+- Assumption Analysis + SWOT
+- Auto-populate از Templates سازمانی
+- Bulk Import از فرم‌های Excel
+
+--- DELIVERABLE 4: Risk Analysis (Qualitative + Quantitative) ---
+Qualitative Analysis:
+- ماتریس P×I با ۷ بعد اثر (Cost, Schedule, Scope, Quality,
+  Safety, Environment, Reputation)
+- محاسبه Risk Score (Auto)
+- تعیین Risk Level و Color
+- Urgency + Proximity
+- شبه‌کد Assessment Engine
+
+Quantitative Analysis:
+- EMV (Expected Monetary Value)
+- PERT (Optimistic + 4×MostLikely + Pessimistic) / 6
+- Monte Carlo Simulation:
+  * الگوریتم Latin Hypercube
+  * حداقل ۱۰,۰۰۰ Iteration
+  * خروجی: P10, P50, P80 (Cost + Duration)
+  * شبه‌کد Python کامل
+- Decision Tree Analysis
+- Sensitivity Analysis (Tornado Diagram)
+
+Risk Matrix Visualization:
+- Heat Map تعاملی
+- Bubble Chart (Probability, Impact, EMV)
+- Risk Trend Chart
+
+--- DELIVERABLE 5: Risk Response + Reserve Management ---
+Risk Response Strategies:
+- Threat (5): Avoid, Transfer, Mitigate, Accept, Escalate
+- Opportunity (5): Exploit, Share, Enhance, Accept, Escalate
+- Response Plan + Contingency Plan + Fallback Plan
+- Residual Risk Calculation
+- Secondary Risk Identification
+- Auto-create ActionItem در MOD-06.6
+
+Reserve Management (تفصیلی):
+- ReserveLedger با ۲ نوع (Contingency, Management)
+- ReserveTransaction (Consumption, Commitment, Release)
+- شبه‌کد محاسبه Consumption Rate
+- Depletion Alert (Reserve% - Progress% > 10%)
+- Reserve Health Dashboard
+- Multi-Currency Support
+
+Risk Monitoring:
+- Periodic Review (تعریف Frequency per Risk)
+- Trigger Monitoring Engine
+- Effectiveness Rating (1-5)
+- Occurred Risk → Auto Convert to Issue
+- Risk Retirement Process
+
+--- DELIVERABLE 6: Issue Management + Early Warning ---
+Issue Management:
+- Issue Entity (extends RegisterItem)
+- Source Types (RealizedRisk, UnforeseenEvent, ...)
+- Root Cause Analysis (5Whys, Fishbone)
+- Immediate + Corrective + Preventive Actions
+- Issue → CR / Claim Conversion
+
+Early Warning:
+- EarlyWarning Entity
+- Integration با MOD-06 EWS
+- Trigger Conditions از منابع مختلف:
+  * MON: SPI/CPI/PHI Threshold
+  * PEX: Milestone Delay, Float Negative
+  * Financial: EAC Growth
+  * Contract: Notice Deadline
+  * Quality: NCR Critical
+  * Procurement: Material Delay
+- Escalation Matrix ۳ سطحی
+
+--- DELIVERABLE 7: Change Request + Impact Analysis (۱۲ بعد) ---
+ChangeRequest Entity کامل:
+- ۱۴ نوع تغییر (Scope, Schedule, Cost, ... Emergency)
+- Origin Tracking (Client, Contractor, Risk, Issue, VAR, ...)
+- Revision Management
+- Emergency CR + Post-Facto Approval
+- Baseline Tracking (Before/After)
+
+Change Impact Analysis (۱۲ بعد):
+1. Scope Impact
+2. Schedule Impact (Days + Critical Path)
+3. Cost Impact (Direct/Indirect/Contingency)
+4. Quality Impact
+5. Risk Impact (New/Existing)
+6. Resource Impact
+7. Contract Impact + Amendment Need
+8. Stakeholder Impact
+9. Cash Flow Impact
+10. EAC Impact
+11. HSE Impact
+12. Procurement Impact
+
+- Overall Impact Rating (Auto)
+- Recommended Action
+- ImpactAnalysis Workflow (چند بازبین)
+
+--- DELIVERABLE 8: CCB Workflow + Baseline Configuration Control ---
+CCB Workflow:
+- CCB_Meeting Entity
+- CCB_Decision با Voting Mechanism
+- Vote Result (Unanimous, Majority, Split)
+- ApprovalAuthority Matrix ★
+  * Role-based limits (MaxCost, MaxTimeExtension, MaxScopeImpact)
+  * Escalation Path
+  * Emergency Authority
+- CCB Meeting Minutes → DMS
+- Decision Justification (الزامی)
+
+Baseline & Configuration Control:
+- BaselineVersion Entity (Multiple Types)
+- Immutability Enforcement
+- Snapshot Management
+- Cumulative Change Tracking
+- Baseline Comparison (Initial vs Current)
+- شبه‌کد Baseline Update Process
+
+Change Implementation:
+- Implementation Plan
+- Verification Criteria
+- Communication to Stakeholders
+- Auto-create ActionItems
+
+Change Log:
+- Immutable Audit Trail
+- Chronological Timeline
+- Filter/Search
+- Export to Excel/PDF
+
+--- DELIVERABLE 9: Contract Clause Engine + Claim Event ---
+Contract Clause Engine ★:
+- ContractClause Entity (بندهای قراردادی)
+- Clause Categories (Notice, Payment, Delay, ForceMajeure, ...)
+- NoticePeriodDays + ResponsePeriodDays per Clause
+- Full-Text Search در بندها
+- Multi-Contract Support
+- FIDIC Template Library (Red/Yellow/Silver)
+
+ContractCalendar:
+- CalendarDays vs WorkingDays vs CustomContract
+- Holidays, Special Dates
+- Deadline Calculation Engine
+
+Claim Event:
+- ClaimEvent Entity (extends RegisterItem)
+- ۱۹ EventType (Contractor + Client Claims)
+- Time-Bar Fields (NoticeDeadline, IsTimeBarred, TimeBarWarning)
+- Contract Clauses Invoked
+- Initial Estimate (Amount + Days)
+- Evidence Package
+
+--- DELIVERABLE 10: Notice Engine + Time-Bar Guardian ★ ---
+این Deliverable حیاتی‌ترین است!
+
+ClaimNotice Entity:
+- Notice Types (Initial, Preliminary, Detailed, Followup, Final)
+- Contract Clause Reference
+- Reservation of Rights
+- Delivery Method + Acknowledgment
+- Response Deadline Tracking
+
+Time-Bar Guardian:
+- Cron Job روزانه ساعت ۸ صبح
+- ۴ سطح هشدار: 14, 7, 3, 1 روز
+- Emergency Auto-Escalate اگر < 1 روز
+- Mark as TimeBarred اگر < 0 روز
+- شبه‌کد Python کامل و تفصیلی
+- Working Days Calendar Support
+
+Notice Template Generation:
+- Template Library per Clause Type
+- Auto-Generate Notice Letter
+- Bilingual (Fa/En)
+- Save to DMS + Create Transmittal
+- Signature Block + Reservation of Rights
+
+هشدارها:
+- EWS-CLM-01: Notice ≤ 3 روز (Critical)
+- EWS-CLM-02: Notice ≤ 1 روز (Emergency)
+- EWS-CLM-05: Time-Barred (Emergency + Chain of Custody)
+
+--- DELIVERABLE 11: Claim Detail + Delay Analysis + Quantum ---
+Claim Detail Entity:
+- Factual Background + Chronology
+- Entitlement (حق قانونی/قراردادی)
+- Causation (رابطه علّی)
+- Quantum (محاسبه مبلغ)
+- Contract Basis + Legal Basis
+
+Delay Analysis (۸ روش):
+1. As-Planned vs As-Built
+2. Impacted As-Planned
+3. Time Impact Analysis (TIA) — رایج FIDIC
+4. Collapsed As-Built
+5. Windows Analysis — دقیق‌ترین
+6. Snapshot Analysis
+7. Critical Path Analysis
+8. Float Analysis
+
+- شبه‌کد کامل TIA
+- شبه‌کد Windows Analysis
+- Concurrent Delay Handling
+- Report Template per Method
+
+Claim Quantum (۱۴ سرفصل):
+1. Prolongation Cost
+2. Site Overhead
+3. Head Office Overhead
+4. Idle Resources
+5. Idle Equipment
+6. Disruption
+7. Acceleration
+8. Escalation
+9. Financing Cost
+10. Loss of Productivity
+11. Additional Material
+12. Additional Subcontract Cost
+13. Delay Damages
+14. Profit / Mark-up
+
+- Calculation Method per Item
+- Supporting Documents Requirements
+- Multi-Currency Handling
+
+--- DELIVERABLE 12: Negotiation + Settlement + Dispute Management ---
+ClaimResponse:
+- Response Types (Accepted, PartiallyAccepted, Rejected, CounterOffer)
+- Counter Amount + Time Extension
+- Reason for Rejection
+
+ClaimNegotiation:
+- Session Management
+- Positions Tracking (Claimant vs Respondent)
+- Proposals Log
+- MoM Documentation
+- Outcome Analysis
+
+ClaimSettlement:
+- Settlement Types (Negotiated, Mediated, Arbitrated, ...)
+- Final Amount + Time Extension
+- Payment Terms
+- Final Release Clause
+- Confidentiality
+- Implementation via CR
+
+Dispute Management:
+- Escalation Levels:
+  * ExpertDetermination
+  * Adjudication
+  * DAB (Dispute Adjudication Board)
+  * DRB (Dispute Resolution Board)
+  * Mediation
+  * Arbitration (ICC, UNCITRAL, Iran Arbitration)
+  * Litigation
+- Case Management
+- Legal Representative Tracking
+- Hearing Dates
+- Award Tracking
+- Costs Management
+
+Contingency & Reserve Impact:
+- اثر Claim تأیید‌شده بر ReserveLedger
+- BAC Adjustment
+- Baseline Update via CR
+
+--- DELIVERABLE 13: Cross-Module Integration + Traceability ---
+Cross-Module Integration Engine:
+- ماتریس یکپارچگی 3×3 (PEX × MON × RCC)
+- Data Flow Diagrams
+- API Endpoints per Integration
+- Webhook Events
+
+Auto-Suggest Rules (۸ قاعده پیش‌فرض):
+1. SPI < 0.85 → Create CR + Recovery Plan
+2. CPI < 0.85 → Create CR + Cost Analysis
+3. Risk Occurred + Impact = Critical → Create Issue + Suggest CR
+4. CR Rejected + Party Damaged → Create Claim Event
+5. Milestone Slip > 15 days → Create Claim Event (EOT)
+6. Notice Not Sent within 50% deadline → Alert + Auto-Draft Notice
+7. Reserve Depletion > Progress + 10% → Create Risk
+8. NCR Critical > 30 days → Create Issue → Potential CR
+
+Traceability Graph:
+- Risk → Issue → Change → Claim → Evidence
+- Visual Graph (Interactive)
+- Chain Analysis Report
+- Impact Propagation Analysis
+
+End-to-End Scenario:
+- سناریوی کامل واقعی (از شناسایی ریسک تا تسویه ادعا)
+- ۱۰ مرحله با جزئیات
+- Cross-Module Data Flow
+
+--- DELIVERABLE 14: RBAC + Business Rules + API + Reports + MVP + Migration ---
+
+RBAC:
+- ماتریس ۹ نقش × ۴ حوزه (Risk/Change/Claim/Reports)
+- Sponsor, PMO, PM, Risk Manager, Contract Manager,
+  Legal Advisor, CAM, Change Coordinator, CCB Member,
+  Site Manager, Client Rep, Auditor
+- دسترسی‌های اتمی
+
+Business Rules (۲۰ قاعده صریح):
+- Risk Rules (6)
+- Change Rules (5)
+- Claim Rules (7)
+- Cross Rules (2)
+
+API Design:
+- RESTful (حداقل ۴۵ endpoint)
+- Request/Response Schema
+- Authentication (JWT)
+- Webhook Events (Notice Time-Bar, CR Decision, ...)
+- Rate Limiting
+
+KPI Framework (۱۸ KPI):
+- Risk KPIs (5): RSK-01 to RSK-05
+- Change KPIs (5): CHG-01 to CHG-05
+- Claim KPIs (5): CLM-01 to CLM-05
+- Cross RCC KPIs (3): RCC-01 to RCC-03
+
+EWS Rules (۱۲ Rule) با Severity و Escalation
+
+Reports (۱۷ گزارش):
+- Risk Reports (4)
+- Change Reports (5)
+- Claim Reports (5) — شامل Time-Bar Watchlist روزانه
+- Integrated (3):
+  * RPT-RCC-01: Bi-Weekly Integrated (۱۰ بخش)
+  * RPT-RCC-02: Chain Analysis
+  * RPT-EXEC: Executive One-Pager
+
+Excel Interop:
+- ۲۱ قالب (5 Risk + 5 Change + 7 Claim + 4 Reporting)
+- Import Pipeline: Load → Sheet → Map → Validate → Preview → Confirm
+- Render Pipeline با Template سازمانی
+- دو قالب (Internal + External)
+
+MVP (فاز F1 + F5):
+- F1 Priority: Risk Register + Basic + Excel Import
+- F5 Priority: Notice Engine + Time-Bar Guardian ★ (حیاتی)
+- حداقل ۲۵ User Story + AC + DoD
+
+نقشه راه ۸ فاز (۳۸ هفته):
+F1 (۱-۵): Risk Foundation
+F2 (۶-۹): Risk Monitoring + Reserve
+F3 (۱۰-۱۵): Change Management
+F4 (۱۶-۱۹): Baseline Config Control
+F5 (۲۰-۲۴): Notice Engine + Time-Bar ⚡
+F6 (۲۵-۳۰): Claim Detail + Delay Analysis + Quantum
+F7 (۳۱-۳۴): Negotiation + Settlement + Dispute
+F8 (۳۵-۳۸): Integration + Traceability + Dashboards
+
+Migration Plan:
+- Gap Analysis ماژول‌های موجود
+- Data Migration Strategy
+- Schema Migration Scripts (V001, V002, ...)
+- Backward Compatibility Plan
+- Phased Rollout
+- Rollback Strategy
+- UI/UX Transition Plan
+
+═══════════════════════════════════════════════════════════════
+🔄 SELF-VALIDATION LOOPS (۱۰ لوپ — اجباری بعد از هر Deliverable)
+═══════════════════════════════════════════════════════════════
+
+--- Loop 1: PMBOK Coverage ---
+□ Plan Risk Management (11.1)
+□ Identify Risks (11.2)
+□ Perform Qualitative Analysis (11.3)
+□ Perform Quantitative Analysis (11.4)
+□ Plan Risk Responses (11.5)
+□ Implement Risk Responses (11.6)
+□ Monitor Risks (11.7)
+□ Perform Integrated Change Control (4.6)
+□ Control Scope/Schedule/Cost (5.6/6.6/7.4)
+□ Control Procurements + Claims Admin (12.3)
+□ Manage Communications - Notice (10.2)
+□ Uncertainty Performance Domain (PMBOK 7)
+
+--- Loop 2: RegisterItem Pattern & Data Model ★ ---
+□ RegisterItem به‌عنوان Abstract Base طراحی شده؟
+□ Inheritance Strategy مشخص است؟
+□ همه Entity ها (Risk/Issue/Change/Claim) از آن ارث می‌برند؟
+□ Migration Scripts پشتیبانی می‌کنند؟
+□ Index و Partitioning Strategy درست است؟
+
+--- Loop 3: Risk Management Completeness ---
+□ RBS پیش‌فرض کامل (۷ دسته + زیرشاخه)؟
+□ Qualitative Analysis (P×I با ۷ بعد اثر)؟
+□ Quantitative Analysis (EMV + PERT + Monte Carlo)؟
+□ ۱۰ Strategy پاسخ (5 Threat + 5 Opportunity)؟
+□ Reserve Management (Ledger + Transaction)؟
+□ Residual Risk + Secondary Risk?
+□ Trigger Monitoring Engine?
+□ Effectiveness Rating?
+
+--- Loop 4: Change Management Check ---
+□ ChangeRequest Entity کامل (۱۴ نوع)؟
+□ Impact Analysis در ۱۲ بعد؟
+□ ApprovalAuthority Matrix صریح؟
+□ CCB Voting Mechanism؟
+□ Emergency CR + Post-Facto Approval?
+□ Baseline Configuration Control (Immutable)?
+□ Change Implementation Process?
+□ Change Log Audit Trail?
+
+--- Loop 5: Claim Management Check ★ ---
+□ Contract Clause Engine کامل؟
+□ ContractCalendar (Working/Calendar/Custom)?
+□ ClaimEvent با ۱۹ EventType?
+□ Notice Engine + Time-Bar Guardian (۱۴/۷/۳/۱ روز)?
+□ Emergency Auto-Escalate?
+□ Entitlement/Causation/Quantum سه‌محوری?
+□ Delay Analysis (۸ روش کامل)؟
+□ Claim Quantum (۱۴ سرفصل)?
+□ Dispute Management تا Arbitration?
+□ Multi-Currency + Multi-Contract?
+
+--- Loop 6: Cross-Module Integration ---
+□ ماتریس یکپارچگی 3×3 کامل؟
+□ Auto-Suggest Rules (۸ قاعده)؟
+□ Traceability Graph (Risk→Change→Claim→Evidence)?
+□ End-to-End Scenario ارائه شده؟
+□ API Endpoints per Integration?
+□ Webhook Events مشخص؟
+
+--- Loop 7: Time-Bar & Notice ★ (بحرانی) ---
+□ Cron Job روزانه طراحی شده؟
+□ ۴ سطح هشدار (14/7/3/1 روز)?
+□ Emergency Auto-Escalate < 1 روز؟
+□ Auto-Mark TimeBarred < 0 روز؟
+□ Working Days Calendar Support?
+□ Notice Template Generation Auto?
+□ Bilingual Templates?
+□ Save to DMS + Auto Transmittal?
+□ شبه‌کد Python کامل و اجرایی?
+
+--- Loop 8: Reports & KPI & Business Rules ---
+□ ۱۸ KPI با فرمول و آستانه؟
+□ ۱۲ EWS Rule با Severity و Escalation؟
+□ ۱۷ گزارش تخصصی؟
+□ RPT-RCC-01 (Bi-Weekly ۱۰ بخشی) کامل؟
+□ RPT-EXEC یک‌صفحه‌ای?
+□ Time-Bar Watchlist روزانه?
+□ ۲۰ Business Rule صریح?
+
+--- Loop 9: Consistency Check ---
+□ نام Entity ها در مدل داده و API یکسان؟
+□ Status enums در Risk/Change/Claim هماهنگ؟
+□ Role ها در RBAC و Workflow منطبق؟
+□ Cross-references درست؟
+□ Auto-Suggest Rules با EWS هماهنگ؟
+
+--- Loop 10: Redesign & Migration Check ★ ---
+□ لیست ماژول‌های موجود با وضعیت (حفظ/بهبود/جدید)؟
+□ نام جداول و فیلدهای موجود حفظ شده؟
+□ Migration Scripts ارائه شده؟
+□ Backward Compatibility تضمین شده؟
+□ UI/UX Improvement Areas صریحاً مشخص شده؟
+□ Phased Rollout Plan?
+□ Rollback Strategy?
+□ Data Migration Strategy?
+
+═══════════════════════════════════════════════════════════════
+🔁 ITERATIVE REFINEMENT PROTOCOL
+═══════════════════════════════════════════════════════════════
+
+پس از اجرای ۱۰ Loop:
+1. هر Gap را لیست کن
+2. برای هر Gap راه‌حل ارائه بده
+3. Deliverable را اصلاح کن
+4. Loop ها را دوباره اجرا کن
+5. تا تمام چک‌باکس‌ها تیک نخورده تکرار کن
+
+═══════════════════════════════════════════════════════════════
+⚠️ ANTI-PATTERNS
+═══════════════════════════════════════════════════════════════
+
+- Risk بدون Owner و Response Plan
+- Reserve بدون Transaction Ledger
+- Change بدون Impact Analysis (رفتن مستقیم به CCB)
+- Baseline قابل ویرایش مستقیم
+- CCB بدون Voting و Justification
+- Claim بدون Contract Clause Reference
+- Notice بدون Time-Bar Tracking
+- Delay Analysis بدون Method مشخص
+- Quantum بدون Supporting Docs
+- Dispute بدون Legal Representative
+- بدون Cross-Module Integration
+- بدون Auto-Suggest
+- بدون Traceability Graph
+- بدون Chain of Custody در ادعا
+- بازنویسی کامل بدون حفظ ساختار موجود ★
+- تغییر نام جداول بدون Migration ★
+- UI/UX بدون بهبود بصری ★
+
+═══════════════════════════════════════════════════════════════
+📎 OUTPUT FORMAT
+═══════════════════════════════════════════════════════════════
+
+- Markdown با جداول تمیز
+- SQL و JSON و شبه‌کد Python
+- نمودارها با Mermaid
+- فرمول‌ها با فرمت ریاضی
+- هر Deliverable با خلاصه ۳ خطی شروع
+- در انتهای هر Deliverable نتیجه ۱۰ Loop
+- Gap ها و اصلاحات صریح
+- برای هر جدول: موجود/بهبود/جدید ★
+- برای هر صفحه UI: بهبود بصری لازم؟ ★
+- برای Notice و Time-Bar: شبه‌کد کامل اجرایی
+- برای Delay Analysis: نمونه محاسبه واقعی
+
+═══════════════════════════════════════════════════════════════
+🚀 START
+═══════════════════════════════════════════════════════════════
+
+حالا شروع کن. از Deliverable 1 آغاز کن.
+بعد از تکمیل هر Deliverable و اجرای ۱۰ Loop:
+- نتیجه Loop ها را بنویس
+- Gap ها را لیست و حل کن
+- برای هر جدول/صفحه وضعیت موجود/جدید/بهبود
+- منتظر دستور من برای Deliverable بعدی باش
+
+اگر به اطلاعات بیشتری نیاز داری قبل از شروع بپرس.
