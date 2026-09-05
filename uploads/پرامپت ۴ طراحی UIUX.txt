@@ -1,0 +1,12 @@
+برای صفحات کلیدی، Wireframe متنی و Component Structure طراحی کن:
+- صفحه Dashboard مدیر پروژه (با Milestone Widget + CP Widget + EVM)
+- صفحه Gantt Chart تعاملی
+- صفحه Milestone Tracking
+- صفحه Critical Path Analysis
+- صفحه Ferm ثبت DPR (وب + موبایل)
+- صفحه Template Designer (AI Generator)
+- صفحه Look-ahead Planning
+- صفحه Report Generator (انتخاب قالب + خروجی)
+- صفحه Alert Center
+- Component Library (Buttons, Tables, Charts, Filters)
+- Design System (رنگ، فونت، فاصله‌گذاری)

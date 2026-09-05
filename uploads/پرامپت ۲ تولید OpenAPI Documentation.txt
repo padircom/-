@@ -1,0 +1,9 @@
+از Deliverable 12، مستندات API کامل با OpenAPI 3.0 (YAML) تولید کن:
+- تمام Endpoints با Request/Response Schema
+- Error Responses استاندارد (400, 401, 403, 404, 409, 500)
+- Query/Path Parameters
+- Headers و Authentication (JWT Bearer)
+- نمونه Request/Response واقعی
+- Pagination Pattern (offset, limit, cursor)
+- Webhook Events Schema
+- Rate Limiting Documentation

@@ -1,0 +1,10 @@
+یک کتابخانه کامل Rule of Credit برای پروژه‌های ایران بساز:
+- کارهای بتنی (فونداسیون، ستون، تیر، دال، دیوار)
+- کارهای فلزی (اسکلت، Piperack، Skid)
+- پایپینگ (Fit-up, Weld, NDT, PWHT, Test, Paint)
+- کابل‌کشی برق (Pulling, Termination, Meggering)
+- ابزار دقیق (Installation, Loop Check, Calibration)
+- HVAC (Ducting, Insulation, Testing)
+- کارهای عمرانی (خاکبرداری، سنگ‌کاری، آسفالت)
+- کارهای معماری (سرامیک، رنگ، درب و پنجره، سقف کاذب)
+- برای هر مورد: Steps + Weight% + Inspection Required + مرجع

@@ -1,0 +1,12 @@
+موتور CPM را با جزئیات کامل پیاده‌سازی کن:
+- کلاس Activity, Relationship, Calendar در Python/C#
+- Forward Pass Algorithm (کامنت‌دار)
+- Backward Pass Algorithm
+- Float Calculation (Total, Free)
+- Critical Path Detection
+- Near-Critical Detection
+- Calendar-Aware Duration
+- Constraint Handling
+- Topological Sort با Cycle Detection
+- Unit Tests کامل
+- Performance Optimization برای ۵۰K فعالیت

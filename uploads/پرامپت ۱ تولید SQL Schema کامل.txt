@@ -1,0 +1,9 @@
+از مدل داده Deliverable 2، اسکریپت کامل PostgreSQL تولید کن:
+- CREATE TABLE با تمام Constraints (PK, FK, Unique, Check)
+- JSONB columns برای Alert Rules و MappingSchema
+- Index Strategy (B-Tree, GIN برای JSONB, GiST برای Full-Text)
+- Partitioning برای AuditLog و EVMSnapshot (per Month)
+- Comments فارسی روی جداول و ستون‌ها
+- Seed Data برای Lookup Tables (RuleOfCredit Library, Color Schemes)
+- Migration Scripts با شماره‌گذاری V001, V002, ...
+- Trigger برای Audit Log خودکار
