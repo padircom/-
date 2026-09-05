@@ -1,0 +1,1065 @@
+openapi: 3.0.3
+info:
+  title: PMIS PEX Planning & Execution API
+  version: 1.0.0
+  description: |
+    API ماژول برنامه‌ریزی و اجرا (Deliverable 12).
+
+    WBS ستون فقرات است. Baseline قفل. Excel/XER ظرف. Progress فقط Approved.
+
+    ## Auth
+    `Authorization: Bearer <JWT>` با claims پروژه. ABAC روی projectId.
+
+    ## Pagination
+    - Offset: `offset` (default 0), `limit` (default 50, max 200)
+    - Cursor: `cursor` opaque؛ پاسخ `page.nextCursor`
+
+    ## Rate limiting
+    120 req/min/IP؛ upload/import 20/min؛ CPM compute 10/min.
+    429 + header `Retry-After`. `X-RateLimit-Remaining` اختیاری.
+
+    ## Webhooks
+    HMAC header `X-PMIS-Signature`. رویدادها در `components.schemas.WebhookEvent`.
+  contact: { name: Arena PEX }
+servers:
+  - url: http://localhost:5000/api/v1/pex
+    description: Local
+security:
+  - bearerAuth: []
+
+tags:
+  - name: WBS
+  - name: Schedule
+  - name: Milestone
+  - name: CriticalPath
+  - name: EVM
+  - name: Resource
+  - name: Site
+  - name: PMS
+  - name: Reports
+  - name: Alerts
+
+paths:
+  /projects/{projectId}/wbs:
+    get:
+      tags: [WBS]
+      parameters: [{ $ref: '#/components/parameters/ProjectId' }, { $ref: '#/components/parameters/Offset' }, { $ref: '#/components/parameters/Limit' }, { $ref: '#/components/parameters/Cursor' }, { $ref: '#/components/parameters/Lang' }]
+      responses:
+        '200':
+          description: WBS tree/list
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WbsListEnvelope' }
+              example: { ok: true, data: [{ id: '11111111-1111-1111-1111-111111111111', code: '1.2', nameFa: 'فونداسیون', weight: 0.12 }], page: { offset: 0, limit: 50, total: 1 } }
+        '400': { $ref: '#/components/responses/E400' }
+        '401': { $ref: '#/components/responses/E401' }
+        '403': { $ref: '#/components/responses/E403' }
+        '404': { $ref: '#/components/responses/E404' }
+        '409': { $ref: '#/components/responses/E409' }
+        '500': { $ref: '#/components/responses/E500' }
+    post:
+      tags: [WBS]
+      parameters: [{ $ref: '#/components/parameters/ProjectId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WbsCreate' }
+            example: { parentId: null, code: '1', nameFa: 'مهندسی', nameEn: 'Engineering', nodeType: Summary, weight: 1 }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/WbsEnvelope' } } } }
+        '400': { $ref: '#/components/responses/E400' }
+        '401': { $ref: '#/components/responses/E401' }
+        '403': { $ref: '#/components/responses/E403' }
+        '404': { $ref: '#/components/responses/E404' }
+        '409': { $ref: '#/components/responses/E409' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /wbs/{id}:
+    get:
+      tags: [WBS]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '200': { description: Node, content: { application/json: { schema: { $ref: '#/components/schemas/WbsEnvelope' } } } }
+        '401': { $ref: '#/components/responses/E401' }
+        '403': { $ref: '#/components/responses/E403' }
+        '404': { $ref: '#/components/responses/E404' }
+        '500': { $ref: '#/components/responses/E500' }
+    patch:
+      tags: [WBS]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WbsPatch' }
+            example: { nameEn: 'Foundations', crId: '22222222-2222-2222-2222-222222222222' }
+      responses:
+        '200': { description: Updated, content: { application/json: { schema: { $ref: '#/components/schemas/WbsEnvelope' } } } }
+        '400': { $ref: '#/components/responses/E400' }
+        '401': { $ref: '#/components/responses/E401' }
+        '403': { $ref: '#/components/responses/E403' }
+        '404': { $ref: '#/components/responses/E404' }
+        '409': { $ref: '#/components/responses/E409' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /wbs/{id}/move:
+    post:
+      tags: [WBS]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, properties: { parentId: { type: string, format: uuid } } }
+      responses:
+        '200': { description: Moved, content: { application/json: { schema: { $ref: '#/components/schemas/Ok' } } } }
+        '400': { $ref: '#/components/responses/E400' }
+        '401': { $ref: '#/components/responses/E401' }
+        '403': { $ref: '#/components/responses/E403' }
+        '404': { $ref: '#/components/responses/E404' }
+        '409': { $ref: '#/components/responses/E409' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /wbs/{id}/dictionary:
+    get:
+      tags: [WBS]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '200': { description: Dictionary, content: { application/json: { schema: { $ref: '#/components/schemas/Ok' } } } }
+        '401': { $ref: '#/components/responses/E401' }
+        '404': { $ref: '#/components/responses/E404' }
+        '500': { $ref: '#/components/responses/E500' }
+    put:
+      tags: [WBS]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, properties: { acceptanceFa: { type: string } } }
+            example: { acceptanceFa: 'بتن به مقاومت مشخصه' }
+      responses:
+        '200': { description: Saved, content: { application/json: { schema: { $ref: '#/components/schemas/Ok' } } } }
+        '400': { $ref: '#/components/responses/E400' }
+        '401': { $ref: '#/components/responses/E401' }
+        '403': { $ref: '#/components/responses/E403' }
+        '404': { $ref: '#/components/responses/E404' }
+        '409': { $ref: '#/components/responses/E409' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /projects/{projectId}/wbs/import:
+    post:
+      tags: [WBS]
+      parameters: [{ $ref: '#/components/parameters/ProjectId' }]
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file: { type: string, format: binary }
+                source: { type: string, enum: [xlsx, xer, msp] }
+      responses:
+        '200': { description: Import result, content: { application/json: { schema: { $ref: '#/components/schemas/Ok' } } } }
+        '400': { $ref: '#/components/responses/E400' }
+        '401': { $ref: '#/components/responses/E401' }
+        '403': { $ref: '#/components/responses/E403' }
+        '404': { $ref: '#/components/responses/E404' }
+        '409': { $ref: '#/components/responses/E409' }
+        '429': { $ref: '#/components/responses/E429' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /projects/{projectId}/ca:
+    get:
+      tags: [WBS]
+      parameters: [{ $ref: '#/components/parameters/ProjectId' }]
+      responses:
+        '200': { description: Control accounts, content: { application/json: { schema: { $ref: '#/components/schemas/Ok' } } } }
+        '401': { $ref: '#/components/responses/E401' }
+        '403': { $ref: '#/components/responses/E403' }
+        '404': { $ref: '#/components/responses/E404' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /ai/wbs/analyze:
+    post:
+      tags: [WBS]
+      requestBody:
+        content:
+          multipart/form-data:
+            schema: { type: object, properties: { projectId: { type: string, format: uuid }, file: { type: string, format: binary } } }
+      responses:
+        '202': { description: Analysis job, content: { application/json: { schema: { $ref: '#/components/schemas/Ok' } } } }
+        '400': { $ref: '#/components/responses/E400' }
+        '401': { $ref: '#/components/responses/E401' }
+        '403': { $ref: '#/components/responses/E403' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /ai/wbs/{reqId}/approve:
+    post:
+      tags: [WBS]
+      parameters: [{ name: reqId, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        '200': { description: Applied to WBS, content: { application/json: { schema: { $ref: '#/components/schemas/Ok' } } } }
+        '400': { $ref: '#/components/responses/E400' }
+        '401': { $ref: '#/components/responses/E401' }
+        '403': { $ref: '#/components/responses/E403' }
+        '404': { $ref: '#/components/responses/E404' }
+        '409': { $ref: '#/components/responses/E409' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /projects/{projectId}/activities:
+    get:
+      tags: [Schedule]
+      parameters: [{ $ref: '#/components/parameters/ProjectId' }, { $ref: '#/components/parameters/Offset' }, { $ref: '#/components/parameters/Limit' }, { $ref: '#/components/parameters/Cursor' }]
+      responses:
+        '200':
+          description: Activities
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ActivityListEnvelope' }
+              example: { ok: true, data: [{ code: 'PIP-ISO-012', totalFloatH: 0, isCritical: true }], page: { offset: 0, limit: 50, total: 1, nextCursor: 'eyJvIjoxfQ' } }
+        '401': { $ref: '#/components/responses/E401' }
+        '403': { $ref: '#/components/responses/E403' }
+        '404': { $ref: '#/components/responses/E404' }
+        '500': { $ref: '#/components/responses/E500' }
+    post:
+      tags: [Schedule]
+      parameters: [{ $ref: '#/components/parameters/ProjectId' }]
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ActivityCreate' }
+            example: { wbsId: '11111111-1111-1111-1111-111111111111', code: 'CIV-001', nameFa: 'بتن فونداسیون', durationHours: 80 }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/ActivityEnvelope' } } } }
+        '400': { $ref: '#/components/responses/E400' }
+        '401': { $ref: '#/components/responses/E401' }
+        '403': { $ref: '#/components/responses/E403' }
+        '409': { $ref: '#/components/responses/E409' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /activities/{id}:
+    patch:
+      tags: [Schedule]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ActivityCreate' }
+      responses:
+        '200': { description: Updated, content: { application/json: { schema: { $ref: '#/components/schemas/ActivityEnvelope' } } } }
+        '400': { $ref: '#/components/responses/E400' }
+        '401': { $ref: '#/components/responses/E401' }
+        '403': { $ref: '#/components/responses/E403' }
+        '404': { $ref: '#/components/responses/E404' }
+        '409': { $ref: '#/components/responses/E409' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /activities/{id}/rels:
+    get:
+      tags: [Schedule]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '200': { description: Relationships, content: { application/json: { schema: { $ref: '#/components/schemas/Ok' } } } }
+        '401': { $ref: '#/components/responses/E401' }
+        '404': { $ref: '#/components/responses/E404' }
+        '500': { $ref: '#/components/responses/E500' }
+    post:
+      tags: [Schedule]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, required: [succId, relType], properties: { succId: { type: string, format: uuid }, relType: { type: string, enum: [FS, SS, FF, SF] }, lagHours: { type: number } } }
+            example: { succId: '33333333-3333-3333-3333-333333333333', relType: FS, lagHours: 8 }
+      responses:
+        '201': { description: Linked, content: { application/json: { schema: { $ref: '#/components/schemas/Ok' } } } }
+        '400': { $ref: '#/components/responses/E400' }
+        '401': { $ref: '#/components/responses/E401' }
+        '409': { $ref: '#/components/responses/E409' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /projects/{projectId}/cpm/compute:
+    post:
+      tags: [Schedule]
+      parameters: [{ $ref: '#/components/parameters/ProjectId' }]
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, properties: { dataDate: { type: string, format: date } } }
+            example: { dataDate: '2026-09-04' }
+      responses:
+        '202': { description: Job accepted, content: { application/json: { schema: { $ref: '#/components/schemas/Ok' }, example: { ok: true, data: { jobId: '44444444-4444-4444-4444-444444444444' } } } } }
+        '400': { $ref: '#/components/responses/E400' }
+        '401': { $ref: '#/components/responses/E401' }
+        '403': { $ref: '#/components/responses/E403' }
+        '409': { $ref: '#/components/responses/E409' }
+        '429': { $ref: '#/components/responses/E429' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /cpm/jobs/{id}:
+    get:
+      tags: [Schedule]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '200': { description: Job status, content: { application/json: { schema: { $ref: '#/components/schemas/Ok' } } } }
+        '401': { $ref: '#/components/responses/E401' }
+        '404': { $ref: '#/components/responses/E404' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /projects/{projectId}/baselines:
+    get:
+      tags: [Schedule]
+      parameters: [{ $ref: '#/components/parameters/ProjectId' }]
+      responses:
+        '200': { description: Baselines, content: { application/json: { schema: { $ref: '#/components/schemas/Ok' } } } }
+        '401': { $ref: '#/components/responses/E401' }
+        '404': { $ref: '#/components/responses/E404' }
+        '500': { $ref: '#/components/responses/E500' }
+    post:
+      tags: [Schedule]
+      parameters: [{ $ref: '#/components/parameters/ProjectId' }]
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/Ok' } } } }
+        '401': { $ref: '#/components/responses/E401' }
+        '403': { $ref: '#/components/responses/E403' }
+        '409': { $ref: '#/components/responses/E409' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /baselines/{id}/lock:
+    post:
+      tags: [Schedule]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '200': { description: Locked, content: { application/json: { schema: { $ref: '#/components/schemas/Ok' } } } }
+        '401': { $ref: '#/components/responses/E401' }
+        '403': { $ref: '#/components/responses/E403' }
+        '404': { $ref: '#/components/responses/E404' }
+        '409': { $ref: '#/components/responses/E409' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /projects/{projectId}/schedule/update:
+    post:
+      tags: [Schedule]
+      parameters: [{ $ref: '#/components/parameters/ProjectId' }]
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, properties: { dataDate: { type: string, format: date } } }
+      responses:
+        '200': { description: Update opened, content: { application/json: { schema: { $ref: '#/components/schemas/Ok' } } } }
+        '400': { $ref: '#/components/responses/E400' }
+        '401': { $ref: '#/components/responses/E401' }
+        '409': { $ref: '#/components/responses/E409' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /periods/{id}/close:
+    post:
+      tags: [Schedule]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '200': { description: Closed immutable, content: { application/json: { schema: { $ref: '#/components/schemas/Ok' } } } }
+        '401': { $ref: '#/components/responses/E401' }
+        '403': { $ref: '#/components/responses/E403' }
+        '404': { $ref: '#/components/responses/E404' }
+        '409': { $ref: '#/components/responses/E409' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /projects/{projectId}/lookahead:
+    get:
+      tags: [Schedule]
+      parameters: [{ $ref: '#/components/parameters/ProjectId' }, { name: weeks, in: query, schema: { type: integer, enum: [1, 2, 3, 4, 6] } }]
+      responses:
+        '200': { description: Lookahead, content: { application/json: { schema: { $ref: '#/components/schemas/Ok' } } } }
+        '401': { $ref: '#/components/responses/E401' }
+        '404': { $ref: '#/components/responses/E404' }
+        '500': { $ref: '#/components/responses/E500' }
+    post:
+      tags: [Schedule]
+      parameters: [{ $ref: '#/components/parameters/ProjectId' }]
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/Ok' } } } }
+        '400': { $ref: '#/components/responses/E400' }
+        '401': { $ref: '#/components/responses/E401' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /projects/{projectId}/milestones:
+    get:
+      tags: [Milestone]
+      parameters: [{ $ref: '#/components/parameters/ProjectId' }, { $ref: '#/components/parameters/Offset' }, { $ref: '#/components/parameters/Limit' }]
+      responses:
+        '200':
+          description: Register
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Ok' }
+              example: { ok: true, data: [{ code: 'MS-MECH-RFSU', status: Delayed, penaltyEst: 125000 }] }
+        '401': { $ref: '#/components/responses/E401' }
+        '404': { $ref: '#/components/responses/E404' }
+        '500': { $ref: '#/components/responses/E500' }
+    post:
+      tags: [Milestone]
+      parameters: [{ $ref: '#/components/parameters/ProjectId' }]
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MilestoneCreate' }
+            example: { activityId: '55555555-5555-5555-5555-555555555555', msType: Contractual, contractualDate: '2025-02-03', penaltyPerDay: 25000 }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/Ok' } } } }
+        '400': { $ref: '#/components/responses/E400' }
+        '401': { $ref: '#/components/responses/E401' }
+        '409': { $ref: '#/components/responses/E409' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /milestones/{id}:
+    patch:
+      tags: [Milestone]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, properties: { forecastDate: { type: string, format: date }, crId: { type: string, format: uuid }, reason: { type: string } } }
+      responses:
+        '200': { description: Updated, content: { application/json: { schema: { $ref: '#/components/schemas/Ok' } } } }
+        '400': { $ref: '#/components/responses/E400' }
+        '401': { $ref: '#/components/responses/E401' }
+        '403': { $ref: '#/components/responses/E403' }
+        '404': { $ref: '#/components/responses/E404' }
+        '409': { $ref: '#/components/responses/E409' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /projects/{projectId}/milestones/alerts:
+    get:
+      tags: [Milestone]
+      parameters: [{ $ref: '#/components/parameters/ProjectId' }]
+      responses:
+        '200': { description: MS alerts, content: { application/json: { schema: { $ref: '#/components/schemas/Ok' } } } }
+        '401': { $ref: '#/components/responses/E401' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /projects/{projectId}/milestones/reports/{n}:
+    get:
+      tags: [Milestone]
+      parameters: [{ $ref: '#/components/parameters/ProjectId' }, { name: n, in: path, required: true, schema: { type: integer, minimum: 1, maximum: 10 } }]
+      responses:
+        '200': { description: Report 1-10, content: { application/json: { schema: { $ref: '#/components/schemas/Ok' } } } }
+        '400': { $ref: '#/components/responses/E400' }
+        '401': { $ref: '#/components/responses/E401' }
+        '404': { $ref: '#/components/responses/E404' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /projects/{projectId}/milestones/widget:
+    get:
+      tags: [Milestone]
+      parameters: [{ $ref: '#/components/parameters/ProjectId' }]
+      responses:
+        '200': { description: Dashboard widget, content: { application/json: { schema: { $ref: '#/components/schemas/Ok' } } } }
+        '401': { $ref: '#/components/responses/E401' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /projects/{projectId}/milestones/penalty:
+    get:
+      tags: [Milestone]
+      parameters: [{ $ref: '#/components/parameters/ProjectId' }]
+      responses:
+        '200': { description: Penalty/bonus, content: { application/json: { schema: { $ref: '#/components/schemas/Ok' } } } }
+        '401': { $ref: '#/components/responses/E401' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /projects/{projectId}/cp/snapshots:
+    get:
+      tags: [CriticalPath]
+      parameters: [{ $ref: '#/components/parameters/ProjectId' }]
+      responses:
+        '200': { description: Snapshots, content: { application/json: { schema: { $ref: '#/components/schemas/Ok' } } } }
+        '401': { $ref: '#/components/responses/E401' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /cp/snapshots/{id}/activities:
+    get:
+      tags: [CriticalPath]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '200': { description: CP activities, content: { application/json: { schema: { $ref: '#/components/schemas/Ok' } } } }
+        '401': { $ref: '#/components/responses/E401' }
+        '404': { $ref: '#/components/responses/E404' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /projects/{projectId}/cp/float-trend:
+    get:
+      tags: [CriticalPath]
+      parameters: [{ $ref: '#/components/parameters/ProjectId' }]
+      responses:
+        '200': { description: Float trend, content: { application/json: { schema: { $ref: '#/components/schemas/Ok' } } } }
+        '401': { $ref: '#/components/responses/E401' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /projects/{projectId}/cp/health:
+    get:
+      tags: [CriticalPath]
+      parameters: [{ $ref: '#/components/parameters/ProjectId' }]
+      responses:
+        '200': { description: DCMA 14, content: { application/json: { schema: { $ref: '#/components/schemas/Ok' } } } }
+        '401': { $ref: '#/components/responses/E401' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /projects/{projectId}/cp/reports/{n}:
+    get:
+      tags: [CriticalPath]
+      parameters: [{ $ref: '#/components/parameters/ProjectId' }, { name: n, in: path, required: true, schema: { type: integer, minimum: 1, maximum: 10 } }]
+      responses:
+        '200': { description: CP report, content: { application/json: { schema: { $ref: '#/components/schemas/Ok' } } } }
+        '400': { $ref: '#/components/responses/E400' }
+        '401': { $ref: '#/components/responses/E401' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /projects/{projectId}/budget:
+    get:
+      tags: [EVM]
+      parameters: [{ $ref: '#/components/parameters/ProjectId' }]
+      responses:
+        '200': { description: Budget, content: { application/json: { schema: { $ref: '#/components/schemas/Ok' } } } }
+        '401': { $ref: '#/components/responses/E401' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /projects/{projectId}/actuals:
+    post:
+      tags: [EVM]
+      parameters: [{ $ref: '#/components/parameters/ProjectId' }]
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, properties: { activityId: { type: string, format: uuid }, amount: { type: number }, source: { type: string } } }
+            example: { activityId: '55555555-5555-5555-5555-555555555555', amount: 12000, source: Timesheet }
+      responses:
+        '201': { description: Posted, content: { application/json: { schema: { $ref: '#/components/schemas/Ok' } } } }
+        '400': { $ref: '#/components/responses/E400' }
+        '401': { $ref: '#/components/responses/E401' }
+        '409': { $ref: '#/components/responses/E409' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /projects/{projectId}/evm/snapshots:
+    get:
+      tags: [EVM]
+      parameters: [{ $ref: '#/components/parameters/ProjectId' }]
+      responses:
+        '200':
+          description: EVM snapshots
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Ok' }
+              example: { ok: true, data: [{ dataDate: '2026-09-04', spi: 0.94, cpi: 1.02, spi_t: 0.93 }] }
+        '401': { $ref: '#/components/responses/E401' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /projects/{projectId}/cashflow:
+    get:
+      tags: [EVM]
+      parameters: [{ $ref: '#/components/parameters/ProjectId' }]
+      responses:
+        '200': { description: Cash flow, content: { application/json: { schema: { $ref: '#/components/schemas/Ok' } } } }
+        '401': { $ref: '#/components/responses/E401' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /projects/{projectId}/reserves:
+    get:
+      tags: [EVM]
+      parameters: [{ $ref: '#/components/parameters/ProjectId' }]
+      responses:
+        '200': { description: Reserves, content: { application/json: { schema: { $ref: '#/components/schemas/Ok' } } } }
+        '401': { $ref: '#/components/responses/E401' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /projects/{projectId}/forecast-method:
+    post:
+      tags: [EVM]
+      parameters: [{ $ref: '#/components/parameters/ProjectId' }]
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, properties: { method: { type: string, enum: [CPI, CPI_SPI, Manual, BottomUp] } } }
+      responses:
+        '200': { description: Set, content: { application/json: { schema: { $ref: '#/components/schemas/Ok' } } } }
+        '400': { $ref: '#/components/responses/E400' }
+        '401': { $ref: '#/components/responses/E401' }
+        '403': { $ref: '#/components/responses/E403' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /projects/{projectId}/resources:
+    get:
+      tags: [Resource]
+      parameters: [{ $ref: '#/components/parameters/ProjectId' }]
+      responses:
+        '200': { description: Pool, content: { application/json: { schema: { $ref: '#/components/schemas/Ok' } } } }
+        '401': { $ref: '#/components/responses/E401' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /projects/{projectId}/assignments:
+    post:
+      tags: [Resource]
+      parameters: [{ $ref: '#/components/parameters/ProjectId' }]
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, properties: { activityId: { type: string, format: uuid }, resourceId: { type: string, format: uuid }, qty: { type: number } } }
+      responses:
+        '201': { description: Assigned, content: { application/json: { schema: { $ref: '#/components/schemas/Ok' } } } }
+        '400': { $ref: '#/components/responses/E400' }
+        '401': { $ref: '#/components/responses/E401' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /projects/{projectId}/timesheets:
+    post:
+      tags: [Resource]
+      parameters: [{ $ref: '#/components/parameters/ProjectId' }]
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, properties: { activityId: { type: string, format: uuid }, workDate: { type: string, format: date }, hours: { type: number } } }
+            example: { activityId: '55555555-5555-5555-5555-555555555555', workDate: '2026-09-04', hours: 8 }
+      responses:
+        '201': { description: Draft timesheet, content: { application/json: { schema: { $ref: '#/components/schemas/Ok' } } } }
+        '400': { $ref: '#/components/responses/E400' }
+        '401': { $ref: '#/components/responses/E401' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /timesheets/{id}/approve:
+    post:
+      tags: [Resource]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '200': { description: Approved into AC, content: { application/json: { schema: { $ref: '#/components/schemas/Ok' } } } }
+        '401': { $ref: '#/components/responses/E401' }
+        '403': { $ref: '#/components/responses/E403' }
+        '404': { $ref: '#/components/responses/E404' }
+        '409': { $ref: '#/components/responses/E409' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /projects/{projectId}/materials/status:
+    get:
+      tags: [Resource]
+      parameters: [{ $ref: '#/components/parameters/ProjectId' }]
+      responses:
+        '200': { description: Material status, content: { application/json: { schema: { $ref: '#/components/schemas/Ok' } } } }
+        '401': { $ref: '#/components/responses/E401' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /projects/{projectId}/resources/histogram:
+    get:
+      tags: [Resource]
+      parameters: [{ $ref: '#/components/parameters/ProjectId' }]
+      responses:
+        '200': { description: Histogram, content: { application/json: { schema: { $ref: '#/components/schemas/Ok' } } } }
+        '401': { $ref: '#/components/responses/E401' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /projects/{projectId}/dpr:
+    post:
+      tags: [Site]
+      parameters: [{ $ref: '#/components/parameters/ProjectId' }]
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DprCreate' }
+            example: { reportDate: '2026-09-04', shift: 'A', progressLines: [{ activityCode: 'CIV-001', qty: 12, step: 3 }] }
+      responses:
+        '201': { description: DPR draft, content: { application/json: { schema: { $ref: '#/components/schemas/Ok' } } } }
+        '400': { $ref: '#/components/responses/E400' }
+        '401': { $ref: '#/components/responses/E401' }
+        '409': { $ref: '#/components/responses/E409' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /dpr/{id}/submit:
+    post:
+      tags: [Site]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '200': { description: Submitted WF2, content: { application/json: { schema: { $ref: '#/components/schemas/Ok' } } } }
+        '401': { $ref: '#/components/responses/E401' }
+        '404': { $ref: '#/components/responses/E404' }
+        '409': { $ref: '#/components/responses/E409' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /projects/{projectId}/ir:
+    post:
+      tags: [Site]
+      parameters: [{ $ref: '#/components/parameters/ProjectId' }]
+      responses:
+        '201': { description: IR, content: { application/json: { schema: { $ref: '#/components/schemas/Ok' } } } }
+        '401': { $ref: '#/components/responses/E401' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /projects/{projectId}/punch:
+    post:
+      tags: [Site]
+      parameters: [{ $ref: '#/components/parameters/ProjectId' }]
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, properties: { category: { type: string, enum: [A, B, C] }, descriptionFa: { type: string } } }
+      responses:
+        '201': { description: Punch, content: { application/json: { schema: { $ref: '#/components/schemas/Ok' } } } }
+        '400': { $ref: '#/components/responses/E400' }
+        '401': { $ref: '#/components/responses/E401' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /projects/{projectId}/wo:
+    post:
+      tags: [Site]
+      parameters: [{ $ref: '#/components/parameters/ProjectId' }]
+      responses:
+        '201': { description: WO, content: { application/json: { schema: { $ref: '#/components/schemas/Ok' } } } }
+        '401': { $ref: '#/components/responses/E401' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /projects/{projectId}/handover:
+    post:
+      tags: [Site]
+      parameters: [{ $ref: '#/components/parameters/ProjectId' }]
+      responses:
+        '201': { description: Handover, content: { application/json: { schema: { $ref: '#/components/schemas/Ok' } } } }
+        '401': { $ref: '#/components/responses/E401' }
+        '409': { $ref: '#/components/responses/E409' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /sync/conflicts:
+    get:
+      tags: [Site]
+      responses:
+        '200': { description: Offline conflicts, content: { application/json: { schema: { $ref: '#/components/schemas/Ok' } } } }
+        '401': { $ref: '#/components/responses/E401' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /projects/{projectId}/pms-config:
+    get:
+      tags: [PMS]
+      parameters: [{ $ref: '#/components/parameters/ProjectId' }]
+      responses:
+        '200': { description: Config, content: { application/json: { schema: { $ref: '#/components/schemas/Ok' } } } }
+        '401': { $ref: '#/components/responses/E401' }
+        '500': { $ref: '#/components/responses/E500' }
+    put:
+      tags: [PMS]
+      parameters: [{ $ref: '#/components/parameters/ProjectId' }]
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, properties: { weightMode: { type: string }, alpha: { type: number }, beta: { type: number } } }
+            example: { weightMode: Hybrid, alpha: 0.7, beta: 0.3 }
+      responses:
+        '200': { description: Saved, content: { application/json: { schema: { $ref: '#/components/schemas/Ok' } } } }
+        '400': { $ref: '#/components/responses/E400' }
+        '401': { $ref: '#/components/responses/E401' }
+        '403': { $ref: '#/components/responses/E403' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /roc-library:
+    get:
+      tags: [PMS]
+      responses:
+        '200': { description: RoC library, content: { application/json: { schema: { $ref: '#/components/schemas/Ok' } } } }
+        '401': { $ref: '#/components/responses/E401' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /projects/{projectId}/scurve:
+    get:
+      tags: [PMS]
+      parameters: [{ $ref: '#/components/parameters/ProjectId' }]
+      responses:
+        '200': { description: S-curve, content: { application/json: { schema: { $ref: '#/components/schemas/Ok' } } } }
+        '401': { $ref: '#/components/responses/E401' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /progress/{id}/approve:
+    post:
+      tags: [PMS]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '200': { description: Approved into roll-up, content: { application/json: { schema: { $ref: '#/components/schemas/Ok' } } } }
+        '401': { $ref: '#/components/responses/E401' }
+        '403': { $ref: '#/components/responses/E403' }
+        '409': { $ref: '#/components/responses/E409' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /projects/{projectId}/reports/generate:
+    post:
+      tags: [Reports]
+      parameters: [{ $ref: '#/components/parameters/ProjectId' }]
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, properties: { code: { type: string }, kind: { type: string, enum: [Internal, External] }, format: { type: string, enum: [XLSX, DOCX, PDF] } } }
+            example: { code: 'MPR', kind: External, format: PDF }
+      responses:
+        '202': { description: Generation job, content: { application/json: { schema: { $ref: '#/components/schemas/Ok' } } } }
+        '400': { $ref: '#/components/responses/E400' }
+        '401': { $ref: '#/components/responses/E401' }
+        '429': { $ref: '#/components/responses/E429' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /report-templates:
+    get:
+      tags: [Reports]
+      responses:
+        '200': { description: Templates, content: { application/json: { schema: { $ref: '#/components/schemas/Ok' } } } }
+        '401': { $ref: '#/components/responses/E401' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /projects/{projectId}/kpis:
+    get:
+      tags: [Reports]
+      parameters: [{ $ref: '#/components/parameters/ProjectId' }]
+      responses:
+        '200': { description: KPIs, content: { application/json: { schema: { $ref: '#/components/schemas/Ok' }, example: { ok: true, data: { spi: 0.94, ppc: 0.81, healthScore: 78 } } } } }
+        '401': { $ref: '#/components/responses/E401' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /projects/{projectId}/alert-rules:
+    get:
+      tags: [Alerts]
+      parameters: [{ $ref: '#/components/parameters/ProjectId' }]
+      responses:
+        '200': { description: Rules JSON, content: { application/json: { schema: { $ref: '#/components/schemas/Ok' } } } }
+        '401': { $ref: '#/components/responses/E401' }
+        '500': { $ref: '#/components/responses/E500' }
+    post:
+      tags: [Alerts]
+      parameters: [{ $ref: '#/components/parameters/ProjectId' }]
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AlertRule' }
+            example: { category: EVM, rule: { when: { field: SPI, op: '<', value: 0.9 }, severity: Warning } }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/Ok' } } } }
+        '400': { $ref: '#/components/responses/E400' }
+        '401': { $ref: '#/components/responses/E401' }
+        '403': { $ref: '#/components/responses/E403' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /projects/{projectId}/alerts:
+    get:
+      tags: [Alerts]
+      parameters: [{ $ref: '#/components/parameters/ProjectId' }, { $ref: '#/components/parameters/Offset' }, { $ref: '#/components/parameters/Limit' }]
+      responses:
+        '200': { description: Active alerts, content: { application/json: { schema: { $ref: '#/components/schemas/Ok' } } } }
+        '401': { $ref: '#/components/responses/E401' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /alerts/{id}/ack:
+    post:
+      tags: [Alerts]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '200': { description: Acknowledged, content: { application/json: { schema: { $ref: '#/components/schemas/Ok' } } } }
+        '401': { $ref: '#/components/responses/E401' }
+        '404': { $ref: '#/components/responses/E404' }
+        '500': { $ref: '#/components/responses/E500' }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    Lang:
+      name: Accept-Language
+      in: header
+      schema: { type: string, enum: [fa, en], default: fa }
+    ProjectId:
+      name: projectId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    Id:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    Offset:
+      name: offset
+      in: query
+      schema: { type: integer, minimum: 0, default: 0 }
+    Limit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+    Cursor:
+      name: cursor
+      in: query
+      schema: { type: string }
+      description: Opaque cursor; alternative to offset
+  responses:
+    E400:
+      description: Bad request
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Err' }
+          example: { ok: false, error: { code: VALIDATION, messageFa: نامعتبر, messageEn: Invalid } }
+    E401:
+      description: Unauthorized
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Err' }
+          example: { ok: false, error: { code: TOKEN_EXPIRED, messageFa: منقضی, messageEn: Expired } }
+    E403:
+      description: Forbidden ABAC
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Err' }
+          example: { ok: false, error: { code: FORBIDDEN, messageFa: غیرمجاز, messageEn: Forbidden } }
+    E404:
+      description: Not found
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Err' }
+          example: { ok: false, error: { code: NOT_FOUND, messageFa: یافت نشد, messageEn: Not found } }
+    E409:
+      description: Conflict SCOPE_LOCKED / STALE / CYCLE / PERIOD_CLOSED
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Err' }
+          example: { ok: false, error: { code: SCOPE_LOCKED, messageFa: نیاز به CR, messageEn: CR required } }
+    E429:
+      description: Rate limited
+      headers:
+        Retry-After: { schema: { type: integer }, example: 60 }
+        X-RateLimit-Remaining: { schema: { type: integer }, example: 0 }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Err' }
+          example: { ok: false, error: { code: RATE, messageFa: زیاد, messageEn: Too many requests } }
+    E500:
+      description: Server error
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Err' }
+          example: { ok: false, error: { code: INTERNAL, messageFa: داخلی, messageEn: Internal } }
+  schemas:
+    Err:
+      type: object
+      properties:
+        ok: { type: boolean, enum: [false] }
+        error:
+          type: object
+          properties:
+            code: { type: string }
+            messageFa: { type: string }
+            messageEn: { type: string }
+    Page:
+      type: object
+      properties:
+        offset: { type: integer }
+        limit: { type: integer }
+        total: { type: integer }
+        nextCursor: { type: string, nullable: true }
+    Ok:
+      type: object
+      properties:
+        ok: { type: boolean }
+        data: { type: object, additionalProperties: true }
+        page: { $ref: '#/components/schemas/Page' }
+    WbsNode:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        code: { type: string }
+        nameFa: { type: string }
+        nameEn: { type: string }
+        nodeType: { type: string, enum: [WP, CA, Summary] }
+        weight: { type: number }
+        isLocked: { type: boolean }
+    WbsCreate:
+      type: object
+      required: [code, nameFa, nameEn]
+      properties:
+        parentId: { type: string, format: uuid, nullable: true }
+        code: { type: string }
+        nameFa: { type: string }
+        nameEn: { type: string }
+        nodeType: { type: string }
+        weight: { type: number }
+    WbsPatch:
+      type: object
+      properties:
+        nameFa: { type: string }
+        nameEn: { type: string }
+        weight: { type: number }
+        crId: { type: string, format: uuid }
+    WbsEnvelope:
+      type: object
+      properties:
+        ok: { type: boolean }
+        data: { $ref: '#/components/schemas/WbsNode' }
+    WbsListEnvelope:
+      type: object
+      properties:
+        ok: { type: boolean }
+        data: { type: array, items: { $ref: '#/components/schemas/WbsNode' } }
+        page: { $ref: '#/components/schemas/Page' }
+    Activity:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        code: { type: string }
+        nameFa: { type: string }
+        durationHours: { type: number }
+        totalFloatH: { type: number }
+        isCritical: { type: boolean }
+        externalIdP6: { type: string }
+    ActivityCreate:
+      type: object
+      properties:
+        wbsId: { type: string, format: uuid }
+        code: { type: string }
+        nameFa: { type: string }
+        nameEn: { type: string }
+        durationHours: { type: number }
+        actType: { type: string }
+    ActivityEnvelope:
+      type: object
+      properties:
+        ok: { type: boolean }
+        data: { $ref: '#/components/schemas/Activity' }
+    ActivityListEnvelope:
+      type: object
+      properties:
+        ok: { type: boolean }
+        data: { type: array, items: { $ref: '#/components/schemas/Activity' } }
+        page: { $ref: '#/components/schemas/Page' }
+    MilestoneCreate:
+      type: object
+      required: [activityId, msType]
+      properties:
+        activityId: { type: string, format: uuid }
+        msType: { type: string, enum: [Contractual, Key, Payment, Gate, Internal, Interface] }
+        contractualDate: { type: string, format: date }
+        penaltyPerDay: { type: number }
+    DprCreate:
+      type: object
+      required: [reportDate]
+      properties:
+        reportDate: { type: string, format: date }
+        shift: { type: string }
+        progressLines: { type: array, items: { type: object } }
+    AlertRule:
+      type: object
+      properties:
+        category: { type: string }
+        rule: { type: object, additionalProperties: true }
+        isActive: { type: boolean }
+    WebhookEvent:
+      type: object
+      required: [event, at, projectId]
+      properties:
+        event:
+          type: string
+          enum: [milestone.achieved, alert.triggered, period.closed, baseline.locked, cpm.completed]
+        at: { type: string, format: date-time }
+        projectId: { type: string, format: uuid }
+        payload: { type: object, additionalProperties: true }
+      example:
+        event: cpm.completed
+        at: '2026-09-04T12:00:00Z'
+        projectId: 66666666-6666-6666-6666-666666666666
+        payload: { jobId: '44444444-4444-4444-4444-444444444444', healthScore: 78 }

@@ -1,0 +1,1420 @@
+openapi: 3.0.3
+info:
+  title: PMIS PIM/EDMS API
+  version: 1.0.0
+  description: |
+    API مدیریت اطلاعات و مستندات پروژه (Deliverable 8).
+
+    **منبع حقیقت Database است؛ Excel فقط ظرف Render است.**
+
+    ## Authentication Flow
+    1. ورود از Auth موجود Arena → JWT شامل `sub`, `role`, `projects[]`, `disciplines[]`, `clearance`.
+    2. همه درخواست‌ها: `Authorization: Bearer <token>`.
+    3. ABAC روی project از JWT (نه از body قابل جعل).
+    4. انقضا → `401` با `error.code = TOKEN_EXPIRED`.
+
+    ## Envelope
+    `{ ok, data, error: { code, messageFa, messageEn }, page?: { offset, limit, total } }`
+
+    ## Pagination
+    Query: `offset` (default 0), `limit` (default 50, max 200).
+  contact:
+    name: Arena PMIS
+servers:
+  - url: http://localhost:5000/api/v1
+    description: Local API (server/.env PORT)
+tags:
+  - name: Documents
+  - name: Numbering
+  - name: Workflow
+  - name: Excel
+  - name: Transmittals
+  - name: Correspondence
+  - name: Knowledge
+  - name: Search
+  - name: Reports
+  - name: Audit
+
+security:
+  - bearerAuth: []
+
+paths:
+  /projects/{projectId}/documents:
+    get:
+      tags: [Documents]
+      summary: List MDR documents
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/Offset'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: disc
+          in: query
+          schema: { type: string, example: CIV }
+        - name: type
+          in: query
+          schema: { type: string, example: DR }
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/DocStatus'
+        - name: q
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          description: Paginated MDR
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DocumentListEnvelope' }
+              example:
+                ok: true
+                data:
+                  - id: 7c2e1a90-0001-4000-8000-000000000001
+                    docNumber: OG-2401-CIV-DR-001
+                    titleFa: نقشه تفصیلی فونداسیون
+                    status: Approved
+                    currentRev: Rev-02
+                page: { offset: 0, limit: 50, total: 1 }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+    post:
+      tags: [Documents]
+      summary: Create document (Draft)
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/AcceptLanguage'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DocumentCreate' }
+            example:
+              typeId: 11111111-1111-1111-1111-111111111111
+              titleFa: نقشه فونداسیون
+              titleEn: Foundation drawing
+              discipline: CIV
+              docNumber: OG-2401-CIV-DR-005
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DocumentEnvelope' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /documents/{id}:
+    get:
+      tags: [Documents]
+      summary: Get document
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+        - $ref: '#/components/parameters/AcceptLanguage'
+      responses:
+        '200':
+          description: Document
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DocumentEnvelope' }
+              example:
+                ok: true
+                data:
+                  id: 7c2e1a90-0001-4000-8000-000000000001
+                  docNumber: OG-2401-CIV-DR-001
+                  titleFa: نقشه تفصیلی فونداسیون
+                  status: Approved
+                  currentRev: Rev-02
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+    patch:
+      tags: [Documents]
+      summary: Patch titles/confidentiality
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DocumentPatch' }
+            example:
+              titleEn: Foundation Detailed Drawing
+              confidentiality: Internal
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DocumentEnvelope' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /documents/{id}/issue:
+    post:
+      tags: [Documents]
+      summary: Issue document (Draft/Reserved → Issued)
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+      responses:
+        '200':
+          description: Issued
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DocumentEnvelope' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /documents/{id}/revisions:
+    get:
+      tags: [Documents]
+      summary: List revisions
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+        - $ref: '#/components/parameters/Offset'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Revisions
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RevisionListEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+    post:
+      tags: [Documents]
+      summary: Upload new revision (evidence file)
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, revCode]
+              properties:
+                file: { type: string, format: binary }
+                revCode: { type: string, example: Rev-03 }
+                changeNote: { type: string }
+      responses:
+        '201':
+          description: Revision created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RevisionEnvelope' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /revisions/{id}/file:
+    get:
+      tags: [Documents]
+      summary: Download watermarked file
+      parameters:
+        - $ref: '#/components/parameters/RevisionId'
+      responses:
+        '200':
+          description: Watermarked binary
+          headers:
+            Content-Disposition:
+              schema: { type: string }
+              example: attachment; filename="OG-2401-CIV-DR-001_Rev-02.pdf"
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /revisions/{id}/file/raw:
+    get:
+      tags: [Documents]
+      summary: Raw evidence download (DC/admin + audit)
+      parameters:
+        - $ref: '#/components/parameters/RevisionId'
+      responses:
+        '200':
+          description: Original file
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /projects/{projectId}/number-rules:
+    get:
+      tags: [Numbering]
+      summary: List number rules
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      responses:
+        '200':
+          description: Rules
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NumberRuleListEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+    post:
+      tags: [Numbering]
+      summary: Create number rule
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/NumberRuleCreate' }
+            example:
+              name: ENG-STD
+              pattern: '{PROJ}-{DISC}-{TYPE}-{SEQ:3}'
+              scope: Type
+              pad: 3
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NumberRuleEnvelope' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /number-rules/{id}/reserve:
+    post:
+      tags: [Numbering]
+      summary: Reserve next number (UPDLOCK)
+      parameters:
+        - $ref: '#/components/parameters/RuleId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [discipline, typeId]
+              properties:
+                discipline: { type: string, example: CIV }
+                typeId: { type: string, format: uuid }
+            example:
+              discipline: CIV
+              typeId: 22222222-2222-2222-2222-222222222222
+      responses:
+        '200':
+          description: Reserved
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReservationEnvelope' }
+              example:
+                ok: true
+                data:
+                  id: 33333333-3333-3333-3333-333333333333
+                  number: OG-2401-CIV-DR-006
+                  expiresAt: '2026-09-06T12:00:00Z'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /reservations/{id}/consume:
+    post:
+      tags: [Numbering]
+      summary: Consume reservation into document
+      parameters:
+        - $ref: '#/components/parameters/ReservationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [documentId]
+              properties:
+                documentId: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Consumed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OkEnvelope' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /reservations/{id}/cancel:
+    post:
+      tags: [Numbering]
+      summary: Cancel unused reservation (SEQ does not rewind)
+      parameters:
+        - $ref: '#/components/parameters/ReservationId'
+      responses:
+        '200':
+          description: Cancelled
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OkEnvelope' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /workflow-defs:
+    get:
+      tags: [Workflow]
+      summary: List workflow definitions
+      responses:
+        '200':
+          description: Defs
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WorkflowDefListEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /documents/{id}/workflow/start:
+    post:
+      tags: [Workflow]
+      summary: Start workflow on document
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [defId]
+              properties:
+                defId: { type: string, format: uuid }
+            example:
+              defId: 44444444-4444-4444-4444-444444444444
+      responses:
+        '201':
+          description: Instance created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WorkflowInstanceEnvelope' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /workflow-instances/{id}:
+    get:
+      tags: [Workflow]
+      summary: Get workflow instance
+      parameters:
+        - $ref: '#/components/parameters/InstanceId'
+      responses:
+        '200':
+          description: Instance
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WorkflowInstanceEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /workflow-tasks/{id}/act:
+    post:
+      tags: [Workflow]
+      summary: Act Code 1-4
+      parameters:
+        - $ref: '#/components/parameters/TaskId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WorkflowAct' }
+            example:
+              code: C2
+              comment: اصلاح تراز فونداسیون
+      responses:
+        '200':
+          description: Acted
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OkEnvelope' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /workflow-tasks/{id}/delegate:
+    post:
+      tags: [Workflow]
+      summary: Delegate task
+      parameters:
+        - $ref: '#/components/parameters/TaskId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [toUserId]
+              properties:
+                toUserId: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Delegated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OkEnvelope' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /me/tasks:
+    get:
+      tags: [Workflow]
+      summary: My inbox
+      parameters:
+        - $ref: '#/components/parameters/Offset'
+        - $ref: '#/components/parameters/Limit'
+        - name: overdue
+          in: query
+          schema: { type: boolean }
+      responses:
+        '200':
+          description: Tasks
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TaskListEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /excel/templates:
+    post:
+      tags: [Excel]
+      summary: Onboard Excel template (scenario A)
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, mappingSchema]
+              properties:
+                file: { type: string, format: binary }
+                mappingSchema: { type: string, description: JSON MappingSchema }
+      responses:
+        '201':
+          description: Template stored
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ExcelTemplateEnvelope' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /excel/templates/{id}/import:
+    post:
+      tags: [Excel]
+      summary: Bulk import (scenario B)
+      parameters:
+        - $ref: '#/components/parameters/ExcelTemplateId'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+      responses:
+        '200':
+          description: Batch result
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ImportBatchEnvelope' }
+              example:
+                ok: true
+                data:
+                  id: 55555555-5555-5555-5555-555555555555
+                  status: Failed
+                  rowCount: 500
+                  errorCount: 3
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /excel/batches/{id}:
+    get:
+      tags: [Excel]
+      summary: Get import batch
+      parameters:
+        - $ref: '#/components/parameters/BatchId'
+      responses:
+        '200':
+          description: Batch
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ImportBatchEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /excel/batches/{id}/errors:
+    get:
+      tags: [Excel]
+      summary: Cell-level import errors
+      parameters:
+        - $ref: '#/components/parameters/BatchId'
+        - $ref: '#/components/parameters/Offset'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Errors
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ImportErrorListEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /excel/export:
+    post:
+      tags: [Excel]
+      summary: Render/export workbook (scenario C)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ExcelExportRequest' }
+            example:
+              projectId: 66666666-6666-6666-6666-666666666666
+              templateId: 77777777-7777-7777-7777-777777777777
+              filters: { status: Issued, disc: CIV }
+      responses:
+        '200':
+          description: xlsx vessel
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema: { type: string, format: binary }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /projects/{projectId}/transmittals:
+    get:
+      tags: [Transmittals]
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/Offset'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: List
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TransmittalListEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+    post:
+      tags: [Transmittals]
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TransmittalCreate' }
+            example:
+              purpose: IFA
+              recipient: Supervision Team
+              revisionIds:
+                - 88888888-8888-8888-8888-888888888888
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TransmittalEnvelope' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /transmittals/{id}/ack:
+    post:
+      tags: [Transmittals]
+      parameters:
+        - $ref: '#/components/parameters/TransmittalId'
+      responses:
+        '200':
+          description: Acknowledged
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TransmittalEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /projects/{projectId}/correspondence:
+    get:
+      tags: [Correspondence]
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/Offset'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Letters
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LetterListEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+    post:
+      tags: [Correspondence]
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LetterCreate' }
+            example:
+              letterNo: LTR-2401-104
+              subjectFa: درخواست ابلاغ نقشه‌ها
+              subjectEn: Request for drawings
+              senderParty: Contractor
+              receiverParty: Consultant
+              letterDate: '2026-09-01'
+              actionRequired: true
+              dueDate: '2026-09-10'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LetterEnvelope' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /projects/{projectId}/lessons:
+    get:
+      tags: [Knowledge]
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/Offset'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Lessons
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LessonListEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+    post:
+      tags: [Knowledge]
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LessonCreate' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LessonEnvelope' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /projects/{projectId}/search:
+    get:
+      tags: [Search]
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/Offset'
+        - $ref: '#/components/parameters/Limit'
+        - name: q
+          in: query
+          schema: { type: string }
+        - name: disc
+          in: query
+          schema: { type: string }
+        - name: type
+          in: query
+          schema: { type: string }
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/DocStatus' }
+      responses:
+        '200':
+          description: Faceted search
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DocumentListEnvelope' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /projects/{projectId}/reports/{reportKey}:
+    get:
+      tags: [Reports]
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - name: reportKey
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1, maximum: 15 }
+          description: Report 1-15 from Deliverable 7
+        - $ref: '#/components/parameters/Offset'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Report rows
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReportEnvelope' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /projects/{projectId}/kpis:
+    get:
+      tags: [Reports]
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      responses:
+        '200':
+          description: Cycle time, rejection, MDR count, SLA breach
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/KpiEnvelope' }
+              example:
+                ok: true
+                data:
+                  cycleHours: 42
+                  rejectRate: 0.15
+                  mdrCount: 128
+                  slaBreachRate: 0.08
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /audit:
+    get:
+      tags: [Audit]
+      summary: Audit trail (audit.view)
+      parameters:
+        - $ref: '#/components/parameters/Offset'
+        - $ref: '#/components/parameters/Limit'
+        - name: entity
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          description: Audit rows
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuditListEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Arena session JWT. Header Authorization Bearer.
+
+  parameters:
+    AcceptLanguage:
+      name: Accept-Language
+      in: header
+      schema:
+        type: string
+        enum: [fa, en]
+        default: fa
+    ProjectId:
+      name: projectId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    DocumentId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    RevisionId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    RuleId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    ReservationId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    InstanceId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    TaskId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    ExcelTemplateId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    BatchId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    TransmittalId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    Offset:
+      name: offset
+      in: query
+      schema: { type: integer, minimum: 0, default: 0 }
+    Limit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+
+  responses:
+    BadRequest:
+      description: Validation error
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+          example:
+            ok: false
+            error:
+              code: VALIDATION
+              messageFa: داده نامعتبر است
+              messageEn: Invalid request
+    Unauthorized:
+      description: Missing/expired token
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+          example:
+            ok: false
+            error:
+              code: TOKEN_EXPIRED
+              messageFa: نشست منقضی شده
+              messageEn: Token expired
+    Forbidden:
+      description: RBAC/ABAC denial
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+          example:
+            ok: false
+            error:
+              code: FORBIDDEN
+              messageFa: دسترسی غیرمجاز
+              messageEn: Forbidden
+    NotFound:
+      description: Not found (Secret may also 404)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+          example:
+            ok: false
+            error:
+              code: NOT_FOUND
+              messageFa: یافت نشد
+              messageEn: Not found
+    Conflict:
+      description: DUP / STALE / RESERVE_MISMATCH
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+          example:
+            ok: false
+            error:
+              code: STALE
+              messageFa: نسخه پایگاه جدیدتر است
+              messageEn: Stale revision
+    RateLimited:
+      description: Rate limit
+      headers:
+        Retry-After:
+          schema: { type: integer }
+          example: 60
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+          example:
+            ok: false
+            error:
+              code: RATE
+              messageFa: تعداد درخواست زیاد است
+              messageEn: Too many requests
+    ServerError:
+      description: Unexpected error
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+          example:
+            ok: false
+            error:
+              code: INTERNAL
+              messageFa: خطای داخلی
+              messageEn: Internal error
+
+  schemas:
+    DocStatus:
+      type: string
+      enum: [Draft, Reserved, Issued, C1, C2, C3, C4, Approved, IFC, Superseded, Void, Archived]
+    ReviewCode:
+      type: string
+      enum: [C1, C2, C3, C4]
+    Confidentiality:
+      type: string
+      enum: [Public, Internal, Restricted, Secret]
+    Page:
+      type: object
+      properties:
+        offset: { type: integer }
+        limit: { type: integer }
+        total: { type: integer }
+    ApiError:
+      type: object
+      properties:
+        code: { type: string }
+        messageFa: { type: string }
+        messageEn: { type: string }
+    ErrorEnvelope:
+      type: object
+      properties:
+        ok: { type: boolean, enum: [false] }
+        error: { $ref: '#/components/schemas/ApiError' }
+    OkEnvelope:
+      type: object
+      properties:
+        ok: { type: boolean, enum: [true] }
+        data: { type: object }
+    Document:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        projectId: { type: string, format: uuid }
+        typeId: { type: string, format: uuid }
+        docNumber: { type: string }
+        titleFa: { type: string }
+        titleEn: { type: string }
+        discipline: { type: string }
+        confidentiality: { $ref: '#/components/schemas/Confidentiality' }
+        status: { $ref: '#/components/schemas/DocStatus' }
+        currentRev: { type: string }
+    DocumentCreate:
+      type: object
+      required: [typeId, titleFa, titleEn, discipline]
+      properties:
+        typeId: { type: string, format: uuid }
+        titleFa: { type: string }
+        titleEn: { type: string }
+        discipline: { type: string }
+        docNumber: { type: string }
+        confidentiality: { $ref: '#/components/schemas/Confidentiality' }
+    DocumentPatch:
+      type: object
+      properties:
+        titleFa: { type: string }
+        titleEn: { type: string }
+        confidentiality: { $ref: '#/components/schemas/Confidentiality' }
+    DocumentEnvelope:
+      type: object
+      properties:
+        ok: { type: boolean }
+        data: { $ref: '#/components/schemas/Document' }
+    DocumentListEnvelope:
+      type: object
+      properties:
+        ok: { type: boolean }
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/Document' }
+        page: { $ref: '#/components/schemas/Page' }
+    Revision:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        documentId: { type: string, format: uuid }
+        revCode: { type: string }
+        state: { $ref: '#/components/schemas/DocStatus' }
+        reviewCode: { $ref: '#/components/schemas/ReviewCode' }
+        checksumSha256: { type: string }
+        changeNote: { type: string }
+    RevisionEnvelope:
+      type: object
+      properties:
+        ok: { type: boolean }
+        data: { $ref: '#/components/schemas/Revision' }
+    RevisionListEnvelope:
+      type: object
+      properties:
+        ok: { type: boolean }
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/Revision' }
+        page: { $ref: '#/components/schemas/Page' }
+    NumberRule:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        pattern: { type: string }
+        scope: { type: string, enum: [Project, Disc, Type] }
+        pad: { type: integer }
+    NumberRuleCreate:
+      type: object
+      required: [name, pattern]
+      properties:
+        name: { type: string }
+        pattern: { type: string }
+        scope: { type: string, enum: [Project, Disc, Type] }
+        pad: { type: integer, default: 3 }
+        typeId: { type: string, format: uuid }
+    NumberRuleEnvelope:
+      type: object
+      properties:
+        ok: { type: boolean }
+        data: { $ref: '#/components/schemas/NumberRule' }
+    NumberRuleListEnvelope:
+      type: object
+      properties:
+        ok: { type: boolean }
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/NumberRule' }
+    Reservation:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        number: { type: string }
+        expiresAt: { type: string, format: date-time }
+    ReservationEnvelope:
+      type: object
+      properties:
+        ok: { type: boolean }
+        data: { $ref: '#/components/schemas/Reservation' }
+    WorkflowDef:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        code: { type: string }
+        nameFa: { type: string }
+        nameEn: { type: string }
+        version: { type: integer }
+    WorkflowDefListEnvelope:
+      type: object
+      properties:
+        ok: { type: boolean }
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/WorkflowDef' }
+    WorkflowInstance:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        defId: { type: string, format: uuid }
+        documentId: { type: string, format: uuid }
+        status: { $ref: '#/components/schemas/DocStatus' }
+    WorkflowInstanceEnvelope:
+      type: object
+      properties:
+        ok: { type: boolean }
+        data: { $ref: '#/components/schemas/WorkflowInstance' }
+    WorkflowAct:
+      type: object
+      required: [code]
+      properties:
+        code: { $ref: '#/components/schemas/ReviewCode' }
+        comment: { type: string }
+    Task:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        documentId: { type: string, format: uuid }
+        dueAt: { type: string, format: date-time }
+        status: { type: string, enum: [Open, Done, Cancelled, Escalated] }
+        overdue: { type: boolean }
+    TaskListEnvelope:
+      type: object
+      properties:
+        ok: { type: boolean }
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/Task' }
+        page: { $ref: '#/components/schemas/Page' }
+    ExcelTemplate:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        version: { type: integer }
+        mappingSchema: { type: object }
+    ExcelTemplateEnvelope:
+      type: object
+      properties:
+        ok: { type: boolean }
+        data: { $ref: '#/components/schemas/ExcelTemplate' }
+    ImportBatch:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        status: { type: string, enum: [Validated, Committed, Failed] }
+        rowCount: { type: integer }
+        errorCount: { type: integer }
+    ImportBatchEnvelope:
+      type: object
+      properties:
+        ok: { type: boolean }
+        data: { $ref: '#/components/schemas/ImportBatch' }
+    ImportError:
+      type: object
+      properties:
+        rowNo: { type: integer }
+        colKey: { type: string }
+        code: { type: string }
+        messageFa: { type: string }
+        messageEn: { type: string }
+    ImportErrorListEnvelope:
+      type: object
+      properties:
+        ok: { type: boolean }
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/ImportError' }
+        page: { $ref: '#/components/schemas/Page' }
+    ExcelExportRequest:
+      type: object
+      required: [projectId, templateId]
+      properties:
+        projectId: { type: string, format: uuid }
+        templateId: { type: string, format: uuid }
+        filters: { type: object, additionalProperties: true }
+    Transmittal:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        transmittalNo: { type: string }
+        purpose: { type: string }
+        recipient: { type: string }
+        status: { type: string, enum: [Draft, Sent, Ack, Overdue] }
+        docCount: { type: integer }
+    TransmittalCreate:
+      type: object
+      required: [purpose, recipient, revisionIds]
+      properties:
+        purpose: { type: string }
+        recipient: { type: string }
+        revisionIds:
+          type: array
+          items: { type: string, format: uuid }
+    TransmittalEnvelope:
+      type: object
+      properties:
+        ok: { type: boolean }
+        data: { $ref: '#/components/schemas/Transmittal' }
+    TransmittalListEnvelope:
+      type: object
+      properties:
+        ok: { type: boolean }
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/Transmittal' }
+        page: { $ref: '#/components/schemas/Page' }
+    Letter:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        letterNo: { type: string }
+        subjectFa: { type: string }
+        actionRequired: { type: boolean }
+        dueDate: { type: string, format: date }
+    LetterCreate:
+      type: object
+      required: [letterNo, subjectFa, subjectEn, senderParty, receiverParty, letterDate]
+      properties:
+        letterNo: { type: string }
+        subjectFa: { type: string }
+        subjectEn: { type: string }
+        senderParty: { type: string }
+        receiverParty: { type: string }
+        letterDate: { type: string, format: date }
+        actionRequired: { type: boolean }
+        dueDate: { type: string, format: date }
+    LetterEnvelope:
+      type: object
+      properties:
+        ok: { type: boolean }
+        data: { $ref: '#/components/schemas/Letter' }
+    LetterListEnvelope:
+      type: object
+      properties:
+        ok: { type: boolean }
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/Letter' }
+        page: { $ref: '#/components/schemas/Page' }
+    Lesson:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        titleFa: { type: string }
+        titleEn: { type: string }
+        lessonFa: { type: string }
+        lessonEn: { type: string }
+    LessonCreate:
+      type: object
+      required: [titleFa, titleEn, lessonFa, lessonEn]
+      properties:
+        titleFa: { type: string }
+        titleEn: { type: string }
+        categoryFa: { type: string }
+        categoryEn: { type: string }
+        impactFa: { type: string }
+        impactEn: { type: string }
+        lessonFa: { type: string }
+        lessonEn: { type: string }
+        author: { type: string }
+    LessonEnvelope:
+      type: object
+      properties:
+        ok: { type: boolean }
+        data: { $ref: '#/components/schemas/Lesson' }
+    LessonListEnvelope:
+      type: object
+      properties:
+        ok: { type: boolean }
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/Lesson' }
+        page: { $ref: '#/components/schemas/Page' }
+    ReportEnvelope:
+      type: object
+      properties:
+        ok: { type: boolean }
+        data:
+          type: array
+          items: { type: object, additionalProperties: true }
+        page: { $ref: '#/components/schemas/Page' }
+    KpiEnvelope:
+      type: object
+      properties:
+        ok: { type: boolean }
+        data:
+          type: object
+          properties:
+            cycleHours: { type: number }
+            rejectRate: { type: number }
+            mdrCount: { type: integer }
+            slaBreachRate: { type: number }
+    AuditRow:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        at: { type: string, format: date-time }
+        action: { type: string }
+        entity: { type: string }
+        hash: { type: string }
+    AuditListEnvelope:
+      type: object
+      properties:
+        ok: { type: boolean }
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/AuditRow' }
+        page: { $ref: '#/components/schemas/Page' }
