@@ -1,0 +1,265 @@
+{
+  "version": "1.0.0",
+  "locale": "fa-IR",
+  "note": "وزن‌ها جمع ۱.۰۰ — مرجع رویه رایج کارگاه ایران (نفت/گاز + ابنیه)، نه جایگزین ITP پروژه",
+  "items": [
+    {
+      "code": "CIV-FND",
+      "discipline": "CIV",
+      "name_fa": "فونداسیون بتنی",
+      "name_en": "Concrete foundation",
+      "ref": "نشریه ۵۵؛ ACI 318؛ ITP سیویل کارفرما",
+      "steps": [
+        {"name": "excavation", "name_fa": "گود/خاکبرداری پی", "w": 0.10, "ir": false},
+        {"name": "blinding", "name_fa": "بتن مگر", "w": 0.08, "ir": true},
+        {"name": "rebar", "name_fa": "آرماتوربندی", "w": 0.22, "ir": true},
+        {"name": "form", "name_fa": "قالب‌بندی", "w": 0.12, "ir": false},
+        {"name": "pour", "name_fa": "بتن‌ریزی", "w": 0.30, "ir": true},
+        {"name": "cure_strip", "name_fa": "عمل‌آوری و باز کردن قالب", "w": 0.18, "ir": false}
+      ]
+    },
+    {
+      "code": "CIV-COL",
+      "discipline": "CIV",
+      "name_fa": "ستون بتنی",
+      "name_en": "Concrete column",
+      "ref": "نشریه ۵۵؛ ACI 318",
+      "steps": [
+        {"name": "rebar", "name_fa": "آرماتور", "w": 0.25, "ir": true},
+        {"name": "form", "name_fa": "قالب", "w": 0.20, "ir": false},
+        {"name": "pour", "name_fa": "بتن", "w": 0.35, "ir": true},
+        {"name": "strip", "name_fa": "باز کردن قالب", "w": 0.10, "ir": false},
+        {"name": "cure", "name_fa": "عمل‌آوری", "w": 0.10, "ir": false}
+      ]
+    },
+    {
+      "code": "CIV-BEAM",
+      "discipline": "CIV",
+      "name_fa": "تیر بتنی",
+      "name_en": "Concrete beam",
+      "ref": "نشریه ۵۵؛ ACI 318",
+      "steps": [
+        {"name": "scaffold", "name_fa": "داربست/شمع", "w": 0.10, "ir": false},
+        {"name": "form", "name_fa": "قالب کف و کنار", "w": 0.18, "ir": false},
+        {"name": "rebar", "name_fa": "آرماتور", "w": 0.25, "ir": true},
+        {"name": "pour", "name_fa": "بتن", "w": 0.32, "ir": true},
+        {"name": "strip_cure", "name_fa": "باز کردن و عمل‌آوری", "w": 0.15, "ir": false}
+      ]
+    },
+    {
+      "code": "CIV-SLAB",
+      "discipline": "CIV",
+      "name_fa": "دال بتنی",
+      "name_en": "Concrete slab",
+      "ref": "نشریه ۵۵",
+      "steps": [
+        {"name": "deck", "name_fa": "قالب سقف", "w": 0.18, "ir": false},
+        {"name": "rebar", "name_fa": "مش/آرماتور", "w": 0.22, "ir": true},
+        {"name": "embed", "name_fa": "مدفون و بازشو", "w": 0.10, "ir": true},
+        {"name": "pour", "name_fa": "بتن", "w": 0.35, "ir": true},
+        {"name": "cure", "name_fa": "عمل‌آوری", "w": 0.15, "ir": false}
+      ]
+    },
+    {
+      "code": "CIV-WALL",
+      "discipline": "CIV",
+      "name_fa": "دیوار بتنی",
+      "name_en": "Concrete wall",
+      "ref": "نشریه ۵۵",
+      "steps": [
+        {"name": "rebar", "name_fa": "آرماتور", "w": 0.28, "ir": true},
+        {"name": "form", "name_fa": "قالب دو طرف", "w": 0.22, "ir": false},
+        {"name": "pour", "name_fa": "بتن", "w": 0.35, "ir": true},
+        {"name": "strip_cure", "name_fa": "باز کردن و عمل‌آوری", "w": 0.15, "ir": false}
+      ]
+    },
+    {
+      "code": "STR-FRAME",
+      "discipline": "STR",
+      "name_fa": "اسکلت فلزی",
+      "name_en": "Steel frame",
+      "ref": "مبحث ۱۰؛ AISC؛ IPS-C-ST",
+      "steps": [
+        {"name": "shop", "name_fa": "ساخت کارگاهی", "w": 0.22, "ir": true},
+        {"name": "haul", "name_fa": "حمل", "w": 0.08, "ir": false},
+        {"name": "erect", "name_fa": "نصب", "w": 0.35, "ir": true},
+        {"name": "bolt", "name_fa": "پیچ/جوش اتصال", "w": 0.20, "ir": true},
+        {"name": "align", "name_fa": "شاقول و تراز", "w": 0.15, "ir": true}
+      ]
+    },
+    {
+      "code": "STR-PRACK",
+      "discipline": "STR",
+      "name_fa": "پایپ‌رک",
+      "name_en": "Piperack",
+      "ref": "IPS-C-ST؛ AISC",
+      "steps": [
+        {"name": "found_ready", "name_fa": "آمادگی پی/بولت", "w": 0.10, "ir": true},
+        {"name": "shop", "name_fa": "ساخت", "w": 0.20, "ir": true},
+        {"name": "erect_col", "name_fa": "نصب ستون", "w": 0.25, "ir": true},
+        {"name": "beam_bracing", "name_fa": "تیر و بادبند", "w": 0.30, "ir": true},
+        {"name": "grout", "name_fa": "گروت زیر صفحه", "w": 0.15, "ir": true}
+      ]
+    },
+    {
+      "code": "STR-SKID",
+      "discipline": "STR",
+      "name_fa": "اسکید",
+      "name_en": "Skid",
+      "ref": "IPS؛ مشخصات پکیج فروشنده",
+      "steps": [
+        {"name": "fab", "name_fa": "ساخت شاسی", "w": 0.25, "ir": true},
+        {"name": "equip", "name_fa": "نصب تجهیزات روی اسکید", "w": 0.30, "ir": true},
+        {"name": "pipe_inst", "name_fa": "پایپینگ اسکید", "w": 0.20, "ir": true},
+        {"name": "fat", "name_fa": "FAT", "w": 0.15, "ir": true},
+        {"name": "site_set", "name_fa": "نصب در سایت", "w": 0.10, "ir": true}
+      ]
+    },
+    {
+      "code": "PIP-LINE",
+      "discipline": "PIP",
+      "name_fa": "پایپینگ فرآیندی",
+      "name_en": "Process piping",
+      "ref": "ASME B31.3؛ IPS-C-PI؛ WPS/PQR",
+      "steps": [
+        {"name": "spool", "name_fa": "ساخت اسپول", "w": 0.12, "ir": false},
+        {"name": "fitup", "name_fa": "فیت‌آپ", "w": 0.15, "ir": true},
+        {"name": "weld", "name_fa": "جوش", "w": 0.22, "ir": true},
+        {"name": "ndt", "name_fa": "NDT", "w": 0.13, "ir": true},
+        {"name": "pwht", "name_fa": "PWHT", "w": 0.08, "ir": true},
+        {"name": "test", "name_fa": "تست هیدرو/پنوماتیک", "w": 0.18, "ir": true},
+        {"name": "paint", "name_fa": "رنگ/عایق", "w": 0.12, "ir": true}
+      ]
+    },
+    {
+      "code": "ELE-CABLE",
+      "discipline": "ELE",
+      "name_fa": "کابل‌کشی برق",
+      "name_en": "Power/control cable",
+      "ref": "IEC 60364؛ IPS-E-EL؛ نشریه ۱۳",
+      "steps": [
+        {"name": "tray", "name_fa": "تری/داکت آماده", "w": 0.15, "ir": false},
+        {"name": "pull", "name_fa": "کشیدن کابل", "w": 0.35, "ir": false},
+        {"name": "term", "name_fa": "سرسیم/گلند", "w": 0.25, "ir": true},
+        {"name": "megger", "name_fa": "مگر/پیوستگی", "w": 0.25, "ir": true}
+      ]
+    },
+    {
+      "code": "INS-LOOP",
+      "discipline": "INS",
+      "name_fa": "ابزار دقیق",
+      "name_en": "Instrumentation",
+      "ref": "ISA؛ IPS-E-IN",
+      "steps": [
+        {"name": "install", "name_fa": "نصب ترانسمیتر/شیر", "w": 0.30, "ir": true},
+        {"name": "tubing", "name_fa": "تیوبینگ/کابل سیگنال", "w": 0.20, "ir": false},
+        {"name": "loop", "name_fa": "لوپ چک", "w": 0.30, "ir": true},
+        {"name": "cal", "name_fa": "کالیبراسیون", "w": 0.20, "ir": true}
+      ]
+    },
+    {
+      "code": "HVAC-DUCT",
+      "discipline": "MEC",
+      "name_fa": "HVAC کانال",
+      "name_en": "HVAC ducting",
+      "ref": "SMACNA؛ نشریه مکانیک",
+      "steps": [
+        {"name": "fab", "name_fa": "ساخت کانال", "w": 0.20, "ir": false},
+        {"name": "erect", "name_fa": "نصب کانال", "w": 0.30, "ir": false},
+        {"name": "insul", "name_fa": "عایق", "w": 0.20, "ir": true},
+        {"name": "test", "name_fa": "تست نشتی/بالانس", "w": 0.30, "ir": true}
+      ]
+    },
+    {
+      "code": "CIV-EXC",
+      "discipline": "CIV",
+      "name_fa": "خاکبرداری",
+      "name_en": "Excavation",
+      "ref": "نشریه ۱۰۱؛ مشخصات خاک",
+      "steps": [
+        {"name": "survey", "name_fa": "پیاده کردن", "w": 0.10, "ir": true},
+        {"name": "cut", "name_fa": "حفر", "w": 0.50, "ir": false},
+        {"name": "level", "name_fa": "تراز و رگلاژ", "w": 0.20, "ir": true},
+        {"name": "dispose", "name_fa": "حمل نخاله", "w": 0.20, "ir": false}
+      ]
+    },
+    {
+      "code": "CIV-STONE",
+      "discipline": "CIV",
+      "name_fa": "سنگ‌کاری",
+      "name_en": "Stone masonry",
+      "ref": "نشریه ۵۵",
+      "steps": [
+        {"name": "prep", "name_fa": "زیرسازی", "w": 0.15, "ir": false},
+        {"name": "set", "name_fa": "نصب سنگ", "w": 0.55, "ir": false},
+        {"name": "grout", "name_fa": "بندکشی", "w": 0.20, "ir": false},
+        {"name": "clean", "name_fa": "نظافت نهایی", "w": 0.10, "ir": true}
+      ]
+    },
+    {
+      "code": "CIV-ASPH",
+      "discipline": "CIV",
+      "name_fa": "آسفالت",
+      "name_en": "Asphalt paving",
+      "ref": "نشریه ۱۰۱؛ ASTM D",
+      "steps": [
+        {"name": "subgrade", "name_fa": "زیرسازی", "w": 0.25, "ir": true},
+        {"name": "base", "name_fa": "اساس/قیرپاشی", "w": 0.20, "ir": true},
+        {"name": "pave", "name_fa": "پخش آسفالت", "w": 0.40, "ir": true},
+        {"name": "compact", "name_fa": "تراکم و خط‌کشی", "w": 0.15, "ir": true}
+      ]
+    },
+    {
+      "code": "ARC-TILE",
+      "discipline": "ARC",
+      "name_fa": "سرامیک",
+      "name_en": "Ceramic tiling",
+      "ref": "نشریه ۵۵",
+      "steps": [
+        {"name": "prep", "name_fa": "آماده سطح", "w": 0.15, "ir": false},
+        {"name": "set", "name_fa": "نصب", "w": 0.55, "ir": false},
+        {"name": "grout", "name_fa": "بندکشی", "w": 0.20, "ir": false},
+        {"name": "clean", "name_fa": "شستشو", "w": 0.10, "ir": true}
+      ]
+    },
+    {
+      "code": "ARC-PAINT",
+      "discipline": "ARC",
+      "name_fa": "رنگ معماری",
+      "name_en": "Architectural paint",
+      "ref": "نشریه ۵۵؛ مشخصات رنگ",
+      "steps": [
+        {"name": "prep", "name_fa": "بتونه‌کاری", "w": 0.25, "ir": false},
+        {"name": "primer", "name_fa": "آستر", "w": 0.20, "ir": false},
+        {"name": "finish", "name_fa": "رنگ نهایی", "w": 0.45, "ir": false},
+        {"name": "touch", "name_fa": "رفع نقص", "w": 0.10, "ir": true}
+      ]
+    },
+    {
+      "code": "ARC-DOOR",
+      "discipline": "ARC",
+      "name_fa": "درب و پنجره",
+      "name_en": "Doors and windows",
+      "ref": "نشریه ۵۵",
+      "steps": [
+        {"name": "frame", "name_fa": "فریم", "w": 0.30, "ir": true},
+        {"name": "leaf", "name_fa": "لنگه/شیشه", "w": 0.40, "ir": false},
+        {"name": "hardware", "name_fa": "یراق", "w": 0.20, "ir": false},
+        {"name": "adjust", "name_fa": "رگلاژ", "w": 0.10, "ir": true}
+      ]
+    },
+    {
+      "code": "ARC-CEIL",
+      "discipline": "ARC",
+      "name_fa": "سقف کاذب",
+      "name_en": "False ceiling",
+      "ref": "نشریه ۵۵",
+      "steps": [
+        {"name": "grid", "name_fa": "شبکه و آویز", "w": 0.35, "ir": false},
+        {"name": "panel", "name_fa": "تایل/کناف", "w": 0.40, "ir": false},
+        {"name": "cutout", "name_fa": "بازشو تأسیسات", "w": 0.15, "ir": false},
+        {"name": "finish", "name_fa": "نهایی", "w": 0.10, "ir": true}
+      ]
+    }
+  ]
+}
