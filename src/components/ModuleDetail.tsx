@@ -59,6 +59,13 @@ const D2_TAB_BY_SUB: Record<string, PexTab> = {
   "d2-p6-al": "alerts",
 };
 
+const HSE_PAGE_SUBS: Record<string, { id: string; title: Bi; tab: HseTab; sql: string[] }[]> = {
+  "d2-p4": [
+    { id: "d2-p4-hse", title: { fa: "ایمنی، بهداشت و محیط‌زیست (HSE)", en: "HSE" }, tab: "dashboard", sql: ["hse_incident", "hse_permit", "hse_inspection"] },
+  ],
+};
+const HSE_TAB_BY_SUB: Record<string, HseTab> = { "d2-p4-hse": "dashboard" };
+
 const D3_PAGE_SUBS: Record<string, { id: string; title: Bi; tab: PmaTab; sql: string[] }[]> = {
   "d3-p1": [
     { id: "d3-p1-phi", title: { fa: "شاخص سلامت PHI", en: "PHI Health" }, tab: "phi", sql: ["pma_health_snapshot"] },
