@@ -9,7 +9,9 @@
 ```bat
 sqlcmd -S localhost\SQL2008EXPRESS -d PMO_Dashboard_DB -i V001__pex_core.sql
 sqlcmd -S localhost\SQL2008EXPRESS -d PMO_Dashboard_DB -i V002__pex_dpr.sql
+sqlcmd -S localhost\SQL2008EXPRESS -d PMO_Dashboard_DB -i V003__hse.sql
 sqlcmd -S localhost\SQL2008EXPRESS -d PMO_Dashboard_DB -i seed__pex_og2401.sql
+sqlcmd -S localhost\SQL2008EXPRESS -d PMO_Dashboard_DB -i seed__hse_og2401.sql
 ```
 
 همه اسکریپت‌ها **idempotent** هستند (اجرای چندباره بی‌خطر).
@@ -18,7 +20,7 @@ sqlcmd -S localhost\SQL2008EXPRESS -d PMO_Dashboard_DB -i seed__pex_og2401.sql
 
 ## قرارداد نام‌گذاری
 
-- جدول‌های PEX با پیشوند `pex_` و snake_case (مثل `pex_progress_line`).
+- جدول‌های PEX با پیشوند `pex_` و جدول‌های HSE با پیشوند `hse_` (snake_case).
 - نسخه‌بندی: `V<nnn>__<topic>.sql` برای DDL و `seed__<scope>.sql` برای سید.
 - هر فاز جدید یک `Vnnn` تازه می‌سازد؛ فایل تأییدشده قبلی ویرایش نمی‌شود.
 
@@ -28,4 +30,6 @@ sqlcmd -S localhost\SQL2008EXPRESS -d PMO_Dashboard_DB -i seed__pex_og2401.sql
 |---|---|
 | `V001__pex_core.sql` | `pex_project` · `pex_wbs` · `pex_roc` · `pex_activity` · `pex_activity_step` · `pex_milestone` |
 | `V002__pex_dpr.sql` | `pex_dpr` · `pex_progress_line` · `pex_dpr_event` |
+| `V003__hse.sql` | `hse_incident` · `hse_permit` · `hse_inspection` · `hse_action` · `hse_manhour` · `hse_tbt` |
 | `seed__pex_og2401.sql` | سید پروژه OG-2401 (آینه `src/data/pexProject.ts`) |
+| `seed__hse_og2401.sql` | سید HSE پروژه OG-2401 (آینه `src/services/hse.ts`) |
