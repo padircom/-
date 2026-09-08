@@ -9,6 +9,11 @@ import DocumentWorkspace, { type EdmsTab } from "./DocumentWorkspace";
 import PlanningWorkspace, { type PexTab } from "./PlanningWorkspace";
 import PmaWorkspace, { type PmaTab } from "./PmaWorkspace";
 import RiskClaimsWorkspace, { type D4Tab } from "./RiskClaimsWorkspace";
+import GovernanceWorkspace, { type GovTab } from "./GovernanceWorkspace";
+import CostSupplyWorkspace, { type FinTab } from "./CostSupplyWorkspace";
+import QualityWorkspace, { type QmsTab } from "./QualityWorkspace";
+import WorkforceWorkspace, { type HrmTab } from "./WorkforceWorkspace";
+import CommunicationWorkspace, { type CkmTab } from "./CommunicationWorkspace";
 
 /** Extra submodules only on the d1 inner page — not in the main right sidebar. */
 const D1_PAGE_SUBS: Record<string, { id: string; title: Bi; tab: EdmsTab; sql: string[] }[]> = {
@@ -130,6 +135,148 @@ const D4_TAB_BY_SUB: Record<string, D4Tab> = {
   "d4-p5-ntc": "notice",
   "d4-p5-dsp": "dispute",
   "d4-p5-exe": "exec",
+};
+
+/** Extra submodules only on the d6 inner page — not in the main right sidebar. */
+const D6_PAGE_SUBS: Record<string, { id: string; title: Bi; tab: GovTab; sql: string[] }[]> = {
+  "d6-p1": [
+    { id: "d6-p1-sla", title: { fa: "پایش SLA و گام‌های معوق", en: "SLA & overdue steps" }, tab: "workflow", sql: ["Workflow_Instance"] },
+  ],
+  "d6-p2": [
+    { id: "d6-p2-health", title: { fa: "سلامت اتصال و آخرین همگام‌سازی", en: "Connector health & last sync" }, tab: "integration", sql: ["Integration_Log"] },
+  ],
+  "d6-p4": [
+    { id: "d6-p4-capa", title: { fa: "یافته‌ها و اقدام اصلاحی", en: "Findings & CAPA" }, tab: "audit", sql: ["Audit_Register"] },
+  ],
+  "d6-p5": [
+    { id: "d6-p5-log", title: { fa: "دفتر تصمیم و مرجع اختیار", en: "Decision log & authority" }, tab: "decision", sql: ["Decision_Log"] },
+  ],
+};
+
+const D6_TAB_BY_SUB: Record<string, GovTab> = {
+  "d6-p1-s1": "workflow",
+  "d6-p1-sla": "workflow",
+  "d6-p2-s1": "integration",
+  "d6-p2-health": "integration",
+  "d6-p3-s1": "stakeholders",
+  "d6-p4-s1": "audit",
+  "d6-p4-capa": "audit",
+  "d6-p5-s1": "decision",
+  "d6-p5-log": "decision",
+};
+
+/** Extra submodules only on the d8 inner page — main sidebar keeps one row per domain. */
+const D8_PAGE_SUBS: Record<string, { id: string; title: Bi; tab: QmsTab; sql: string[] }[]> = {
+  "d8-p1": [
+    { id: "d8-p1-hold", title: { fa: "نقاط توقف و شاهد", en: "Hold & witness points" }, tab: "plan", sql: ["ITP_Point"] },
+  ],
+  "d8-p2": [
+    { id: "d8-p2-ir", title: { fa: "درخواست بازرسی و اعلان ۴۸ ساعته", en: "IR & 48h notice" }, tab: "inspection", sql: ["Inspection_Request"] },
+    { id: "d8-p2-spc", title: { fa: "نمودار پایش و شش‌سیگما", en: "Control chart & six sigma" }, tab: "inspection", sql: ["Test_Report"] },
+  ],
+  "d8-p3": [
+    { id: "d8-p3-capa", title: { fa: "اقدام اصلاحی و پارتو علل", en: "CAPA & Pareto" }, tab: "ncr", sql: ["CAPA_Action"] },
+    { id: "d8-p3-coq", title: { fa: "هزینه کیفیت و COPQ", en: "Cost of quality" }, tab: "ncr", sql: ["NCR_Register"] },
+  ],
+  "d8-p4": [
+    { id: "d8-p4-trace", title: { fa: "ردیابی شماره ذوب", en: "Heat traceability" }, tab: "material", sql: ["Heat_Trace_Link"] },
+  ],
+  "d8-p5": [
+    { id: "d8-p5-iso", title: { fa: "امتیاز انطباق و ریسک گواهینامه", en: "Compliance score & cert risk" }, tab: "audit", sql: ["Audit_Finding"] },
+  ],
+  "d8-p6": [
+    { id: "d8-p6-mc", title: { fa: "دروازه تحویل مکانیکی", en: "Mechanical completion gate" }, tab: "handover", sql: ["Completion_Certificate"] },
+    { id: "d8-p6-dos", title: { fa: "داکیومنت کیفیت تحویل", en: "Quality dossier" }, tab: "handover", sql: ["Quality_Dossier"] },
+  ],
+};
+
+const D8_TAB_BY_SUB: Record<string, QmsTab> = {
+  "d8-p1-s1": "plan",
+  "d8-p1-hold": "plan",
+  "d8-p2-s1": "inspection",
+  "d8-p2-ir": "inspection",
+  "d8-p2-spc": "inspection",
+  "d8-p3-s1": "ncr",
+  "d8-p3-capa": "ncr",
+  "d8-p3-coq": "ncr",
+  "d8-p4-s1": "material",
+  "d8-p4-trace": "material",
+  "d8-p5-s1": "audit",
+  "d8-p5-iso": "audit",
+  "d8-p6-s1": "handover",
+  "d8-p6-mc": "handover",
+  "d8-p6-dos": "handover",
+};
+
+const D10_TAB_BY_SUB: Record<string, HrmTab> = {
+  "d10-p1-s1": "planning",
+  "d10-p1-s2": "planning",
+  "d10-p1-s3": "planning",
+  "d10-p2-s1": "timesheet",
+  "d10-p3-s1": "productivity",
+  "d10-p4-s1": "crew",
+  "d10-p5-s1": "onboarding",
+  "d10-p6-s1": "analytics",
+};
+
+const D11_TAB_BY_SUB: Record<string, CkmTab> = {
+  "d11-p1-s1": "correspondence",
+  "d11-p1-s2": "correspondence",
+  "d11-p2-s1": "meetings",
+  "d11-p3-s1": "stakeholders",
+  "d11-p3-s2": "stakeholders",
+  "d11-p4-s1": "notifications",
+  "d11-p5-s1": "knowledge",
+  "d11-p6-s1": "analytics",
+};
+
+/** Extra submodules only on the d5 inner page — main sidebar untouched. */
+const D5_PAGE_SUBS: Record<string, { id: string; title: Bi; tab: FinTab; sql: string[] }[]> = {
+  "d5-p1": [
+    { id: "d5-p1-cbs", title: { fa: "ساختار شکست هزینه و PMB", en: "CBS & PMB" }, tab: "cost", sql: ["fin_cbs_node", "fin_pmb_period"] },
+    { id: "d5-p1-res", title: { fa: "ذخیره احتیاطی و اختیار برداشت", en: "Reserve & DoA" }, tab: "cost", sql: ["fin_reserve_ledger"] },
+  ],
+  "d5-p2": [
+    { id: "d5-p2-evm", title: { fa: "EVM و پنج روش EAC", en: "EVM & five EACs" }, tab: "control", sql: ["fin_evm_snapshot"] },
+    { id: "d5-p2-snap", title: { fa: "Snapshot تغییرناپذیر و نسخه فرمول", en: "Immutable snapshots" }, tab: "control", sql: ["fin_evm_snapshot"] },
+  ],
+  "d5-p3": [
+    { id: "d5-p3-age", title: { fa: "سن مطالبات و سرمایه در گردش", en: "AR aging & working capital" }, tab: "cash", sql: ["fin_receivable", "fin_payable"] },
+    { id: "d5-p3-ipc", title: { fa: "صورت‌وضعیت و کسورات", en: "Progress invoice" }, tab: "cash", sql: ["fin_progress_invoice"] },
+  ],
+  "d5-p4": [
+    { id: "d5-p4-mrp", title: { fa: "اجرای MRP و تاریخ نیاز کالا", en: "MRP & material need date" }, tab: "pr", sql: ["fin_mrp_run"] },
+    { id: "d5-p4-bud", title: { fa: "کنترل بودجه و مسیر تأیید", en: "Budget check & approval route" }, tab: "pr", sql: ["fin_pr_line"] },
+  ],
+  "d5-p5": [
+    { id: "d5-p5-com", title: { fa: "زنجیره تعهد و عملکرد تأمین‌کننده", en: "Commitment & vendor scoring" }, tab: "po", sql: ["fin_commitment", "fin_vendor_score"] },
+    { id: "d5-p5-3wm", title: { fa: "تطابق سه‌جانبه پیش از پرداخت", en: "3-way match gate" }, tab: "po", sql: ["fin_invoice_match"] },
+  ],
+  "d5-p6": [
+    { id: "d5-p6-rop", title: { fa: "نقطه سفارش، EOQ و طبقه‌بندی ABC", en: "ROP, EOQ & ABC" }, tab: "inventory", sql: ["fin_stock_balance"] },
+    { id: "d5-p6-trc", title: { fa: "ردیابی بچ و گردش انبار", en: "Batch traceability & flow" }, tab: "inventory", sql: ["fin_grn", "fin_issuance"] },
+  ],
+};
+
+const D5_TAB_BY_SUB: Record<string, FinTab> = {
+  "d5-p1-s1": "cost",
+  "d5-p1-cbs": "cost",
+  "d5-p1-res": "cost",
+  "d5-p2-s1": "control",
+  "d5-p2-evm": "control",
+  "d5-p2-snap": "control",
+  "d5-p3-s1": "cash",
+  "d5-p3-age": "cash",
+  "d5-p3-ipc": "cash",
+  "d5-p4-s1": "pr",
+  "d5-p4-mrp": "pr",
+  "d5-p4-bud": "pr",
+  "d5-p5-s1": "po",
+  "d5-p5-com": "po",
+  "d5-p5-3wm": "po",
+  "d5-p6-s1": "inventory",
+  "d5-p6-rop": "inventory",
+  "d5-p6-trc": "inventory",
 };
 
 const D1_TAB_BY_SUB: Record<string, EdmsTab> = {
@@ -568,6 +715,516 @@ export default function ModuleDetail({ lang, target, onBack, onOpenFlowNet }: Pr
                     {[
                       ...p.subs.map((s) => ({ id: s.id, title: s.title, sql: s.sql })),
                       ...(D4_PAGE_SUBS[p.id] ?? []),
+                    ].map((s) => (
+                      <button
+                        key={s.id}
+                        onClick={() => {
+                          audit("OPEN_SUBPROCESS", { projectId: target.projectId, entity: dom.id, entityId: s.id });
+                          setSelected({ pId: p.id, sId: s.id });
+                        }}
+                        className={`group flex w-full items-start gap-2 rounded-lg px-2 py-2 text-start transition hover:-translate-y-px glass-row ${selected?.sId === s.id ? "row-on" : ""}`}
+                      >
+                        <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: dom.accent }} />
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-[10px] font-light tx1">{t(s.title, lang)}</div>
+                          <div className="mt-0.5 flex flex-wrap gap-1">
+                            {s.sql.map((tbl) => (
+                              <span key={tbl} className="rounded bg-sky-400/10 px-1 py-[1px] text-[7.5px] font-light text-sky-300" dir="ltr">🗄 {tbl}</span>
+                            ))}
+                          </div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </aside>
+        </div>
+      </div>
+    );
+  }
+
+  const d6Tab = ((): GovTab => {
+    const sid = selected?.sId ?? target.subId;
+    if (sid && D6_TAB_BY_SUB[sid]) return D6_TAB_BY_SUB[sid];
+    return "workflow";
+  })();
+
+  const d5Tab = ((): FinTab => {
+    const sid = selected?.sId ?? target.subId;
+    if (sid && D5_TAB_BY_SUB[sid]) return D5_TAB_BY_SUB[sid];
+    return "cost";
+  })();
+
+  const d8Tab = ((): QmsTab => {
+    const sid = selected?.sId ?? target.subId;
+    if (sid && D8_TAB_BY_SUB[sid]) return D8_TAB_BY_SUB[sid];
+    return "plan";
+  })();
+
+  if (dom.id === "d8") {
+    return (
+      <div className="flex h-full min-h-0 flex-col gap-3 overflow-hidden" dir={rtl ? "rtl" : "ltr"}>
+        <div className="glass flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl px-3 py-2.5">
+          <button onClick={onBack} className="glass-row flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-[10.5px] font-light tx2 transition hover:tx1">
+            <span className={rtl ? "" : "rotate-180"}>→</span>
+            {rtl ? "بازگشت به داشبورد" : "Back to dashboard"}
+          </button>
+          {cluster && (
+            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl text-[20px]"
+                  style={{ background: `${cluster.color}1f`, border: `1px solid ${cluster.color}55` }}>
+              {cluster.icon}
+            </span>
+          )}
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
+              {cluster && (
+                <h1 className="truncate text-[20px] font-semibold leading-tight" style={{ color: cluster.color }}>
+                  {t(cluster.title, lang)}
+                </h1>
+              )}
+              <span className="text-[16px] font-light tx4">/</span>
+              {project && (
+                <h2 className="truncate text-[19px] font-semibold leading-tight tx1">{t(project.name, lang)}</h2>
+              )}
+            </div>
+            {project && (
+              <p className="mt-1 truncate text-[10px] font-extralight tx3">
+                <span dir="ltr">{project.code}</span> · {t(project.client, lang)} · {t(project.location, lang)}
+              </p>
+            )}
+          </div>
+          <div className="shrink-0 text-end">
+            <div className="text-[9px] font-extralight tx3">{t(dom.title, lang)}</div>
+            <div className="text-[11px] font-light tx1">
+              {rtl ? "QMS — نقطه توقف مسدودکننده؛ تحویل بدون پانچ کلاس A" : "QMS — hold points block; no MC with open class-A punch"}
+            </div>
+          </div>
+        </div>
+        <div className="flex min-h-0 flex-1 gap-3 overflow-hidden">
+          <div className="glass flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl p-3">
+            <QualityWorkspace lang={lang} initialTab={d8Tab} hideTabs />
+          </div>
+          <aside className="glass-dark flex w-[300px] shrink-0 flex-col overflow-hidden rounded-2xl">
+            <div className="b-line border-b px-3 py-2.5">
+              <div className="flex items-center gap-2">
+                <span className="grid h-6 w-6 place-items-center rounded-md text-[12px]"
+                      style={{ background: `${dom.accent}1a`, border: `1px solid ${dom.accent}55`, color: dom.accent }}>
+                  {dom.icon}
+                </span>
+                <div className="text-[10.5px] font-normal tx1">{t(dom.title, lang)}</div>
+              </div>
+            </div>
+            <div className="thin-scroll flex-1 overflow-y-auto p-2 space-y-2">
+              {dom.processes.map((p, i) => (
+                <div key={p.id} className="rounded-xl border b-line-soft bg-black/10 p-1.5">
+                  <div className="flex items-center gap-1.5 px-1 py-1">
+                    <span className="text-[8px] font-light tabular-nums tx4">
+                      {(i + 1).toLocaleString(rtl ? "fa-IR" : "en-US")}
+                    </span>
+                    <span className="text-[10.5px] font-normal" style={{ color: dom.accent }}>{t(p.title, lang)}</span>
+                  </div>
+                  <div className="mt-1 space-y-1">
+                    {[
+                      ...p.subs.map((s) => ({ id: s.id, title: s.title, sql: s.sql })),
+                      ...(D8_PAGE_SUBS[p.id] ?? []),
+                    ].map((s) => (
+                      <button
+                        key={s.id}
+                        onClick={() => {
+                          audit("OPEN_SUBPROCESS", { projectId: target.projectId, entity: dom.id, entityId: s.id });
+                          setSelected({ pId: p.id, sId: s.id });
+                        }}
+                        className={`group flex w-full items-start gap-2 rounded-lg px-2 py-2 text-start transition hover:-translate-y-px glass-row ${selected?.sId === s.id ? "row-on" : ""}`}
+                      >
+                        <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: dom.accent }} />
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-[10px] font-light tx1">{t(s.title, lang)}</div>
+                          <div className="mt-0.5 flex flex-wrap gap-1">
+                            {s.sql.map((tbl) => (
+                              <span key={tbl} className="rounded bg-sky-400/10 px-1 py-[1px] text-[7.5px] font-light text-sky-300" dir="ltr">🗄 {tbl}</span>
+                            ))}
+                          </div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </aside>
+        </div>
+      </div>
+    );
+  }
+
+  const d10Tab = ((): HrmTab => {
+    const sid = selected?.sId ?? target.subId;
+    if (sid && D10_TAB_BY_SUB[sid]) return D10_TAB_BY_SUB[sid];
+    return "planning";
+  })();
+
+  if (dom.id === "d10") {
+    return (
+      <div className="flex h-full min-h-0 flex-col gap-3 overflow-hidden" dir={rtl ? "rtl" : "ltr"}>
+        <div className="glass flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl px-3 py-2.5">
+          <button onClick={onBack} className="glass-row flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-[10.5px] font-light tx2 transition hover:tx1">
+            <span className={rtl ? "" : "rotate-180"}>→</span>
+            {rtl ? "بازگشت به داشبورد" : "Back to dashboard"}
+          </button>
+          {cluster && (
+            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl text-[20px]"
+                  style={{ background: `${cluster.color}1f`, border: `1px solid ${cluster.color}55` }}>
+              {cluster.icon}
+            </span>
+          )}
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
+              {cluster && (
+                <h1 className="truncate text-[20px] font-semibold leading-tight" style={{ color: cluster.color }}>
+                  {t(cluster.title, lang)}
+                </h1>
+              )}
+              <span className="text-[16px] font-light tx4">/</span>
+              {project && (
+                <h2 className="truncate text-[19px] font-semibold leading-tight tx1">{t(project.name, lang)}</h2>
+              )}
+            </div>
+            {project && (
+              <p className="mt-1 truncate text-[10px] font-extralight tx3">
+                <span dir="ltr">{project.code}</span> · {t(project.client, lang)} · {t(project.location, lang)}
+              </p>
+            )}
+          </div>
+          <div className="shrink-0 text-end">
+            <div className="text-[9px] font-extralight tx3">{t(dom.title, lang)}</div>
+            <div className="text-[11px] font-light tx1">
+              {rtl ? "HRM — هر ساعت به یک فعالیت شارژ می‌شود؛ بهره‌وری از پیشرفت تأییدشده" : "HRM — every hour charged to an activity; productivity from approved progress"}
+            </div>
+          </div>
+        </div>
+        <div className="flex min-h-0 flex-1 gap-3 overflow-hidden">
+          <div className="glass flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl p-3">
+            <WorkforceWorkspace lang={lang} initialTab={d10Tab} hideTabs />
+          </div>
+          <aside className="glass-dark flex w-[300px] shrink-0 flex-col overflow-hidden rounded-2xl">
+            <div className="b-line border-b px-3 py-2.5">
+              <div className="flex items-center gap-2">
+                <span className="grid h-6 w-6 place-items-center rounded-md text-[12px]"
+                      style={{ background: `${dom.accent}1a`, border: `1px solid ${dom.accent}55`, color: dom.accent }}>
+                  {dom.icon}
+                </span>
+                <div className="text-[10.5px] font-normal tx1">{t(dom.title, lang)}</div>
+              </div>
+            </div>
+            <div className="thin-scroll flex-1 overflow-y-auto p-2 space-y-2">
+              {dom.processes.map((p, i) => (
+                <div key={p.id} className="rounded-xl border b-line-soft bg-black/10 p-1.5">
+                  <div className="flex items-center gap-1.5 px-1 py-1">
+                    <span className="text-[8px] font-light tabular-nums tx4">
+                      {(i + 1).toLocaleString(rtl ? "fa-IR" : "en-US")}
+                    </span>
+                    <span className="text-[10.5px] font-normal" style={{ color: dom.accent }}>{t(p.title, lang)}</span>
+                  </div>
+                  <div className="mt-1 space-y-1">
+                    {[
+                      ...p.subs.map((s) => ({ id: s.id, title: s.title, sql: s.sql })),
+                      
+                    ].map((s) => (
+                      <button
+                        key={s.id}
+                        onClick={() => {
+                          audit("OPEN_SUBPROCESS", { projectId: target.projectId, entity: dom.id, entityId: s.id });
+                          setSelected({ pId: p.id, sId: s.id });
+                        }}
+                        className={`group flex w-full items-start gap-2 rounded-lg px-2 py-2 text-start transition hover:-translate-y-px glass-row ${selected?.sId === s.id ? "row-on" : ""}`}
+                      >
+                        <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: dom.accent }} />
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-[10px] font-light tx1">{t(s.title, lang)}</div>
+                          <div className="mt-0.5 flex flex-wrap gap-1">
+                            {s.sql.map((tbl) => (
+                              <span key={tbl} className="rounded bg-sky-400/10 px-1 py-[1px] text-[7.5px] font-light text-sky-300" dir="ltr">🗄 {tbl}</span>
+                            ))}
+                          </div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </aside>
+        </div>
+      </div>
+    );
+  }
+
+  const d11Tab = ((): CkmTab => {
+    const sid = selected?.sId ?? target.subId;
+    if (sid && D11_TAB_BY_SUB[sid]) return D11_TAB_BY_SUB[sid];
+    return "correspondence";
+  })();
+
+  if (dom.id === "d11") {
+    return (
+      <div className="flex h-full min-h-0 flex-col gap-3 overflow-hidden" dir={rtl ? "rtl" : "ltr"}>
+        <div className="glass flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl px-3 py-2.5">
+          <button onClick={onBack} className="glass-row flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-[10.5px] font-light tx2 transition hover:tx1">
+            <span className={rtl ? "" : "rotate-180"}>→</span>
+            {rtl ? "بازگشت به داشبورد" : "Back to dashboard"}
+          </button>
+          {cluster && (
+            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl text-[20px]"
+                  style={{ background: `${cluster.color}1f`, border: `1px solid ${cluster.color}55` }}>
+              {cluster.icon}
+            </span>
+          )}
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
+              {cluster && (
+                <h1 className="truncate text-[20px] font-semibold leading-tight" style={{ color: cluster.color }}>
+                  {t(cluster.title, lang)}
+                </h1>
+              )}
+              <span className="text-[16px] font-light tx4">/</span>
+              {project && (
+                <h2 className="truncate text-[19px] font-semibold leading-tight tx1">{t(project.name, lang)}</h2>
+              )}
+            </div>
+            {project && (
+              <p className="mt-1 truncate text-[10px] font-extralight tx3">
+                <span dir="ltr">{project.code}</span> · {t(project.client, lang)} · {t(project.location, lang)}
+              </p>
+            )}
+          </div>
+          <div className="shrink-0 text-end">
+            <div className="text-[9px] font-extralight tx3">{t(dom.title, lang)}</div>
+            <div className="text-[11px] font-light tx1">
+              {rtl ? "CKM — اعلان قراردادی مهلت‌دار است؛ مصوبه بدون مالک و موعد پذیرفته نمی‌شود" : "CKM — notices are time-barred; no action without an owner and a due date"}
+            </div>
+          </div>
+        </div>
+        <div className="flex min-h-0 flex-1 gap-3 overflow-hidden">
+          <div className="glass flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl p-3">
+            <CommunicationWorkspace lang={lang} initialTab={d11Tab} hideTabs />
+          </div>
+          <aside className="glass-dark flex w-[300px] shrink-0 flex-col overflow-hidden rounded-2xl">
+            <div className="b-line border-b px-3 py-2.5">
+              <div className="flex items-center gap-2">
+                <span className="grid h-6 w-6 place-items-center rounded-md text-[12px]"
+                      style={{ background: `${dom.accent}1a`, border: `1px solid ${dom.accent}55`, color: dom.accent }}>
+                  {dom.icon}
+                </span>
+                <div className="text-[10.5px] font-normal tx1">{t(dom.title, lang)}</div>
+              </div>
+            </div>
+            <div className="thin-scroll flex-1 overflow-y-auto p-2 space-y-2">
+              {dom.processes.map((p, i) => (
+                <div key={p.id} className="rounded-xl border b-line-soft bg-black/10 p-1.5">
+                  <div className="flex items-center gap-1.5 px-1 py-1">
+                    <span className="text-[8px] font-light tabular-nums tx4">
+                      {(i + 1).toLocaleString(rtl ? "fa-IR" : "en-US")}
+                    </span>
+                    <span className="text-[10.5px] font-normal" style={{ color: dom.accent }}>{t(p.title, lang)}</span>
+                  </div>
+                  <div className="mt-1 space-y-1">
+                    {[
+                      ...p.subs.map((s) => ({ id: s.id, title: s.title, sql: s.sql })),
+                      
+                    ].map((s) => (
+                      <button
+                        key={s.id}
+                        onClick={() => {
+                          audit("OPEN_SUBPROCESS", { projectId: target.projectId, entity: dom.id, entityId: s.id });
+                          setSelected({ pId: p.id, sId: s.id });
+                        }}
+                        className={`group flex w-full items-start gap-2 rounded-lg px-2 py-2 text-start transition hover:-translate-y-px glass-row ${selected?.sId === s.id ? "row-on" : ""}`}
+                      >
+                        <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: dom.accent }} />
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-[10px] font-light tx1">{t(s.title, lang)}</div>
+                          <div className="mt-0.5 flex flex-wrap gap-1">
+                            {s.sql.map((tbl) => (
+                              <span key={tbl} className="rounded bg-sky-400/10 px-1 py-[1px] text-[7.5px] font-light text-sky-300" dir="ltr">🗄 {tbl}</span>
+                            ))}
+                          </div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </aside>
+        </div>
+      </div>
+    );
+  }
+
+  if (dom.id === "d5") {
+    return (
+      <div className="flex h-full min-h-0 flex-col gap-3 overflow-hidden" dir={rtl ? "rtl" : "ltr"}>
+        <div className="glass flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl px-3 py-2.5">
+          <button onClick={onBack} className="glass-row flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-[10.5px] font-light tx2 transition hover:tx1">
+            <span className={rtl ? "" : "rotate-180"}>→</span>
+            {rtl ? "بازگشت به داشبورد" : "Back to dashboard"}
+          </button>
+          {cluster && (
+            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl text-[20px]"
+                  style={{ background: `${cluster.color}1f`, border: `1px solid ${cluster.color}55` }}>
+              {cluster.icon}
+            </span>
+          )}
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
+              {cluster && (
+                <h1 className="truncate text-[20px] font-semibold leading-tight" style={{ color: cluster.color }}>
+                  {t(cluster.title, lang)}
+                </h1>
+              )}
+              <span className="text-[16px] font-light tx4">/</span>
+              {project && (
+                <h2 className="truncate text-[19px] font-semibold leading-tight tx1">{t(project.name, lang)}</h2>
+              )}
+            </div>
+            {project && (
+              <p className="mt-1 truncate text-[10px] font-extralight tx3">
+                <span dir="ltr">{project.code}</span> · {t(project.client, lang)} · {t(project.location, lang)}
+              </p>
+            )}
+          </div>
+          <div className="shrink-0 text-end">
+            <div className="text-[9px] font-extralight tx3">{t(dom.title, lang)}</div>
+            <div className="text-[11px] font-light tx1">
+              {rtl ? "FIN — تعهد پیش از هزینه؛ Snapshot تغییرناپذیر" : "FIN — commitment first; immutable snapshots"}
+            </div>
+          </div>
+        </div>
+        <div className="flex min-h-0 flex-1 gap-3 overflow-hidden">
+          <div className="glass flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl p-3">
+            <CostSupplyWorkspace lang={lang} initialTab={d5Tab} hideTabs />
+          </div>
+          <aside className="glass-dark flex w-[300px] shrink-0 flex-col overflow-hidden rounded-2xl">
+            <div className="b-line border-b px-3 py-2.5">
+              <div className="flex items-center gap-2">
+                <span className="grid h-6 w-6 place-items-center rounded-md text-[12px]"
+                      style={{ background: `${dom.accent}1a`, border: `1px solid ${dom.accent}55`, color: dom.accent }}>
+                  {dom.icon}
+                </span>
+                <div className="text-[10.5px] font-normal tx1">{t(dom.title, lang)}</div>
+              </div>
+            </div>
+            <div className="thin-scroll flex-1 overflow-y-auto p-2 space-y-2">
+              {dom.processes.map((p, i) => (
+                <div key={p.id} className="rounded-xl border b-line-soft bg-black/10 p-1.5">
+                  <div className="flex items-center gap-1.5 px-1 py-1">
+                    <span className="text-[8px] font-light tabular-nums tx4">
+                      {(i + 1).toLocaleString(rtl ? "fa-IR" : "en-US")}
+                    </span>
+                    <span className="text-[10.5px] font-normal" style={{ color: dom.accent }}>{t(p.title, lang)}</span>
+                  </div>
+                  <div className="mt-1 space-y-1">
+                    {[
+                      ...p.subs.map((s) => ({ id: s.id, title: s.title, sql: s.sql })),
+                      ...(D5_PAGE_SUBS[p.id] ?? []),
+                    ].map((s) => (
+                      <button
+                        key={s.id}
+                        onClick={() => {
+                          audit("OPEN_SUBPROCESS", { projectId: target.projectId, entity: dom.id, entityId: s.id });
+                          setSelected({ pId: p.id, sId: s.id });
+                        }}
+                        className={`group flex w-full items-start gap-2 rounded-lg px-2 py-2 text-start transition hover:-translate-y-px glass-row ${selected?.sId === s.id ? "row-on" : ""}`}
+                      >
+                        <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: dom.accent }} />
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-[10px] font-light tx1">{t(s.title, lang)}</div>
+                          <div className="mt-0.5 flex flex-wrap gap-1">
+                            {s.sql.map((tbl) => (
+                              <span key={tbl} className="rounded bg-sky-400/10 px-1 py-[1px] text-[7.5px] font-light text-sky-300" dir="ltr">🗄 {tbl}</span>
+                            ))}
+                          </div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </aside>
+        </div>
+      </div>
+    );
+  }
+
+  if (dom.id === "d6") {
+    return (
+      <div className="flex h-full min-h-0 flex-col gap-3 overflow-hidden" dir={rtl ? "rtl" : "ltr"}>
+        <div className="glass flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl px-3 py-2.5">
+          <button onClick={onBack} className="glass-row flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-[10.5px] font-light tx2 transition hover:tx1">
+            <span className={rtl ? "" : "rotate-180"}>→</span>
+            {rtl ? "بازگشت به داشبورد" : "Back to dashboard"}
+          </button>
+          {cluster && (
+            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl text-[20px]"
+                  style={{ background: `${cluster.color}1f`, border: `1px solid ${cluster.color}55` }}>
+              {cluster.icon}
+            </span>
+          )}
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
+              {cluster && (
+                <h1 className="truncate text-[20px] font-semibold leading-tight" style={{ color: cluster.color }}>
+                  {t(cluster.title, lang)}
+                </h1>
+              )}
+              <span className="text-[16px] font-light tx4">/</span>
+              {project && (
+                <h2 className="truncate text-[19px] font-semibold leading-tight tx1">{t(project.name, lang)}</h2>
+              )}
+            </div>
+            {project && (
+              <p className="mt-1 truncate text-[10px] font-extralight tx3">
+                <span dir="ltr">{project.code}</span> · {t(project.client, lang)} · {t(project.location, lang)}
+              </p>
+            )}
+          </div>
+          <div className="shrink-0 text-end">
+            <div className="text-[9px] font-extralight tx3">{t(dom.title, lang)}</div>
+            <div className="text-[11px] font-light tx1">
+              {rtl ? "GOV — حاکمیت؛ ارجاع بدون بازنویسی" : "GOV — governance; reference, no rewrite"}
+            </div>
+          </div>
+        </div>
+        <div className="flex min-h-0 flex-1 gap-3 overflow-hidden">
+          <div className="glass flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl p-3">
+            <GovernanceWorkspace lang={lang} initialTab={d6Tab} hideTabs />
+          </div>
+          <aside className="glass-dark flex w-[300px] shrink-0 flex-col overflow-hidden rounded-2xl">
+            <div className="b-line border-b px-3 py-2.5">
+              <div className="flex items-center gap-2">
+                <span className="grid h-6 w-6 place-items-center rounded-md text-[12px]"
+                      style={{ background: `${dom.accent}1a`, border: `1px solid ${dom.accent}55`, color: dom.accent }}>
+                  {dom.icon}
+                </span>
+                <div className="text-[10.5px] font-normal tx1">{t(dom.title, lang)}</div>
+              </div>
+            </div>
+            <div className="thin-scroll flex-1 overflow-y-auto p-2 space-y-2">
+              {dom.processes.map((p, i) => (
+                <div key={p.id} className="rounded-xl border b-line-soft bg-black/10 p-1.5">
+                  <div className="flex items-center gap-1.5 px-1 py-1">
+                    <span className="text-[8px] font-light tabular-nums tx4">
+                      {(i + 1).toLocaleString(rtl ? "fa-IR" : "en-US")}
+                    </span>
+                    <span className="text-[10.5px] font-normal" style={{ color: dom.accent }}>{t(p.title, lang)}</span>
+                  </div>
+                  <div className="mt-1 space-y-1">
+                    {[
+                      ...p.subs.map((s) => ({ id: s.id, title: s.title, sql: s.sql })),
+                      ...(D6_PAGE_SUBS[p.id] ?? []),
                     ].map((s) => (
                       <button
                         key={s.id}

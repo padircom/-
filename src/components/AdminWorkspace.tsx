@@ -2,7 +2,8 @@ import { useState } from "react";
 import { useSystem } from "../context/SystemContext";
 import SqlConnectionPanel from "./SqlConnectionPanel";
 import { pmisApiClient } from "../services/pmisApiClient";
-import AccessControlPanel from "./AccessControlPanel";
+import SecurityCenter from "./SecurityCenter";
+import DataLayerPanel from "./DataLayerPanel";
 import OperationsReadinessPanel from "./OperationsReadinessPanel";
 import MasterDataSyncPanel from "./MasterDataSyncPanel";
 import ProjectKnowledgePanel from "./ProjectKnowledgePanel";
@@ -293,10 +294,10 @@ export default function AdminWorkspace({ lang, subId, onBack, onOpenFlowNet }: P
         {[
           { key: "clusters" as TabKey, label: { fa: "۱. خوشه‌ها و صنایع", en: "1. Industry Clusters" }, icon: "🏭" },
           { key: "projects" as TabKey, label: { fa: "۲. مدیریت پروژه‌ها", en: "2. Projects Master" }, icon: "📊" },
-          { key: "metadata" as TabKey, label: { fa: "۳. متادیتا و اسکیمای SQL", en: "3. SQL & Schema" }, icon: "🗄" },
+          { key: "metadata" as TabKey, label: { fa: "۳. لایه داده و اسکیمای SQL", en: "3. Data Layer & Schema" }, icon: "🗄" },
           { key: "typography" as TabKey, label: { fa: "۴. تنظیمات فونت و ظاهر", en: "4. Typography & Theme" }, icon: "🎨" },
           { key: "ai" as TabKey, label: { fa: "۵. هوش مصنوعی و یکپارچگی", en: "5. AI & Integrations" }, icon: "✨" },
-          { key: "access" as TabKey, label: { fa: "۶. کاربران و دسترسی", en: "6. Users & Access" }, icon: "🛡" },
+          { key: "access" as TabKey, label: { fa: "۶. RBAC و امنیت", en: "6. RBAC & Security" }, icon: "🛡" },
           { key: "sync" as TabKey, label: { fa: "۷. همگام‌سازی", en: "7. Data Sync" }, icon: "↕" },
           { key: "operations" as TabKey, label: { fa: "۸. آمادگی استقرار", en: "8. Operations" }, icon: "⚙" },
           { key: "deployment" as TabKey, label: { fa: "۹. استقرار نهایی", en: "9. Production Deploy" }, icon: "🚀" },
@@ -781,7 +782,8 @@ export default function AdminWorkspace({ lang, subId, onBack, onOpenFlowNet }: P
 
         {/* ═════════ TAB 3: METADATA & DATABASE CONFIG ═════════ */}
         {activeTab === "metadata" && (
-          <div className="fade-rise flex min-h-0 flex-1 flex-col">
+          <div className="fade-rise flex min-h-0 flex-1 flex-col gap-3">
+            <DataLayerPanel lang={lang} />
             <SqlConnectionPanel lang={lang} />
           </div>
         )}
@@ -918,7 +920,7 @@ export default function AdminWorkspace({ lang, subId, onBack, onOpenFlowNet }: P
         )}
 
         {/* ═════════ TAB 6: ACCESS CONTROL ═════════ */}
-        {activeTab === "access" && <AccessControlPanel lang={lang} />}
+        {activeTab === "access" && <SecurityCenter lang={lang} />}
 
         {/* ═════════ TAB 7: MASTER DATA SYNC ═════════ */}
         {activeTab === "sync" && <MasterDataSyncPanel lang={lang} />}

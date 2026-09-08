@@ -1,3 +1,4 @@
+import ReportCenter from "./ReportCenter";
 import { useEffect, useMemo, useState } from "react";
 import type { Lang } from "../data/framework";
 import {
@@ -206,12 +207,7 @@ export default function PmaWorkspace({
         )}
 
         {tab === "reports" && (
-          <div className="fade-rise glass-dark rounded-2xl p-3 flex flex-wrap gap-1.5">
-            {["D", "W", "BW", "M", "Q", "GATE", "ADH", "TRD", "EXEC", "EV", "VA", "KPI", "ALT", "ACT"].map((c) => (
-              <span key={c} className="rounded-lg border b-line-soft px-2 py-1 text-[9px] tx2">RPT-{c}</span>
-            ))}
-            {blocked && <p className="w-full text-[9px] text-rose-300">{rtl ? "تولید External تا رفع Major ممکن نیست" : "Blocked until Major closed"}</p>}
-          </div>
+          <ReportCenter lang={lang} blockers={{ openMajorNcr: blocked ? 1 : 0, timeBarBreach: 2 }} />
         )}
 
         {tab === "exec" && (

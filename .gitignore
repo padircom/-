@@ -1,0 +1,17 @@
+node_modules/
+dist/
+test-results/
+playwright-report/
+.env
+server/data/
+
+# باندل‌های تولیدی esbuild برای تست‌های Node (بازتولید: npm test)
+server/finLogic.js
+server/qmsLogic.js
+server/pexLogic.js
+server/pexModelBundle.js
+server/hrmLogic.js
+server/ckmLogic.js
+server/rptLogic.js
+server/rbacLogic.js
+server/sqlLogic.js
