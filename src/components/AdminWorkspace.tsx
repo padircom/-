@@ -4,6 +4,7 @@ import SqlConnectionPanel from "./SqlConnectionPanel";
 import { pmisApiClient } from "../services/pmisApiClient";
 import SecurityCenter from "./SecurityCenter";
 import DataLayerPanel from "./DataLayerPanel";
+import IntegrationCenter from "./IntegrationCenter";
 import OperationsReadinessPanel from "./OperationsReadinessPanel";
 import MasterDataSyncPanel from "./MasterDataSyncPanel";
 import ProjectKnowledgePanel from "./ProjectKnowledgePanel";
@@ -914,6 +915,7 @@ export default function AdminWorkspace({ lang, subId, onBack, onOpenFlowNet }: P
                 </button>
               </div>
             </div>
+            <IntegrationCenter lang={lang} />
             <ProjectKnowledgePanel lang={lang} />
             <div className="h-[560px]"><NotificationOpsPanel lang={lang} /></div>
           </div>

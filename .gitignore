@@ -15,3 +15,4 @@ server/ckmLogic.js
 server/rptLogic.js
 server/rbacLogic.js
 server/sqlLogic.js
+server/itgLogic.js

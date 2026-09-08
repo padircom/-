@@ -13,10 +13,11 @@
     "build:ckm": "esbuild src/services/communication.ts --bundle --outfile=server/ckmLogic.js --format=esm --platform=node --target=node18 --banner:js=\"/* GENERATED از src/services/communication.ts — ویرایش دستی ممنوع. بازتولید: npm run build:ckm */\"",
     "build:hrm": "esbuild src/services/workforce.ts --outfile=server/hrmLogic.js --format=esm --platform=node --target=node18 --banner:js=\"/* GENERATED از src/services/workforce.ts — ویرایش دستی ممنوع. بازتولید: npm run build:hrm */\"",
     "build:pexdata": "esbuild src/services/pexModel.ts --bundle --outfile=server/pexModelBundle.js --format=esm --platform=node --target=node18 --banner:js=\"/* GENERATED از src/services/pexModel.ts — ویرایش دستی ممنوع. بازتولید: npm run build:pexdata */\"",
-    "test": "npm run build:fin --silent && npm run build:qms --silent && npm run build:pex --silent && npm run build:pexdata --silent && npm run build:hrm --silent && npm run build:ckm --silent && npm run build:rpt --silent && npm run build:rbac --silent && npm run build:sql --silent && node --test server/rcc.test.mjs server/gov.test.mjs server/fin.test.mjs server/qms.test.mjs server/pex.test.mjs server/hrm.test.mjs server/ckm.test.mjs server/rpt.test.mjs server/rbac.test.mjs server/sql.test.mjs",
+    "test": "npm run build:fin --silent && npm run build:qms --silent && npm run build:pex --silent && npm run build:pexdata --silent && npm run build:hrm --silent && npm run build:ckm --silent && npm run build:rpt --silent && npm run build:rbac --silent && npm run build:sql --silent && npm run build:itg --silent && node --test server/rcc.test.mjs server/gov.test.mjs server/fin.test.mjs server/qms.test.mjs server/pex.test.mjs server/hrm.test.mjs server/ckm.test.mjs server/rpt.test.mjs server/rbac.test.mjs server/sql.test.mjs server/itg.test.mjs",
     "build:rpt": "esbuild src/services/reporting.ts --bundle --format=esm --platform=node --outfile=server/rptLogic.js",
     "build:rbac": "esbuild src/services/accessControl.ts --bundle --format=esm --platform=node --outfile=server/rbacLogic.js",
-    "build:sql": "esbuild src/services/persistence.ts --bundle --format=esm --platform=node --outfile=server/sqlLogic.js"
+    "build:sql": "esbuild src/services/persistence.ts --bundle --format=esm --platform=node --outfile=server/sqlLogic.js",
+    "build:itg": "esbuild src/services/integration.ts --bundle --format=esm --platform=node --outfile=server/itgLogic.js"
   },
   "dependencies": {
     "clsx": "2.1.1",

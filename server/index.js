@@ -52,7 +52,23 @@ import {
 import { buildPexModel } from "./pexModelBundle.js";
 import { activityProgress, canPostProgress, validateRoc } from "./pexLogic.js";
 import { createPersistence } from "./persistence/driver.mjs";
-import { MIGRATIONS, SCHEMA, checksumOf, generateDdl, migrationPlan, schemaStats, tableDef } from "./sqlLogic.js";
+import { MIGRATIONS, SCHEMA, allColumns, checksumOf, generateDdl, migrationPlan, schemaStats, tableDef } from "./sqlLogic.js";
+import {
+  ACTIVITY_COMPARE_FIELDS,
+  CONNECTORS,
+  INTEGRATION_VERSION,
+  TEMPLATE_CATALOG,
+  diffRows,
+  extractXer,
+  generateOpenApi,
+  integrationStats,
+  parseImport,
+  parseXer as parseXerTables,
+  templateByCode,
+  templateCsv,
+  templateGuide,
+  toYaml,
+} from "./itgLogic.js";
 
 /** jalaali-js فقط CJS دارد؛ interop امن برای ESM */
 const jalaali = (jalaaliNs.default ?? jalaaliNs);
@@ -227,36 +243,19 @@ const normaliseActivity = (row, index) => {
   return { code, name, startDate, finishDate, durationDays, progress, isCritical, wbsCode };
 };
 
-function parseXer(content) {
-  const lines = content.split(/\r?\n/);
-  const tableRows = [];
-  let columns = [];
-  let inTask = false;
-  for (const line of lines) {
-    if (line.startsWith("%T")) {
-      inTask = line.includes("TASK");
-      columns = [];
-      continue;
-    }
-    if (!inTask) continue;
-    if (line.startsWith("%F")) {
-      columns = line.slice(2).split("\t").map((col) => col.trim());
-      continue;
-    }
-    if (line.startsWith("%R") && columns.length) {
-      const values = line.slice(2).split("\t");
-      const row = Object.fromEntries(columns.map((col, i) => [col, values[i] ?? ""]));
-      tableRows.push({
-        activity_id: row.task_code || row.task_id || row.clndr_id,
-        task_name: row.task_name || row.task_code || "Primavera Activity",
-        start: row.early_start_date || row.target_start_date || row.act_start_date,
-        finish: row.early_end_date || row.target_end_date || row.act_end_date,
-        duration: row.target_drtn_hr_cnt ? Math.round(Number(row.target_drtn_hr_cnt) / 8) : undefined,
-        critical: row.driving_path_flag === "Y" || row.float_path === "1",
-      });
-    }
-  }
-  return tableRows.map(normaliseActivity);
+/** تجزیه XER با موتور itg-v1 (چندجدولی: TASK + TASKPRED + PROJWBS + CALENDAR). */
+function parseXer(content, projectId = "import") {
+  const extracted = extractXer(parseXerTables(content), projectId, jalaali.toGregorian);
+  return extracted.activities.map((a) => ({
+    code: a.Code,
+    name: a.NameFa,
+    startDate: a.ActualStart ?? a.PlannedStart,
+    finishDate: a.ActualFinish ?? a.PlannedFinish,
+    durationDays: a.DurationDays,
+    progress: a.PhysicalPct ?? 0,
+    isCritical: Boolean(a.IsCritical),
+    wbsCode: extracted.wbs.find((w) => w.Id === a.WbsId)?.Code ?? "",
+  }));
 }
 
 function parseSpreadsheet(filePath, ext) {
@@ -2003,6 +2002,184 @@ app.delete("/api/data/:table/:id", async (req, res, next) => {
     next(err);
   }
 });
+
+/* ═══════════════ مرکز یکپارچه‌سازی (itg-v1) ═══════════════
+ * ورود XER پریماورا، قالب‌های Excel/CSV و مشخصات OpenAPI تولیدشده از اسکیما.
+ * همه چیز روی موتور خالص server/itgLogic.js می‌نشیند تا منطق تست‌پذیر بماند. */
+
+const INTEGRATION_EXT = new Set([".xer", ".csv", ".txt", ".xlsx", ".xls"]);
+const integrationUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: maxFileBytes, files: 1 },
+  fileFilter: (_req, file, callback) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (INTEGRATION_EXT.has(ext)) return callback(null, true);
+    const error = new Error(`Unsupported integration file type: ${ext}`);
+    error.code = "UNSUPPORTED_FILE_TYPE";
+    callback(error);
+  },
+});
+
+const itgFail = (req, res, status, code, message) =>
+  res.status(status).json({ ok: false, error: { code, message, traceId: req.requestId } });
+
+const itgOk = (req, res, data) =>
+  res.json({ ok: true, data, meta: { traceId: req.requestId, engine: INTEGRATION_VERSION, timestamp: new Date().toISOString() } });
+
+/** متن فایل را از multipart یا بدنهٔ JSON بیرون می‌کشد. */
+const integrationText = (req) => {
+  if (req.file?.buffer) return { text: req.file.buffer.toString("utf8"), name: req.file.originalname };
+  if (typeof req.body?.content === "string" && req.body.content.trim()) return { text: req.body.content, name: req.body.fileName || "inline" };
+  return null;
+};
+
+/** خلاصهٔ وضعیت مرکز یکپارچه‌سازی برای داشبورد. */
+app.get("/api/integration/status", (req, res) => {
+  itgOk(req, res, {
+    stats: integrationStats(),
+    connectors: CONNECTORS,
+    templates: TEMPLATE_CATALOG.map((t) => ({ code: t.code, title: t.title, targetTable: t.targetTable, fields: t.fields.length })),
+  });
+});
+
+/** ورود فایل XER پریماورا — پیش‌نمایش (پیش‌فرض) یا نوشتن با commit=1. */
+app.post("/api/integration/xer", integrationUpload.single("file"), async (req, res, next) => {
+  try {
+    const source = integrationText(req);
+    if (!source) return itgFail(req, res, 400, "NO_FILE", "فایل XER ارسال نشده است");
+    const projectId = String(req.query.projectId || req.body?.projectId || "").trim();
+    if (!projectId) return itgFail(req, res, 400, "NO_PROJECT", "شناسه پروژه (projectId) الزامی است");
+
+    const parsedTables = parseXerTables(source.text);
+    if (!parsedTables.tableNames.length) return itgFail(req, res, 422, "BAD_XER", "ساختار XER شناسایی نشد");
+    const extracted = extractXer(parsedTables, projectId, jalaali.toGregorian);
+
+    const r = await repo();
+    const existing = await r.list("Activity", { where: [{ column: "ProjectId", op: "eq", value: projectId }], limit: 5000 });
+    const diff = diffRows(existing, extracted.activities, "Code", ACTIVITY_COMPARE_FIELDS);
+    const blocking = extracted.issues.filter((i) => i.severity === "error");
+    const commit = req.query.commit === "1" || req.body?.commit === true;
+
+    const payload = {
+      fileName: source.name,
+      header: parsedTables.header,
+      projectName: extracted.projectName,
+      dataDate: extracted.dataDate,
+      counts: extracted.counts,
+      calendars: extracted.calendars,
+      issues: extracted.issues,
+      diff: {
+        added: diff.added.length,
+        updated: diff.updated.length,
+        removed: diff.removed.length,
+        unchanged: diff.unchanged,
+        sample: diff.updated.slice(0, 20),
+      },
+      committed: false,
+    };
+
+    if (!commit) return itgOk(req, res, payload);
+    if (blocking.length) return itgFail(req, res, 422, "IMPORT_BLOCKED", `${blocking.length} خطای مسدودکننده؛ پیش از نوشتن اصلاح شود`);
+
+    const actor = req.headers["x-user-id"] || "integration";
+    const written = { wbs: 0, activities: 0, relations: 0 };
+    /** شناسهٔ ردیف‌های XER قطعی است، پس upsert روی همان کلید تکرارپذیر می‌ماند. */
+    const upsertById = async (table, row) => {
+      const { Id, ...rest } = row;
+      /** میدان‌های زیرخط‌دار فقط برای نمایش‌اند و ستون پایگاه داده نیستند. */
+      for (const key of Object.keys(rest)) if (key.startsWith("_")) delete rest[key];
+      await r.upsert(table, { Id }, rest, actor);
+    };
+    for (const row of extracted.wbs) { await upsertById("WbsNode", row); written.wbs += 1; }
+    for (const row of extracted.activities) { await upsertById("Activity", row); written.activities += 1; }
+    for (const row of extracted.relations) { await upsertById("ActivityRelation", row); written.relations += 1; }
+    itgOk(req, res, { ...payload, committed: true, written });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** فهرست قالب‌های ورود داده. */
+app.get("/api/integration/templates", (req, res) => {
+  itgOk(req, res, {
+    templates: TEMPLATE_CATALOG.map((t) => ({
+      code: t.code,
+      title: t.title,
+      targetTable: t.targetTable,
+      keyFields: t.keyFields,
+      guide: templateGuide(t),
+    })),
+  });
+});
+
+/** دانلود فایل نمونهٔ CSV یک قالب (با BOM تا اکسل فارسی درست باز کند). */
+app.get("/api/integration/templates/:code.csv", (req, res) => {
+  const template = templateByCode(req.params.code.toUpperCase());
+  if (!template) return itgFail(req, res, 404, "UNKNOWN_TEMPLATE", `قالب ${req.params.code} تعریف نشده است`);
+  const lang = req.query.lang === "en" ? "en" : "fa";
+  res.setHeader("Content-Disposition", `attachment; filename="${template.code}-${lang}.csv"`);
+  res.type("text/csv; charset=utf-8").send(`\uFEFF${templateCsv(template, lang)}`);
+});
+
+/** ورود داده بر پایهٔ قالب — پیش‌نمایش یا نوشتن با commit=1. */
+app.post("/api/integration/import/:code", integrationUpload.single("file"), async (req, res, next) => {
+  try {
+    const template = templateByCode(req.params.code.toUpperCase());
+    if (!template) return itgFail(req, res, 404, "UNKNOWN_TEMPLATE", `قالب ${req.params.code} تعریف نشده است`);
+    const source = integrationText(req);
+    if (!source) return itgFail(req, res, 400, "NO_FILE", "فایلی برای ورود ارسال نشده است");
+
+    const result = parseImport(template, source.text, jalaali.toGregorian);
+    const commit = req.query.commit === "1" || req.body?.commit === true;
+    const projectId = String(req.query.projectId || req.body?.projectId || "").trim();
+
+    const payload = {
+      template: { code: template.code, title: template.title, targetTable: template.targetTable },
+      fileName: source.name,
+      counts: result.counts,
+      issues: result.issues,
+      preview: result.rows.slice(0, 25),
+      committed: false,
+    };
+    if (!commit) return itgOk(req, res, payload);
+    if (result.counts.errors) return itgFail(req, res, 422, "IMPORT_BLOCKED", `${result.counts.errors} خطا در فایل؛ پیش از نوشتن اصلاح شود`);
+    if (!PUBLIC_TABLES.has(template.targetTable)) return itgFail(req, res, 403, "TABLE_NOT_EXPOSED", `نوشتن در ${template.targetTable} مجاز نیست`);
+
+    const r = await repo();
+    const actor = req.headers["x-user-id"] || "integration";
+    const hasProject = allColumns(tableDef(template.targetTable)).some((c) => c.name === "ProjectId");
+    let written = 0;
+    let inserted = 0;
+    for (const row of result.rows) {
+      const record = { ...row };
+      if (projectId && hasProject) record.ProjectId = projectId;
+      /** کلید طبیعی قالب تعیین می‌کند ورود دوباره به‌روزرسانی است نه ردیف تکراری. */
+      const naturalKey = Object.fromEntries(template.keyFields.map((k) => [k, record[k]]));
+      if (projectId && hasProject) naturalKey.ProjectId = projectId;
+      const data = { ...record };
+      for (const k of Object.keys(naturalKey)) delete data[k];
+      const outcome = await r.upsert(template.targetTable, naturalKey, data, actor);
+      written += 1;
+      if (outcome.action === "insert") inserted += 1;
+    }
+    itgOk(req, res, { ...payload, committed: true, written, inserted, updated: written - inserted });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** مشخصات OpenAPI تولیدشده از اسکیمای sql-v1 — همیشه با کد همگام است. */
+const openApiSpec = () => generateOpenApi(
+  SCHEMA.filter((t) => PUBLIC_TABLES.has(t.name)).map((t) => ({
+    name: t.name,
+    title: t.title,
+    pk: t.pk,
+    columns: allColumns(t).map((c) => ({ name: c.name, kind: c.kind, len: c.len, nullable: c.nullable })),
+  })),
+);
+
+app.get("/api/openapi.json", (req, res) => res.json(openApiSpec()));
+app.get("/api/openapi.yaml", (req, res) => res.type("text/yaml; charset=utf-8").send(toYaml(openApiSpec())));
 
 app.use((req, res) => {
   res.status(404).json({ ok: false, error: { code: "NOT_FOUND", message: `Route ${req.method} ${req.path} was not found`, traceId: req.requestId } });
