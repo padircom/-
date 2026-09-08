@@ -3,3 +3,11 @@ dist/
 test-results/
 playwright-report/
 .env
+# جلوگیری از تکرار: بقایای پوشهٔ .git که اشتباهاً کامیت شده بود
+/[0-9a-f][0-9a-f]/
+/HEAD
+/index
+/hooks/
+/info/
+/logs/
+/refs/
