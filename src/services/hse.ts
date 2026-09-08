@@ -275,3 +275,100 @@ export const HSE_ACTIONS: HseAction[] = [
 export const HSE_TBT = { planned: 24, held: 21 };
 export const HSE_WASTE = { recycledKg: 1840, totalKg: 5200 };
 export const HSE_CHECKUP = { covered: 86, total: 112 };
+
+/* ── ثبت و اعتبارسنجی (D3) ─────────────────────────────────────── */
+
+export interface HseIncidentInput {
+  code?: string;
+  dateISO: string;
+  type: string;
+  lostDays?: number;
+  area?: string;
+  descFa?: string;
+  status?: string;
+  volumeL?: number;
+}
+
+const INCIDENT_TYPES: HseIncidentType[] = ["near_miss", "first_aid", "medical", "lost_time", "fatality", "spill", "property"];
+
+function isDateISO(s: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(s || "") && !Number.isNaN(new Date((s || "") + "T00:00:00Z").getTime());
+}
+
+export function validateIncident(d: HseIncidentInput): string[] {
+  const e: string[] = [];
+  if (!isDateISO(d.dateISO)) e.push("DATE_INVALID");
+  if (!INCIDENT_TYPES.includes(d.type as HseIncidentType)) e.push("TYPE_UNKNOWN");
+  if (d.lostDays != null && (!Number.isInteger(d.lostDays) || d.lostDays < 0)) e.push("LOSTDAYS_INVALID");
+  if (!String(d.area || "").trim()) e.push("AREA_REQUIRED");
+  if (!String(d.descFa || "").trim()) e.push("DESC_REQUIRED");
+  if (d.status != null && !["open", "investigating", "closed"].includes(d.status)) e.push("STATUS_UNKNOWN");
+  if (d.type === "spill" && !(Number(d.volumeL) > 0)) e.push("VOLUME_REQUIRED");
+  if (d.code != null && !String(d.code).trim()) e.push("CODE_EMPTY");
+  return e;
+}
+
+export interface HsePermitInput {
+  no?: string;
+  type: string;
+  workDate: string;
+  area?: string;
+  riskLevel: string;
+  flags?: PtwFlags;
+}
+
+const PTW_TYPES: PtwType[] = ["hot", "cold", "confined", "electrical", "height", "excavation", "radiation"];
+
+export function validatePermit(d: HsePermitInput): string[] {
+  const e: string[] = [];
+  if (!PTW_TYPES.includes(d.type as PtwType)) e.push("TYPE_UNKNOWN");
+  if (!isDateISO(d.workDate)) e.push("DATE_INVALID");
+  if (!String(d.area || "").trim()) e.push("AREA_REQUIRED");
+  if (!["low", "medium", "high"].includes(d.riskLevel)) e.push("RISK_UNKNOWN");
+  if (d.no != null && !String(d.no).trim()) e.push("NO_EMPTY");
+  return e;
+}
+
+export interface HseInspectionInput {
+  area?: string;
+  dateISO: string;
+  items?: { item?: string; ok?: boolean; na?: boolean }[];
+}
+
+export function validateInspection(d: HseInspectionInput): string[] {
+  const e: string[] = [];
+  if (!String(d.area || "").trim()) e.push("AREA_REQUIRED");
+  if (!isDateISO(d.dateISO)) e.push("DATE_INVALID");
+  if (!Array.isArray(d.items) || d.items.length === 0) e.push("ITEMS_REQUIRED");
+  else if (d.items.length > 100) e.push("ITEMS_TOO_MANY");
+  else d.items.forEach((it, i) => {
+    if (!String(it.item || "").trim()) e.push(`I${i + 1}:ITEM_TEXT_REQUIRED`);
+  });
+  return e;
+}
+
+/* ── گیت پروانه کار برای WO پرخطر (D3: advisory؛ hard در F4) ────── */
+
+/** کار پرخطر = همه انواع PTW جز cold */
+export const HIGH_RISK_PTW: PtwType[] = ["hot", "confined", "electrical", "height", "excavation", "radiation"];
+
+export interface WoGateReq { workType: string; area?: string; workDate: string }
+export interface WoGatePermit { no: string; type: string; status: string; workDate: string; area: string }
+
+export function woPermitGate(
+  req: WoGateReq, permits: WoGatePermit[] | undefined, mode: "advisory" | "hard" = "advisory"
+): { ok: boolean; verdict: "allow" | "warn" | "block"; reason: string; permitNo?: string; pending?: string[] } {
+  if (!HIGH_RISK_PTW.includes(req.workType as PtwType)) return { ok: true, verdict: "allow", reason: "NO_PERMIT_NEEDED" };
+  const list = permits || [];
+  const match = list.find((p) => p.type === req.workType && p.status === "active" && p.workDate === req.workDate && (!req.area || p.area === req.area));
+  if (match) return { ok: true, verdict: "allow", reason: "ACTIVE_PTW", permitNo: match.no };
+  const pending = list.filter((p) => p.type === req.workType && (p.status === "requested" || p.status === "approved")).map((p) => p.no);
+  if (mode === "hard") return { ok: false, verdict: "block", reason: "NO_ACTIVE_PTW", pending };
+  return { ok: true, verdict: "warn", reason: "NO_ACTIVE_PTW", pending };
+}
+
+/** تاریخ بعدی بازرسی از روی باند (A:+۹۰ B:+۳۰ C:+۱۴ D:+۷) */
+export function nextInspectionDue(dateISO: string, band: string): string {
+  const add = band === "A" ? 90 : band === "B" ? 30 : band === "C" ? 14 : 7;
+  return new Date(new Date(dateISO + "T00:00:00Z").getTime() + add * 86400000).toISOString().slice(0, 10);
+}

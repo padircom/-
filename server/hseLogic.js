@@ -125,3 +125,65 @@ export function hseScore(x) {
   const band = total >= 85 ? "Green" : total >= 65 ? "Yellow" : "Red";
   return { total, band };
 }
+
+/* ── ثبت و اعتبارسنجی (D3 · آینه hse.ts) ───────────────────────── */
+
+const INCIDENT_TYPES = ["near_miss", "first_aid", "medical", "lost_time", "fatality", "spill", "property"];
+
+function isDateISO(s) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(s || "") && !Number.isNaN(new Date((s || "") + "T00:00:00Z").getTime());
+}
+
+export function validateIncident(d) {
+  const e = [];
+  if (!isDateISO(d.dateISO)) e.push("DATE_INVALID");
+  if (!INCIDENT_TYPES.includes(d.type)) e.push("TYPE_UNKNOWN");
+  if (d.lostDays != null && (!Number.isInteger(d.lostDays) || d.lostDays < 0)) e.push("LOSTDAYS_INVALID");
+  if (!String(d.area || "").trim()) e.push("AREA_REQUIRED");
+  if (!String(d.descFa || "").trim()) e.push("DESC_REQUIRED");
+  if (d.status != null && !["open", "investigating", "closed"].includes(d.status)) e.push("STATUS_UNKNOWN");
+  if (d.type === "spill" && !(Number(d.volumeL) > 0)) e.push("VOLUME_REQUIRED");
+  if (d.code != null && !String(d.code).trim()) e.push("CODE_EMPTY");
+  return e;
+}
+
+const PTW_TYPES = ["hot", "cold", "confined", "electrical", "height", "excavation", "radiation"];
+
+export function validatePermit(d) {
+  const e = [];
+  if (!PTW_TYPES.includes(d.type)) e.push("TYPE_UNKNOWN");
+  if (!isDateISO(d.workDate)) e.push("DATE_INVALID");
+  if (!String(d.area || "").trim()) e.push("AREA_REQUIRED");
+  if (!["low", "medium", "high"].includes(d.riskLevel)) e.push("RISK_UNKNOWN");
+  if (d.no != null && !String(d.no).trim()) e.push("NO_EMPTY");
+  return e;
+}
+
+export function validateInspection(d) {
+  const e = [];
+  if (!String(d.area || "").trim()) e.push("AREA_REQUIRED");
+  if (!isDateISO(d.dateISO)) e.push("DATE_INVALID");
+  if (!Array.isArray(d.items) || d.items.length === 0) e.push("ITEMS_REQUIRED");
+  else if (d.items.length > 100) e.push("ITEMS_TOO_MANY");
+  else d.items.forEach((it, i) => {
+    if (!String(it.item || "").trim()) e.push(`I${i + 1}:ITEM_TEXT_REQUIRED`);
+  });
+  return e;
+}
+
+export const HIGH_RISK_PTW = ["hot", "confined", "electrical", "height", "excavation", "radiation"];
+
+export function woPermitGate(req, permits, mode = "advisory") {
+  if (!HIGH_RISK_PTW.includes(req.workType)) return { ok: true, verdict: "allow", reason: "NO_PERMIT_NEEDED" };
+  const list = permits || [];
+  const match = list.find((p) => p.type === req.workType && p.status === "active" && p.workDate === req.workDate && (!req.area || p.area === req.area));
+  if (match) return { ok: true, verdict: "allow", reason: "ACTIVE_PTW", permitNo: match.no };
+  const pending = list.filter((p) => p.type === req.workType && (p.status === "requested" || p.status === "approved")).map((p) => p.no);
+  if (mode === "hard") return { ok: false, verdict: "block", reason: "NO_ACTIVE_PTW", pending };
+  return { ok: true, verdict: "warn", reason: "NO_ACTIVE_PTW", pending };
+}
+
+export function nextInspectionDue(dateISO, band) {
+  const add = band === "A" ? 90 : band === "B" ? 30 : band === "C" ? 14 : 7;
+  return new Date(new Date(dateISO + "T00:00:00Z").getTime() + add * 86400000).toISOString().slice(0, 10);
+}

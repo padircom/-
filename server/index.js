@@ -16,6 +16,7 @@ import nodemailer from "nodemailer";
 import { createWorker } from "tesseract.js";
 import { applyGuardian } from "./rccLogic.js";
 import { canDprTransition, openDprBlocked, validateDpr } from "./pexLogic.js";
+import { inspectionBand, inspectionScore, nextInspectionDue, ptwCanTransition, ptwMissing, severityWeight, validateIncident, validateInspection, validatePermit, woPermitGate } from "./hseLogic.js";
 
 const app = express();
 const PORT = Number(process.env.PORT || 4000);
@@ -1583,6 +1584,193 @@ app.post("/api/pex/dpr/:id/actions", async (req, res) => {
     }
   } catch (err) {
     res.status(500).json({ ok: false, error: { code: "DPR_ACTION_ERROR", message: err.message, traceId: req.requestId } });
+  }
+});
+
+/* ─────────────────────────── HSE Safety/Health/Env (D3) ─────────────────────────── */
+
+const HSE_INCIDENT_SELECT = `SELECT CAST(Id AS NVARCHAR(30)) AS id, ProjectCode AS projectCode, Code AS code, CONVERT(NVARCHAR(20), IncidentDate, 23) AS dateISO, Type AS type, SeverityW AS severityW, LostDays AS lostDays, Area AS area, DescFa AS descFa, Status AS status, VolumeL AS volumeL FROM dbo.hse_incident`;
+const HSE_PERMIT_SELECT = `SELECT CAST(Id AS NVARCHAR(30)) AS id, ProjectCode AS projectCode, No AS no, Type AS type, Status AS status, CONVERT(NVARCHAR(20), WorkDate, 23) AS workDate, Area AS area, RiskLevel AS riskLevel, FlagsJson AS flagsJson FROM dbo.hse_permit`;
+
+app.get("/api/hse/projects/:code/incidents", async (req, res) => {
+  try {
+    const pool = await getPool(req);
+    const rq = pool.request().input("ProjectCode", sql.NVarChar(50), req.params.code);
+    let extra = "";
+    if (req.query.status) { rq.input("Status", sql.NVarChar(20), String(req.query.status)); extra += " AND Status = @Status"; }
+    if (req.query.type) { rq.input("Type", sql.NVarChar(20), String(req.query.type)); extra += " AND Type = @Type"; }
+    const rs = await rq.query(`${HSE_INCIDENT_SELECT.replace("SELECT", "SELECT TOP 200")} WHERE ProjectCode = @ProjectCode${extra} ORDER BY IncidentDate DESC, Id DESC`);
+    res.json({ ok: true, data: rs.recordset.map((r) => ({ ...r, severityW: Number(r.severityW), volumeL: r.volumeL == null ? null : Number(r.volumeL) })), meta: { traceId: req.requestId, timestamp: new Date().toISOString() } });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: { code: "HSE_INCIDENTS_ERROR", message: err.message, traceId: req.requestId } });
+  }
+});
+
+app.post("/api/hse/projects/:code/incidents", async (req, res) => {
+  try {
+    const b = req.body || {};
+    const input = {
+      code: b.code ? normalizeDigits(b.code).trim() : undefined,
+      dateISO: normalizeDigits(b.dateISO).trim(),
+      type: String(b.type || ""),
+      lostDays: b.lostDays == null ? 0 : Number(b.lostDays),
+      area: b.area ? String(b.area).slice(0, 200) : "",
+      descFa: b.descFa ? String(b.descFa).slice(0, 1000) : "",
+      status: b.status ? String(b.status) : "open",
+      volumeL: b.volumeL == null ? undefined : Number(b.volumeL),
+    };
+    const errors = validateIncident(input);
+    if (errors.length) return res.status(400).json({ ok: false, error: { code: "VALIDATION", message: errors.join(", "), traceId: req.requestId } });
+    const code = input.code || `INC-${input.dateISO.replace(/-/g, "")}-${Date.now().toString(36).toUpperCase()}`;
+    const pool = await getPool(req);
+    const rs = await pool.request()
+      .input("ProjectCode", sql.NVarChar(50), req.params.code)
+      .input("Code", sql.NVarChar(50), code)
+      .input("IncidentDate", sql.Date, toSqlDate(input.dateISO))
+      .input("Type", sql.NVarChar(20), input.type)
+      .input("SeverityW", sql.Decimal(8, 2), severityWeight(input.type))
+      .input("LostDays", sql.Int, input.lostDays)
+      .input("Area", sql.NVarChar(200), input.area)
+      .input("DescFa", sql.NVarChar(1000), input.descFa)
+      .input("Status", sql.NVarChar(20), input.status)
+      .input("VolumeL", sql.Decimal(18, 2), input.volumeL ?? null)
+      .query(`INSERT INTO dbo.hse_incident (ProjectCode, Code, IncidentDate, Type, SeverityW, LostDays, Area, DescFa, Status, VolumeL) VALUES (@ProjectCode, @Code, @IncidentDate, @Type, @SeverityW, @LostDays, @Area, @DescFa, @Status, @VolumeL); ${HSE_INCIDENT_SELECT} WHERE Id = SCOPE_IDENTITY();`);
+    const row = rs.recordset[0];
+    res.status(201).json({ ok: true, data: { ...row, severityW: Number(row.severityW), volumeL: row.volumeL == null ? null : Number(row.volumeL) }, meta: { traceId: req.requestId, timestamp: new Date().toISOString() } });
+  } catch (err) {
+    const dup = err && err.number === 2627;
+    res.status(dup ? 409 : 500).json({ ok: false, error: { code: dup ? "HSE_DUPLICATE" : "HSE_INCIDENT_INSERT_ERROR", message: err.message, traceId: req.requestId } });
+  }
+});
+
+app.get("/api/hse/projects/:code/permits", async (req, res) => {
+  try {
+    const pool = await getPool(req);
+    const rq = pool.request().input("ProjectCode", sql.NVarChar(50), req.params.code);
+    let extra = "";
+    if (req.query.status) { rq.input("Status", sql.NVarChar(20), String(req.query.status)); extra += " AND Status = @Status"; }
+    const rs = await rq.query(`${HSE_PERMIT_SELECT.replace("SELECT", "SELECT TOP 200")} WHERE ProjectCode = @ProjectCode${extra} ORDER BY WorkDate DESC, Id DESC`);
+    res.json({ ok: true, data: rs.recordset, meta: { traceId: req.requestId, timestamp: new Date().toISOString() } });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: { code: "HSE_PERMITS_ERROR", message: err.message, traceId: req.requestId } });
+  }
+});
+
+app.post("/api/hse/projects/:code/permits", async (req, res) => {
+  try {
+    const b = req.body || {};
+    const input = {
+      no: b.no ? normalizeDigits(b.no).trim() : undefined,
+      type: String(b.type || ""),
+      workDate: normalizeDigits(b.workDate).trim(),
+      area: b.area ? String(b.area).slice(0, 200) : "",
+      riskLevel: String(b.riskLevel || ""),
+      flags: b.flags && typeof b.flags === "object" ? b.flags : {},
+    };
+    const errors = validatePermit(input);
+    if (errors.length) return res.status(400).json({ ok: false, error: { code: "VALIDATION", message: errors.join(", "), traceId: req.requestId } });
+    const warnings = ptwMissing(input.type, input.flags);
+    const no = input.no || `PTW-${input.workDate.replace(/-/g, "")}-${Date.now().toString(36).toUpperCase()}`;
+    const flagsJson = Object.keys(input.flags).length ? JSON.stringify(input.flags) : null;
+    const pool = await getPool(req);
+    const rs = await pool.request()
+      .input("ProjectCode", sql.NVarChar(50), req.params.code)
+      .input("No", sql.NVarChar(50), no)
+      .input("Type", sql.NVarChar(20), input.type)
+      .input("WorkDate", sql.Date, toSqlDate(input.workDate))
+      .input("Area", sql.NVarChar(200), input.area)
+      .input("RiskLevel", sql.NVarChar(20), input.riskLevel)
+      .input("FlagsJson", sql.NVarChar(sql.MAX), flagsJson)
+      .query(`INSERT INTO dbo.hse_permit (ProjectCode, No, Type, Status, WorkDate, Area, RiskLevel, FlagsJson) VALUES (@ProjectCode, @No, @Type, N'draft', @WorkDate, @Area, @RiskLevel, @FlagsJson); ${HSE_PERMIT_SELECT} WHERE Id = SCOPE_IDENTITY();`);
+    res.status(201).json({ ok: true, data: { ...rs.recordset[0], warnings }, meta: { traceId: req.requestId, timestamp: new Date().toISOString() } });
+  } catch (err) {
+    const dup = err && err.number === 2627;
+    res.status(dup ? 409 : 500).json({ ok: false, error: { code: dup ? "HSE_DUPLICATE" : "HSE_PERMIT_INSERT_ERROR", message: err.message, traceId: req.requestId } });
+  }
+});
+
+app.post("/api/hse/permits/:id/actions", async (req, res) => {
+  const action = String(req.body.action || "");
+  const role = String(req.body.role || "");
+  try {
+    const pool = await getPool(req);
+    const cur = await pool.request().input("Id", sql.Int, Number(req.params.id)).query(`SELECT Id, Status FROM dbo.hse_permit WHERE Id = @Id`);
+    const pmt = cur.recordset[0];
+    if (!pmt) return res.status(404).json({ ok: false, error: { code: "NOT_FOUND", message: "Permit not found", traceId: req.requestId } });
+    const check = ptwCanTransition(pmt.Status, action, role);
+    if (!check.ok) {
+      const http = check.code === "ROLE_NOT_ALLOWED" ? 403 : check.code === "INVALID_TRANSITION" ? 409 : 400;
+      return res.status(http).json({ ok: false, error: { code: check.code, message: `${action} not allowed`, traceId: req.requestId } });
+    }
+    await pool.request().input("Id", sql.Int, pmt.Id).input("ToStatus", sql.NVarChar(20), check.to)
+      .query(`UPDATE dbo.hse_permit SET Status = @ToStatus, UpdatedAt = GETUTCDATE() WHERE Id = @Id;`);
+    await writeAudit(pool, req, "HSE_PERMIT_ACTION", { entityName: "hse_permit", entityId: req.params.id, action, role, toStatus: check.to });
+    const rs = await pool.request().input("Id", sql.Int, pmt.Id).query(`${HSE_PERMIT_SELECT} WHERE Id = @Id`);
+    res.json({ ok: true, data: rs.recordset[0], meta: { traceId: req.requestId, timestamp: new Date().toISOString() } });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: { code: "HSE_PERMIT_ACTION_ERROR", message: err.message, traceId: req.requestId } });
+  }
+});
+
+app.get("/api/hse/projects/:code/inspections", async (req, res) => {
+  try {
+    const pool = await getPool(req);
+    const rs = await pool.request().input("ProjectCode", sql.NVarChar(50), req.params.code).query(
+      `SELECT TOP 200 CAST(Id AS NVARCHAR(30)) AS id, ProjectCode AS projectCode, Area AS area, CONVERT(NVARCHAR(20), InspectDate, 23) AS dateISO, Score AS score, Band AS band, ItemsJson AS itemsJson, CONVERT(NVARCHAR(20), NextDue, 23) AS nextDue FROM dbo.hse_inspection WHERE ProjectCode = @ProjectCode ORDER BY InspectDate DESC, Id DESC`
+    );
+    const data = rs.recordset.map((r) => {
+      let items = [];
+      try { items = JSON.parse(r.itemsJson || "[]").map((x) => ({ item: x.item, ok: !!x.ok, na: !!x.na })); } catch { items = []; }
+      return { id: r.id, projectCode: r.projectCode, area: r.area, dateISO: r.dateISO, items, score: r.score, band: r.band, nextDue: r.nextDue };
+    });
+    res.json({ ok: true, data, meta: { traceId: req.requestId, timestamp: new Date().toISOString() } });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: { code: "HSE_INSPECTIONS_ERROR", message: err.message, traceId: req.requestId } });
+  }
+});
+
+app.post("/api/hse/projects/:code/inspections", async (req, res) => {
+  try {
+    const b = req.body || {};
+    const input = {
+      area: b.area ? String(b.area).slice(0, 200) : "",
+      dateISO: normalizeDigits(b.dateISO).trim(),
+      items: Array.isArray(b.items) ? b.items.map((x) => ({ item: String(x.item || "").slice(0, 500), ok: !!x.ok, na: !!x.na })) : [],
+    };
+    const errors = validateInspection(input);
+    if (errors.length) return res.status(400).json({ ok: false, error: { code: "VALIDATION", message: errors.join(", "), traceId: req.requestId } });
+    const score = inspectionScore(input.items);
+    const band = inspectionBand(score);
+    const pool = await getPool(req);
+    const rs = await pool.request()
+      .input("ProjectCode", sql.NVarChar(50), req.params.code)
+      .input("Area", sql.NVarChar(200), input.area)
+      .input("InspectDate", sql.Date, toSqlDate(input.dateISO))
+      .input("Score", sql.Int, score)
+      .input("Band", sql.Char(1), band)
+      .input("ItemsJson", sql.NVarChar(sql.MAX), JSON.stringify(input.items.map((x) => ({ item: x.item, ok: x.ok ? 1 : 0, ...(x.na ? { na: 1 } : {}) }))))
+      .input("NextDue", sql.Date, toSqlDate(nextInspectionDue(input.dateISO, band)))
+      .query(`INSERT INTO dbo.hse_inspection (ProjectCode, Area, InspectDate, Score, Band, ItemsJson, NextDue) VALUES (@ProjectCode, @Area, @InspectDate, @Score, @Band, @ItemsJson, @NextDue); SELECT CAST(SCOPE_IDENTITY() AS INT) AS id;`);
+    res.status(201).json({ ok: true, data: { id: String(rs.recordset[0].id), projectCode: req.params.code, area: input.area, dateISO: input.dateISO, items: input.items, score, band, nextDue: nextInspectionDue(input.dateISO, band) }, meta: { traceId: req.requestId, timestamp: new Date().toISOString() } });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: { code: "HSE_INSPECTION_INSERT_ERROR", message: err.message, traceId: req.requestId } });
+  }
+});
+
+app.get("/api/hse/projects/:code/wo-gate", async (req, res) => {
+  try {
+    const pool = await getPool(req);
+    const rs = await pool.request().input("ProjectCode", sql.NVarChar(50), req.params.code).query(
+      `SELECT No AS no, Type AS type, Status AS status, CONVERT(NVARCHAR(20), WorkDate, 23) AS workDate, Area AS area FROM dbo.hse_permit WHERE ProjectCode = @ProjectCode`
+    );
+    const verdict = woPermitGate({
+      workType: String(req.query.workType || "general"),
+      area: req.query.area ? String(req.query.area) : undefined,
+      workDate: normalizeDigits(req.query.workDate).trim() || new Date().toISOString().slice(0, 10),
+    }, rs.recordset, "advisory");
+    res.json({ ok: true, data: verdict, meta: { traceId: req.requestId, timestamp: new Date().toISOString() } });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: { code: "HSE_WO_GATE_ERROR", message: err.message, traceId: req.requestId } });
   }
 });
 
