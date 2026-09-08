@@ -1,0 +1,296 @@
+openapi: 3.0.3
+info:
+  title: PMIS GOV Governance API
+  version: 1.0.0
+  description: |
+    API ماژول حاکمیت و فرآیندهای PMBOK (دامنه d6 — Deliverable 10).
+
+    اصول: ارجاع بدون بازنویسی · Baseline مقدس · هر تصمیم = شاهد + اختیار · زنجیره ممیزی append-only.
+
+    ## Auth
+    `Authorization: Bearer <JWT>` با claims پروژه. ABAC روی projectId.
+
+    ## خطاهای اختصاصی
+    GOV-403-DOA · GOV-409-CAPA · GOV-409-EVIDENCE · GOV-409-BASELINE · GOV-423-TRAIL
+  contact: { name: Arena GOV }
+servers:
+  - url: http://localhost:5000/api/v1/gov
+    description: Local
+security:
+  - bearerAuth: []
+
+tags:
+  - name: Workflow
+  - name: Integration
+  - name: Stakeholders
+  - name: Audit
+  - name: Decisions
+  - name: Trail
+
+paths:
+  /projects/{projectId}/workflow-tasks:
+    get:
+      tags: [Workflow]
+      summary: گام‌های باز با SLA و سطح تشدید
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - name: state
+          in: query
+          schema: { type: string, enum: [open, closed, all], default: open }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/WorkflowTask' }
+
+  /workflow-tasks/{taskId}/approve:
+    post:
+      tags: [Workflow]
+      summary: تأیید گام و درج در زنجیره ممیزی
+      parameters:
+        - name: taskId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: Idempotency-Key
+          in: header
+          schema: { type: string }
+      responses:
+        '200':
+          description: تأیید شد
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TrailEntry' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /projects/{projectId}/connectors:
+    get:
+      tags: [Integration]
+      summary: رجیستری اتصال و سلامت همگام‌سازی
+      parameters: [{ $ref: '#/components/parameters/ProjectId' }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Connector' }
+
+  /projects/{projectId}/stakeholders:
+    get:
+      tags: [Stakeholders]
+      parameters: [{ $ref: '#/components/parameters/ProjectId' }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Stakeholder' }
+
+  /projects/{projectId}/audit/findings:
+    get:
+      tags: [Audit]
+      parameters: [{ $ref: '#/components/parameters/ProjectId' }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  score: { type: integer, example: 82 }
+                  band: { type: string, enum: [Green, Yellow, Red] }
+                  closeBlocked: { type: boolean }
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Finding' }
+    post:
+      tags: [Audit]
+      parameters: [{ $ref: '#/components/parameters/ProjectId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Finding' }
+      responses:
+        '201': { description: ثبت شد }
+
+  /audit/plans/{planId}/close:
+    post:
+      tags: [Audit]
+      summary: بستن برنامه ممیزی
+      parameters:
+        - name: planId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: بسته شد }
+        '409':
+          description: GOV-409-CAPA — یافته Major/Critical بدون CAPA
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /projects/{projectId}/decisions:
+    get:
+      tags: [Decisions]
+      parameters: [{ $ref: '#/components/parameters/ProjectId' }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Decision' }
+    post:
+      tags: [Decisions]
+      summary: ثبت تصمیم (عبور از دروازه شاهد/اختیار/Baseline)
+      parameters: [{ $ref: '#/components/parameters/ProjectId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Decision' }
+      responses:
+        '201': { description: ثبت شد }
+        '409':
+          description: GOV-409-EVIDENCE یا GOV-409-BASELINE
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '403':
+          description: GOV-403-DOA — اختیار ناکافی
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /projects/{projectId}/audit-trail:
+    get:
+      tags: [Trail]
+      summary: زنجیره ثبت غیرقابل تغییر + وضعیت صحت
+      parameters: [{ $ref: '#/components/parameters/ProjectId' }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  valid: { type: boolean }
+                  entries:
+                    type: array
+                    items: { $ref: '#/components/schemas/TrailEntry' }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    ProjectId:
+      name: projectId
+      in: path
+      required: true
+      schema: { type: string }
+
+  responses:
+    Forbidden:
+      description: GOV-403-DOA
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        code: { type: string, example: GOV-409-EVIDENCE }
+        message: { type: string }
+        reasons:
+          type: array
+          items: { type: string }
+
+    WorkflowTask:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        code: { type: string, example: WF-CR-012 }
+        processFa: { type: string }
+        assignee: { type: string }
+        dueAt: { type: string, format: date }
+        daysLeft: { type: integer, example: -5 }
+        slaLevel: { type: string, enum: [ok, due_soon, breach] }
+        escalation: { type: string, enum: [L0, L1, L2, L3] }
+        action: { type: string, enum: [none, notify, escalate] }
+
+    Connector:
+      type: object
+      properties:
+        id: { type: string }
+        system: { type: string, example: Primavera P6 }
+        owningDomain: { type: string, enum: [d1, d2, d3, d4, d5] }
+        direction: { type: string, enum: [pull, push, two_way] }
+        lastSync: { type: string }
+        slaHours: { type: integer, default: 24 }
+        health: { type: string, enum: [ok, warn, fail] }
+
+    Stakeholder:
+      type: object
+      properties:
+        id: { type: string }
+        nameFa: { type: string }
+        roleFa: { type: string }
+        power: { type: string, enum: [High, Medium, Low] }
+        interest: { type: string, enum: [High, Medium, Low] }
+        attitude: { type: string, enum: [supporter, neutral, blocker] }
+        strategyFa: { type: string }
+
+    Finding:
+      type: object
+      required: [code, compliance, severity]
+      properties:
+        id: { type: string }
+        code: { type: string, example: AUD-HSE-04 }
+        itemFa: { type: string }
+        standard: { type: string, example: ISO 45001 }
+        weight: { type: number, default: 1 }
+        compliance: { type: number, minimum: 0, maximum: 100 }
+        severity: { type: string, enum: [minor, major, critical] }
+        capaId: { type: string, nullable: true }
+
+    Decision:
+      type: object
+      required: [code, authority, evidenceRef]
+      properties:
+        id: { type: string }
+        code: { type: string, example: DEC-2026-041 }
+        subjectFa: { type: string }
+        authority: { type: string, enum: [PM, PMO, STEERING, BOARD] }
+        requiredAuthority: { type: string, enum: [PM, PMO, STEERING, BOARD], readOnly: true }
+        evidenceRef: { type: string, example: 'PMA:EVM#1405-06' }
+        cost: { type: number }
+        days: { type: integer }
+        dueAt: { type: string, format: date }
+        rewritesBaseline: { type: boolean, default: false }
+        crId: { type: string, nullable: true }
+        state: { type: string, enum: [open, approved, rejected, escalated] }
+
+    TrailEntry:
+      type: object
+      properties:
+        seq: { type: integer }
+        at: { type: string, format: date-time }
+        payload: { type: string, example: 'APPROVE:wf2:PMO' }
+        hash: { type: string, example: 9f3a21bc }
