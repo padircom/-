@@ -400,6 +400,7 @@ export default function ModuleDetail({ lang, target, onBack, onOpenFlowNet }: Pr
                     {[
                       ...p.subs.map((s) => ({ id: s.id, title: s.title, sql: s.sql })),
                       ...(D2_PAGE_SUBS[p.id] ?? []),
+                      ...(HSE_PAGE_SUBS[p.id] ?? []),
                     ].map((s) => (
                       <button
                         key={s.id}
