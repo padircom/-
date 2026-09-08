@@ -29,7 +29,7 @@ type QuickAction = { id: string; label: Bi; alert?: string; icon: ReactNode };
 const iconClass = "h-4 w-4";
 
 const moduleDataGaps: Record<string, string[]> = {
-  d1: ["c3"], d2: [], d3: ["c5"], d4: ["c2", "c3"], d5: ["c4"], d6: [], d7: [],
+  d1: ["c3"], d2: [], d3: ["c5"], d4: ["c2", "c3"], d5: ["c4"], d6: [], d8: [], d7: [],
 };
 
 const quickActions: QuickAction[] = [
@@ -83,7 +83,7 @@ export default function RightSidebar({ lang, quickAction, onQuickAction, onNavig
           <div className="min-w-0">
             <h2 className="truncate text-[12.5px] font-normal tx1">{t(ui.frameworkTitle, lang)}</h2>
             <p className="mt-0.5 text-[9.5px] font-extralight tx3">
-              {rtl ? "۷ حوزه · ۳۸ فرآیند · مدیریت سامانه" : "7 Domains · 38 Processes · System Admin"}
+              {rtl ? "۸ حوزه · ۴۴ فرآیند · مدیریت سامانه" : "8 Domains · 44 Processes · System Admin"}
             </p>
           </div>
         </div>

@@ -182,6 +182,15 @@ const D6_TAB_BY_SUB: Record<string, GovTab> = {
   "d6-p5-log": "decision",
 };
 
+const D8_TAB_BY_SUB: Record<string, HseTab> = {
+  "d8-p1-s1": "dashboard",
+  "d8-p2-s1": "incidents",
+  "d8-p3-s1": "ptw",
+  "d8-p4-s1": "inspections",
+  "d8-p5-s1": "healthenv",
+  "d8-p6-s1": "actions",
+};
+
 const D1_TAB_BY_SUB: Record<string, EdmsTab> = {
   "d1-p1-s1": "mdr",
   "d1-p1-ov": "overview",
@@ -745,6 +754,105 @@ export default function ModuleDetail({ lang, target, onBack, onOpenFlowNet }: Pr
                           <div className="truncate text-[10px] font-light tx1">{t(s.title, lang)}</div>
                           <div className="mt-0.5 flex flex-wrap gap-1">
                             {s.sql.map((tbl) => (
+                              <span key={tbl} className="rounded bg-sky-400/10 px-1 py-[1px] text-[7.5px] font-light text-sky-300" dir="ltr">🗄 {tbl}</span>
+                            ))}
+                          </div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </aside>
+        </div>
+      </div>
+    );
+  }
+
+  const d8Tab = ((): HseTab => {
+    const sid = selected?.sId ?? target.subId;
+    if (sid && D8_TAB_BY_SUB[sid]) return D8_TAB_BY_SUB[sid];
+    return "dashboard";
+  })();
+
+  if (dom.id === "d8") {
+    return (
+      <div className="flex h-full min-h-0 flex-col gap-3 overflow-hidden" dir={rtl ? "rtl" : "ltr"}>
+        <div className="glass flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl px-3 py-2.5">
+          <button onClick={onBack} className="glass-row flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-[10.5px] font-light tx2 transition hover:tx1">
+            <span className={rtl ? "" : "rotate-180"}>→</span>
+            {rtl ? "بازگشت به داشبورد" : "Back to dashboard"}
+          </button>
+          {cluster && (
+            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl text-[20px]"
+                  style={{ background: `${cluster.color}1f`, border: `1px solid ${cluster.color}55` }}>
+              {cluster.icon}
+            </span>
+          )}
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
+              {cluster && (
+                <h1 className="truncate text-[20px] font-semibold leading-tight" style={{ color: cluster.color }}>
+                  {t(cluster.title, lang)}
+                </h1>
+              )}
+              <span className="text-[16px] font-light tx4">/</span>
+              {project && (
+                <h2 className="truncate text-[19px] font-semibold leading-tight tx1">{t(project.name, lang)}</h2>
+              )}
+            </div>
+            {project && (
+              <p className="mt-1 truncate text-[10px] font-extralight tx3">
+                <span dir="ltr">{project.code}</span> · {t(project.client, lang)} · {t(project.location, lang)}
+              </p>
+            )}
+          </div>
+          <div className="shrink-0 text-end">
+            <div className="text-[9px] font-extralight tx3">{t(dom.title, lang)}</div>
+            <div className="text-[11px] font-light tx1">
+              {rtl ? "HSE — TRIR از من‌اور واقعی" : "HSE — real man-hour TRIR"}
+            </div>
+          </div>
+        </div>
+        <div className="flex min-h-0 flex-1 gap-3 overflow-hidden">
+          <div className="glass flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl p-3">
+            <HseWorkspace lang={lang} initialTab={d8Tab} hideTabs />
+          </div>
+          <aside className="glass-dark flex w-[300px] shrink-0 flex-col overflow-hidden rounded-2xl">
+            <div className="b-line border-b px-3 py-2.5">
+              <div className="flex items-center gap-2">
+                <span className="grid h-6 w-6 place-items-center rounded-md text-[12px]"
+                      style={{ background: `${dom.accent}1a`, border: `1px solid ${dom.accent}55`, color: dom.accent }}>
+                  {dom.icon}
+                </span>
+                <div className="text-[10.5px] font-normal tx1">{t(dom.title, lang)}</div>
+              </div>
+            </div>
+            <div className="thin-scroll flex-1 overflow-y-auto p-2 space-y-2">
+              {dom.processes.map((p, i) => (
+                <div key={p.id} className="rounded-xl border b-line-soft bg-black/10 p-1.5">
+                  <div className="flex items-center gap-1.5 px-1 py-1">
+                    <span className="text-[8px] font-light tabular-nums tx4">
+                      {(i + 1).toLocaleString(rtl ? "fa-IR" : "en-US")}
+                    </span>
+                    <span className="text-[10.5px] font-normal" style={{ color: dom.accent }}>{t(p.title, lang)}</span>
+                  </div>
+                  <div className="mt-1 space-y-1">
+                    {p.subs.map((sub) => (
+                      <button
+                        key={sub.id}
+                        onClick={() => {
+                          audit("OPEN_SUBPROCESS", { projectId: target.projectId, entity: dom.id, entityId: sub.id });
+                          setSelected({ pId: p.id, sId: sub.id });
+                        }}
+                        className={`group flex w-full items-start gap-2 rounded-lg px-2 py-2 text-start transition hover:-translate-y-px glass-row ${selected?.sId === sub.id ? "row-on" : ""}`}
+                      >
+                        <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: dom.accent }} />
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-[10px] font-light tx1">{t(sub.title, lang)}</div>
+                          <div className="mt-0.5 flex flex-wrap gap-1">
+                            {sub.sql.map((tbl) => (
                               <span key={tbl} className="rounded bg-sky-400/10 px-1 py-[1px] text-[7.5px] font-light text-sky-300" dir="ltr">🗄 {tbl}</span>
                             ))}
                           </div>
