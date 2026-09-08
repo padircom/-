@@ -10,6 +10,7 @@ import PlanningWorkspace, { type PexTab } from "./PlanningWorkspace";
 import PmaWorkspace, { type PmaTab } from "./PmaWorkspace";
 import RiskClaimsWorkspace, { type D4Tab } from "./RiskClaimsWorkspace";
 import GovernanceWorkspace, { type GovTab } from "./GovernanceWorkspace";
+import HseWorkspace, { type HseTab } from "./HseWorkspace";
 
 /** Extra submodules only on the d1 inner page — not in the main right sidebar. */
 const D1_PAGE_SUBS: Record<string, { id: string; title: Bi; tab: EdmsTab; sql: string[] }[]> = {
@@ -59,12 +60,25 @@ const D2_TAB_BY_SUB: Record<string, PexTab> = {
   "d2-p6-al": "alerts",
 };
 
+/** Extra HSE submodules only on the d2 inner page — not in the main right sidebar. */
 const HSE_PAGE_SUBS: Record<string, { id: string; title: Bi; tab: HseTab; sql: string[] }[]> = {
   "d2-p4": [
     { id: "d2-p4-hse", title: { fa: "ایمنی، بهداشت و محیط‌زیست (HSE)", en: "HSE" }, tab: "dashboard", sql: ["hse_incident", "hse_permit", "hse_inspection"] },
+    { id: "d2-p4-hse-inc", title: { fa: "HSE — رجیستر حوادث", en: "HSE Incidents" }, tab: "incidents", sql: ["hse_incident"] },
+    { id: "d2-p4-hse-ptw", title: { fa: "HSE — پروانه کار", en: "HSE Permits" }, tab: "ptw", sql: ["hse_permit"] },
+    { id: "d2-p4-hse-insp", title: { fa: "HSE — بازرسی‌ها", en: "HSE Inspections" }, tab: "inspections", sql: ["hse_inspection"] },
+    { id: "d2-p4-hse-he", title: { fa: "HSE — بهداشت/محیط", en: "HSE Health/Env" }, tab: "healthenv", sql: ["hse_tbt"] },
+    { id: "d2-p4-hse-act", title: { fa: "HSE — اقدامات اصلاحی", en: "HSE Actions" }, tab: "actions", sql: ["hse_action"] },
   ],
 };
-const HSE_TAB_BY_SUB: Record<string, HseTab> = { "d2-p4-hse": "dashboard" };
+const HSE_TAB_BY_SUB: Record<string, HseTab> = {
+  "d2-p4-hse": "dashboard",
+  "d2-p4-hse-inc": "incidents",
+  "d2-p4-hse-ptw": "ptw",
+  "d2-p4-hse-insp": "inspections",
+  "d2-p4-hse-he": "healthenv",
+  "d2-p4-hse-act": "actions",
+};
 
 const D3_PAGE_SUBS: Record<string, { id: string; title: Bi; tab: PmaTab; sql: string[] }[]> = {
   "d3-p1": [
@@ -333,6 +347,12 @@ export default function ModuleDetail({ lang, target, onBack, onOpenFlowNet }: Pr
     return "dashboard";
   })();
 
+  const hseTab = ((): HseTab | null => {
+    const sid = selected?.sId ?? target.subId;
+    if (sid && HSE_TAB_BY_SUB[sid]) return HSE_TAB_BY_SUB[sid];
+    return null;
+  })();
+
   if (dom.id === "d2") {
     return (
       <div className="flex h-full min-h-0 flex-col gap-3 overflow-hidden" dir={rtl ? "rtl" : "ltr"}>
@@ -375,7 +395,11 @@ export default function ModuleDetail({ lang, target, onBack, onOpenFlowNet }: Pr
 
         <div className="flex min-h-0 flex-1 gap-3 overflow-hidden">
           <div className="glass flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl p-3">
-            <PlanningWorkspace lang={lang} initialTab={d2Tab} hideTabs />
+            {hseTab ? (
+              <HseWorkspace lang={lang} initialTab={hseTab} hideTabs />
+            ) : (
+              <PlanningWorkspace lang={lang} initialTab={d2Tab} hideTabs />
+            )}
           </div>
           <aside className="glass-dark flex w-[300px] shrink-0 flex-col overflow-hidden rounded-2xl">
             <div className="b-line border-b px-3 py-2.5">
