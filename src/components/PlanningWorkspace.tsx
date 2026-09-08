@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { t, type Lang } from "../data/framework";
 import { ACTIVITIES, computeEvm, computePhi, DATA_DATE } from "../services/projectControls";
+import PexDprPanel from "./PexDprPanel";
+import { loadPexSnapshot, type PexSnapshot } from "../services/pexApi";
+import { PEX_ACTIVITIES, PEX_PROJECT, PEX_WBS } from "../data/pexProject";
 
 export type PexTab =
   | "dashboard"
@@ -35,7 +38,8 @@ const TABS: { id: PexTab; fa: string; en: string }[] = [
   { id: "roc", fa: "RoC", en: "RoC" },
 ];
 
-const acts = ACTIVITIES.map((a) => ({
+/* Fallback نمایشی تا رسیدن اسنپ‌شات SQL/seed (شکل یکسان با خروجی mapperها) */
+const fallbackActs = ACTIVITIES.map((a) => ({
   code: a.code,
   name: { fa: a.nameFa, en: a.nameEn },
   dur: a.durH,
@@ -44,17 +48,50 @@ const acts = ACTIVITIES.map((a) => ({
   pct: Math.round(a.pctApproved * 100),
 }));
 
-const ms = [
+const fallbackMs = [
   { code: "MS-MECH-RFSU", type: "Contractual", status: "Delayed", contractual: "1404/11/14", forecast: "1404/11/28", penalty: 125000 },
   { code: "MS-CIV-FOC", type: "Key", status: "AtRisk", contractual: "1403/07/01", forecast: "1403/07/04", penalty: 0 },
   { code: "MS-PIP-HYDRO", type: "Gate", status: "OnTrack", contractual: "1403/09/15", forecast: "1403/09/12", penalty: 0 },
 ];
 
-const roc = [
+const fallbackRoc = [
   { code: "CIV-FND", fa: "فونداسیون", steps: "گود ۱۰ · مگر ۸ · آرماتور ۲۲ · قالب ۱۲ · بتن ۳۰ · عمل‌آوری ۱۸" },
   { code: "PIP-LINE", fa: "پایپینگ", steps: "اسپول ۱۲ · فیت‌آپ ۱۵ · جوش ۲۲ · NDT ۱۳ · PWHT ۸ · تست ۱۸ · رنگ ۱۲" },
   { code: "ELE-CABLE", fa: "کابل", steps: "تری ۱۵ · کشیدن ۳۵ · سرسیم ۲۵ · مگر ۲۵" },
 ];
+
+function actsFromSnapshot(snap: PexSnapshot | null) {
+  if (!snap) return fallbackActs;
+  return snap.activities.map((a) => ({
+    code: a.code,
+    name: { fa: a.nameFa, en: a.nameEn },
+    dur: a.durH,
+    tf: a.tfH,
+    crit: a.tfH <= 0,
+    pct: Math.round(a.pctApproved * 100),
+  }));
+}
+
+function msFromSnapshot(snap: PexSnapshot | null) {
+  if (!snap) return fallbackMs;
+  return snap.milestones.map((m) => ({
+    code: m.code,
+    type: m.msType,
+    status: m.status,
+    contractual: m.contractualFa,
+    forecast: m.forecastFa,
+    penalty: m.penaltyPerDay,
+  }));
+}
+
+function rocFromSnapshot(snap: PexSnapshot | null, fa: boolean) {
+  if (!snap) return fallbackRoc;
+  return snap.roc.map((r) => ({
+    code: r.code,
+    fa: fa ? r.nameFa : r.nameEn,
+    steps: r.steps.map((s) => `${fa ? s.nameFa : s.nameEn} ${Math.round(s.weight * 100)}`).join(" · "),
+  }));
+}
 
 export default function PlanningWorkspace({
   lang,
@@ -67,7 +104,7 @@ export default function PlanningWorkspace({
 }) {
   const rtl = lang === "fa";
   const [tab, setTab] = useState<PexTab>(initialTab);
-  const [dprLines, setDprLines] = useState([{ act: "CIV-001", qty: "12", step: "3" }]);
+  const [snap, setSnap] = useState<PexSnapshot | null>(null);
   const [ack, setAck] = useState<Record<string, boolean>>({});
   const [fmt, setFmt] = useState("PDF");
   const [kind, setKind] = useState("External");
@@ -76,8 +113,21 @@ export default function PlanningWorkspace({
     setTab(initialTab);
   }, [initialTab]);
 
+  useEffect(() => {
+    let alive = true;
+    void loadPexSnapshot(PEX_PROJECT.code).then((s) => {
+      if (alive) setSnap(s);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   const evm = useMemo(() => computeEvm(), []);
   const phi = useMemo(() => computePhi(evm), [evm]);
+  const acts = useMemo(() => actsFromSnapshot(snap), [snap]);
+  const ms = useMemo(() => msFromSnapshot(snap), [snap]);
+  const roc = useMemo(() => rocFromSnapshot(snap, rtl), [snap, rtl]);
   const kpis = useMemo(
     () => [
       { k: "SPI", v: evm.spi.toFixed(2), c: "#FFD48A" },
@@ -105,6 +155,17 @@ export default function PlanningWorkspace({
             </p>
           </div>
           <span className="rounded-lg border b-line-soft px-2 py-1 text-[9px] tx3" dir="ltr">DataDate {DATA_DATE}</span>
+          <span
+            className="rounded-lg border px-2 py-1 text-[9px]"
+            dir="ltr"
+            title={snap ? (snap.source === "sql" ? "SQL Server" : "Seed (offline)") : "…"}
+            style={{
+              borderColor: snap?.source === "sql" ? "#8FE3C855" : "#9AA4B255",
+              color: snap?.source === "sql" ? "#8FE3C8" : "#9AA4B2",
+            }}
+          >
+            {snap?.source === "sql" ? "● SQL" : "○ Seed"}
+          </span>
         </div>
       </section>
 
@@ -175,10 +236,13 @@ export default function PlanningWorkspace({
           <div className="fade-rise glass-dark rounded-2xl p-3">
             <div className="text-[11px] tx1">{rtl ? "ساختار شکست — قفل بدون CR" : "WBS — locked without CR"}</div>
             <ul className="mt-2 space-y-1 text-[10px] tx2">
-              <li>1 {rtl ? "مهندسی" : "Engineering"} · 0.18</li>
-              <li className="ps-4">1.2 {rtl ? "فونداسیون" : "Foundations"} · 0.12 · WP</li>
-              <li className="ps-8">CIV-001 {rtl ? "بتن پی" : "Fnd pour"}</li>
-              <li>2 {rtl ? "ساخت" : "Construction"} · 0.62</li>
+              {(snap?.wbs ?? PEX_WBS).map((n) => (
+                <li key={n.code} className={n.level > 1 ? "ps-4" : ""}>
+                  <span className="font-mono text-sky-300" dir="ltr">{n.code}</span>{" "}
+                  {rtl ? n.nameFa : n.nameEn}{" "}
+                  <span className="tx3">· {n.weight} · {n.nodeType}{n.isLocked ? " 🔒" : ""}</span>
+                </li>
+              ))}
             </ul>
           </div>
         )}
@@ -288,30 +352,7 @@ export default function PlanningWorkspace({
         )}
 
         {tab === "dpr" && (
-          <div className="fade-rise space-y-2">
-            <div className="glass-dark flex flex-wrap gap-2 rounded-2xl p-3 text-[10px]">
-              <span className="tx3">{rtl ? "تاریخ" : "Date"}</span>
-              <span className="rounded border b-line-soft px-2 py-1 tx1">1405/06/14</span>
-              <span className="tx3">{rtl ? "شیفت" : "Shift"}</span>
-              <span className="rounded border b-line-soft px-2 py-1 tx1">A</span>
-            </div>
-            {dprLines.map((ln, i) => (
-              <div key={i} className="glass-dark flex flex-wrap gap-2 rounded-xl p-2.5 text-[10px]">
-                <span className="font-mono tx2" dir="ltr">{ln.act}</span>
-                <span className="tx3">{rtl ? "گام RoC" : "RoC step"} {ln.step}</span>
-                <span className="tx1">{rtl ? "مقدار" : "Qty"} {ln.qty}</span>
-              </div>
-            ))}
-            <div className="flex gap-2">
-              <button
-                onClick={() => setDprLines((p) => [...p, { act: "PIP-ISO-012", qty: "4", step: "2" }])}
-                className="rounded-lg border border-emerald-400/40 bg-emerald-400/10 px-3 py-1.5 text-[10px] text-emerald-200"
-              >
-                + {rtl ? "خط پیشرفت" : "Progress line"}
-              </button>
-              <button className="rounded-lg border b-line-soft px-3 py-1.5 text-[10px] tx2">{rtl ? "ارسال WF2" : "Submit WF2"}</button>
-            </div>
-          </div>
+          <PexDprPanel lang={lang} projectCode={PEX_PROJECT.code} activities={snap?.activities ?? PEX_ACTIVITIES} />
         )}
 
         {tab === "weekly" && (

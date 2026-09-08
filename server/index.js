@@ -15,6 +15,7 @@ import jalaali from "jalaali-js";
 import nodemailer from "nodemailer";
 import { createWorker } from "tesseract.js";
 import { applyGuardian } from "./rccLogic.js";
+import { canDprTransition, openDprBlocked, validateDpr } from "./pexLogic.js";
 
 const app = express();
 const PORT = Number(process.env.PORT || 4000);
@@ -1243,6 +1244,345 @@ app.post("/api/daily-reports/:id/workflow/actions", async (req, res) => {
     }
   } catch (err) {
     res.status(500).json({ ok: false, error: { code: "WORKFLOW_ACTION_ERROR", message: err.message, traceId: req.requestId } });
+  }
+});
+
+/* ─────────────────── PEX Planning & Execution (F5) ─────────────────── */
+
+async function pexActivityCtx(pool, projectCode) {
+  const rs = await pool.request().input("ProjectCode", sql.NVarChar(50), projectCode).query(
+    `SELECT a.Code AS code, a.IsLocked AS locked, s.StepSeq AS seq, s.TargetQty AS targetQty
+     FROM dbo.pex_activity a LEFT JOIN dbo.pex_activity_step s ON s.ActivityId = a.Id
+     WHERE a.ProjectCode = @ProjectCode`
+  );
+  const activities = {};
+  for (const r of rs.recordset) {
+    if (!activities[r.code]) activities[r.code] = { locked: !!r.locked, steps: [] };
+    if (r.seq != null) activities[r.code].steps.push({ seq: r.seq, targetQty: Number(r.targetQty) });
+  }
+  return { activities };
+}
+
+async function fetchDprDetail(pool, id) {
+  const head = await pool.request().input("Id", sql.Int, Number(id)).query(
+    `SELECT CAST(Id AS NVARCHAR(30)) AS id, ProjectCode AS projectCode, ReportNo AS reportNo,
+     CONVERT(NVARCHAR(20), ReportDate, 23) AS reportDate, Shift AS shift, Weather AS weather,
+     Status AS status, CONVERT(NVARCHAR(30), CreatedAt, 126) AS createdAt
+     FROM dbo.pex_dpr WHERE Id = @Id`
+  );
+  const dpr = head.recordset[0];
+  if (!dpr) return null;
+  const lines = await pool.request().input("Id", sql.Int, Number(id)).input("ProjectCode", sql.NVarChar(50), dpr.projectCode).query(
+    `SELECT CAST(l.Id AS NVARCHAR(30)) AS id, CAST(l.DprId AS NVARCHAR(30)) AS dprId,
+     l.ActivityCode AS activityCode, a.NameFa AS activityNameFa, l.LocationCode AS locationCode,
+     l.StepSeq AS stepSeq, s.NameFa AS stepNameFa, l.Qty AS qty, l.Uom AS uom,
+     l.LineStatus AS lineStatus, l.ApprovedQty AS approvedQty, l.Note AS note
+     FROM dbo.pex_progress_line l
+     LEFT JOIN dbo.pex_activity a ON a.Code = l.ActivityCode AND a.ProjectCode = @ProjectCode
+     LEFT JOIN dbo.pex_activity_step s ON s.ActivityId = a.Id AND s.StepSeq = l.StepSeq
+     WHERE l.DprId = @Id ORDER BY l.Id`
+  );
+  const events = await pool.request().input("Id", sql.Int, Number(id)).query(
+    `SELECT CAST(Id AS NVARCHAR(30)) AS id, ActionCode AS actionCode, FromStatus AS fromStatus,
+     ToStatus AS toStatus, ActorRole AS actorRole, Comment AS comment,
+     CONVERT(NVARCHAR(30), CreatedAt, 126) AS createdAt
+     FROM dbo.pex_dpr_event WHERE DprId = @Id ORDER BY Id DESC`
+  );
+  return {
+    ...dpr,
+    lines: lines.recordset.map((r) => ({ ...r, qty: Number(r.qty), approvedQty: r.approvedQty == null ? null : Number(r.approvedQty) })),
+    events: events.recordset,
+  };
+}
+
+app.get("/api/pex/projects/:code/wbs", async (req, res) => {
+  try {
+    const pool = await getPool(req);
+    const rs = await pool.request().input("ProjectCode", sql.NVarChar(50), req.params.code).query(
+      `SELECT w.Code AS code, p.Code AS parentCode, w.NameFa AS nameFa, w.NameEn AS nameEn,
+       w.NodeLevel AS [level], w.NodeType AS nodeType, w.Weight AS weight, w.IsLocked AS isLocked
+       FROM dbo.pex_wbs w LEFT JOIN dbo.pex_wbs p ON p.Id = w.ParentId
+       WHERE w.ProjectCode = @ProjectCode ORDER BY w.Code`
+    );
+    res.json({ ok: true, data: rs.recordset.map((r) => ({ ...r, weight: Number(r.weight), isLocked: !!r.isLocked })), meta: { traceId: req.requestId, timestamp: new Date().toISOString() } });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: { code: "PEX_WBS_ERROR", message: err.message, traceId: req.requestId } });
+  }
+});
+
+app.get("/api/pex/projects/:code/activities", async (req, res) => {
+  try {
+    const pool = await getPool(req);
+    const acts = await pool.request().input("ProjectCode", sql.NVarChar(50), req.params.code).query(
+      `SELECT a.Code AS code, w.Code AS wbsCode, a.NameFa AS nameFa, a.NameEn AS nameEn,
+       a.Bac AS bac, a.DurationHours AS durH, a.TotalFloatH AS tfH,
+       a.PctApproved AS pctApproved, a.PctPhysicalDraft AS pctPhysicalDraft,
+       a.IsLocked AS locked, a.RocCode AS rocCode
+       FROM dbo.pex_activity a LEFT JOIN dbo.pex_wbs w ON w.Id = a.WbsId
+       WHERE a.ProjectCode = @ProjectCode ORDER BY a.Code`
+    );
+    const steps = await pool.request().input("ProjectCode", sql.NVarChar(50), req.params.code).query(
+      `SELECT a.Code AS activityCode, s.StepSeq AS seq, s.NameFa AS nameFa, s.NameEn AS nameEn,
+       s.Weight AS weight, s.TargetQty AS targetQty, s.Uom AS uom, s.ApprovedQty AS approvedQty
+       FROM dbo.pex_activity_step s INNER JOIN dbo.pex_activity a ON a.Id = s.ActivityId
+       WHERE a.ProjectCode = @ProjectCode ORDER BY a.Code, s.StepSeq`
+    );
+    const byAct = {};
+    for (const s of steps.recordset) {
+      (byAct[s.activityCode] = byAct[s.activityCode] || []).push({
+        seq: s.seq, nameFa: s.nameFa, nameEn: s.nameEn, weight: Number(s.weight),
+        targetQty: Number(s.targetQty), uom: s.uom, approvedQty: Number(s.approvedQty),
+      });
+    }
+    const data = acts.recordset.map((a) => ({
+      ...a, bac: Number(a.bac), durH: Number(a.durH), tfH: Number(a.tfH),
+      pctApproved: Number(a.pctApproved), pctPhysicalDraft: Number(a.pctPhysicalDraft),
+      locked: !!a.locked, steps: byAct[a.code] || [],
+    }));
+    res.json({ ok: true, data, meta: { traceId: req.requestId, timestamp: new Date().toISOString() } });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: { code: "PEX_ACTIVITIES_ERROR", message: err.message, traceId: req.requestId } });
+  }
+});
+
+app.get("/api/pex/projects/:code/milestones", async (req, res) => {
+  try {
+    const pool = await getPool(req);
+    const rs = await pool.request().input("ProjectCode", sql.NVarChar(50), req.params.code).query(
+      `SELECT m.Code AS code, a.Code AS activityCode, m.MsType AS msType, m.Status AS status,
+       m.ContractualFa AS contractualFa, m.ForecastFa AS forecastFa,
+       CONVERT(NVARCHAR(20), m.ContractualDate, 23) AS contractualIso,
+       CONVERT(NVARCHAR(20), m.ForecastDate, 23) AS forecastIso,
+       m.PenaltyPerDay AS penaltyPerDay, m.OwnerOrg AS ownerOrg, m.Priority AS priority
+       FROM dbo.pex_milestone m LEFT JOIN dbo.pex_activity a ON a.Id = m.ActivityId
+       WHERE m.ProjectCode = @ProjectCode ORDER BY m.ContractualDate`
+    );
+    res.json({ ok: true, data: rs.recordset.map((r) => ({ ...r, penaltyPerDay: Number(r.penaltyPerDay) })), meta: { traceId: req.requestId, timestamp: new Date().toISOString() } });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: { code: "PEX_MILESTONES_ERROR", message: err.message, traceId: req.requestId } });
+  }
+});
+
+app.get("/api/pex/projects/:code/roc", async (req, res) => {
+  try {
+    const pool = await getPool(req);
+    const rs = await pool.request().query(
+      `SELECT RocCode AS code, NameFa AS nameFa, NameEn AS nameEn, Discipline AS discipline, StepsJson AS stepsJson FROM dbo.pex_roc ORDER BY RocCode`
+    );
+    const data = rs.recordset.map((r) => {
+      let steps = [];
+      try { steps = JSON.parse(r.stepsJson || "[]"); } catch { steps = []; }
+      return { code: r.code, nameFa: r.nameFa, nameEn: r.nameEn, discipline: r.discipline, steps };
+    });
+    res.json({ ok: true, data, meta: { traceId: req.requestId, timestamp: new Date().toISOString() } });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: { code: "PEX_ROC_ERROR", message: err.message, traceId: req.requestId } });
+  }
+});
+
+app.post("/api/pex/projects/:code/dpr", async (req, res) => {
+  try {
+    const projectCode = req.params.code;
+    const body = req.body || {};
+    const pool = await getPool(req);
+    const ctx = await pexActivityCtx(pool, projectCode);
+    const dpr = {
+      reportDate: normalizeDigits(body.reportDate).trim(),
+      shift: String(body.shift || "").toUpperCase(),
+      weather: body.weather ? String(body.weather).slice(0, 100) : null,
+      lines: Array.isArray(body.lines) ? body.lines : [],
+    };
+    const errors = validateDpr(dpr, ctx);
+    if (errors.length) return res.status(400).json({ ok: false, error: { code: "VALIDATION", message: errors.join(", "), traceId: req.requestId } });
+    const open = await pool.request().input("ProjectCode", sql.NVarChar(50), projectCode).query(
+      `SELECT CONVERT(NVARCHAR(20), ReportDate, 23) AS reportDate, Shift AS shift, Status AS status FROM dbo.pex_dpr WHERE ProjectCode = @ProjectCode`
+    );
+    if (openDprBlocked(open.recordset, dpr.reportDate, dpr.shift)) {
+      return res.status(409).json({ ok: false, error: { code: "DPR_OPEN_EXISTS", message: "An open DPR already exists for this date/shift", traceId: req.requestId } });
+    }
+    const stamp = dpr.reportDate.replace(/-/g, "");
+    const reportNo = normalizeDigits(body.reportNo).trim() || `DPR-${stamp}-${dpr.shift}-${open.recordset.filter((r) => r.reportDate === dpr.reportDate).length + 1}`;
+    const transaction = new sql.Transaction(pool);
+    await transaction.begin();
+    try {
+      const head = await new sql.Request(transaction)
+        .input("ProjectCode", sql.NVarChar(50), projectCode)
+        .input("ReportNo", sql.NVarChar(30), reportNo)
+        .input("ReportDate", sql.Date, toSqlDate(dpr.reportDate))
+        .input("Shift", sql.NVarChar(10), dpr.shift)
+        .input("Weather", sql.NVarChar(100), dpr.weather)
+        .input("CreatedBy", sql.NVarChar(100), body.createdBy ? String(body.createdBy).slice(0, 100) : null)
+        .query(`INSERT INTO dbo.pex_dpr (ProjectCode, ReportNo, ReportDate, Shift, Weather, Status, CreatedBy) VALUES (@ProjectCode, @ReportNo, @ReportDate, @Shift, @Weather, N'draft', @CreatedBy); SELECT CAST(SCOPE_IDENTITY() AS INT) AS id;`);
+      const dprId = head.recordset[0].id;
+      for (const ln of dpr.lines) {
+        await new sql.Request(transaction)
+          .input("DprId", sql.Int, dprId)
+          .input("ActivityCode", sql.NVarChar(50), String(ln.activityCode))
+          .input("LocationCode", sql.NVarChar(50), ln.locationCode ? String(ln.locationCode).slice(0, 50) : null)
+          .input("StepSeq", sql.Int, Number(ln.stepSeq))
+          .input("Qty", sql.Decimal(18, 4), Number(ln.qty))
+          .input("Uom", sql.NVarChar(20), ln.uom ? String(ln.uom).slice(0, 20) : null)
+          .input("CrId", sql.NVarChar(50), ln.crId ? String(ln.crId).slice(0, 50) : null)
+          .input("Note", sql.NVarChar(500), ln.note ? String(ln.note).slice(0, 500) : null)
+          .query(`INSERT INTO dbo.pex_progress_line (DprId, ActivityCode, LocationCode, StepSeq, Qty, Uom, CrId, Note) VALUES (@DprId, @ActivityCode, @LocationCode, @StepSeq, @Qty, @Uom, @CrId, @Note);`);
+      }
+      await transaction.commit();
+      const detail = await fetchDprDetail(pool, dprId);
+      res.status(201).json({ ok: true, data: detail, meta: { traceId: req.requestId, timestamp: new Date().toISOString() } });
+    } catch (error) {
+      await transaction.rollback().catch(() => {});
+      throw error;
+    }
+  } catch (err) {
+    const code = err && err.number === 2627 ? 409 : 500;
+    res.status(code).json({ ok: false, error: { code: code === 409 ? "DPR_DUPLICATE" : "DPR_INSERT_ERROR", message: err.message, traceId: req.requestId } });
+  }
+});
+
+app.get("/api/pex/projects/:code/dpr", async (req, res) => {
+  try {
+    const pool = await getPool(req);
+    const rq = pool.request().input("ProjectCode", sql.NVarChar(50), req.params.code);
+    const statusFilter = req.query.status ? String(req.query.status) : "";
+    if (statusFilter) rq.input("Status", sql.NVarChar(30), statusFilter);
+    const rs = await rq.query(
+      `SELECT TOP 200 CAST(d.Id AS NVARCHAR(30)) AS id, d.ProjectCode AS projectCode, d.ReportNo AS reportNo,
+       CONVERT(NVARCHAR(20), d.ReportDate, 23) AS reportDate, d.Shift AS shift, d.Weather AS weather,
+       d.Status AS status, CONVERT(NVARCHAR(30), d.CreatedAt, 126) AS createdAt,
+       (SELECT COUNT(*) FROM dbo.pex_progress_line l WHERE l.DprId = d.Id) AS lineCount
+       FROM dbo.pex_dpr d WHERE d.ProjectCode = @ProjectCode${statusFilter ? " AND d.Status = @Status" : ""}
+       ORDER BY d.ReportDate DESC, d.Id DESC`
+    );
+    res.json({ ok: true, data: rs.recordset, meta: { traceId: req.requestId, timestamp: new Date().toISOString() } });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: { code: "DPR_LIST_ERROR", message: err.message, traceId: req.requestId } });
+  }
+});
+
+app.get("/api/pex/projects/:code/dpr/conflicts", async (req, res) => {
+  try {
+    const pool = await getPool(req);
+    const rs = await pool.request().input("ProjectCode", sql.NVarChar(50), req.params.code).query(
+      `SELECT CAST(l.DprId AS NVARCHAR(30)) AS dprId, d.ReportNo AS reportNo, l.ActivityCode AS activityCode,
+       CONVERT(NVARCHAR(20), d.ReportDate, 23) AS reportDate, l.StepSeq AS stepSeq, l.Qty AS qty
+       FROM dbo.pex_progress_line l INNER JOIN dbo.pex_dpr d ON d.Id = l.DprId
+       WHERE d.ProjectCode = @ProjectCode AND d.Status <> N'rejected' AND l.LineStatus <> N'void'`
+    );
+    const groups = new Map();
+    for (const r of rs.recordset) {
+      const key = `${r.activityCode}|${r.reportDate}|${r.stepSeq}`;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push({ dprId: r.dprId, reportNo: r.reportNo, qty: Number(r.qty) });
+    }
+    const out = [];
+    for (const [key, lines] of groups) {
+      if (new Set(lines.map((x) => x.qty)).size > 1) {
+        const [activityCode, reportDate, stepSeq] = key.split("|");
+        out.push({ activityCode, reportDate, stepSeq: Number(stepSeq), lines });
+      }
+    }
+    res.json({ ok: true, data: out, meta: { traceId: req.requestId, timestamp: new Date().toISOString() } });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: { code: "DPR_CONFLICTS_ERROR", message: err.message, traceId: req.requestId } });
+  }
+});
+
+app.get("/api/pex/dpr/:id", async (req, res) => {
+  try {
+    const pool = await getPool(req);
+    // نام فعالیت/گام نیاز به ProjectCode دارد
+    const head = await pool.request().input("Id", sql.Int, Number(req.params.id)).query(
+      `SELECT ProjectCode FROM dbo.pex_dpr WHERE Id = @Id`
+    );
+    if (!head.recordset[0]) return res.status(404).json({ ok: false, error: { code: "NOT_FOUND", message: "DPR not found", traceId: req.requestId } });
+    const projectCode = head.recordset[0].ProjectCode;
+    const detail = await pool.request().input("Id", sql.Int, Number(req.params.id)).input("ProjectCode", sql.NVarChar(50), projectCode).query(
+      `SELECT CAST(Id AS NVARCHAR(30)) AS id, ProjectCode AS projectCode, ReportNo AS reportNo,
+       CONVERT(NVARCHAR(20), ReportDate, 23) AS reportDate, Shift AS shift, Weather AS weather,
+       Status AS status, CONVERT(NVARCHAR(30), CreatedAt, 126) AS createdAt
+       FROM dbo.pex_dpr WHERE Id = @Id`
+    );
+    const lines = await pool.request().input("Id", sql.Int, Number(req.params.id)).input("ProjectCode", sql.NVarChar(50), projectCode).query(
+      `SELECT CAST(l.Id AS NVARCHAR(30)) AS id, CAST(l.DprId AS NVARCHAR(30)) AS dprId,
+       l.ActivityCode AS activityCode, a.NameFa AS activityNameFa, l.LocationCode AS locationCode,
+       l.StepSeq AS stepSeq, s.NameFa AS stepNameFa, l.Qty AS qty, l.Uom AS uom,
+       l.LineStatus AS lineStatus, l.ApprovedQty AS approvedQty, l.Note AS note
+       FROM dbo.pex_progress_line l
+       LEFT JOIN dbo.pex_activity a ON a.Code = l.ActivityCode AND a.ProjectCode = @ProjectCode
+       LEFT JOIN dbo.pex_activity_step s ON s.ActivityId = a.Id AND s.StepSeq = l.StepSeq
+       WHERE l.DprId = @Id ORDER BY l.Id`
+    );
+    const events = await pool.request().input("Id", sql.Int, Number(req.params.id)).query(
+      `SELECT CAST(Id AS NVARCHAR(30)) AS id, ActionCode AS actionCode, FromStatus AS fromStatus,
+       ToStatus AS toStatus, ActorRole AS actorRole, Comment AS comment,
+       CONVERT(NVARCHAR(30), CreatedAt, 126) AS createdAt
+       FROM dbo.pex_dpr_event WHERE DprId = @Id ORDER BY Id DESC`
+    );
+    res.json({ ok: true, data: { ...detail.recordset[0], lines: lines.recordset.map((r) => ({ ...r, qty: Number(r.qty), approvedQty: r.approvedQty == null ? null : Number(r.approvedQty) })), events: events.recordset }, meta: { traceId: req.requestId, timestamp: new Date().toISOString() } });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: { code: "DPR_GET_ERROR", message: err.message, traceId: req.requestId } });
+  }
+});
+
+app.post("/api/pex/dpr/:id/actions", async (req, res) => {
+  const actionCode = String(req.body.actionCode || "");
+  const actorRole = String(req.body.actorRole || "");
+  try {
+    const pool = await getPool(req);
+    const cur = await pool.request().input("Id", sql.Int, Number(req.params.id)).query(
+      `SELECT Id, ProjectCode, Status FROM dbo.pex_dpr WHERE Id = @Id`
+    );
+    const dpr = cur.recordset[0];
+    if (!dpr) return res.status(404).json({ ok: false, error: { code: "NOT_FOUND", message: "DPR not found", traceId: req.requestId } });
+    const check = canDprTransition(dpr.Status, actionCode, actorRole);
+    if (!check.ok) {
+      const http = check.code === "ROLE_NOT_ALLOWED" ? 403 : check.code === "INVALID_TRANSITION" ? 409 : 400;
+      return res.status(http).json({ ok: false, error: { code: check.code, message: `${actionCode} not allowed`, traceId: req.requestId } });
+    }
+    const transaction = new sql.Transaction(pool);
+    await transaction.begin();
+    try {
+      await new sql.Request(transaction)
+        .input("DprId", sql.Int, dpr.Id)
+        .input("ActionCode", sql.NVarChar(40), actionCode)
+        .input("FromStatus", sql.NVarChar(30), dpr.Status)
+        .input("ToStatus", sql.NVarChar(30), check.to)
+        .input("ActorRole", sql.NVarChar(60), actorRole)
+        .input("AssigneeRole", sql.NVarChar(60), check.assignee)
+        .input("Comment", sql.NVarChar(2000), req.body.comment ? String(req.body.comment).slice(0, 2000) : null)
+        .query(`INSERT INTO dbo.pex_dpr_event (DprId, ActionCode, FromStatus, ToStatus, ActorRole, Comment) VALUES (@DprId, @ActionCode, @FromStatus, @ToStatus, @ActorRole, @Comment);
+                UPDATE dbo.pex_dpr SET Status = @ToStatus, AssigneeRole = @AssigneeRole, UpdatedAt = GETUTCDATE() WHERE Id = @DprId;`);
+      if (check.to === "approved") {
+        // فقط Approved وارد PMS می‌شود: خطوط ← گام‌ها ← درصد فعالیت
+        await new sql.Request(transaction)
+          .input("DprId", sql.Int, dpr.Id)
+          .input("Actor", sql.NVarChar(100), actorRole.slice(0, 100))
+          .query(`UPDATE dbo.pex_progress_line SET LineStatus = N'approved', ApprovedQty = Qty, ApprovedBy = @Actor, ApprovedAt = GETUTCDATE() WHERE DprId = @DprId AND LineStatus = N'draft';`);
+        await new sql.Request(transaction)
+          .input("DprId", sql.Int, dpr.Id)
+          .input("ProjectCode", sql.NVarChar(50), dpr.ProjectCode)
+          .query(`UPDATE s SET s.ApprovedQty = s.ApprovedQty + l.Qty
+                  FROM dbo.pex_activity_step s
+                  INNER JOIN dbo.pex_activity a ON a.Id = s.ActivityId
+                  INNER JOIN dbo.pex_progress_line l ON l.ActivityCode = a.Code AND l.StepSeq = s.StepSeq
+                  WHERE l.DprId = @DprId AND l.LineStatus = N'approved' AND a.ProjectCode = @ProjectCode;`);
+        await new sql.Request(transaction)
+          .input("DprId", sql.Int, dpr.Id)
+          .input("ProjectCode", sql.NVarChar(50), dpr.ProjectCode)
+          .query(`UPDATE a SET a.PctApproved = ISNULL((SELECT SUM(s.Weight * CASE WHEN s.TargetQty > 0 THEN CASE WHEN s.ApprovedQty > s.TargetQty THEN 1 ELSE s.ApprovedQty / s.TargetQty END ELSE 0 END) FROM dbo.pex_activity_step s WHERE s.ActivityId = a.Id), 0)
+                  FROM dbo.pex_activity a
+                  WHERE a.ProjectCode = @ProjectCode AND EXISTS (SELECT 1 FROM dbo.pex_progress_line l WHERE l.DprId = @DprId AND l.ActivityCode = a.Code);`);
+      }
+      await transaction.commit();
+      await writeAudit(pool, req, "PEX_DPR_ACTION", { entityName: "pex_dpr", entityId: req.params.id, actionCode, actorRole, toStatus: check.to });
+      const detail = await fetchDprDetail(pool, dpr.Id);
+      res.json({ ok: true, data: detail, meta: { traceId: req.requestId, timestamp: new Date().toISOString() } });
+    } catch (error) {
+      await transaction.rollback().catch(() => {});
+      throw error;
+    }
+  } catch (err) {
+    res.status(500).json({ ok: false, error: { code: "DPR_ACTION_ERROR", message: err.message, traceId: req.requestId } });
   }
 });
 
