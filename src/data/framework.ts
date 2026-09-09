@@ -791,6 +791,164 @@ export const domains: Domain[] = [
     ],
   },
   {
+    id: "d8",
+    icon: "🔬",
+    accent: "#34D399",
+    title: { fa: "مدیریت کیفیت و بازرسی", en: "Quality & Inspection Management" },
+    processes: [
+      {
+        id: "d8-p1",
+        title: { fa: "برنامه‌ریزی کیفیت و ITP", en: "Quality Planning & ITP" },
+        subs: [
+          { id: "d8-p1-s1", title: { fa: "برنامه کیفیت و نقاط بازرسی", en: "Quality Plan & Inspection Points" }, activity: { fa: "تدوین QMP و ITP با نقاط توقف و شاهد", en: "Author QMP and ITP with hold/witness points" }, source: "QMP, Specification, Code", sql: ["Quality_Plan", "ITP_Master", "ITP_Point"], output: "Approved ITP", connectsTo: "Engineering, Construction", ai: "AI ITP Generator" },
+        ],
+      },
+      {
+        id: "d8-p2",
+        title: { fa: "بازرسی و آزمون", en: "Inspection & Testing" },
+        subs: [
+          { id: "d8-p2-s1", title: { fa: "درخواست بازرسی و نتیجه آزمون", en: "Inspection Request & Test Result" }, activity: { fa: "صدور IR، اجرای بازرسی و ثبت نتیجه", en: "Raise IR, inspect and record result" }, source: "Site, Lab, TPI", sql: ["Inspection_Request", "Inspection_Result", "Test_Report"], output: "Inspection Record", connectsTo: "Construction, Handover", ai: "AI Defect Classifier" },
+        ],
+      },
+      {
+        id: "d8-p3",
+        title: { fa: "عدم انطباق و اقدام اصلاحی", en: "Non-Conformance & CAPA" },
+        subs: [
+          { id: "d8-p3-s1", title: { fa: "ثبت NCR و ریشه‌یابی", en: "NCR Registration & Root Cause" }, activity: { fa: "ثبت عدم انطباق، تعیین تکلیف و اقدام اصلاحی", en: "Log NCR, disposition and corrective action" }, source: "Inspection, Audit, Site", sql: ["NCR_Register", "CAPA_Action"], output: "NCR & CAPA Report", connectsTo: "Governance, Claims", ai: "AI Root Cause Advisor" },
+        ],
+      },
+      {
+        id: "d8-p4",
+        title: { fa: "کنترل مواد و گواهی‌ها", en: "Material Control & Certificates" },
+        subs: [
+          { id: "d8-p4-s1", title: { fa: "گواهی مواد و ردیابی ذوب", en: "Material Certificate & Heat Traceability" }, activity: { fa: "کنترل MTC، انطباق گرید و ردیابی شماره ذوب", en: "Verify MTC, grade match and heat traceability" }, source: "Vendor, Lab, Warehouse", sql: ["Material_Certificate", "Heat_Trace_Link"], output: "Material Release Note", connectsTo: "Procurement, Warehouse", ai: "AI Certificate Reader" },
+        ],
+      },
+      {
+        id: "d8-p5",
+        title: { fa: "ممیزی کیفیت و انطباق", en: "Quality Audit & Compliance" },
+        subs: [
+          { id: "d8-p5-s1", title: { fa: "ممیزی داخلی و انطباق ISO 9001", en: "Internal Audit & ISO 9001 Compliance" }, activity: { fa: "برنامه ممیزی، یافته‌ها و امتیاز انطباق", en: "Audit program, findings and compliance score" }, source: "ISO 9001, Procedures", sql: ["Quality_Audit", "Audit_Finding"], output: "Audit Report", connectsTo: "Governance, PMO", ai: "AI Compliance Analyzer" },
+        ],
+      },
+      {
+        id: "d8-p6",
+        title: { fa: "تحویل، پانچ و راه‌اندازی", en: "Handover, Punch & Commissioning" },
+        subs: [
+          { id: "d8-p6-s1", title: { fa: "پانچ‌لیست و تحویل مکانیکی", en: "Punch List & Mechanical Completion" }, activity: { fa: "پانچ کلاس A/B، داکیومنت کیفیت و دروازه MC", en: "Class A/B punch, quality dossier and MC gate" }, source: "Site, Commissioning", sql: ["Punch_List", "Completion_Certificate", "Quality_Dossier"], output: "MC / RFC Certificate", connectsTo: "Client, Operations", ai: "AI Punch Prioritizer" },
+        ],
+      },
+    ],
+  },
+  {
+    /* ماژول منابع انسانی — پس از HSE و پیش از مدیریت سامانه (ADR-13 بازنگری‌شده).
+       کد دامنه در src/services/workforce.ts → HRM_DOMAIN_ID متمرکز است (ADR-15). */
+    id: "d10",
+    icon: "👷",
+    accent: "#F59E0B",
+    title: { fa: "مدیریت منابع انسانی و بهره‌وری نیروی کار", en: "Human Resources & Workforce Productivity" },
+    processes: [
+      {
+        id: "d10-p1",
+        title: { fa: "برنامه‌ریزی نیرو، OBS و تجهیز", en: "Workforce Planning, OBS & Mobilization" },
+        subs: [
+          { id: "d10-p1-s1", title: { fa: "ساختار شکست سازمانی و ماتریس مسئولیت", en: "OBS & Responsibility Matrix" }, activity: { fa: "تعریف سازمان شش‌سطحی و پیوند آن به WBS", en: "Define six-level org and link to WBS" }, source: "PMO, Site Org Chart", sql: ["hrm_obs_node", "hrm_crew"], output: "OBS & RAM Report", connectsTo: "Planning, Governance", ai: "AI Span-of-Control Advisor" },
+          { id: "d10-p1-s2", title: { fa: "برنامه نیرو و هیستوگرام", en: "Manpower Plan & Histogram" }, activity: { fa: "تبدیل نفر-ساعت برنامه به نفرات دوره‌ای و ترازسازی", en: "Convert planned man-hours to periodic headcount and level" }, source: "Primavera, Excel", sql: ["hrm_manpower_plan", "hrm_manpower_plan_line"], output: "Manpower Histogram", connectsTo: "Planning, Cost", ai: "AI Resource Leveling" },
+          { id: "d10-p1-s3", title: { fa: "درخواست تجهیز و تخلیه نیرو", en: "Mobilization & Demobilization" }, activity: { fa: "گردش درخواست نیرو با پنج گیت انطباق", en: "Request workflow with five compliance gates" }, source: "Site Request", sql: ["hrm_mobilization_request"], output: "Mobilization Status", connectsTo: "HSE, Procurement", ai: "AI Demand Forecast" },
+        ],
+      },
+      {
+        id: "d10-p2",
+        title: { fa: "تایم‌شیت و حضور و غیاب", en: "Timesheet & Attendance" },
+        subs: [
+          { id: "d10-p2-s1", title: { fa: "ثبت کارکرد و تفکیک ساعت", en: "Timesheet Entry & Hours Split" }, activity: { fa: "ثبت میدانی ساعت و تفکیک عادی، اضافه‌کاری، شب و تعطیل", en: "Field capture and split into normal, overtime, night and holiday" }, source: "Mobile PWA, Excel", sql: ["hrm_timesheet_header", "hrm_timesheet_entry", "hrm_leave_log"], output: "Approved Timesheet", connectsTo: "Cost, Planning", ai: "AI Anomaly Detection" },
+        ],
+      },
+      {
+        id: "d10-p3",
+        title: { fa: "بهره‌وری و عملکرد نیرو", en: "Workforce Productivity & Performance" },
+        subs: [
+          { id: "d10-p3-s1", title: { fa: "شاخص بهره‌وری و ریشه‌یابی افت", en: "Productivity Index & Root Cause" }, activity: { fa: "محاسبه شاخص بهره‌وری از پیشرفت تأییدشده و ریشه‌یابی انحراف", en: "Compute PI from approved progress and analyse variance" }, source: "Timesheet, Progress", sql: ["hrm_productivity_log", "hrm_rca_reason"], output: "Productivity Report", connectsTo: "Planning, Claims", ai: "AI Productivity Forecast" },
+        ],
+      },
+      {
+        id: "d10-p4",
+        title: { fa: "اکیپ و نیروی پیمانکاری", en: "Crews & Subcontracted Labor" },
+        subs: [
+          { id: "d10-p4-s1", title: { fa: "مدیریت اکیپ و صورت‌کارکرد پیمانکار", en: "Crew Management & Subcontractor Certificates" }, activity: { fa: "ترکیب اکیپ، حضور دست‌مزدی و کنترل صورت‌کارکرد", en: "Crew mix, daily-wage attendance and payment certificate control" }, source: "Site, Gate Pass", sql: ["hrm_crew", "hrm_sub_contract", "hrm_sub_attendance"], output: "Subcontractor Payment Certificate", connectsTo: "Cost, Contracts", ai: "AI Overbilling Detection" },
+        ],
+      },
+      {
+        id: "d10-p5",
+        title: { fa: "پذیرش، احکام و انطباق", en: "Onboarding, Assignment & Compliance" },
+        subs: [
+          { id: "d10-p5-s1", title: { fa: "پرونده پرسنلی و پایش مدارک", en: "Personnel File & Document Watch" }, activity: { fa: "پذیرش نیرو، صدور حکم و پایش انقضای مدارک و صلاحیت", en: "Onboard, assign and monitor document and competency expiry" }, source: "HR, HSE, Medical", sql: ["hrm_person", "hrm_assignment", "hrm_document", "hrm_skill_matrix"], output: "Compliance Dashboard", connectsTo: "HSE, Governance", ai: "AI Expiry Predictor" },
+        ],
+      },
+      {
+        id: "d10-p6",
+        title: { fa: "تحلیل، هیستوگرام و گزارش", en: "Analytics, Histogram & Reporting" },
+        subs: [
+          { id: "d10-p6-s1", title: { fa: "شاخص‌های کلیدی و هشدار زودهنگام", en: "KPIs & Early Warning" }, activity: { fa: "شش شاخص کلیدی نیرو و چهار قاعده هشدار زودهنگام", en: "Six workforce KPIs and four early-warning rules" }, source: "Timesheet, Plan", sql: ["hrm_metric_snapshot", "hrm_alert_rule", "hrm_alert"], output: "Workforce KPI Report", connectsTo: "Dashboard, Cost", ai: "AI Trend Analysis" },
+        ],
+      },
+    ],
+  },
+  {
+    /* ماژول ارتباطات و دانش — مالک گردش مکاتبات، جلسات، ذی‌نفعان و درس‌آموخته.
+       مالک فایل مدرک همچنان d1 است و ماتریس اختیار همچنان d6. */
+    id: "d11",
+    icon: "📡",
+    accent: "#A78BFA",
+    title: { fa: "مدیریت ارتباطات و دانش", en: "Communications & Knowledge Management" },
+    processes: [
+      {
+        id: "d11-p1",
+        title: { fa: "مکاتبات و اعلان قراردادی", en: "Correspondence & Contractual Notices" },
+        subs: [
+          { id: "d11-p1-s1", title: { fa: "دفتر مکاتبات و مهلت پاسخ", en: "Correspondence Register & Response Deadline" }, activity: { fa: "ثبت نامه وارده و صادره با مهلت پاسخ بر پایه روز کاری", en: "Register letters with working-day response deadlines" }, source: "Outlook, Secretariat, Upload", sql: ["ckm_letter", "ckm_letter_link"], output: "Correspondence & Overdue Report", connectsTo: "Documents, Claims", ai: "AI Letter Summarization" },
+          { id: "d11-p1-s2", title: { fa: "اعلان قراردادی و پایش Time-Bar", en: "Contractual Notice & Time-Bar Watch" }, activity: { fa: "پایش مهلت اعلان ادعا و هشدار پیش از سقوط حق", en: "Track notice windows and warn before the right lapses" }, source: "Contract, Claim Register", sql: ["ckm_letter", "ckm_notice_watch"], output: "Time-Bar Status", connectsTo: "Risk & Claims", ai: "AI Notice Drafter" },
+        ],
+      },
+      {
+        id: "d11-p2",
+        title: { fa: "جلسات و مصوبات", en: "Meetings & Action Register" },
+        subs: [
+          { id: "d11-p2-s1", title: { fa: "صورت‌جلسه و پیگیری مصوبات", en: "Minutes & Action Follow-up" }, activity: { fa: "ثبت صورت‌جلسه، تصویب، توزیع و پیگیری مصوبات دارای مالک و موعد", en: "Record, approve, distribute minutes and track owned actions" }, source: "Meeting, User Entry", sql: ["ckm_meeting", "ckm_action_item"], output: "Minutes & Action Status", connectsTo: "Governance, Planning", ai: "AI Minutes Generator" },
+        ],
+      },
+      {
+        id: "d11-p3",
+        title: { fa: "ذی‌نفعان و برنامه ارتباطات", en: "Stakeholders & Communication Plan" },
+        subs: [
+          { id: "d11-p3-s1", title: { fa: "ثبت ذی‌نفعان و شبکه قدرت-علاقه", en: "Stakeholder Register & Power-Interest Grid" }, activity: { fa: "تحلیل قدرت و علاقه و سنجش شکاف سطح تعامل", en: "Assess power, interest and engagement gap" }, source: "PMO, Interviews", sql: ["ckm_stakeholder", "ckm_engagement_log"], output: "Stakeholder Engagement Report", connectsTo: "Governance", ai: "AI Engagement Advisor" },
+          { id: "d11-p3-s2", title: { fa: "ماتریس ارتباطات و ابلاغ", en: "Communication & Distribution Matrix" }, activity: { fa: "تعیین کانال، تناوب و مالک ارتباط با هر ذی‌نفع", en: "Define channel, cadence and owner per stakeholder" }, source: "Comms Plan", sql: ["ckm_comm_matrix"], output: "Communication Matrix", connectsTo: "All Modules", ai: "AI Channel Optimizer" },
+        ],
+      },
+      {
+        id: "d11-p4",
+        title: { fa: "اطلاع‌رسانی و تشدید", en: "Notification & Escalation" },
+        subs: [
+          { id: "d11-p4-s1", title: { fa: "قواعد اعلان و سطوح تشدید", en: "Notification Rules & Escalation Levels" }, activity: { fa: "تعریف رویداد، کانال، مخاطب و زمان تشدید", en: "Define event, channel, audience and escalation timing" }, source: "System Events", sql: ["ckm_notification_rule", "ckm_notification_log"], output: "Escalation Log", connectsTo: "Alerts, Governance", ai: "AI Alert Deduplication" },
+        ],
+      },
+      {
+        id: "d11-p5",
+        title: { fa: "دانش و درس‌آموخته", en: "Knowledge & Lessons Learned" },
+        subs: [
+          { id: "d11-p5-s1", title: { fa: "بانک درس‌آموخته و استفاده مجدد", en: "Lessons Register & Reuse Tracking" }, activity: { fa: "ثبت درس با منشأ الزامی، تأیید شورای دانش و ردیابی استفاده مجدد", en: "Capture lessons with mandatory source, validate and track reuse" }, source: "NCR, Claim, Incident, Meeting", sql: ["ckm_lesson", "ckm_lesson_reuse"], output: "Knowledge Value Report", connectsTo: "Quality, Risk, HSE", ai: "AI Knowledge Recommender" },
+        ],
+      },
+      {
+        id: "d11-p6",
+        title: { fa: "تحلیل و گزارش ارتباطات", en: "Communication Analytics & Reporting" },
+        subs: [
+          { id: "d11-p6-s1", title: { fa: "شاخص‌های ارتباطی و هشدار زودهنگام", en: "Communication KPIs & Early Warning" }, activity: { fa: "زمان پاسخ، نرخ بستن مصوبه، پوشش ارتباطات و نرخ استفاده از دانش", en: "Response time, action closure, comms coverage and knowledge utilization" }, source: "CKM Data", sql: ["ckm_metric_snapshot", "ckm_alert"], output: "Communication KPI Report", connectsTo: "Dashboard", ai: "AI Trend Analysis" },
+        ],
+      },
+    ],
+  },
+  {
     id: "d7",
     icon: "⚙️",
     accent: "#38BDF8",
@@ -897,6 +1055,7 @@ export const domainExportFormats: Record<string, FormatKind[]> = {
   d4: ["excel", "word", "pdf", "csv"],                     // Risk / Claims
   d5: ["excel", "pdf", "csv", "xml"],                      // Cost / Procurement
   d6: ["pdf", "word", "excel", "json"],                    // Governance
+  d8: ["excel", "pdf", "word", "csv"],                     // Quality & Inspection
 };
 
 /* Legacy module shape — derived from domains for backward compatibility */

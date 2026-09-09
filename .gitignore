@@ -3,6 +3,20 @@ dist/
 test-results/
 playwright-report/
 .env
+server/data/
+
+# باندل‌های تولیدی esbuild برای تست‌های Node (بازتولید: npm test)
+server/finLogic.js
+server/qmsLogic.js
+server/pexLogic.js
+server/pexModelBundle.js
+server/hrmLogic.js
+server/ckmLogic.js
+server/rptLogic.js
+server/rbacLogic.js
+server/sqlLogic.js
+server/itgLogic.js
+
 # جلوگیری از تکرار: بقایای پوشهٔ .git که اشتباهاً کامیت شده بود
 /[0-9a-f][0-9a-f]/
 /HEAD

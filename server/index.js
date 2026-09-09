@@ -11,14 +11,131 @@ import crypto from "node:crypto";
 import XLSX from "xlsx";
 import { PDFParse } from "pdf-parse";
 import mammoth from "mammoth";
-import jalaali from "jalaali-js";
+import * as jalaaliNs from "jalaali-js";
 import nodemailer from "nodemailer";
 import { createWorker } from "tesseract.js";
 import { applyGuardian } from "./rccLogic.js";
+import {
+  appendTrail,
+  auditCloseBlocked,
+  authorityFor,
+  complianceBand,
+  complianceScore,
+  connectorHealth,
+  decisionGate,
+  verifyTrail,
+  workflowTick,
+} from "./govLogic.js";
+import {
+  canProceed,
+  capaRequired,
+  certificationRisk,
+  complianceScore as qmsComplianceScore,
+  costOfQuality,
+  dispositionAllowed,
+  dossierCompleteness,
+  firstPassYield,
+  irNoticeCheck,
+  irOutcome,
+  itpBlocking,
+  itpCoverage,
+  mechanicalCompletionGate,
+  ncrClosureRate,
+  ncrOverdue,
+  ncrSeverity,
+  pareto,
+  punchSummary,
+  qmsEws,
+  signRecord,
+  verifyCertificate,
+} from "./qmsLogic.js";
+import { buildPexModel } from "./pexModelBundle.js";
+import { activityProgress, canPostProgress, validateRoc } from "./pexLogic.js";
+import { createPersistence } from "./persistence/driver.mjs";
+import { MIGRATIONS, SCHEMA, allColumns, checksumOf, generateDdl, migrationPlan, schemaStats, tableDef } from "./sqlLogic.js";
+import {
+  ACTIVITY_COMPARE_FIELDS,
+  CONNECTORS,
+  INTEGRATION_VERSION,
+  TEMPLATE_CATALOG,
+  diffRows,
+  extractXer,
+  generateOpenApi,
+  integrationStats,
+  parseImport,
+  parseXer as parseXerTables,
+  templateByCode,
+  templateCsv,
+  templateGuide,
+  toYaml,
+} from "./itgLogic.js";
+
+/** jalaali-js فقط CJS دارد؛ interop امن برای ESM */
+const jalaali = (jalaaliNs.default ?? jalaaliNs);
 
 const app = express();
 const PORT = Number(process.env.PORT || 4000);
 const startedAt = Date.now();
+
+/* ─────────────── لایه ماندگاری (sql-v1) ───────────────
+ * اگر SQL Server در دسترس باشد از آن استفاده می‌شود، وگرنه درایور فایلی.
+ * تنزل آرام است تا نبود پایگاه داده کل API را از کار نیندازد. */
+let persistence = null;
+const persistenceReady = createPersistence({
+  getPool: async () => (process.env.SQL_SERVER ? getPool({ headers: {} }) : null),
+  sqlModule: sql,
+  dataDir: path.resolve(process.cwd(), process.env.DATA_DIR || "server/data"),
+  preferSql: process.env.PERSIST_DRIVER !== "json",
+})
+  .then((p) => {
+    persistence = p;
+    return p;
+  })
+  .catch((err) => {
+    console.error("[persistence] bootstrap failed:", err.message);
+    return null;
+  });
+
+async function repo() {
+  if (!persistence) await persistenceReady;
+  if (!persistence) throw Object.assign(new Error("لایه ماندگاری در دسترس نیست"), { code: "PERSISTENCE_UNAVAILABLE" });
+  return persistence.repo;
+}
+
+/** جدول‌هایی که از راه REST عمومی قابل دسترسی‌اند — بقیه فقط از مسیر اختصاصی خودشان. */
+const PUBLIC_TABLES = new Set([
+  "Industry", "Project", "Document", "Transmittal", "WbsNode", "Activity", "ActivityRelation",
+  "Baseline", "Period", "ProgressEntry", "EvmSnapshot", "KpiSnapshot", "Risk", "ChangeRequest",
+  "Claim", "CostAccount", "PaymentCertificate", "Ncr", "InspectionRecord", "WorkforceMember",
+  "Timesheet", "Correspondence", "MeetingMinute", "LessonLearned", "ReportIssue",
+]);
+
+/** ?where=Col:op:value&order=Col:desc&limit=&offset= → SelectSpec امن */
+function parseSelectSpec(table, query) {
+  const known = new Set([...table.columns, ...[{ name: "CreatedAt" }, { name: "UpdatedAt" }, { name: "RowVersion" }]].map((c) => c.name));
+  const where = [];
+  const raw = query.where ? (Array.isArray(query.where) ? query.where : [query.where]) : [];
+  for (const item of raw) {
+    const [column, op = "eq", ...rest] = String(item).split(":");
+    if (!known.has(column)) throw Object.assign(new Error(`ستون ناشناخته: ${column}`), { code: "UNKNOWN_COLUMN" });
+    const value = rest.join(":");
+    if (op === "in") where.push({ column, op, value: value.split(",") });
+    else if (op === "isnull" || op === "notnull") where.push({ column, op });
+    else where.push({ column, op, value: /^-?\d+(\.\d+)?$/.test(value) ? Number(value) : value === "true" ? true : value === "false" ? false : value });
+  }
+  const orderBy = [];
+  if (query.order) {
+    const [column, dir = "asc"] = String(query.order).split(":");
+    if (!known.has(column)) throw Object.assign(new Error(`ستون ناشناخته: ${column}`), { code: "UNKNOWN_COLUMN" });
+    orderBy.push({ column, dir: dir === "desc" ? "desc" : "asc" });
+  }
+  return {
+    where,
+    orderBy,
+    limit: Math.min(1000, Math.max(1, Number(query.limit) || 200)),
+    offset: Math.max(0, Number(query.offset) || 0),
+  };
+}
 const storageRoot = path.resolve(process.cwd(), process.env.FILE_STORAGE_PATH || "server/storage");
 const maxFileBytes = Number(process.env.MAX_FILE_MB || 25) * 1024 * 1024;
 const acceptedMimeTypes = new Set([
@@ -126,36 +243,19 @@ const normaliseActivity = (row, index) => {
   return { code, name, startDate, finishDate, durationDays, progress, isCritical, wbsCode };
 };
 
-function parseXer(content) {
-  const lines = content.split(/\r?\n/);
-  const tableRows = [];
-  let columns = [];
-  let inTask = false;
-  for (const line of lines) {
-    if (line.startsWith("%T")) {
-      inTask = line.includes("TASK");
-      columns = [];
-      continue;
-    }
-    if (!inTask) continue;
-    if (line.startsWith("%F")) {
-      columns = line.slice(2).split("\t").map((col) => col.trim());
-      continue;
-    }
-    if (line.startsWith("%R") && columns.length) {
-      const values = line.slice(2).split("\t");
-      const row = Object.fromEntries(columns.map((col, i) => [col, values[i] ?? ""]));
-      tableRows.push({
-        activity_id: row.task_code || row.task_id || row.clndr_id,
-        task_name: row.task_name || row.task_code || "Primavera Activity",
-        start: row.early_start_date || row.target_start_date || row.act_start_date,
-        finish: row.early_end_date || row.target_end_date || row.act_end_date,
-        duration: row.target_drtn_hr_cnt ? Math.round(Number(row.target_drtn_hr_cnt) / 8) : undefined,
-        critical: row.driving_path_flag === "Y" || row.float_path === "1",
-      });
-    }
-  }
-  return tableRows.map(normaliseActivity);
+/** تجزیه XER با موتور itg-v1 (چندجدولی: TASK + TASKPRED + PROJWBS + CALENDAR). */
+function parseXer(content, projectId = "import") {
+  const extracted = extractXer(parseXerTables(content), projectId, jalaali.toGregorian);
+  return extracted.activities.map((a) => ({
+    code: a.Code,
+    name: a.NameFa,
+    startDate: a.ActualStart ?? a.PlannedStart,
+    finishDate: a.ActualFinish ?? a.PlannedFinish,
+    durationDays: a.DurationDays,
+    progress: a.PhysicalPct ?? 0,
+    isCritical: Boolean(a.IsCritical),
+    wbsCode: extracted.wbs.find((w) => w.Id === a.WbsId)?.Code ?? "",
+  }));
 }
 
 function parseSpreadsheet(filePath, ext) {
@@ -1294,6 +1394,793 @@ if (guardianMs > 0) {
   }, guardianMs).unref();
 }
 
+/* ──────────────────────── GOV governance (d6) — in-memory; SQL optional ──────────────────────── */
+const isoIn = (days) => new Date(Date.now() + days * 86400000).toISOString().slice(0, 10);
+
+const govTasks = [
+  { id: "wf1", code: "WF-MDR-084", processFa: "تأیید نقشه شاپ فونداسیون", assignee: "مهندس ناظر مقیم", dueAt: isoIn(6) },
+  { id: "wf2", code: "WF-CR-012", processFa: "درخواست تغییر قیمت الحاقیه", assignee: "مدیر پروژه کارفرما", dueAt: isoIn(-5) },
+  { id: "wf3", code: "WF-CLM-007", processFa: "دروازه ادعا (Notice / Time-Bar)", assignee: "کمیته ادعا", dueAt: isoIn(1) },
+];
+
+const govConnectors = [
+  { id: "in1", system: "Primavera P6", owningDomain: "d2", direction: "pull", lastSync: new Date(Date.now() - 4 * 3600000).toISOString().slice(0, 16).replace("T", " "), slaHours: 24, records: 4820 },
+  { id: "in2", system: "ERP / SAP", owningDomain: "d5", direction: "pull", lastSync: new Date(Date.now() - 6 * 3600000).toISOString().slice(0, 16).replace("T", " "), slaHours: 24, records: 1290 },
+  { id: "in3", system: "EDMS", owningDomain: "d1", direction: "two_way", lastSync: new Date(Date.now() - 30 * 3600000).toISOString().slice(0, 16).replace("T", " "), slaHours: 24, records: 7315 },
+  { id: "in4", system: "Power BI Gateway", owningDomain: "d3", direction: "push", lastSync: new Date(Date.now() - 8 * 86400000).toISOString().slice(0, 16).replace("T", " "), slaHours: 24, records: 0 },
+];
+
+const govFindings = [
+  { id: "au1", code: "AUD-PMBOK-01", itemFa: "انطباق فرآیند کنترل تغییرات با PMBOK", standard: "PMBOK 7th Ed.", weight: 2, compliance: 92, severity: "minor", capaId: null },
+  { id: "au2", code: "AUD-HSE-04", itemFa: "ممیزی چک‌لیست‌های HSE کارگاه", standard: "ISO 45001", weight: 1, compliance: 85, severity: "major", capaId: "CAPA-118" },
+  { id: "au3", code: "AUD-DOC-11", itemFa: "انطباق شماره‌گذاری و گردش مدارک", standard: "ISO 9001 / EDMS", weight: 1, compliance: 68, severity: "critical", capaId: null },
+];
+
+const govDecisions = [
+  { id: "de1", code: "DEC-2026-041", subjectFa: "تخصیص ذخیره احتیاطی به بسته سیویل", authority: "PM", evidenceRef: "PMA:EVM#1405-06", cost: 180000, days: 10, dueAt: isoIn(12), state: "open" },
+  { id: "de2", code: "DEC-2026-038", subjectFa: "تمدید زمان ۱۴ روزه ناشی از تأخیر کارفرما", authority: "PMO", evidenceRef: "RCC:CLM-007", cost: 0, days: 14, dueAt: isoIn(-3), state: "open" },
+  { id: "de3", code: "DEC-2026-035", subjectFa: "تأیید بازنگری برنامه پایه (Rebaseline)", authority: "STEERING", evidenceRef: "PEX:BL#3", cost: 0, days: 45, dueAt: isoIn(-15), rewritesBaseline: true, crId: "CR-2026-19", state: "approved" },
+];
+
+let govTrail = [];
+
+const govOk = (req, data, meta = {}) =>
+  ({ ok: true, data, meta: { traceId: req.requestId, timestamp: new Date().toISOString(), ...meta } });
+
+app.get("/api/gov/workflow-tasks", (req, res) => {
+  const events = workflowTick(govTasks, new Date());
+  const data = govTasks.map((t) => {
+    const e = events.find((x) => x.taskId === t.id);
+    return { ...t, daysLeft: e?.daysLeft ?? null, slaLevel: e?.level ?? "ok", escalation: e?.escalation ?? "L0", action: e?.action ?? "none" };
+  });
+  res.json(govOk(req, data, { writesOwnedFigures: false }));
+});
+
+app.post("/api/gov/workflow-tasks/:taskId/approve", (req, res) => {
+  const task = govTasks.find((t) => t.id === req.params.taskId);
+  if (!task) return res.status(404).json({ ok: false, error: { code: "NOT_FOUND", message: "task", traceId: req.requestId } });
+  if (task.closedAt) return res.json(govOk(req, { idempotent: true, entry: govTrail[govTrail.length - 1] }));
+  task.closedAt = new Date().toISOString().slice(0, 10);
+  govTrail = appendTrail(govTrail, `APPROVE:${task.id}:${req.body?.actor || "system"}`);
+  res.json(govOk(req, { entry: govTrail[govTrail.length - 1] }));
+});
+
+app.get("/api/gov/connectors", (req, res) => {
+  res.json(govOk(req, govConnectors.map((c) => ({ ...c, health: connectorHealth(c.lastSync, c.slaHours) }))));
+});
+
+app.get("/api/gov/audit/findings", (req, res) => {
+  const score = complianceScore(govFindings);
+  res.json(govOk(req, { score, band: complianceBand(score), closeBlocked: auditCloseBlocked(govFindings), items: govFindings }));
+});
+
+app.post("/api/gov/audit/plans/:planId/close", (req, res) => {
+  if (auditCloseBlocked(govFindings)) {
+    return res.status(409).json({ ok: false, error: { code: "GOV-409-CAPA", message: "major/critical finding without CAPA", traceId: req.requestId } });
+  }
+  res.json(govOk(req, { planId: req.params.planId, state: "closed" }));
+});
+
+app.get("/api/gov/decisions", (req, res) => {
+  res.json(govOk(req, govDecisions.map((d) => ({ ...d, requiredAuthority: authorityFor(d.cost || 0, d.days || 0), gate: decisionGate(d) }))));
+});
+
+app.post("/api/gov/decisions", (req, res) => {
+  const d = req.body || {};
+  const gate = decisionGate(d);
+  if (!gate.ok) {
+    const code = gate.reasons.includes("authority_insufficient")
+      ? "GOV-403-DOA"
+      : gate.reasons.includes("baseline_rewrite_without_cr")
+      ? "GOV-409-BASELINE"
+      : "GOV-409-EVIDENCE";
+    const status = code === "GOV-403-DOA" ? 403 : 409;
+    return res.status(status).json({ ok: false, error: { code, message: "decision gate rejected", reasons: gate.reasons, traceId: req.requestId } });
+  }
+  const row = { ...d, id: d.id || `de${govDecisions.length + 1}`, state: "open", requiredAuthority: authorityFor(d.cost || 0, d.days || 0) };
+  govDecisions.push(row);
+  govTrail = appendTrail(govTrail, `DECISION:${row.code || row.id}`);
+  res.status(201).json(govOk(req, row));
+});
+
+/* ──────────────────────── QMS quality & inspection (d8) — in-memory; SQL optional ──────────────────────── */
+
+const qmsItp = [
+  { id: "ITP-01-H", activityId: "A-1100", type: "H", party: "consultant", titleFa: "تأیید آرماتوربندی پیش از بتن‌ریزی", signedAt: isoIn(-6) },
+  { id: "ITP-02-W", activityId: "A-1200", type: "W", party: "client", titleFa: "شاهد آزمون اسلامپ بتن" },
+  { id: "ITP-03-H", activityId: "A-1300", type: "H", party: "tpi", titleFa: "توقف پیش از پوشش جوش خط ۱۴ اینچ" },
+  { id: "ITP-04-R", activityId: "A-1400", type: "R", party: "consultant", titleFa: "بازبینی دستورالعمل جوشکاری WPS" },
+  { id: "ITP-05-H", activityId: "A-1500", type: "H", party: "client", titleFa: "تأیید تست هیدرواستاتیک", waivedBy: "مدیر کیفیت" },
+  { id: "ITP-06-M", activityId: "A-1100", type: "M", party: "contractor", titleFa: "پایش دمای عمل‌آوری بتن" },
+];
+const qmsActivities = ["A-1100", "A-1200", "A-1300", "A-1400", "A-1500", "A-1600"];
+
+const qmsIrs = [
+  { id: "IR-4410", titleFa: "بازرسی ابعادی اسپول SP-14", requestedAt: "2026-09-01T08:00:00Z", inspectionAt: "2026-09-04T08:00:00Z", noticeHours: 48, defects: [] },
+  { id: "IR-4411", titleFa: "بازرسی چشمی جوش W-221", requestedAt: "2026-09-03T09:00:00Z", inspectionAt: "2026-09-04T09:00:00Z", noticeHours: 48, defects: [{ severity: "minor" }] },
+  { id: "IR-4412", titleFa: "آزمون رادیوگرافی خط ۱۴ اینچ", requestedAt: "2026-09-02T07:00:00Z", inspectionAt: "2026-09-06T07:00:00Z", noticeHours: 48, defects: [{ severity: "critical" }] },
+  { id: "IR-4413", titleFa: "بازرسی رنگ و پوشش مخزن T-02", requestedAt: "2026-09-04T10:00:00Z", inspectionAt: "2026-09-07T10:00:00Z", noticeHours: 48, defects: [{ severity: "major" }, { severity: "minor" }] },
+];
+
+const qmsNcrs = [
+  { id: "NCR-2026-018", severity: "critical", openedAt: isoIn(-14), titleFa: "ترک در جوش محیطی خط ۱۴ اینچ", cause: "جوشکاری", disposition: "rework", recurrence: 4, capaId: "CAPA-07" },
+  { id: "NCR-2026-021", severity: "major", openedAt: isoIn(-9), closedAt: isoIn(-3), titleFa: "انحراف ابعادی صفحه کف ستون", cause: "ابعاد", disposition: "repair", concessionBy: "مهندس ارشد سازه", recurrence: 2 },
+  { id: "NCR-2026-024", severity: "minor", openedAt: isoIn(-7), titleFa: "ضخامت رنگ کمتر از مشخصات", cause: "رنگ", disposition: "rework", recurrence: 1 },
+  { id: "NCR-2026-025", severity: "major", openedAt: isoIn(-5), titleFa: "نبود گواهی مواد برای شیر ۸ اینچ", cause: "مستندات", disposition: "use_as_is", recurrence: 1 },
+];
+
+const qmsCerts = [
+  { itemFa: "لوله بدون درز ۱۴ اینچ", heatNo: "H-99312", certType: "3.1", issuedAt: "2026-05-11", declaredGrade: "A106-B", requiredGrade: "A106-B", labVerified: true },
+  { itemFa: "میلگرد A3 قطر ۱۸", heatNo: "H-88120", certType: "2.2", issuedAt: "2026-06-02", declaredGrade: "AIII", requiredGrade: "AIII", labVerified: true },
+  { itemFa: "شیر پروانه‌ای ۸ اینچ", heatNo: "H-77045", certType: "3.1", issuedAt: "2025-08-01", expiresAt: "2026-08-01", declaredGrade: "WCB", requiredGrade: "WCB", labVerified: false },
+  { itemFa: "ورق مخزن ۱۲ میلی‌متر", heatNo: "H-66190", certType: "3.2", issuedAt: "2026-07-19", declaredGrade: "A283-C", requiredGrade: "A516-70", labVerified: true },
+];
+
+const qmsFindings = [
+  { clause: "8.5.1", titleFa: "نبود شواهد کنترل عملیات جوشکاری", severity: "major" },
+  { clause: "7.5.3", titleFa: "نسخه منسوخ نقشه در کارگاه", severity: "minor" },
+  { clause: "9.2.2", titleFa: "تأخیر در برنامه ممیزی داخلی", severity: "observation", closed: true },
+  { clause: "8.7", titleFa: "پیگیری ناقص خروجی نامنطبق", severity: "minor", closed: true },
+];
+
+const qmsPunch = [
+  { id: "PL-101", category: "A", systemId: "SYS-01", titleFa: "نصب نشدن شیر اطمینان PSV-3" },
+  { id: "PL-102", category: "A", systemId: "SYS-01", titleFa: "نقص ارت تجهیز E-11", closed: true },
+  { id: "PL-103", category: "B", systemId: "SYS-02", titleFa: "رنگ‌آمیزی نهایی سکوی دسترسی" },
+  { id: "PL-104", category: "B", systemId: "SYS-02", titleFa: "برچسب‌گذاری خطوط", closed: true },
+  { id: "PL-105", category: "B", systemId: "SYS-01", titleFa: "تکمیل عایق‌کاری", closed: true },
+];
+
+const qmsDossierRequired = ["ITP امضاشده", "گزارش بازرسی", "گواهی مواد", "نتایج NDT", "نقشه چون‌ساخت", "گزارش تست هیدرواستاتیک", "لیست پانچ", "گواهی کالیبراسیون"];
+const qmsDossierDelivered = ["ITP امضاشده", "گزارش بازرسی", "گواهی مواد", "نتایج NDT", "لیست پانچ", "گواهی کالیبراسیون"];
+const qmsSignatures = {};
+
+const qmsOk = (req, data, meta = {}) =>
+  ({ ok: true, data, meta: { traceId: req.requestId, timestamp: new Date().toISOString(), writesOwnedFigures: false, ...meta } });
+
+app.get("/api/qms/itp", (req, res) => {
+  const gate = canProceed(qmsItp);
+  res.json(qmsOk(req, {
+    points: qmsItp,
+    blocking: itpBlocking(qmsItp).map((p) => p.id),
+    canProceed: gate.ok,
+    coveragePct: itpCoverage(qmsActivities, qmsItp),
+  }));
+});
+
+/** امضای نقطه توقف — تنها راه رفع انسداد کار. */
+app.post("/api/qms/itp/:pointId/sign", (req, res) => {
+  const point = qmsItp.find((p) => p.id === req.params.pointId);
+  if (!point) return res.status(404).json({ ok: false, error: { code: "NOT_FOUND", message: "itp point", traceId: req.requestId } });
+  if (point.signedAt) return res.json(qmsOk(req, { idempotent: true, point }));
+  point.signedAt = new Date().toISOString().slice(0, 10);
+  point.signedBy = req.body?.actor || "system";
+  res.json(qmsOk(req, { point, canProceed: canProceed(qmsItp).ok }));
+});
+
+app.get("/api/qms/inspections", (req, res) => {
+  const rows = qmsIrs.map((ir) => ({ ...ir, notice: irNoticeCheck(ir), outcome: irOutcome(ir.defects), signature: qmsSignatures[ir.id] ?? null }));
+  res.json(qmsOk(req, {
+    items: rows,
+    firstPassYieldPct: firstPassYield(rows.filter((r) => r.outcome === "accepted").length, rows.length),
+  }));
+});
+
+/** ثبت نتیجه بازرسی همراه امضای هش‌دار غیرقابل انکار. */
+app.post("/api/qms/inspections/:irId/sign", (req, res) => {
+  const ir = qmsIrs.find((x) => x.id === req.params.irId);
+  if (!ir) return res.status(404).json({ ok: false, error: { code: "NOT_FOUND", message: "inspection request", traceId: req.requestId } });
+  const sig = signRecord({ id: ir.id, defects: ir.defects }, req.body?.actor || "system", new Date().toISOString());
+  qmsSignatures[ir.id] = sig;
+  res.json(qmsOk(req, { irId: ir.id, outcome: irOutcome(ir.defects), signature: sig }));
+});
+
+app.get("/api/qms/ncr", (req, res) => {
+  const now = new Date();
+  const items = qmsNcrs.map((n) => ({
+    ...n,
+    overdue: ncrOverdue(n, now),
+    capaRequired: capaRequired(n.severity, n.recurrence),
+    dispositionCheck: dispositionAllowed(n.disposition, n.concessionBy),
+  }));
+  const causes = {};
+  for (const n of qmsNcrs) causes[n.cause] = (causes[n.cause] ?? 0) + 1;
+  res.json(qmsOk(req, {
+    items,
+    closureRatePct: ncrClosureRate(qmsNcrs),
+    pareto: pareto(Object.entries(causes).map(([cause, count]) => ({ cause, count }))),
+  }));
+});
+
+/** ثبت عدم انطباق جدید — شدت و مهلت خودکار تعیین می‌شود؛ تعیین تکلیف غیرمجاز رد می‌شود. */
+app.post("/api/qms/ncr", (req, res) => {
+  const b = req.body || {};
+  const severity = b.severity || ncrSeverity({
+    safetyImpact: Boolean(b.safetyImpact),
+    structuralImpact: Boolean(b.structuralImpact),
+    reworkCost: Number(b.reworkCost || 0),
+    functionalImpact: Boolean(b.functionalImpact),
+  });
+  const disposition = b.disposition || "rework";
+  const check = dispositionAllowed(disposition, b.concessionBy);
+  if (!check.ok) {
+    return res.status(409).json({ ok: false, error: { code: "QMS-409-CONCESSION", message: check.reason, traceId: req.requestId } });
+  }
+  const row = {
+    id: b.id || `NCR-${new Date().getFullYear()}-${String(qmsNcrs.length + 1).padStart(3, "0")}`,
+    titleFa: b.titleFa || "عدم انطباق ثبت‌شده از API",
+    severity,
+    openedAt: new Date().toISOString().slice(0, 10),
+    cause: b.cause || "نامشخص",
+    disposition,
+    concessionBy: b.concessionBy,
+    recurrence: Number(b.recurrence || 1),
+  };
+  qmsNcrs.push(row);
+  res.status(201).json(qmsOk(req, { ...row, capaRequired: capaRequired(severity, row.recurrence) }));
+});
+
+app.get("/api/qms/certificates", (req, res) => {
+  const now = new Date();
+  const items = qmsCerts.map((c) => ({ ...c, verdict: verifyCertificate(c, req.query.minType === "3.2" ? "3.2" : "3.1", now) }));
+  res.json(qmsOk(req, { items, rejected: items.filter((i) => !i.verdict.ok).length }));
+});
+
+app.get("/api/qms/audit", (req, res) => {
+  res.json(qmsOk(req, {
+    findings: qmsFindings,
+    score: qmsComplianceScore(qmsFindings),
+    certificationRisk: certificationRisk(qmsFindings),
+  }));
+});
+
+app.get("/api/qms/handover", (req, res) => {
+  const dossier = dossierCompleteness(qmsDossierRequired, qmsDossierDelivered);
+  const gate = mechanicalCompletionGate({
+    punch: qmsPunch,
+    ncrs: qmsNcrs,
+    itp: qmsItp,
+    dossierCompletenessPct: dossier.pct,
+    preCommissioningDone: true,
+  });
+  res.json(qmsOk(req, { punch: qmsPunch, summary: punchSummary(qmsPunch), dossier, gate }));
+});
+
+/** صدور گواهی تحویل مکانیکی — با هر مسدودکننده باز، ۴۰۹ برمی‌گرداند. */
+app.post("/api/qms/handover/mc", (req, res) => {
+  const dossier = dossierCompleteness(qmsDossierRequired, qmsDossierDelivered);
+  const gate = mechanicalCompletionGate({
+    punch: qmsPunch,
+    ncrs: qmsNcrs,
+    itp: qmsItp,
+    dossierCompletenessPct: dossier.pct,
+    preCommissioningDone: Boolean(req.body?.preCommissioningDone ?? true),
+  });
+  if (!gate.ok) {
+    return res.status(409).json({ ok: false, error: { code: "QMS-409-MC-GATE", message: gate.blockers.join(","), traceId: req.requestId } });
+  }
+  res.json(qmsOk(req, { certificate: `MC-${req.body?.systemId || "SYS-01"}-${new Date().toISOString().slice(0, 10)}`, state: "issued" }));
+});
+
+app.get("/api/qms/dashboard", (req, res) => {
+  const now = new Date();
+  const irRows = qmsIrs.map((ir) => irOutcome(ir.defects));
+  const dossier = dossierCompleteness(qmsDossierRequired, qmsDossierDelivered);
+  const summary = punchSummary(qmsPunch);
+  const coq = costOfQuality(
+    { prevention: 8_400_000_000, appraisal: 12_600_000_000, internalFailure: 9_800_000_000, externalFailure: 2_300_000_000 },
+    620_000_000_000
+  );
+  const alerts = qmsEws({
+    openCriticalNcr: qmsNcrs.filter((n) => n.severity === "critical" && !n.closedAt).length,
+    ncrOverdueCount: qmsNcrs.filter((n) => ncrOverdue(n, now)).length,
+    fpyPct: firstPassYield(irRows.filter((r) => r === "accepted").length, irRows.length),
+    copqPct: coq.copqPct,
+    openMajorAuditFindings: qmsFindings.filter((f) => f.severity === "major" && !f.closed).length,
+    certRejections: qmsCerts.filter((c) => !verifyCertificate(c, "3.1", now).ok).length,
+    openPunchA: summary.openA,
+    unsignedHoldPoints: itpBlocking(qmsItp).length,
+  });
+  res.json(qmsOk(req, {
+    itpCoveragePct: itpCoverage(qmsActivities, qmsItp),
+    firstPassYieldPct: firstPassYield(irRows.filter((r) => r === "accepted").length, irRows.length),
+    ncrClosureRatePct: ncrClosureRate(qmsNcrs),
+    copqPct: coq.copqPct,
+    complianceScore: qmsComplianceScore(qmsFindings),
+    dossierPct: dossier.pct,
+    alerts,
+  }));
+});
+
+app.get("/api/gov/audit-trail", (req, res) => {
+  res.json(govOk(req, { valid: verifyTrail(govTrail), entries: govTrail }));
+});
+
+const govTickMs = Number(process.env.GOV_SLA_TICK_MS || 0);
+if (govTickMs > 0) {
+  setInterval(() => {
+    const events = workflowTick(govTasks, new Date()).filter((e) => e.action !== "none");
+    if (events.length) console.log("[gov-sla]", events.map((e) => `${e.taskId}:${e.escalation}`).join(","));
+  }, govTickMs).unref();
+}
+
+
+/* ═══════════════════════ PEX (d2) — برنامه‌ریزی و اجرای عملیات ═══════════════════════ */
+
+/** PEX مالک ارقام «پیشرفت» و «برنامه پایه» است (DATA_OWNER در حاکمیت). */
+const pexOk = (req, data, meta = {}) =>
+  ({ ok: true, data, meta: { traceId: req.requestId, timestamp: new Date().toISOString(), writesOwnedFigures: true, ownedFields: ["progress", "baseline"], ...meta } });
+
+const pexModel = (req) => {
+  const mode = ["Cost", "MH", "Hybrid", "BOQ", "Manual"].includes(req.query.mode) ? req.query.mode : "Cost";
+  const alpha = req.query.alpha == null ? 1 : Math.max(0, Math.min(1, Number(req.query.alpha)));
+  return buildPexModel(mode, Number.isFinite(alpha) ? alpha : 1);
+};
+
+app.get("/api/pex/schedule", (req, res) => {
+  const m = pexModel(req);
+  res.json(pexOk(req, {
+    project: m.project,
+    dataDate: m.dataDate,
+    formulaVersion: m.cpm.formulaVersion,
+    projectStart: m.cpm.projectStart,
+    projectFinish: m.cpm.projectFinish,
+    baseline: { start: m.baseline.projectStart, finish: m.baseline.projectFinish, lengthDays: m.baseline.cpLengthDays },
+    activities: m.rows.map((r) => ({
+      id: r.id, wbs: r.wbs, nameFa: r.nameFa, duration: r.duration, es: r.es, ef: r.ef, ls: r.ls, lf: r.lf,
+      totalFloat: r.totalFloat, freeFloat: r.freeFloat, critical: r.critical,
+      baselineStart: r.baselineStart, baselineFinish: r.baselineFinish,
+      physicalPct: r.physicalPct, plannedPct: r.plannedPct, weight: r.weight, blockedSteps: r.blockedSteps,
+    })),
+  }));
+});
+
+app.get("/api/pex/critical-path", (req, res) => {
+  const m = pexModel(req);
+  res.json(pexOk(req, {
+    criticalPath: m.cpm.criticalPath,
+    lengthDays: m.cpm.cpLengthDays,
+    snapshot: m.snapshot,
+    nearCritical: m.nearCritical.map((r) => ({ id: r.id, nameFa: r.nameFa, totalFloat: r.totalFloat })),
+    dcma: m.dcma,
+  }));
+});
+
+app.get("/api/pex/milestones", (req, res) => {
+  const m = pexModel(req);
+  res.json(pexOk(req, { dataDate: m.dataDate, items: m.milestones, totalPenalty: m.totalPenalty }));
+});
+
+app.get("/api/pex/progress", (req, res) => {
+  const m = pexModel(req);
+  res.json(pexOk(req, {
+    weightMode: m.weightMode,
+    overallPct: m.overallPct,
+    plannedPct: m.plannedPct,
+    variance: m.variance,
+    ppcPct: m.ppcPct,
+    wbs: m.wbsRollup,
+    openPeriod: m.openPeriod,
+    periods: m.periods,
+    blockedCount: m.blockedCount,
+  }));
+});
+
+app.get("/api/pex/alerts", (req, res) => {
+  const m = pexModel(req);
+  res.json(pexOk(req, { items: m.alerts, counts: m.alerts.reduce((o, a) => ({ ...o, [a.severity]: (o[a.severity] ?? 0) + 1 }), {}) }));
+});
+
+app.get("/api/pex/roc", (req, res) => {
+  const m = pexModel(req);
+  res.json(pexOk(req, {
+    items: Object.entries(m.roc).map(([code, r]) => ({ code, nameFa: r.nameFa, ref: r.ref, steps: r.steps, ...validateRoc(r.steps) })),
+  }));
+});
+
+/** ثبت پیشرفت روزانه: قفل دوره + گیت بازرسی پیش از ورود به EV. */
+/**
+ * ثبت پیشرفت روزانه: قفل دوره + گیت بازرسی + **ماندگاری واقعی** (شکاف PEX-G2).
+ * پیش از این نتیجه فقط محاسبه و برگردانده می‌شد و هیچ‌جا نوشته نمی‌شد.
+ */
+app.post("/api/pex/progress", async (req, res, next) => {
+  try {
+    const b = req.body ?? {};
+    const m = buildPexModel();
+    const activity = m.rows.find((r) => r.id === b.activityId);
+    if (!activity) {
+      return res.status(404).json({ ok: false, error: { code: "ACTIVITY_NOT_FOUND", message: `فعالیت ${b.activityId} یافت نشد`, traceId: req.requestId } });
+    }
+    const gate = canPostProgress(m.openPeriod, b.date ?? m.dataDate);
+    if (!gate.ok) {
+      return res.status(409).json({ ok: false, error: { code: gate.reason === "period_closed" ? "PERIOD_CLOSED" : "OUT_OF_PERIOD", message: "ثبت پیشرفت در این تاریخ مجاز نیست", traceId: req.requestId } });
+    }
+    const steps = m.roc[activity.roc]?.steps ?? [];
+    const result = activityProgress(steps, Array.isArray(b.steps) ? b.steps : []);
+    const entryDate = b.date ?? m.dataDate;
+    const acceptedIntoEv = result.blockedSteps.length === 0;
+
+    const r = await repo();
+    const saved = await r.create(
+      "ProgressEntry",
+      {
+        ProjectId: String(b.projectId ?? "prj-default"),
+        ActivityId: activity.id,
+        PeriodCode: m.openPeriod.code,
+        EntryDate: entryDate,
+        PhysicalPct: result.physicalPct,
+        Steps: Array.isArray(b.steps) ? b.steps : [],
+        BlockedSteps: result.blockedSteps,
+        AcceptedIntoEv: acceptedIntoEv,
+        Note: b.note ? String(b.note).slice(0, 500) : null,
+        EnteredBy: String(b.enteredBy ?? req.headers["x-user-id"] ?? "anonymous"),
+      },
+      String(b.enteredBy ?? req.headers["x-user-id"] ?? "anonymous"),
+      "progress"
+    );
+
+    res.status(201).json(pexOk(req, {
+      id: saved.Id,
+      persisted: true,
+      driver: persistence?.driver?.kind ?? "unknown",
+      activityId: activity.id,
+      date: entryDate,
+      period: m.openPeriod.code,
+      physicalPct: result.physicalPct,
+      blockedSteps: result.blockedSteps,
+      acceptedIntoEv,
+    }, { note: "فقط پیشرفت دارای IR تأییدشده وارد EV می‌شود" }));
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** تاریخچهٔ ثبت‌های پیشرفت — روی ماندگاری واقعی. */
+app.get("/api/pex/progress/entries", async (req, res, next) => {
+  try {
+    const r = await repo();
+    const where = [];
+    if (req.query.activityId) where.push({ column: "ActivityId", op: "eq", value: String(req.query.activityId) });
+    if (req.query.period) where.push({ column: "PeriodCode", op: "eq", value: String(req.query.period) });
+    const items = await r.list("ProgressEntry", { where, orderBy: [{ column: "EntryDate", dir: "desc" }], limit: Math.min(500, Number(req.query.limit) || 100) });
+    res.json(pexOk(req, { items, total: items.length, driver: persistence?.driver?.kind ?? "unknown" }));
+  } catch (err) {
+    next(err);
+  }
+});
+
+/* ═══════════════════ لایه ماندگاری داده (sql-v1) ═══════════════════ */
+
+app.get("/api/data/schema", (req, res) => {
+  res.json({
+    ok: true,
+    data: {
+      version: "sql-v1",
+      driver: persistence?.driver?.kind ?? "pending",
+      stats: schemaStats(),
+      tables: SCHEMA.map((t) => ({
+        name: t.name,
+        module: t.module,
+        title: t.title,
+        pk: t.pk,
+        columns: t.columns.length,
+        indexes: (t.indexes ?? []).length,
+        foreignKeys: (t.foreignKeys ?? []).length,
+        exposed: PUBLIC_TABLES.has(t.name),
+      })),
+    },
+    meta: { traceId: req.requestId, timestamp: new Date().toISOString() },
+  });
+});
+
+app.get("/api/data/ddl", (req, res) => {
+  const dialect = req.query.dialect === "sqlite" ? "sqlite" : "mssql";
+  res.type("text/plain; charset=utf-8").send(generateDdl(dialect));
+});
+
+app.get("/api/data/migrations", async (req, res, next) => {
+  try {
+    let applied = [];
+    try {
+      const r = await repo();
+      applied = (await r.list("SchemaMigration", { orderBy: [{ column: "Version", dir: "asc" }] })).map((m) => ({
+        version: m.Version,
+        name: m.Name,
+        checksum: m.Checksum,
+        appliedAt: m.AppliedAt,
+      }));
+    } catch {
+      applied = [];
+    }
+    res.json({
+      ok: true,
+      data: { applied, plan: migrationPlan(applied), catalogue: MIGRATIONS.map((m) => ({ version: m.version, name: m.name, statements: m.statements.length, checksum: checksumOf(m.statements) })) },
+      meta: { traceId: req.requestId, timestamp: new Date().toISOString() },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** اجرای مهاجرت‌های معلق. روی درایور فایلی فقط ثبت می‌شود چون جدولی ساخته نمی‌شود. */
+app.post("/api/data/migrate", async (req, res, next) => {
+  try {
+    const r = await repo();
+    const applied = (await r.list("SchemaMigration", {})).map((m) => ({ version: m.Version, name: m.Name, checksum: m.Checksum, appliedAt: m.AppliedAt }));
+    const plan = migrationPlan(applied);
+    if (plan.drift.length) {
+      return res.status(409).json({ ok: false, error: { code: "MIGRATION_DRIFT", message: "چک‌سام مهاجرت اجراشده تغییر کرده است", details: plan.drift, traceId: req.requestId } });
+    }
+    const executed = [];
+    for (const version of plan.pending.map((p) => p.version)) {
+      const migration = MIGRATIONS.find((m) => m.version === version);
+      const startedMs = Date.now();
+      if (persistence?.driver?.kind === "mssql") {
+        for (const stmt of migration.statements) await persistence.driver.pool.request().query(stmt);
+      }
+      await r.create("SchemaMigration", {
+        Version: migration.version,
+        Name: migration.name,
+        Checksum: checksumOf(migration.statements),
+        AppliedAt: new Date().toISOString(),
+        DurationMs: Date.now() - startedMs,
+      }, "system");
+      executed.push(migration.version);
+    }
+    res.json({ ok: true, data: { executed, driver: persistence?.driver?.kind }, meta: { traceId: req.requestId, timestamp: new Date().toISOString() } });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** CRUD عمومی روی جدول‌های مجاز — همه از راه سازندهٔ پارامتری. */
+app.get("/api/data/:table", async (req, res, next) => {
+  try {
+    const t = tableDef(req.params.table);
+    if (!t || !PUBLIC_TABLES.has(t.name)) return res.status(404).json({ ok: false, error: { code: "UNKNOWN_TABLE", message: `جدول ${req.params.table} در دسترس نیست`, traceId: req.requestId } });
+    const r = await repo();
+    const spec = parseSelectSpec(t, req.query);
+    const [items, total] = await Promise.all([r.list(t.name, spec), r.count(t.name, spec.where)]);
+    res.json({ ok: true, data: { items, total, limit: spec.limit, offset: spec.offset }, meta: { traceId: req.requestId, timestamp: new Date().toISOString() } });
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.get("/api/data/:table/:id", async (req, res, next) => {
+  try {
+    const t = tableDef(req.params.table);
+    if (!t || !PUBLIC_TABLES.has(t.name)) return res.status(404).json({ ok: false, error: { code: "UNKNOWN_TABLE", message: `جدول ${req.params.table} در دسترس نیست`, traceId: req.requestId } });
+    const r = await repo();
+    const row = await r.get(t.name, req.params.id);
+    if (!row) return res.status(404).json({ ok: false, error: { code: "NOT_FOUND", message: "رکورد یافت نشد", traceId: req.requestId } });
+    res.json({ ok: true, data: row, meta: { traceId: req.requestId, timestamp: new Date().toISOString() } });
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.post("/api/data/:table", async (req, res, next) => {
+  try {
+    const t = tableDef(req.params.table);
+    if (!t || !PUBLIC_TABLES.has(t.name)) return res.status(404).json({ ok: false, error: { code: "UNKNOWN_TABLE", message: `جدول ${req.params.table} در دسترس نیست`, traceId: req.requestId } });
+    const r = await repo();
+    const userId = String(req.headers["x-user-id"] ?? "anonymous");
+    const row = await r.create(t.name, r.pickWritable(t.name, req.body), userId, t.name.toLowerCase());
+    res.status(201).json({ ok: true, data: row, meta: { traceId: req.requestId, timestamp: new Date().toISOString() } });
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.patch("/api/data/:table/:id", async (req, res, next) => {
+  try {
+    const t = tableDef(req.params.table);
+    if (!t || !PUBLIC_TABLES.has(t.name)) return res.status(404).json({ ok: false, error: { code: "UNKNOWN_TABLE", message: `جدول ${req.params.table} در دسترس نیست`, traceId: req.requestId } });
+    const r = await repo();
+    const userId = String(req.headers["x-user-id"] ?? "anonymous");
+    const expected = req.headers["if-match"] ? Number(req.headers["if-match"]) : undefined;
+    const result = await r.patch(t.name, req.params.id, r.pickWritable(t.name, req.body), userId, expected);
+    if (!result.ok) {
+      return res.status(result.code === "NOT_FOUND" ? 404 : 409).json({ ok: false, error: { code: result.code, message: result.message, traceId: req.requestId } });
+    }
+    res.json({ ok: true, data: await r.get(t.name, req.params.id), meta: { traceId: req.requestId, timestamp: new Date().toISOString() } });
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.delete("/api/data/:table/:id", async (req, res, next) => {
+  try {
+    const t = tableDef(req.params.table);
+    if (!t || !PUBLIC_TABLES.has(t.name)) return res.status(404).json({ ok: false, error: { code: "UNKNOWN_TABLE", message: `جدول ${req.params.table} در دسترس نیست`, traceId: req.requestId } });
+    const r = await repo();
+    const result = await r.remove(t.name, req.params.id);
+    if (!result.affected) return res.status(404).json({ ok: false, error: { code: "NOT_FOUND", message: "رکورد یافت نشد", traceId: req.requestId } });
+    res.json({ ok: true, data: { deleted: result.affected }, meta: { traceId: req.requestId, timestamp: new Date().toISOString() } });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/* ═══════════════ مرکز یکپارچه‌سازی (itg-v1) ═══════════════
+ * ورود XER پریماورا، قالب‌های Excel/CSV و مشخصات OpenAPI تولیدشده از اسکیما.
+ * همه چیز روی موتور خالص server/itgLogic.js می‌نشیند تا منطق تست‌پذیر بماند. */
+
+const INTEGRATION_EXT = new Set([".xer", ".csv", ".txt", ".xlsx", ".xls"]);
+const integrationUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: maxFileBytes, files: 1 },
+  fileFilter: (_req, file, callback) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (INTEGRATION_EXT.has(ext)) return callback(null, true);
+    const error = new Error(`Unsupported integration file type: ${ext}`);
+    error.code = "UNSUPPORTED_FILE_TYPE";
+    callback(error);
+  },
+});
+
+const itgFail = (req, res, status, code, message) =>
+  res.status(status).json({ ok: false, error: { code, message, traceId: req.requestId } });
+
+const itgOk = (req, res, data) =>
+  res.json({ ok: true, data, meta: { traceId: req.requestId, engine: INTEGRATION_VERSION, timestamp: new Date().toISOString() } });
+
+/** متن فایل را از multipart یا بدنهٔ JSON بیرون می‌کشد. */
+const integrationText = (req) => {
+  if (req.file?.buffer) return { text: req.file.buffer.toString("utf8"), name: req.file.originalname };
+  if (typeof req.body?.content === "string" && req.body.content.trim()) return { text: req.body.content, name: req.body.fileName || "inline" };
+  return null;
+};
+
+/** خلاصهٔ وضعیت مرکز یکپارچه‌سازی برای داشبورد. */
+app.get("/api/integration/status", (req, res) => {
+  itgOk(req, res, {
+    stats: integrationStats(),
+    connectors: CONNECTORS,
+    templates: TEMPLATE_CATALOG.map((t) => ({ code: t.code, title: t.title, targetTable: t.targetTable, fields: t.fields.length })),
+  });
+});
+
+/** ورود فایل XER پریماورا — پیش‌نمایش (پیش‌فرض) یا نوشتن با commit=1. */
+app.post("/api/integration/xer", integrationUpload.single("file"), async (req, res, next) => {
+  try {
+    const source = integrationText(req);
+    if (!source) return itgFail(req, res, 400, "NO_FILE", "فایل XER ارسال نشده است");
+    const projectId = String(req.query.projectId || req.body?.projectId || "").trim();
+    if (!projectId) return itgFail(req, res, 400, "NO_PROJECT", "شناسه پروژه (projectId) الزامی است");
+
+    const parsedTables = parseXerTables(source.text);
+    if (!parsedTables.tableNames.length) return itgFail(req, res, 422, "BAD_XER", "ساختار XER شناسایی نشد");
+    const extracted = extractXer(parsedTables, projectId, jalaali.toGregorian);
+
+    const r = await repo();
+    const existing = await r.list("Activity", { where: [{ column: "ProjectId", op: "eq", value: projectId }], limit: 5000 });
+    const diff = diffRows(existing, extracted.activities, "Code", ACTIVITY_COMPARE_FIELDS);
+    const blocking = extracted.issues.filter((i) => i.severity === "error");
+    const commit = req.query.commit === "1" || req.body?.commit === true;
+
+    const payload = {
+      fileName: source.name,
+      header: parsedTables.header,
+      projectName: extracted.projectName,
+      dataDate: extracted.dataDate,
+      counts: extracted.counts,
+      calendars: extracted.calendars,
+      issues: extracted.issues,
+      diff: {
+        added: diff.added.length,
+        updated: diff.updated.length,
+        removed: diff.removed.length,
+        unchanged: diff.unchanged,
+        sample: diff.updated.slice(0, 20),
+      },
+      committed: false,
+    };
+
+    if (!commit) return itgOk(req, res, payload);
+    if (blocking.length) return itgFail(req, res, 422, "IMPORT_BLOCKED", `${blocking.length} خطای مسدودکننده؛ پیش از نوشتن اصلاح شود`);
+
+    const actor = req.headers["x-user-id"] || "integration";
+    const written = { wbs: 0, activities: 0, relations: 0 };
+    /** شناسهٔ ردیف‌های XER قطعی است، پس upsert روی همان کلید تکرارپذیر می‌ماند. */
+    const upsertById = async (table, row) => {
+      const { Id, ...rest } = row;
+      /** میدان‌های زیرخط‌دار فقط برای نمایش‌اند و ستون پایگاه داده نیستند. */
+      for (const key of Object.keys(rest)) if (key.startsWith("_")) delete rest[key];
+      await r.upsert(table, { Id }, rest, actor);
+    };
+    for (const row of extracted.wbs) { await upsertById("WbsNode", row); written.wbs += 1; }
+    for (const row of extracted.activities) { await upsertById("Activity", row); written.activities += 1; }
+    for (const row of extracted.relations) { await upsertById("ActivityRelation", row); written.relations += 1; }
+    itgOk(req, res, { ...payload, committed: true, written });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** فهرست قالب‌های ورود داده. */
+app.get("/api/integration/templates", (req, res) => {
+  itgOk(req, res, {
+    templates: TEMPLATE_CATALOG.map((t) => ({
+      code: t.code,
+      title: t.title,
+      targetTable: t.targetTable,
+      keyFields: t.keyFields,
+      guide: templateGuide(t),
+    })),
+  });
+});
+
+/** دانلود فایل نمونهٔ CSV یک قالب (با BOM تا اکسل فارسی درست باز کند). */
+app.get("/api/integration/templates/:code.csv", (req, res) => {
+  const template = templateByCode(req.params.code.toUpperCase());
+  if (!template) return itgFail(req, res, 404, "UNKNOWN_TEMPLATE", `قالب ${req.params.code} تعریف نشده است`);
+  const lang = req.query.lang === "en" ? "en" : "fa";
+  res.setHeader("Content-Disposition", `attachment; filename="${template.code}-${lang}.csv"`);
+  res.type("text/csv; charset=utf-8").send(`\uFEFF${templateCsv(template, lang)}`);
+});
+
+/** ورود داده بر پایهٔ قالب — پیش‌نمایش یا نوشتن با commit=1. */
+app.post("/api/integration/import/:code", integrationUpload.single("file"), async (req, res, next) => {
+  try {
+    const template = templateByCode(req.params.code.toUpperCase());
+    if (!template) return itgFail(req, res, 404, "UNKNOWN_TEMPLATE", `قالب ${req.params.code} تعریف نشده است`);
+    const source = integrationText(req);
+    if (!source) return itgFail(req, res, 400, "NO_FILE", "فایلی برای ورود ارسال نشده است");
+
+    const result = parseImport(template, source.text, jalaali.toGregorian);
+    const commit = req.query.commit === "1" || req.body?.commit === true;
+    const projectId = String(req.query.projectId || req.body?.projectId || "").trim();
+
+    const payload = {
+      template: { code: template.code, title: template.title, targetTable: template.targetTable },
+      fileName: source.name,
+      counts: result.counts,
+      issues: result.issues,
+      preview: result.rows.slice(0, 25),
+      committed: false,
+    };
+    if (!commit) return itgOk(req, res, payload);
+    if (result.counts.errors) return itgFail(req, res, 422, "IMPORT_BLOCKED", `${result.counts.errors} خطا در فایل؛ پیش از نوشتن اصلاح شود`);
+    if (!PUBLIC_TABLES.has(template.targetTable)) return itgFail(req, res, 403, "TABLE_NOT_EXPOSED", `نوشتن در ${template.targetTable} مجاز نیست`);
+
+    const r = await repo();
+    const actor = req.headers["x-user-id"] || "integration";
+    const hasProject = allColumns(tableDef(template.targetTable)).some((c) => c.name === "ProjectId");
+    let written = 0;
+    let inserted = 0;
+    for (const row of result.rows) {
+      const record = { ...row };
+      if (projectId && hasProject) record.ProjectId = projectId;
+      /** کلید طبیعی قالب تعیین می‌کند ورود دوباره به‌روزرسانی است نه ردیف تکراری. */
+      const naturalKey = Object.fromEntries(template.keyFields.map((k) => [k, record[k]]));
+      if (projectId && hasProject) naturalKey.ProjectId = projectId;
+      const data = { ...record };
+      for (const k of Object.keys(naturalKey)) delete data[k];
+      const outcome = await r.upsert(template.targetTable, naturalKey, data, actor);
+      written += 1;
+      if (outcome.action === "insert") inserted += 1;
+    }
+    itgOk(req, res, { ...payload, committed: true, written, inserted, updated: written - inserted });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** مشخصات OpenAPI تولیدشده از اسکیمای sql-v1 — همیشه با کد همگام است. */
+const openApiSpec = () => generateOpenApi(
+  SCHEMA.filter((t) => PUBLIC_TABLES.has(t.name)).map((t) => ({
+    name: t.name,
+    title: t.title,
+    pk: t.pk,
+    columns: allColumns(t).map((c) => ({ name: c.name, kind: c.kind, len: c.len, nullable: c.nullable })),
+  })),
+);
+
+app.get("/api/openapi.json", (req, res) => res.json(openApiSpec()));
+app.get("/api/openapi.yaml", (req, res) => res.type("text/yaml; charset=utf-8").send(toYaml(openApiSpec())));
+
 app.use((req, res) => {
   res.status(404).json({ ok: false, error: { code: "NOT_FOUND", message: `Route ${req.method} ${req.path} was not found`, traceId: req.requestId } });
 });
@@ -1303,6 +2190,18 @@ app.use((err, req, res, next) => {
   console.error(`[${req.requestId}]`, err);
   if (err instanceof multer.MulterError) {
     return res.status(400).json({ ok: false, error: { code: "FILE_UPLOAD_ERROR", message: err.message, traceId: req.requestId } });
+  }
+  if (err.code === "ROW_VALIDATION_FAILED") {
+    return res.status(422).json({ ok: false, error: { code: err.code, message: err.message, issues: err.issues, traceId: req.requestId } });
+  }
+  if (err.code === "DUPLICATE_KEY" || err.code === "UNIQUE_VIOLATION") {
+    return res.status(409).json({ ok: false, error: { code: err.code, message: err.message, traceId: req.requestId } });
+  }
+  if (err.code === "UNKNOWN_COLUMN" || err.code === "UNKNOWN_TABLE") {
+    return res.status(400).json({ ok: false, error: { code: err.code, message: err.message, traceId: req.requestId } });
+  }
+  if (err.code === "PERSISTENCE_UNAVAILABLE") {
+    return res.status(503).json({ ok: false, error: { code: err.code, message: err.message, traceId: req.requestId } });
   }
   if (err.code === "UNSUPPORTED_FILE_TYPE") {
     return res.status(415).json({ ok: false, error: { code: err.code, message: err.message, traceId: req.requestId } });
