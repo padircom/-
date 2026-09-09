@@ -1,0 +1,3139 @@
++  const revoke = (id: string) => {
++    setDelegations((prev) => prev.map((d) => (d.id === id ? { ...d, revoked: true } : d)));
++    logAudit("RBAC_DELEGATION_REVOKE", "Security", id, "security");
++  };
++
++  /* ── سیاست‌ها ── */
++  const [pw, setPw] = useState("Arena#2026");
++  const pwCheck = checkPassword(pw);
++  const [attempts, setAttempts] = useState(3);
++  const lock = loginThrottle(attempts, 5);
++
++  const catalogueHealthy = orphanPermissions().length === 0 && danglingGrants().length === 0 && hasInheritanceCycle().length === 0;
++
++  return (
++    <div className="fade-rise space-y-3" dir={rtl ? "rtl" : "ltr"}>
++      {/* نوار عنوان */}
++      <div className="glass-dark flex flex-wrap items-center gap-2 rounded-2xl p-2.5">
++        <span className="grid h-8 w-8 place-items-center rounded-lg border border-emerald-400/40 bg-emerald-400/10 text-[15px]">🛡</span>
++        <div className="min-w-0 flex-1">
++          <div className="text-[11.5px] font-semibold tx1">{rtl ? "مرکز RBAC و امنیت یکپارچه" : "Unified RBAC & Security Centre"}</div>
++          <div className="text-[8.5px] font-extralight tx3">
++            {rtl
++              ? `${PERMISSION_CATALOG.length} مجوز · ${ROLE_CATALOG.length} نقش · ${SOD_RULES.length} قاعده تفکیک وظیفه · وراثت نقش، تفویض زمان‌دار، پوشاندن میدان حساس`
++              : `${PERMISSION_CATALOG.length} permissions · ${ROLE_CATALOG.length} roles · ${SOD_RULES.length} SoD rules · inheritance, time-boxed delegation, field masking`}
++          </div>
++        </div>
++        <span className={`rounded-lg border px-2 py-1 text-[8.5px] ${catalogueHealthy ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-300" : "border-rose-400/30 bg-rose-400/10 text-rose-300"}`}>
++          {catalogueHealthy ? (rtl ? "کاتالوگ سالم" : "Catalogue healthy") : rtl ? "کاتالوگ ناسازگار" : "Catalogue inconsistent"}
++        </span>
++        <span className="rounded-lg border b-line-soft px-2 py-1 font-mono text-[8.5px] tx3" dir="ltr">{RBAC_ENGINE_VERSION}</span>
++      </div>
++
++      {/* زیرتب‌ها */}
++      <nav className="flex flex-wrap gap-1 rounded-xl bg-black/15 p-1">
++        {PANES.map((p) => (
++          <button
++            key={p.key}
++            onClick={() => setPane(p.key)}
++            className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[10px] font-light transition ${pane === p.key ? "toggle-on tx1 shadow-sm" : "tx3 hover:tx2"}`}
++          >
++            <span>{p.icon}</span>
++            <span>{T(p.label)}</span>
++          </button>
++        ))}
++      </nav>
++
++      {/* ═══════════ وضعیت امنیتی ═══════════ */}
++      {pane === "posture" && (
++        <div className="grid gap-3 lg:grid-cols-[260px_1fr]">
++          <div className="space-y-3">
++            <Card title={rtl ? "امتیاز آمادگی امنیتی" : "Security readiness score"}>
++              <div className="flex flex-col items-center py-2">
++                <div className="grid h-24 w-24 place-items-center rounded-full border-4" style={{ borderColor: GRADE_COLOR[posture.grade] }}>
++                  <div className="text-center">
++                    <div className="text-[26px] font-bold leading-none" style={{ color: GRADE_COLOR[posture.grade] }}>{posture.score}</div>
++                    <div className="text-[9px] tx3">{rtl ? "از ۱۰۰" : "of 100"}</div>
++                  </div>
++                </div>
++                <div className="mt-2 text-[13px] font-bold" style={{ color: GRADE_COLOR[posture.grade] }}>
++                  {rtl ? "درجه" : "Grade"} {posture.grade}
++                </div>
++                <div className="text-[9px] tx3">{posture.findings.length} {rtl ? "یافته باز" : "open findings"}</div>
++              </div>
++            </Card>
++
++            <Card title={rtl ? "پیکربندی زیرساخت" : "Infrastructure config"}>
++              <div className="space-y-1.5">
++                {([
++                  [rtl ? "HTTPS اجباری" : "HTTPS enforced", httpsEnforced, setHttps],
++                  [rtl ? "احراز دومرحله‌ای (MFA)" : "MFA enabled", mfaEnabled, setMfa],
++                  [rtl ? "رمزنگاری پایگاه داده" : "DB encryption", sqlEncrypted, setSqlEnc],
++                ] as const).map(([label, val, set]) => (
++                  <label key={label} className="glass-row flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5">
++                    <input type="checkbox" checked={val} onChange={(e) => set(e.target.checked)} className="h-3 w-3 accent-emerald-400" />
++                    <span className="text-[9.5px] font-light tx2">{label}</span>
++                    <span className={`ms-auto text-[8px] ${val ? "text-emerald-300" : "text-rose-300"}`}>{val ? "ON" : "OFF"}</span>
++                  </label>
++                ))}
++                <label className="block px-1">
++                  <span className="text-[8.5px] tx3">{rtl ? "نگهداشت لاگ ممیزی (روز)" : "Audit retention (days)"}: {retention}</span>
++                  <input type="range" min={30} max={1095} step={30} value={retention} onChange={(e) => setRetention(Number(e.target.value))} className="w-full accent-sky-400" />
++                </label>
++                <label className="block px-1">
++                  <span className="text-[8.5px] tx3">{rtl ? "عمر آخرین پشتیبان (روز)" : "Backup age (days)"}: {backupAge ?? (rtl ? "بدون پشتیبان" : "none")}</span>
++                  <input type="range" min={-1} max={60} value={backupAge ?? -1} onChange={(e) => setBackupAge(Number(e.target.value) < 0 ? null : Number(e.target.value))} className="w-full accent-sky-400" />
++                </label>
++              </div>
++            </Card>
++          </div>
++
++          <Card title={rtl ? "یافته‌ها به ترتیب اثر بر نمره" : "Findings by score impact"}>
++            {posture.findings.length === 0 ? (
++              <div className="py-10 text-center text-[10px] text-emerald-300">{rtl ? "هیچ یافتهٔ بازی وجود ندارد — پیکربندی سالم است" : "No open findings — configuration is clean"}</div>
++            ) : (
++              <div className="thin-scroll max-h-[460px] space-y-1.5 overflow-y-auto pr-1">
++                {posture.findings.map((f, i) => (
++                  <div key={`${f.code}-${i}`} className={`rounded-xl border p-2 ${SEV_STYLE[f.severity]}`}>
++                    <div className="flex flex-wrap items-center gap-1.5">
++                      <span className="font-mono text-[8px] opacity-80" dir="ltr">{f.code}</span>
++                      <span className="rounded bg-black/25 px-1.5 py-[1px] text-[7.5px] uppercase">{f.severity}</span>
++                      <span className="text-[10px] font-medium">{T(f.title)}</span>
++                      <span className="ms-auto text-[8.5px] opacity-75">−{f.weight}</span>
++                    </div>
++                    <p className="mt-0.5 text-[9px] font-light opacity-90">{T(f.detail)}</p>
++                  </div>
++                ))}
++              </div>
++            )}
++          </Card>
++        </div>
++      )}
++
++      {/* ═══════════ آزمون دسترسی ═══════════ */}
++      {pane === "simulator" && (
++        <div className="grid gap-3 lg:grid-cols-[300px_1fr]">
++          <Card title={rtl ? "سناریو" : "Scenario"}>
++            <div className="space-y-2">
++              <label className="block">
++                <span className="text-[8.5px] tx3">{rtl ? "کاربر" : "User"}</span>
++                <select value={simUser} onChange={(e) => setSimUser(e.target.value)} className="mt-0.5 w-full rounded-lg border b-line-soft bg-black/30 px-2 py-1 text-[10px] tx1 outline-none">
++                  {DEMO_SUBJECTS.map((s) => (
++                    <option key={s.id} value={s.id} className="bg-neutral-900">
++                      {s.displayName} {s.active ? "" : rtl ? "(غیرفعال)" : "(inactive)"}
++                    </option>
++                  ))}
++                </select>
++              </label>
++              <label className="block">
++                <span className="text-[8.5px] tx3">{rtl ? "مجوز" : "Permission"}</span>
++                <select value={simPerm} onChange={(e) => setSimPerm(e.target.value)} className="mt-0.5 w-full rounded-lg border b-line-soft bg-black/30 px-2 py-1 font-mono text-[9.5px] tx1 outline-none" dir="ltr">
++                  {PERMISSION_CATALOG.map((p) => (
++                    <option key={p.code} value={p.code} className="bg-neutral-900">{p.code}</option>
++                  ))}
++                </select>
++              </label>
++              <div className="grid grid-cols-2 gap-1.5">
++                <label className="block">
++                  <span className="text-[8.5px] tx3">{rtl ? "پروژه" : "Project"}</span>
++                  <input value={simProject} onChange={(e) => setSimProject(e.target.value)} dir="ltr" className="mt-0.5 w-full rounded-lg border b-line-soft bg-black/25 px-2 py-1 text-[9.5px] tx1 outline-none" />
++                </label>
++                <label className="block">
++                  <span className="text-[8.5px] tx3">{rtl ? "دیسیپلین" : "Discipline"}</span>
++                  <input value={simDiscipline} onChange={(e) => setSimDiscipline(e.target.value)} dir="ltr" placeholder="civil…" className="mt-0.5 w-full rounded-lg border b-line-soft bg-black/25 px-2 py-1 text-[9.5px] tx1 outline-none" />
++                </label>
++              </div>
++              <label className="block">
++                <span className="text-[8.5px] tx3">{rtl ? "تهیه‌کنندهٔ رکورد (برای تفکیک وظیفه)" : "Record preparer (for SoD)"}</span>
++                <select value={simPreparer} onChange={(e) => setSimPreparer(e.target.value)} className="mt-0.5 w-full rounded-lg border b-line-soft bg-black/30 px-2 py-1 text-[10px] tx1 outline-none">
++                  <option value="" className="bg-neutral-900">{rtl ? "— بدون رکورد —" : "— no record —"}</option>
++                  {DEMO_SUBJECTS.map((s) => (
++                    <option key={s.id} value={s.id} className="bg-neutral-900">{s.displayName}</option>
++                  ))}
++                </select>
++              </label>
++            </div>
++          </Card>
++
++          <div className="space-y-3">
++            <Card title={rtl ? "تصمیم موتور" : "Engine decision"}>
++              <div className={`rounded-xl border p-3 ${simDecision.allow ? "border-emerald-400/30 bg-emerald-400/10" : "border-rose-400/30 bg-rose-400/10"}`}>
++                <div className="flex flex-wrap items-center gap-2">
++                  <span className="text-[18px]">{simDecision.allow ? "✔" : "✖"}</span>
++                  <span className={`text-[13px] font-bold ${simDecision.allow ? "text-emerald-300" : "text-rose-300"}`}>
++                    {simDecision.allow ? (rtl ? "مجاز" : "ALLOW") : rtl ? "رد" : "DENY"}
++                  </span>
++                  <span className="rounded bg-black/30 px-1.5 py-0.5 font-mono text-[8.5px] tx2" dir="ltr">{simDecision.code}</span>
++                  {simDecision.audit && <span className="rounded bg-fuchsia-400/15 px-1.5 py-0.5 text-[8px] text-fuchsia-200">{rtl ? "ثبت در ممیزی" : "audited"}</span>}
++                </div>
++                <p className="mt-1.5 text-[10px] font-light tx1">{T(simDecision.reason)}</p>
++              </div>
++
++              <div className="mt-2 grid gap-2 sm:grid-cols-2">
++                <div className="rounded-xl border b-line-soft bg-black/15 p-2">
++                  <div className="mb-1 text-[9px] font-semibold tx2">{rtl ? "پروفایل کاربر" : "Subject profile"}</div>
++                  <div className="space-y-0.5 text-[8.5px] font-light tx3">
++                    <div>{rtl ? "نقش‌ها: " : "Roles: "}{simSubject.roles.map((r) => roleTitle(r, lang)).join("، ")}</div>
++                    <div>{rtl ? "سطح دسترسی: " : "Clearance: "}{T(CLASSIFICATION_LABEL[subjectClearance(simSubject)])}</div>
++                    <div dir="ltr">{rtl ? "پروژه‌ها: " : "Projects: "}{simSubject.projectIds.join(", ")}</div>
++                    <div dir="ltr">{rtl ? "دیسیپلین‌ها: " : "Disciplines: "}{simSubject.disciplines?.join(", ") ?? "*"}</div>
++                    <div>{rtl ? "تعداد مجوز مؤثر: " : "Effective permissions: "}{subjectPermissions(simSubject).length}</div>
++                    <div>{rtl ? "تفویض دریافتی امروز: " : "Delegated today: "}{delegatedPermissions(delegations, simSubject.id, TODAY).length}</div>
++                  </div>
++                </div>
++                <div className="rounded-xl border b-line-soft bg-black/15 p-2">
++                  <div className="mb-1 text-[9px] font-semibold tx2">{rtl ? "رکورد ممیزی تولیدشده" : "Generated audit record"}</div>
++                  <pre className="thin-scroll overflow-x-auto text-[8px] leading-relaxed tx3" dir="ltr">{JSON.stringify({ ...simAudit, at: simAudit.at.slice(0, 19) + "Z" }, null, 1)}</pre>
++                </div>
++              </div>
++            </Card>
++
++            <Card title={rtl ? "نمونهٔ پوشاندن میدان حساس" : "Field masking preview"}>
++              <div className="thin-scroll overflow-x-auto">
++                <table className="w-full min-w-[520px] border-collapse text-[9px]">
++                  <thead>
++                    <tr className="border-b b-line-soft bg-black/20">
++                      <th className="px-2 py-1 text-start tx3">{rtl ? "میدان" : "Field"}</th>
++                      <th className="px-2 py-1 text-start tx3">{rtl ? "مجوز لازم" : "Required permission"}</th>
++                      <th className="px-2 py-1 text-start tx3">{rtl ? "مقدار واقعی" : "Raw"}</th>
++                      <th className="px-2 py-1 text-start tx3">{rtl ? "آنچه این کاربر می‌بیند" : "What this user sees"}</th>
++                    </tr>
++                  </thead>
++                  <tbody className="divide-y b-line-soft">
++                    {MASK_RULES.map((r) => {
++                      const raw = r.field === "nationalId" ? "0012345678" : r.field === "mobile" ? "09121234567" : r.field === "claimStrategy" ? "تمدید ۴۵ روزه" : 4_200_000;
++                      const shown = (maskRecord(simSubject, { [r.field]: raw }, { projectId: simProject || null, delegations, onDate: TODAY }) as Record<string, unknown>)[r.field];
++                      const masked = shown !== raw;
++                      return (
++                        <tr key={r.field}>
++                          <td className="px-2 py-1 font-mono tx1" dir="ltr">{r.field}</td>
++                          <td className="px-2 py-1 font-mono text-[8px] tx3" dir="ltr">{r.permission}</td>
++                          <td className="px-2 py-1 tx3" dir="ltr">{String(raw)}</td>
++                          <td className={`px-2 py-1 ${masked ? "text-rose-300" : "text-emerald-300"}`} dir="ltr">{String(shown)}</td>
++                        </tr>
++                      );
++                    })}
++                  </tbody>
++                </table>
++              </div>
++            </Card>
++          </div>
++        </div>
++      )}
++
++      {/* ═══════════ ماتریس ═══════════ */}
++      {pane === "matrix" && (
++        <Card
++          title={rtl ? "ماتریس نقش × مجوز (پس از اعمال وراثت)" : "Role × permission matrix (inheritance resolved)"}
++          right={
++            <select value={matrixModule} onChange={(e) => setMatrixModule(e.target.value)} className="rounded-lg border b-line-soft bg-black/30 px-2 py-1 text-[9.5px] tx1 outline-none">
++              {MODULES.map((m) => (
++                <option key={m} value={m} className="bg-neutral-900">{m}</option>
++              ))}
++            </select>
++          }
++        >
++          <div className="thin-scroll max-h-[520px] overflow-auto rounded-xl border b-line-soft">
++            <table className="w-full border-collapse text-[9px]">
++              <thead className="sticky top-0 z-10">
++                <tr className="bg-neutral-900">
++                  <th className="sticky start-0 z-20 min-w-[130px] bg-neutral-900 px-2 py-2 text-start tx3">{rtl ? "نقش" : "Role"}</th>
++                  {matrixPerms.map((p) => (
++                    <th key={p.code} className="px-1 py-2 text-center align-bottom tx4" title={`${p.code} — ${T(p.title)}`}>
++                      <span className="inline-block whitespace-nowrap text-[8px]" style={{ writingMode: "vertical-rl", transform: "rotate(180deg)" }} dir="ltr">
++                        {p.code.split(".").slice(1).join(".")}
++                      </span>
++                    </th>
++                  ))}
++                </tr>
++              </thead>
++              <tbody className="divide-y b-line-soft">
++                {ROLE_CATALOG.map((r) => {
++                  const eff = new Set(effectivePermissions(r.code));
++                  const direct = new Set(r.grants);
++                  return (
++                    <tr key={r.code} className="hover:bg-white/5">
++                      <td className="sticky start-0 bg-neutral-950/90 px-2 py-1.5 tx1">
++                        <div className="text-[9.5px] font-light">{T(r.title)}</div>
++                        <div className="text-[7.5px] tx4">{T(CLASSIFICATION_LABEL[r.clearance])}</div>
++                      </td>
++                      {matrixPerms.map((p) => (
++                        <td key={p.code} className="px-1 py-1.5 text-center">
++                          {eff.has(p.code) ? (
++                            <span className={direct.has(p.code) ? "text-emerald-300" : "text-sky-400/70"} title={direct.has(p.code) ? (rtl ? "مستقیم" : "direct") : rtl ? "ارثی" : "inherited"}>
++                              {direct.has(p.code) ? "●" : "○"}
++                            </span>
++                          ) : (
++                            <span className="tx4 opacity-30">·</span>
++                          )}
++                        </td>
++                      ))}
++                    </tr>
++                  );
++                })}
++              </tbody>
++            </table>
++          </div>
++          <div className="mt-1.5 flex flex-wrap gap-3 text-[8.5px] tx3">
++            <span><span className="text-emerald-300">●</span> {rtl ? "اعطای مستقیم" : "direct grant"}</span>
++            <span><span className="text-sky-400/70">○</span> {rtl ? "ارث‌برده از نقش والد" : "inherited"}</span>
++            <span className="tx4">· {rtl ? "بدون دسترسی" : "no access"}</span>
++          </div>
++        </Card>
++      )}
++
++      {/* ═══════════ تفکیک وظایف ═══════════ */}
++      {pane === "sod" && (
++        <div className="grid gap-3 lg:grid-cols-2">
++          <Card title={rtl ? "قواعد تفکیک وظایف" : "SoD rule set"}>
++            <div className="space-y-1.5">
++              {SOD_RULES.map((r) => (
++                <div key={r.id} className={`rounded-xl border p-2 ${SEV_STYLE[r.severity === "critical" ? "critical" : "high"]}`}>
++                  <div className="flex items-center gap-1.5">
++                    <span className="font-mono text-[8.5px]" dir="ltr">{r.id}</span>
++                    <span className="rounded bg-black/25 px-1.5 py-[1px] text-[7.5px] uppercase">{r.severity}</span>
++                  </div>
++                  <div className="mt-0.5 flex flex-wrap items-center gap-1 font-mono text-[8.5px] opacity-90" dir="ltr">
++                    <span>{r.a}</span><span className="opacity-60">⇄</span><span>{r.b}</span>
++                  </div>
++                  <p className="mt-0.5 text-[9px] font-light opacity-90">{T(r.reason)}</p>
++                </div>
++              ))}
++            </div>
++          </Card>
++
++          <Card title={rtl ? "پویش کاربران" : "User scan"}>
++            <div className="space-y-1.5">
++              {DEMO_SUBJECTS.map((s) => {
++                const v = sodViolations(subjectPermissions(s));
++                return (
++                  <div key={s.id} className="glass-row flex flex-wrap items-center gap-1.5 rounded-lg px-2 py-1.5">
++                    <span className="text-[9.5px] font-light tx1">{s.displayName}</span>
++                    <span className="text-[8px] tx4">{s.roles.map((r) => roleTitle(r, lang)).join(" + ")}</span>
++                    {v.length === 0 ? (
++                      <span className="ms-auto rounded bg-emerald-400/10 px-1.5 py-0.5 text-[8px] text-emerald-300">{rtl ? "پاک" : "clean"}</span>
++                    ) : (
++                      <span className="ms-auto flex gap-1">
++                        {v.map((x) => (
++                          <span key={x.id} className="rounded bg-rose-400/15 px-1.5 py-0.5 font-mono text-[8px] text-rose-300" title={T(x.reason)} dir="ltr">{x.id}</span>
++                        ))}
++                      </span>
++                    )}
++                  </div>
++                );
++              })}
++            </div>
++            <p className="mt-2 rounded-lg bg-sky-400/10 px-2 py-1.5 text-[8.5px] text-sky-200">
++              {rtl
++                ? "تفکیک وظیفه در سطح نقش کافی نیست: حتی وقتی کاربر هر دو مجوز را قانوناً دارد، موتور در لحظهٔ تأیید بررسی می‌کند که تهیه‌کنندهٔ همان رکورد نباشد."
++                : "Role-level SoD is not enough: even when a user legitimately holds both permissions, the engine checks at approval time that they did not prepare that very record."}
++            </p>
++          </Card>
++        </div>
++      )}
++
++      {/* ═══════════ تفویض ═══════════ */}
++      {pane === "delegation" && (
++        <div className="grid gap-3 lg:grid-cols-[320px_1fr]">
++          <Card title={rtl ? "تفویض جدید" : "New delegation"}>
++            <div className="space-y-2">
++              {([
++                [rtl ? "از" : "From", dFrom, setDFrom],
++                [rtl ? "به" : "To", dTo, setDTo],
++              ] as const).map(([label, val, set]) => (
++                <label key={label} className="block">
++                  <span className="text-[8.5px] tx3">{label}</span>
++                  <select value={val} onChange={(e) => set(e.target.value)} className="mt-0.5 w-full rounded-lg border b-line-soft bg-black/30 px-2 py-1 text-[10px] tx1 outline-none">
++                    {DEMO_SUBJECTS.map((s) => (
++                      <option key={s.id} value={s.id} className="bg-neutral-900">{s.displayName}</option>
++                    ))}
++                  </select>
++                </label>
++              ))}
++              <label className="block">
++                <span className="text-[8.5px] tx3">{rtl ? "مجوز" : "Permission"}</span>
++                <select value={dPerm} onChange={(e) => setDPerm(e.target.value)} className="mt-0.5 w-full rounded-lg border b-line-soft bg-black/30 px-2 py-1 font-mono text-[9.5px] tx1 outline-none" dir="ltr">
++                  {PERMISSION_CATALOG.map((p) => (
++                    <option key={p.code} value={p.code} className="bg-neutral-900">{p.code}</option>
++                  ))}
++                </select>
++              </label>
++              <div className="grid grid-cols-2 gap-1.5">
++                <label className="block">
++                  <span className="text-[8.5px] tx3">{rtl ? "از تاریخ" : "From date"}</span>
++                  <input value={dStart} onChange={(e) => setDStart(e.target.value)} dir="ltr" className="mt-0.5 w-full rounded-lg border b-line-soft bg-black/25 px-2 py-1 text-[9.5px] tx1 outline-none" />
++                </label>
++                <label className="block">
++                  <span className="text-[8.5px] tx3">{rtl ? "تا تاریخ" : "To date"}</span>
++                  <input value={dEnd} onChange={(e) => setDEnd(e.target.value)} dir="ltr" className="mt-0.5 w-full rounded-lg border b-line-soft bg-black/25 px-2 py-1 text-[9.5px] tx1 outline-none" />
++                </label>
++              </div>
++              <label className="block">
++                <span className="text-[8.5px] tx3">{rtl ? "دلیل (الزامی)" : "Reason (mandatory)"}</span>
++                <input value={dReason} onChange={(e) => setDReason(e.target.value)} className="mt-0.5 w-full rounded-lg border b-line-soft bg-black/25 px-2 py-1 text-[9.5px] tx1 outline-none" />
++              </label>
++
++              {dIssues.map((i) => (
++                <div key={i.code} className={`rounded-lg px-2 py-1 text-[8.5px] ${i.code.startsWith("E-") ? "bg-rose-400/10 text-rose-300" : "bg-amber-400/10 text-amber-200"}`}>
++                  <span dir="ltr">{i.code}</span> · {T(i.message)}
++                </div>
++              ))}
++
++              <button
++                onClick={addDelegation}
++                disabled={dErrors.length > 0}
++                className={`w-full rounded-lg px-3 py-1.5 text-[10px] font-light transition ${dErrors.length ? "cursor-not-allowed border b-line-soft tx4 opacity-50" : "glass-row tx2 hover:tx1"}`}
++              >
++                {rtl ? "ثبت تفویض" : "Create delegation"}
++              </button>
++            </div>
++          </Card>
++
++          <Card title={rtl ? "تفویض‌های ثبت‌شده" : "Registered delegations"}>
++            <div className="space-y-1.5">
++              {delegations.map((d) => {
++                const active = isDelegationActive(d, TODAY);
++                const from = DEMO_SUBJECTS.find((s) => s.id === d.fromUserId)?.displayName ?? d.fromUserId;
++                const to = DEMO_SUBJECTS.find((s) => s.id === d.toUserId)?.displayName ?? d.toUserId;
++                return (
++                  <div key={d.id} className="glass-row rounded-xl px-2.5 py-2">
++                    <div className="flex flex-wrap items-center gap-1.5">
++                      <span className="text-[9.5px] font-light tx1">{from}</span>
++                      <span className="tx4">→</span>
++                      <span className="text-[9.5px] font-light tx1">{to}</span>
++                      <span className={`rounded px-1.5 py-0.5 text-[8px] ${d.revoked ? "bg-neutral-500/20 tx3" : active ? "bg-emerald-400/15 text-emerald-300" : "bg-amber-400/15 text-amber-200"}`}>
++                        {d.revoked ? (rtl ? "باطل‌شده" : "revoked") : active ? (rtl ? "فعال" : "active") : rtl ? "خارج از بازه" : "out of window"}
++                      </span>
++                      {!d.revoked && (
++                        <button onClick={() => revoke(d.id)} className="ms-auto rounded-lg border border-rose-400/30 bg-rose-400/10 px-2 py-0.5 text-[8.5px] text-rose-300">
++                          {rtl ? "ابطال" : "Revoke"}
++                        </button>
++                      )}
++                    </div>
++                    <div className="mt-1 flex flex-wrap gap-1">
++                      {d.permissions.map((p) => (
++                        <span key={p} className="rounded bg-fuchsia-400/10 px-1.5 py-0.5 font-mono text-[8px] text-fuchsia-200" dir="ltr">{p}</span>
++                      ))}
++                    </div>
++                    <div className="mt-0.5 text-[8.5px] font-extralight tx4">
++                      <span dir="ltr">{d.from} … {d.to}</span> · {d.reason}
++                    </div>
++                  </div>
++                );
++              })}
++            </div>
++          </Card>
++        </div>
++      )}
++
++      {/* ═══════════ سیاست‌ها ═══════════ */}
++      {pane === "policy" && (
++        <div className="grid gap-3 lg:grid-cols-3">
++          <Card title={rtl ? "سیاست گذرواژه" : "Password policy"}>
++            <input
++              value={pw}
++              onChange={(e) => setPw(e.target.value)}
++              dir="ltr"
++              className="w-full rounded-lg border b-line-soft bg-black/25 px-2 py-1.5 font-mono text-[10px] tx1 outline-none focus:border-sky-400/50"
++            />
++            <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-black/40">
++              <div className="h-full transition-all" style={{ width: `${pwCheck.score}%`, background: pwCheck.score >= 80 ? "#2E9E4F" : pwCheck.score >= 50 ? "#F5A623" : "#D0021B" }} />
++            </div>
++            <div className="mt-1 flex items-center gap-1.5 text-[9px]">
++              <span className={pwCheck.ok ? "text-emerald-300" : "text-rose-300"}>{pwCheck.ok ? (rtl ? "قابل قبول" : "Acceptable") : rtl ? "مردود" : "Rejected"}</span>
++              <span className="tx4">·</span>
++              <span className="tx3">{rtl ? "قدرت" : "Strength"} {pwCheck.score}/100</span>
++            </div>
++            <div className="mt-1.5 space-y-0.5">
++              {pwCheck.issues.map((i, k) => (
++                <div key={k} className="rounded bg-rose-400/10 px-1.5 py-0.5 text-[8.5px] text-rose-300">{T(i)}</div>
++              ))}
++            </div>
++            <div className="mt-2 space-y-0.5 border-t b-line-soft pt-1.5 text-[8.5px] font-extralight tx3">
++              <div>{rtl ? "حداقل طول: " : "Min length: "}{DEFAULT_PASSWORD_POLICY.minLength}</div>
++              <div>{rtl ? "بیشینه عمر: " : "Max age: "}{DEFAULT_PASSWORD_POLICY.maxAgeDays} {rtl ? "روز" : "days"}</div>
++              <div>{rtl ? "عمق تاریخچه: " : "History depth: "}{DEFAULT_PASSWORD_POLICY.historyDepth}</div>
++            </div>
++          </Card>
++
++          <Card title={rtl ? "سیاست نشست بر پایه سطح دسترسی" : "Clearance-based session policy"}>
++            <table className="w-full border-collapse text-[9px]">
++              <thead>
++                <tr className="border-b b-line-soft">
++                  <th className="px-1.5 py-1 text-start tx3">{rtl ? "سطح" : "Clearance"}</th>
++                  <th className="px-1.5 py-1 text-center tx3">{rtl ? "بی‌کاری" : "Idle"}</th>
++                  <th className="px-1.5 py-1 text-center tx3">{rtl ? "مطلق" : "Absolute"}</th>
++                  <th className="px-1.5 py-1 text-center tx3">MFA</th>
++                </tr>
++              </thead>
++              <tbody className="divide-y b-line-soft">
++                {(["internal", "confidential", "restricted"] as Classification[]).map((c) => {
++                  const p = sessionPolicyFor(c);
++                  return (
++                    <tr key={c}>
++                      <td className="px-1.5 py-1.5 tx1">{T(CLASSIFICATION_LABEL[c])}</td>
++                      <td className="px-1.5 py-1.5 text-center tx2">{p.idleMinutes}′</td>
++                      <td className="px-1.5 py-1.5 text-center tx2">{p.absoluteHours}h</td>
++                      <td className="px-1.5 py-1.5 text-center">
++                        <span className={p.mfaRequired ? "text-emerald-300" : "tx4"}>{p.mfaRequired ? "✔" : "—"}</span>
++                      </td>
++                    </tr>
++                  );
++                })}
++              </tbody>
++            </table>
++            <p className="mt-2 text-[8.5px] font-extralight tx3">
++              {rtl ? `سطح دسترسی کاربر جاری: ${me ? T(CLASSIFICATION_LABEL[subjectClearance(me)]) : "—"}` : `Current user clearance: ${me ? T(CLASSIFICATION_LABEL[subjectClearance(me)]) : "—"}`}
++            </p>
++          </Card>
++
++          <Card title={rtl ? "قفل پس از تلاش ناموفق" : "Failed-login lockout"}>
++            <label className="block">
++              <span className="text-[8.5px] tx3">{rtl ? "تعداد تلاش ناموفق در پنجرهٔ ۱۵ دقیقه" : "Failed attempts in 15-minute window"}: {attempts}</span>
++              <input type="range" min={0} max={8} value={attempts} onChange={(e) => setAttempts(Number(e.target.value))} className="w-full accent-sky-400" />
++            </label>
++            <div className={`mt-2 rounded-xl border p-2.5 ${lock.locked ? "border-rose-400/30 bg-rose-400/10" : "border-emerald-400/30 bg-emerald-400/10"}`}>
++              <div className={`text-[11px] font-bold ${lock.locked ? "text-rose-300" : "text-emerald-300"}`}>
++                {lock.locked ? (rtl ? "حساب قفل شد" : "Account locked") : rtl ? "باز" : "Open"}
++              </div>
++              <div className="mt-0.5 text-[9px] tx2">
++                {lock.locked
++                  ? rtl
++                    ? `آزادسازی پس از ${lock.unlockAfterMinutes} دقیقه`
++                    : `Unlocks in ${lock.unlockAfterMinutes} minutes`
++                  : rtl
++                  ? `${lock.remainingAttempts} تلاش باقی مانده`
++                  : `${lock.remainingAttempts} attempts remaining`}
++              </div>
++            </div>
++            <div className="mt-2 space-y-0.5 text-[8.5px] font-extralight tx3">
++              <div>{rtl ? "سقف تلاش: " : "Max attempts: "}{DEFAULT_LOCKOUT.maxAttempts}</div>
++              <div>{rtl ? "پنجره: " : "Window: "}{DEFAULT_LOCKOUT.windowMinutes} {rtl ? "دقیقه" : "min"}</div>
++              <div>{rtl ? "مدت قفل: " : "Lock duration: "}{DEFAULT_LOCKOUT.lockMinutes} {rtl ? "دقیقه" : "min"}</div>
++            </div>
++          </Card>
++        </div>
++      )}
++
++      {/* ═══════════ کاربران ═══════════ */}
++      {pane === "users" && <AccessControlPanel lang={lang} />}
++    </div>
++  );
++}
+diff --git a/src/components/WorkforceWorkspace.tsx b/src/components/WorkforceWorkspace.tsx
+new file mode 100644
+index 0000000..e5e16bf
+--- /dev/null
++++ b/src/components/WorkforceWorkspace.tsx
+@@ -0,0 +1,738 @@
++import { useEffect, useMemo, useState } from "react";
++import { type Lang } from "../data/framework";
++import { logAudit } from "../services/auditLogger";
++import {
++  HRM_FORMULA_VERSION,
++  IRAN_LABOR_LAW,
++  TRADE_BY_CODE,
++  TRADE_CATALOG,
++  distribute,
++  headcountFor,
++  hrmEws,
++  indirectShare,
++  mobilizationVariance,
++  obsHealth,
++  peakFactor,
++  productivityIndex,
++  splitHours,
++  validateObs,
++  validatePlan,
++  type MobilizationRequest,
++  type ObsNode,
++  type PlanLine,
++} from "../services/workforce";
++
++/* شش تب = دقیقاً شش زیرماژول ماژول منابع انسانی */
++export type HrmTab = "planning" | "timesheet" | "productivity" | "crew" | "onboarding" | "analytics";
++
++const TABS: { id: HrmTab; fa: string; en: string; icon: string; proc: string; deliverable: string }[] = [
++  { id: "planning", fa: "برنامه‌ریزی نیرو و OBS", en: "Workforce Planning & OBS", icon: "🗺", proc: "p1", deliverable: "D3" },
++  { id: "timesheet", fa: "تایم‌شیت و حضور و غیاب", en: "Timesheet & Attendance", icon: "⏱", proc: "p2", deliverable: "D4" },
++  { id: "productivity", fa: "بهره‌وری و عملکرد", en: "Productivity & Performance", icon: "📊", proc: "p3", deliverable: "D5" },
++  { id: "crew", fa: "اکیپ و نیروی پیمانکاری", en: "Crews & Subcontracted Labor", icon: "👷", proc: "p4", deliverable: "D6" },
++  { id: "onboarding", fa: "پذیرش، احکام و انطباق", en: "Onboarding & Compliance", icon: "🪪", proc: "p5", deliverable: "D7" },
++  { id: "analytics", fa: "تحلیل، هیستوگرام و گزارش", en: "Analytics & Histogram", icon: "📈", proc: "p6", deliverable: "D8" },
++];
++
++const TODAY = "2026-09-08";
++
++/* ─────────────── داده نمونه (پروژه OG-2401) ─────────────── */
++
++const SAMPLE_OBS: ObsNode[] = [
++  { id: "O-1", code: "OG2401", fa: "پروژه OG-2401", en: "Project OG-2401", level: 1, managerId: "مهندس رضایی", wbsLink: [], headcount: 412 },
++  { id: "O-2", parentId: "O-1", code: "OG2401.CON", fa: "ساختمان و نصب", en: "Construction", level: 2, managerId: "مهندس کاظمی", wbsLink: [], headcount: 336 },
++  { id: "O-3", parentId: "O-1", code: "OG2401.ENG", fa: "مهندسی", en: "Engineering", level: 2, managerId: "مهندس نوری", wbsLink: ["WBS-1.0"], headcount: 28 },
++  { id: "O-4", parentId: "O-1", code: "OG2401.HSQ", fa: "ایمنی و کیفیت", en: "HSE & Quality", level: 2, managerId: "مهندس شریفی", wbsLink: [], headcount: 24 },
++  { id: "O-5", parentId: "O-1", code: "OG2401.SUP", fa: "پشتیبانی و اداری", en: "Support & Admin", level: 2, managerId: "آقای موسوی", wbsLink: [], headcount: 24 },
++  { id: "O-6", parentId: "O-2", code: "OG2401.CON.CIV", fa: "عمران", en: "Civil", level: 3, managerId: "مهندس احمدی", wbsLink: ["WBS-2.1", "WBS-2.2"], headcount: 148 },
++  { id: "O-7", parentId: "O-2", code: "OG2401.CON.MEC", fa: "مکانیک و پایپینگ", en: "Mechanical & Piping", level: 3, managerId: "مهندس تقوی", wbsLink: ["WBS-3.1", "WBS-3.2"], headcount: 121 },
++  { id: "O-8", parentId: "O-2", code: "OG2401.CON.ELE", fa: "برق و ابزار دقیق", en: "Electrical & Instrument", level: 3, managerId: "مهندس فرهادی", wbsLink: ["WBS-4.1"], headcount: 67 },
++  { id: "O-9", parentId: "O-6", code: "OG2401.CON.CIV.A1", fa: "منطقه ۱ — فونداسیون", en: "Area 1 — Foundations", level: 4, managerId: "آقای سلطانی", wbsLink: ["WBS-2.1"], headcount: 86 },
++  { id: "O-10", parentId: "O-6", code: "OG2401.CON.CIV.A2", fa: "منطقه ۲ — ابنیه", en: "Area 2 — Buildings", level: 4, managerId: "آقای جعفری", wbsLink: ["WBS-2.2"], headcount: 62 },
++  { id: "O-11", parentId: "O-7", code: "OG2401.CON.MEC.A1", fa: "منطقه ۱ — نصب مخازن", en: "Area 1 — Tank Erection", level: 4, managerId: "آقای رستمی", wbsLink: ["WBS-3.1"], headcount: 58 },
++  { id: "O-12", parentId: "O-7", code: "OG2401.CON.MEC.A3", fa: "منطقه ۳ — پایپ‌رک", en: "Area 3 — Pipe Rack", level: 4, managerId: "آقای زمانی", wbsLink: ["WBS-3.2"], headcount: 63 },
++  { id: "O-13", parentId: "O-8", code: "OG2401.CON.ELE.A1", fa: "منطقه ۱ — کابل‌کشی", en: "Area 1 — Cabling", level: 4, wbsLink: ["WBS-4.1"], headcount: 67 },
++  { id: "O-14", parentId: "O-9", code: "OG2401.CON.CIV.A1.CR01", fa: "اکیپ آرماتوربندی ۱", en: "Rebar Crew 1", level: 5, managerId: "استاد کریمی", wbsLink: ["WBS-2.1"], headcount: 24 },
++  { id: "O-15", parentId: "O-9", code: "OG2401.CON.CIV.A1.CR02", fa: "اکیپ قالب‌بندی ۲", en: "Formwork Crew 2", level: 5, managerId: "استاد بابایی", wbsLink: ["WBS-2.1"], headcount: 31 },
++];
++
++const ALL_WBS = ["WBS-1.0", "WBS-2.1", "WBS-2.2", "WBS-3.1", "WBS-3.2", "WBS-4.1", "WBS-5.1"];
++
++const PERIODS = ["1405-01", "1405-02", "1405-03", "1405-04", "1405-05", "1405-06", "1405-07", "1405-08"];
++
++/** برنامه نیرو: دوره × رسته — دانه داده هم‌سطح با تجمیع تایم‌شیت (L7). */
++const SAMPLE_PLAN: PlanLine[] = (() => {
++  const mix: { trade: string; obs: string; totalMH: number; shape: "bell" | "front_loaded" | "back_loaded" | "uniform" }[] = [
++    { trade: "CIV-RBR", obs: "O-9", totalMH: 41000, shape: "front_loaded" },
++    { trade: "CIV-FRM", obs: "O-9", totalMH: 36000, shape: "front_loaded" },
++    { trade: "CIV-CNC", obs: "O-9", totalMH: 22000, shape: "bell" },
++    { trade: "PIP-FIT", obs: "O-12", totalMH: 48000, shape: "bell" },
++    { trade: "WLD-6G", obs: "O-12", totalMH: 39000, shape: "back_loaded" },
++    { trade: "MEC-STF", obs: "O-11", totalMH: 27000, shape: "bell" },
++    { trade: "ELE-CAB", obs: "O-13", totalMH: 24000, shape: "back_loaded" },
++    { trade: "INS-FIT", obs: "O-13", totalMH: 14000, shape: "back_loaded" },
++    { trade: "QCM-WLD", obs: "O-4", totalMH: 9000, shape: "uniform" },
++    { trade: "HSE-OFF", obs: "O-4", totalMH: 8000, shape: "uniform" },
++    { trade: "STF-SUP", obs: "O-2", totalMH: 11000, shape: "uniform" },
++    { trade: "GEN-HLP", obs: "O-2", totalMH: 19000, shape: "bell" },
++  ];
++  // انحراف واقعی نسبت به برنامه — عمداً در دوره‌های میانی کمبود نیرو دارد.
++  const actualBias = [1.02, 0.98, 0.93, 0.86, 0.82, 0.88, 0, 0];
++  const rows: PlanLine[] = [];
++  for (const m of mix) {
++    const dist = distribute(PERIODS.length, m.shape);
++    PERIODS.forEach((p, i) => {
++      const mh = Math.round(m.totalMH * dist[i]);
++      if (mh <= 0) return;
++      const hc = headcountFor(mh / 22, 8.5); // ۲۲ روز کاری در ماه
++      const bias = actualBias[i];
++      rows.push({
++        id: `PL-${m.trade}-${p}`,
++        periodCode: p,
++        periodStart: `${p}-01`,
++        periodEnd: `${p}-30`,
++        tradeCode: m.trade,
++        obsNodeId: m.obs,
++        plannedHeadcount: hc,
++        plannedMH: mh,
++        actualHeadcount: bias > 0 ? Math.round(hc * bias) : undefined,
++        actualMH: bias > 0 ? Math.round(mh * bias) : undefined,
++      });
++    });
++  }
++  return rows;
++})();
++
++const SAMPLE_MOB: MobilizationRequest[] = [
++  { id: "MOB-0112", tradeCode: "WLD-6G", qty: 18, needByDate: "1405-06-20", status: "in_progress", fulfilledQty: 11, justification: "جبران عقب‌ماندگی جوش پایپ‌رک منطقه ۳", gates: { contract: true, medical: true, hseTraining: false, tradeDocs: true, gatePass: false } },
++  { id: "MOB-0113", tradeCode: "PIP-FIT", qty: 24, needByDate: "1405-06-15", status: "approved", fulfilledQty: 0, justification: "پیک نصب اسپول طبق برنامه بازنگری ۳", gates: { contract: true, medical: false, hseTraining: false, tradeDocs: true, gatePass: false } },
++  { id: "MOB-0114", tradeCode: "ELE-CAB", qty: 12, needByDate: "1405-07-05", status: "submitted", fulfilledQty: 0, justification: "شروع کابل‌کشی منطقه ۱", gates: { contract: false, medical: false, hseTraining: false, tradeDocs: false, gatePass: false } },
++  { id: "MOB-0115", tradeCode: "CIV-RBR", qty: 15, needByDate: "1405-06-01", status: "fulfilled", fulfilledQty: 15, justification: "تکمیل اکیپ آرماتوربندی منطقه ۱", gates: { contract: true, medical: true, hseTraining: true, tradeDocs: true, gatePass: true } },
++  { id: "MOB-0116", tradeCode: "GEN-HLP", qty: 30, needByDate: "1405-06-25", status: "draft", fulfilledQty: 0, justification: "پشتیبانی بتن‌ریزی حجیم", gates: { contract: false, medical: false, hseTraining: false, tradeDocs: false, gatePass: false } },
++  { id: "MOB-0117", tradeCode: "INS-FIT", qty: 8, needByDate: "1405-08-10", status: "rejected", fulfilledQty: 0, justification: "پیش‌بینی زودهنگام — به دوره بعد موکول شد" },
++];
++
++/* مجموع نفر-ساعت فعالیت‌های PEX برای اعتبارسنجی برنامه */
++const PEX_TOTAL_MH = SAMPLE_PLAN.reduce((a, l) => a + l.plannedMH, 0);
++
++/* ─────────────── اجزای نمایشی ─────────────── */
++
++function Kpi({ label, value, hint, tone = "tx1" }: { label: string; value: string; hint?: string; tone?: string }) {
++  return (
++    <div className="rounded-xl border b-line-soft bg-black/15 px-2.5 py-2">
++      <div className="text-[8.5px] font-extralight tx3">{label}</div>
++      <div className={`text-[13px] font-semibold tabular-nums ${tone}`} dir="ltr">{value}</div>
++      {hint && <div className="text-[8px] font-extralight tx4">{hint}</div>}
++    </div>
++  );
++}
++
++function Section({ title, note, children }: { title: string; note?: string; children: React.ReactNode }) {
++  return (
++    <section className="glass-dark rounded-2xl p-3">
++      <div className="mb-2 flex flex-wrap items-baseline gap-2">
++        <h4 className="text-[11px] font-semibold tx1">{title}</h4>
++        {note && <span className="text-[8.5px] font-extralight tx3">{note}</span>}
++      </div>
++      {children}
++    </section>
++  );
++}
++
++function Th({ children }: { children: React.ReactNode }) {
++  return <th className="px-2 py-1 text-start font-normal">{children}</th>;
++}
++
++/** کارت تب‌های در دست ساخت — نقشه راه صادقانه به جای صفحه خالی. */
++function Upcoming({ rtl, tab }: { rtl: boolean; tab: (typeof TABS)[number] }) {
++  const plan: Record<HrmTab, { fa: string; en: string }[]> = {
++    planning: [],
++    timesheet: [
++      { fa: "موتور تفکیک ساعت عادی / اضافه‌کاری / شب / تعطیل طبق قانون کار", en: "Hours split engine per labor law" },
++      { fa: "ثبت میدانی آفلاین با GPS، عکس و امضای دیجیتال", en: "Offline field capture with GPS, photo and signature" },
++      { fa: "چرخه تأیید هفت‌مرحله‌ای و قفل دوره", en: "Seven-stage approval and period lock" },
++      { fa: "حل تعارض همگام‌سازی مبتنی بر امضا", en: "Signature-based sync conflict resolution" },
++    ],
++    productivity: [
++      { fa: "شاخص بهره‌وری از پیشرفت تأییدشده", en: "PI from approved progress only" },
++      { fa: "مقایسه نرخ اجرا با نرخ استاندارد رسته", en: "Unit rate vs trade standard" },
++      { fa: "ریشه‌یابی افت بهره‌وری و پل به ادعا", en: "Root-cause analysis and claim linkage" },
++    ],
++    crew: [
++      { fa: "ترکیب اکیپ و بهره‌وری تیمی", en: "Crew mix and team productivity" },
++      { fa: "قرارداد نیروی پیمانکاری و صورت‌کارکرد", en: "Subcontracted labor and payment certificates" },
++    ],
++    onboarding: [
++      { fa: "پنج گیت تجهیز و پرونده پرسنلی", en: "Five mobilization gates and personnel file" },
++      { fa: "پایش انقضای مدارک و ماتریس مهارت", en: "Document expiry watch and skill matrix" },
++    ],
++    analytics: [
++      { fa: "هیستوگرام نیرو برنامه در برابر واقعی", en: "Manpower histogram plan vs actual" },
++      { fa: "شش شاخص کلیدی و مرکز گزارش A4 سه‌لوگو", en: "Six KPIs and A4 three-logo report centre" },
++    ],
++  };
++  const items = plan[tab.id] ?? [];
++  return (
++    <Section
++      title={rtl ? `${tab.fa} — در دست ساخت` : `${tab.en} — under construction`}
++      note={rtl ? `طراحی این زیرماژول در تحویلی ${tab.deliverable} انجام می‌شود` : `designed in deliverable ${tab.deliverable}`}
++    >
++      <ul className="space-y-1.5">
++        {items.map((it, i) => (
++          <li key={i} className="flex items-start gap-2 rounded-lg border b-line-soft bg-black/10 px-2.5 py-1.5">
++            <span className="mt-[3px] h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400/70" />
++            <span className="text-[9.5px] font-light tx2">{rtl ? it.fa : it.en}</span>
++          </li>
++        ))}
++      </ul>
++      <p className="mt-2 text-[8.5px] font-extralight tx4">
++        {rtl
++          ? "موتور محاسباتی این بخش‌ها در src/services/workforce.ts آماده است و پس از تأیید طراحی به رابط کاربری وصل می‌شود."
++          : "The calculation engine already exists in src/services/workforce.ts and will be wired once the design is approved."}
++      </p>
++    </Section>
++  );
++}
++
++/* ══════════════════════════ کامپوننت اصلی ══════════════════════════ */
++
++export default function WorkforceWorkspace({
++  lang,
++  initialTab = "planning",
++  hideTabs = false,
++}: {
++  lang: Lang;
++  initialTab?: HrmTab;
++  hideTabs?: boolean;
++}) {
++  const rtl = lang === "fa";
++  const [tab, setTab] = useState<HrmTab>(initialTab);
++  const [view, setView] = useState<"obs" | "plan" | "mob">("obs");
++  const [obs] = useState<ObsNode[]>(SAMPLE_OBS);
++  const [mob, setMob] = useState<MobilizationRequest[]>(SAMPLE_MOB);
++  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
++  const [selectedNode, setSelectedNode] = useState<string>("O-6");
++  useEffect(() => setTab(initialTab), [initialTab]);
++
++  const fmt = (n: number) => n.toLocaleString(rtl ? "fa-IR" : "en-US");
++
++  /* ── محاسبات ── */
++  const obsIssues = useMemo(() => validateObs(obs), [obs]);
++  const health = useMemo(() => obsHealth(obs, ALL_WBS), [obs]);
++  const planIssues = useMemo(() => validatePlan(SAMPLE_PLAN, PEX_TOTAL_MH), []);
++
++  /** تجمیع دوره‌ای برنامه در برابر واقعی — پایه هیستوگرام. */
++  const byPeriod = useMemo(
++    () =>
++      PERIODS.map((p) => {
++        const rows = SAMPLE_PLAN.filter((l) => l.periodCode === p);
++        return {
++          period: p,
++          planHC: rows.reduce((a, l) => a + l.plannedHeadcount, 0),
++          actualHC: rows.reduce((a, l) => a + (l.actualHeadcount ?? 0), 0),
++          planMH: rows.reduce((a, l) => a + l.plannedMH, 0),
++          actualMH: rows.reduce((a, l) => a + (l.actualMH ?? 0), 0),
++          hasActual: rows.some((l) => l.actualHeadcount !== undefined),
++        };
++      }),
++    []
++  );
++
++  const currentPeriod = byPeriod.find((p) => p.period === "1405-06")!;
++  const mobVar = mobilizationVariance(currentPeriod.actualHC, currentPeriod.planHC);
++  const pkFactor = peakFactor(byPeriod.map((p) => p.planHC));
++  const indirect = indirectShare(
++    SAMPLE_PLAN.filter((l) => l.periodCode === "1405-06").map((l) => ({ tradeCode: l.tradeCode, headcount: l.plannedHeadcount }))
++  );
++
++  /** نمونه بهره‌وری برای نوار وضعیت — از پیشرفت تأییدشده، نه اعلامی (ADR-09). */
++  const pi = productivityIndex(48000, 62, 34800);
++
++  /** نمونه تفکیک ساعت برای نمایش آمادگی موتور D4. */
++  const sample = splitHours(11.5, { dateIso: "2026-09-07", shift: "day" });
++  const otPct = round1((sample.ot / sample.raw) * 100);
++
++  const expiringDocs = 7;
++  const alerts = useMemo(
++    () => hrmEws({ mobVarPct: mobVar, piWorst: pi.pi, otPct, expiringDocs, indirectPct: indirect }),
++    [mobVar, pi.pi, otPct, indirect]
++  );
++
++  /* ── ماتریس RAM: ستون C از کارکرد واقعی مشتق می‌شود، نه از اعلام ── */
++  const ramRows = useMemo(() => obs.filter((n) => n.level === 3), [obs]);
++  const ramFor = (node: ObsNode, wbs: string): "R" | "A" | "C" | "I" | "—" => {
++    if (node.wbsLink.includes(wbs)) return "R";
++    const children = obs.filter((c) => c.parentId === node.id);
++    if (children.some((c) => c.wbsLink.includes(wbs))) return "A";
++    if (node.code.includes("HSQ")) return "I";
++    return "—";
++  };
++
++  const advance = (id: string) => {
++    const order: MobilizationRequest["status"][] = ["draft", "submitted", "approved", "in_progress", "fulfilled"];
++    setMob((prev) =>
++      prev.map((m) => {
++        if (m.id !== id) return m;
++        const i = order.indexOf(m.status);
++        if (i < 0 || i === order.length - 1) return m;
++        const next = order[i + 1];
++        logAudit("HRM_MOB_ADVANCE", "Workforce", `Mobilization ${id}: ${m.status} → ${next}`);
++        return { ...m, status: next, fulfilledQty: next === "fulfilled" ? m.qty : m.fulfilledQty };
++      })
++    );
++  };
++
++  const toggle = (id: string) =>
++    setCollapsed((prev) => {
++      const next = new Set(prev);
++      next.has(id) ? next.delete(id) : next.add(id);
++      return next;
++    });
++
++  /* درخت OBS تخت‌شده با احترام به گره‌های جمع‌شده */
++  const visibleObs = useMemo(() => {
++    const out: ObsNode[] = [];
++    const walk = (parentId?: string) => {
++      for (const n of obs.filter((x) => x.parentId === parentId)) {
++        out.push(n);
++        if (!collapsed.has(n.id)) walk(n.id);
++      }
++    };
++    walk(undefined);
++    return out;
++  }, [obs, collapsed]);
++
++  const selected = obs.find((n) => n.id === selectedNode);
++  const maxHC = Math.max(...byPeriod.map((p) => Math.max(p.planHC, p.actualHC)), 1);
++
++  return (
++    <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden" dir={rtl ? "rtl" : "ltr"}>
++      {/* هدر */}
++      <section className="glass-dark shrink-0 rounded-2xl p-3">
++        <div className="flex flex-wrap items-center gap-2">
++          <span className="grid h-8 w-8 place-items-center rounded-lg border border-amber-400/40 bg-amber-400/10 text-[15px]">👷</span>
++          <div className="min-w-0 flex-1">
++            <h3 className="text-[12px] font-semibold tx1">
++              {rtl ? "مدیریت منابع انسانی و بهره‌وری نیروی کار" : "Human Resources & Workforce Productivity"}
++            </h3>
++            <p className="text-[8.5px] font-extralight tx3">
++              {rtl
++                ? "هر ساعت به یک فعالیت شارژ می‌شود · بهره‌وری از پیشرفت تأییدشده · نرخ×ساعت فقط برای هزینه پروژه"
++                : "every hour charged to an activity · productivity from approved progress · rate×hours for project cost only"}
++            </p>
++          </div>
++          <span className={`rounded-lg px-2 py-1 text-[10px] font-semibold tabular-nums ${Math.abs(mobVar) > 10 ? "bg-rose-400/15 text-rose-300" : "bg-emerald-400/15 text-emerald-300"}`}>
++            {rtl ? "انحراف تجهیز" : "Mob var"} {mobVar > 0 ? "+" : ""}{mobVar}%
++          </span>
++          <span className="rounded-lg border b-line-soft px-2 py-1 text-[9px] tx3" dir="ltr">PI {pi.pi.toFixed(2)}</span>
++          <span className="rounded-lg border b-line-soft px-2 py-1 text-[9px] tx3" dir="ltr">HC {fmt(currentPeriod.actualHC)}</span>
++          <span className="rounded-lg border b-line-soft px-2 py-1 text-[9px] tx3">{rtl ? "داده نمونه" : "Sample data"}</span>
++          <span className="rounded-lg border b-line-soft px-2 py-1 font-mono text-[9px] tx3" dir="ltr">{HRM_FORMULA_VERSION} · {TODAY}</span>
++        </div>
++        {alerts.length > 0 && (
++          <div className="mt-2 flex flex-wrap gap-1.5">
++            {alerts.map((a) => (
++              <span
++                key={a.code}
++                className={`rounded-lg px-2 py-0.5 text-[8.5px] ${
++                  a.severity === "critical" ? "bg-rose-400/15 text-rose-300" : a.severity === "high" ? "bg-amber-400/15 text-amber-200" : "border b-line-soft tx3"
++                }`}
++              >
++                <span dir="ltr">{a.code}</span> · {a.message}
++              </span>
++            ))}
++          </div>
++        )}
++      </section>
++
++      {!hideTabs && (
++        <nav className="flex shrink-0 flex-wrap items-center gap-1.5 rounded-xl bg-black/15 p-1">
++          {TABS.map((it) => (
++            <button
++              key={it.id}
++              onClick={() => setTab(it.id)}
++              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[10px] font-light transition ${tab === it.id ? "toggle-on tx1 shadow-sm" : "tx3 hover:tx2"}`}
++              title={it.proc}
++            >
++              <span>{it.icon}</span>
++              <span>{rtl ? it.fa : it.en}</span>
++            </button>
++          ))}
++        </nav>
++      )}
++
++      <div className="thin-scroll min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
++        {/* ═══ تب ۱: برنامه‌ریزی نیرو، OBS و تجهیز ═══ */}
++        {tab === "planning" && (
++          <>
++            <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
++              <Kpi label={rtl ? "نیروی فعال" : "Active headcount"} value={fmt(currentPeriod.actualHC)} hint={`${rtl ? "برنامه" : "plan"} ${fmt(currentPeriod.planHC)}`} />
++              <Kpi
++                label={rtl ? "انحراف تجهیز" : "Mobilization variance"}
++                value={`${mobVar > 0 ? "+" : ""}${mobVar}%`}
++                tone={Math.abs(mobVar) > 10 ? "text-rose-300" : "text-emerald-300"}
++                hint={rtl ? "آستانه ±۱۰٪" : "threshold ±10%"}
++              />
++              <Kpi label={rtl ? "ضریب پیک" : "Peak factor"} value={pkFactor.toFixed(2)} tone={pkFactor > 2.5 ? "text-amber-300" : "tx1"} hint={rtl ? "حداکثر ۲.۵" : "max 2.5"} />
++              <Kpi label={rtl ? "سهم غیرمستقیم" : "Indirect share"} value={`${indirect}%`} tone={indirect > 25 ? "text-amber-300" : "tx1"} hint={rtl ? "آستانه ۲۵٪" : "threshold 25%"} />
++              <Kpi label={rtl ? "پوشش WBS در سازمان" : "OBS→WBS coverage"} value={`${health.wbsCoverage}%`} tone={health.wbsCoverage < 95 ? "text-amber-300" : "text-emerald-300"} />
++            </div>
++
++            <nav className="flex flex-wrap items-center gap-1.5 rounded-xl bg-black/15 p-1">
++              {([
++                { id: "obs", fa: "چارت سازمانی", en: "Org chart", icon: "🌳" },
++                { id: "plan", fa: "برنامه نیرو و هیستوگرام", en: "Plan & histogram", icon: "📊" },
++                { id: "mob", fa: "تجهیز نیرو", en: "Mobilization", icon: "🚚" },
++              ] as const).map((v) => (
++                <button
++                  key={v.id}
++                  onClick={() => setView(v.id)}
++                  className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[9.5px] font-light transition ${view === v.id ? "toggle-on tx1 shadow-sm" : "tx3 hover:tx2"}`}
++                >
++                  <span>{v.icon}</span>
++                  <span>{rtl ? v.fa : v.en}</span>
++                </button>
++              ))}
++            </nav>
++
++            {/* ── نمای ۱: چارت سازمانی ── */}
++            {view === "obs" && (
++              <div className="grid gap-3 lg:grid-cols-[1.4fr_1fr]">
++                <Section
++                  title={rtl ? "ساختار شکست سازمانی (OBS)" : "Organization Breakdown Structure"}
++                  note={rtl ? "شش سطح · کد فرزند باید با کد والد شروع شود" : "six levels · child code must extend parent code"}
++                >
++                  <div className="space-y-0.5">
++                    {visibleObs.map((n) => {
++                      const hasChildren = obs.some((c) => c.parentId === n.id);
++                      const issue = obsIssues.find((i) => i.nodeId === n.id);
++                      return (
++                        <button
++                          key={n.id}
++                          onClick={() => setSelectedNode(n.id)}
++                          className={`glass-row flex w-full items-center gap-2 rounded-lg py-1.5 text-start transition ${selectedNode === n.id ? "row-on" : ""}`}
++                          style={{ paddingInlineStart: `${(n.level - 1) * 16 + 8}px`, paddingInlineEnd: "8px" }}
++                        >
++                          <span
++                            onClick={(e) => { e.stopPropagation(); if (hasChildren) toggle(n.id); }}
++                            className={`grid h-4 w-4 shrink-0 place-items-center rounded text-[8px] ${hasChildren ? "border b-line-soft tx3" : "tx4"}`}
++                          >
++                            {hasChildren ? (collapsed.has(n.id) ? "+" : "−") : "·"}
++                          </span>
++                          <span className="min-w-0 flex-1 truncate text-[10px] font-light tx1">{rtl ? n.fa : n.en}</span>
++                          {issue && (
++                            <span className={`shrink-0 rounded px-1 py-[1px] text-[7.5px] ${issue.severity === "error" ? "bg-rose-400/15 text-rose-300" : "bg-amber-400/15 text-amber-200"}`} dir="ltr">
++                              {issue.code}
++                            </span>
++                          )}
++                          {n.headcount !== undefined && (
++                            <span className="shrink-0 rounded bg-sky-400/10 px-1.5 py-[1px] text-[8px] tabular-nums text-sky-300" dir="ltr">
++                              {fmt(n.headcount)}
++                            </span>
++                          )}
++                          <span className="shrink-0 font-mono text-[7.5px] tx4" dir="ltr">L{n.level}</span>
++                        </button>
++                      );
++                    })}
++                  </div>
++                </Section>
++
++                <div className="space-y-3">
++                  <Section title={rtl ? "جزئیات گره" : "Node detail"}>
++                    {selected ? (
++                      <div className="space-y-1.5 text-[9.5px]">
++                        <Row k={rtl ? "کد" : "Code"} v={selected.code} mono />
++                        <Row k={rtl ? "عنوان" : "Title"} v={rtl ? selected.fa : selected.en} />
++                        <Row k={rtl ? "سطح" : "Level"} v={`L${selected.level}`} mono />
++                        <Row k={rtl ? "مسئول" : "Manager"} v={selected.managerId ?? (rtl ? "— تعیین نشده" : "— unassigned")} />
++                        <Row k={rtl ? "نفرات" : "Headcount"} v={fmt(selected.headcount ?? 0)} mono />
++                        <Row k={rtl ? "پیوند WBS" : "WBS link"} v={selected.wbsLink.length ? selected.wbsLink.join(" · ") : "—"} mono />
++                      </div>
++                    ) : null}
++                  </Section>
++
++                  <Section title={rtl ? "سلامت سازمان" : "Organization health"} note={rtl ? "سه شاخص" : "three indicators"}>
++                    <div className="grid grid-cols-3 gap-2">
++                      <Kpi label={rtl ? "پوشش WBS" : "WBS coverage"} value={`${health.wbsCoverage}%`} tone={health.wbsCoverage < 95 ? "text-amber-300" : "text-emerald-300"} />
++                      <Kpi label={rtl ? "توازن عمق" : "Depth balance"} value={health.depthStdDev.toFixed(2)} tone={health.depthStdDev > 1.5 ? "text-amber-300" : "text-emerald-300"} />
++                      <Kpi label={rtl ? "حیطه نظارت" : "Span of control"} value={fmt(Math.round(health.spanOfControl))} tone={health.spanOfControl > 35 ? "text-rose-300" : "text-emerald-300"} />
++                    </div>
++                    {obsIssues.length > 0 && (
++                      <ul className="mt-2 space-y-1">
++                        {obsIssues.slice(0, 4).map((i, k) => (
++                          <li key={k} className="text-[8.5px] font-light tx3">
++                            <span className={i.severity === "error" ? "text-rose-300" : "text-amber-200"} dir="ltr">{i.code}</span> · {i.message}
++                          </li>
++                        ))}
++                      </ul>
++                    )}
++                  </Section>
++
++                  <Section title={rtl ? "ماتریس مسئولیت (RAM)" : "Responsibility matrix"} note={rtl ? "ستون مشورتی از کارکرد واقعی مشتق می‌شود" : "consulted column derived from actual charged hours"}>
++                    <table className="w-full text-[9px]">
++                      <thead className="tx3">
++                        <tr className="border-b b-line-soft">
++                          <Th>{rtl ? "واحد" : "Unit"}</Th>
++                          {ALL_WBS.slice(0, 5).map((w) => (
++                            <th key={w} className="px-1 py-1 text-center font-normal" dir="ltr">{w.replace("WBS-", "")}</th>
++                          ))}
++                        </tr>
++                      </thead>
++                      <tbody>
++                        {ramRows.map((n) => (
++                          <tr key={n.id} className="border-b b-line-soft/50">
++                            <td className="px-2 py-1 tx2">{rtl ? n.fa : n.en}</td>
++                            {ALL_WBS.slice(0, 5).map((w) => {
++                              const r = ramFor(n, w);
++                              return (
++                                <td key={w} className="px-1 py-1 text-center">
++                                  <span
++                                    className={`inline-grid h-4 w-4 place-items-center rounded text-[8px] font-semibold ${
++                                      r === "R" ? "bg-emerald-400/20 text-emerald-300"
++                                      : r === "A" ? "bg-sky-400/20 text-sky-300"
++                                      : r === "I" ? "bg-white/5 tx4" : "tx4"
++                                    }`}
++                                    dir="ltr"
++                                  >
++                                    {r === "—" ? "" : r}
++                                  </span>
++                                </td>
++                              );
++                            })}
++                          </tr>
++                        ))}
++                      </tbody>
++                    </table>
++                  </Section>
++                </div>
++              </div>
++            )}
++
++            {/* ── نمای ۲: برنامه نیرو و هیستوگرام ── */}
++            {view === "plan" && (
++              <>
++                <Section
++                  title={rtl ? "هیستوگرام نیرو — برنامه در برابر واقعی" : "Manpower histogram — plan vs actual"}
++                  note={rtl ? "میله روشن: برنامه · میله پررنگ: واقعی" : "light bar: plan · solid bar: actual"}
++                >
++                  <div className="flex h-48 items-end gap-3 px-1">
++                    {byPeriod.map((p) => (
++                      <div key={p.period} className="flex min-w-0 flex-1 flex-col items-center gap-1">
++                        <div className="flex h-40 w-full items-end justify-center gap-[3px]">
++                          <div
++                            className="w-1/2 rounded-t bg-sky-400/25"
++                            style={{ height: `${(p.planHC / maxHC) * 100}%` }}
++                            title={`${rtl ? "برنامه" : "plan"} ${p.planHC}`}
++                          />
++                          <div
++                            className={`w-1/2 rounded-t ${p.actualHC && p.actualHC < p.planHC * 0.9 ? "bg-rose-400/70" : "bg-emerald-400/70"}`}
++                            style={{ height: `${(p.actualHC / maxHC) * 100}%` }}
++                            title={`${rtl ? "واقعی" : "actual"} ${p.actualHC}`}
++                          />
++                        </div>
++                        <span className="truncate text-[7.5px] tx4" dir="ltr">{p.period.replace("1405-", "")}</span>
++                        <span className="text-[8px] tabular-nums tx3" dir="ltr">{p.hasActual ? p.actualHC : "—"}</span>
++                      </div>
++                    ))}
++                  </div>
++                </Section>
++
++                <Section title={rtl ? "برنامه نیرو بر حسب دوره و رسته" : "Manpower plan by period and trade"} note={`${fmt(PEX_TOTAL_MH)} ${rtl ? "نفر-ساعت برنامه‌ریزی‌شده" : "planned man-hours"}`}>
++                  <div className="thin-scroll max-h-72 overflow-auto">
++                    <table className="w-full text-[9.5px]">
++                      <thead className="tx3">
++                        <tr className="border-b b-line-soft">
++                          <Th>{rtl ? "دوره" : "Period"}</Th>
++                          <Th>{rtl ? "برنامه نفر" : "Plan HC"}</Th>
++                          <Th>{rtl ? "واقعی نفر" : "Actual HC"}</Th>
++                          <Th>{rtl ? "انحراف" : "Variance"}</Th>
++                          <Th>{rtl ? "برنامه نفر-ساعت" : "Plan MH"}</Th>
++                          <Th>{rtl ? "واقعی نفر-ساعت" : "Actual MH"}</Th>
++                        </tr>
++                      </thead>
++                      <tbody>
++                        {byPeriod.map((p) => {
++                          const v = p.hasActual ? mobilizationVariance(p.actualHC, p.planHC) : null;
++                          return (
++                            <tr key={p.period} className="border-b b-line-soft/50">
++                              <td className="px-2 py-1 font-mono tx2" dir="ltr">{p.period}</td>
++                              <td className="px-2 py-1 tabular-nums tx2" dir="ltr">{fmt(p.planHC)}</td>
++                              <td className="px-2 py-1 tabular-nums tx1" dir="ltr">{p.hasActual ? fmt(p.actualHC) : "—"}</td>
++                              <td className={`px-2 py-1 tabular-nums ${v === null ? "tx4" : Math.abs(v) > 10 ? "text-rose-300" : "text-emerald-300"}`} dir="ltr">
++                                {v === null ? "—" : `${v > 0 ? "+" : ""}${v}%`}
++                              </td>
++                              <td className="px-2 py-1 tabular-nums tx3" dir="ltr">{fmt(p.planMH)}</td>
++                              <td className="px-2 py-1 tabular-nums tx3" dir="ltr">{p.hasActual ? fmt(p.actualMH) : "—"}</td>
++                            </tr>
++                          );
++                        })}
++                      </tbody>
++                    </table>
++                  </div>
++                  {planIssues.length > 0 && (
++                    <div className="mt-2 flex flex-wrap gap-1.5">
++                      {planIssues.map((i, k) => (
++                        <span key={k} className={`rounded-lg px-2 py-0.5 text-[8.5px] ${i.severity === "error" ? "bg-rose-400/15 text-rose-300" : "bg-amber-400/15 text-amber-200"}`}>
++                          <span dir="ltr">{i.code}</span> · {i.message}
++                        </span>
++                      ))}
++                    </div>
++                  )}
++                </Section>
++
++                <Section title={rtl ? "کاتالوگ رسته‌های شغلی" : "Trade catalog"} note={`${fmt(TRADE_CATALOG.length)} ${rtl ? "رسته · نرخ استاندارد نیازمند کالیبراسیون با داده تاریخی" : "trades · standard rates require historical calibration"}`}>
++                  <div className="thin-scroll max-h-64 overflow-auto">
++                    <table className="w-full text-[9.5px]">
++                      <thead className="tx3">
++                        <tr className="border-b b-line-soft">
++                          <Th>{rtl ? "کد" : "Code"}</Th>
++                          <Th>{rtl ? "رسته" : "Trade"}</Th>
++                          <Th>{rtl ? "گروه" : "Category"}</Th>
++                          <Th>{rtl ? "نوع" : "Type"}</Th>
++                          <Th>{rtl ? "نرخ استاندارد" : "Std rate"}</Th>
++                        </tr>
++                      </thead>
++                      <tbody>
++                        {TRADE_CATALOG.map((tr) => (
++                          <tr key={tr.code} className="border-b b-line-soft/50">
++                            <td className="px-2 py-1 font-mono tx2" dir="ltr">{tr.code}</td>
++                            <td className="px-2 py-1 tx1">{rtl ? tr.fa : tr.en}</td>
++                            <td className="px-2 py-1 tx3" dir="ltr">{tr.category}</td>
++                            <td className="px-2 py-1">
++                              <span className={`rounded px-1.5 py-[1px] text-[8px] ${tr.direct ? "bg-emerald-400/15 text-emerald-300" : "bg-white/5 tx3"}`}>
++                                {tr.direct ? (rtl ? "مستقیم" : "direct") : rtl ? "غیرمستقیم" : "indirect"}
++                              </span>
++                            </td>
++                            <td className="px-2 py-1 tabular-nums tx3" dir="ltr">{tr.stdRate ? `${tr.stdRate} ${tr.uom}` : "—"}</td>
++                          </tr>
++                        ))}
++                      </tbody>
++                    </table>
++                  </div>
++                </Section>
++              </>
++            )}
++
++            {/* ── نمای ۳: تجهیز نیرو ── */}
++            {view === "mob" && (
++              <>
++                <Section title={rtl ? "درخواست‌های تجهیز نیرو" : "Mobilization requests"} note={rtl ? "نفر تازه‌وارد فقط با پنج گیت سبز اجازه ثبت ساعت دارد" : "a new hire may log hours only when all five gates are green"}>
++                  <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
++                    {mob.map((m) => {
++                      const trade = TRADE_BY_CODE[m.tradeCode];
++                      const gates = m.gates;
++                      const green = gates ? Object.values(gates).filter(Boolean).length : 0;
++                      const pct = m.qty > 0 ? Math.round((m.fulfilledQty / m.qty) * 100) : 0;
++                      return (
++                        <div key={m.id} className="rounded-xl border b-line-soft bg-black/15 p-2.5">
++                          <div className="flex items-center gap-2">
++                            <span className="font-mono text-[9px] tx3" dir="ltr">{m.id}</span>
++                            <span className={`rounded px-1.5 py-[1px] text-[8px] ${STATUS_TONE[m.status]}`}>{STATUS_LABEL[m.status][rtl ? "fa" : "en"]}</span>
++                            <span className="ms-auto text-[9px] tabular-nums tx2" dir="ltr">{fmt(m.fulfilledQty)}/{fmt(m.qty)}</span>
++                          </div>
++                          <div className="mt-1 text-[10px] font-light tx1">{trade ? (rtl ? trade.fa : trade.en) : m.tradeCode}</div>
++                          <div className="mt-0.5 text-[8.5px] font-extralight tx3">{m.justification}</div>
++                          <div className="mt-1.5 h-1 w-full overflow-hidden rounded bg-white/5">
++                            <div className="h-full rounded bg-emerald-400/60" style={{ width: `${pct}%` }} />
++                          </div>
++                          <div className="mt-1.5 flex items-center gap-1">
++                            {gates ? (
++                              GATE_KEYS.map((g) => (
++                                <span
++                                  key={g}
++                                  title={GATE_LABEL[g][rtl ? "fa" : "en"]}
++                                  className={`h-1.5 flex-1 rounded ${gates[g] ? "bg-emerald-400/70" : "bg-rose-400/40"}`}
++                                />
++                              ))
++                            ) : (
++                              <span className="text-[8px] tx4">{rtl ? "بدون گیت" : "no gates"}</span>
++                            )}
++                            <span className="ms-1 text-[8px] tabular-nums tx4" dir="ltr">{green}/5</span>
++                          </div>
++                          <div className="mt-1.5 flex items-center justify-between">
++                            <span className="text-[8px] tx4" dir="ltr">{m.needByDate}</span>
++                            {!["fulfilled", "rejected", "cancelled"].includes(m.status) && (
++                              <button
++                                onClick={() => advance(m.id)}
++                                className="glass-row rounded-lg px-2 py-1 text-[8.5px] font-light tx2 transition hover:tx1"
++                              >
++                                {rtl ? "پیشبرد وضعیت ←" : "Advance →"}
++                              </button>
++                            )}
++                          </div>
++                        </div>
++                      );
++                    })}
++                  </div>
++                </Section>
++
++                <Section title={rtl ? "موتور تفکیک ساعت — آماده اتصال در تحویلی ۴" : "Hours split engine — ready, wired in D4"} note={rtl ? "نمونه: ۱۱.۵ ساعت در روز کاری عادی" : "sample: 11.5 hours on a normal working day"}>
++                  <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
++                    <Kpi label={rtl ? "ساعت خام" : "Raw"} value={String(sample.raw)} />
++                    <Kpi label={rtl ? "عادی" : "Normal"} value={String(sample.normal)} hint={`${rtl ? "سقف" : "cap"} ${IRAN_LABOR_LAW.dailyNormalCap}`} />
++                    <Kpi label={rtl ? "اضافه‌کاری" : "Overtime"} value={String(sample.ot)} tone="text-amber-300" hint={`×${IRAN_LABOR_LAW.otFactor}`} />
++                    <Kpi label={rtl ? "شب‌کاری" : "Night"} value={String(sample.night)} hint={`×${IRAN_LABOR_LAW.nightFactor}`} />
++                    <Kpi label={rtl ? "مازاد رد شده" : "Rejected"} value={String(sample.rejected)} tone={sample.rejected > 0 ? "text-rose-300" : "tx1"} hint={`${rtl ? "سقف مطلق" : "abs cap"} ${IRAN_LABOR_LAW.dailyAbsoluteCap}`} />
++                  </div>
++                  <p className="mt-2 text-[8.5px] font-extralight tx4">
++                    {rtl
++                      ? "کاربر فقط ساعت خام را وارد می‌کند؛ تفکیک خروجی موتور است و دستی قابل ویرایش نیست."
++                      : "the user enters raw hours only; the split is engine output and cannot be edited by hand."}
++                  </p>
++                </Section>
++              </>
++            )}
++          </>
++        )}
++
++        {/* ═══ تب‌های ۲ تا ۶ — نقشه راه ═══ */}
++        {tab !== "planning" && <Upcoming rtl={rtl} tab={TABS.find((x) => x.id === tab)!} />}
++      </div>
++    </div>
++  );
++}
++
++/* ─────────────── کمکی ─────────────── */
++
++function Row({ k, v, mono = false }: { k: string; v: string; mono?: boolean }) {
++  return (
++    <div className="flex items-baseline justify-between gap-2 border-b b-line-soft/40 py-1">
++      <span className="shrink-0 text-[8.5px] font-extralight tx3">{k}</span>
++      <span className={`min-w-0 truncate text-end text-[9.5px] tx1 ${mono ? "font-mono" : ""}`} dir={mono ? "ltr" : undefined}>{v}</span>
++    </div>
++  );
++}
++
++const GATE_KEYS = ["contract", "medical", "hseTraining", "tradeDocs", "gatePass"] as const;
++
++const GATE_LABEL: Record<(typeof GATE_KEYS)[number], { fa: string; en: string }> = {
++  contract: { fa: "قرارداد امضاشده", en: "Signed contract" },
++  medical: { fa: "معاینات طب کار", en: "Medical clearance" },
++  hseTraining: { fa: "آموزش ایمنی (از ماژول HSE)", en: "HSE training (from HSE module)" },
++  tradeDocs: { fa: "مدارک تخصصی رسته", en: "Trade documents" },
++  gatePass: { fa: "کارت تردد", en: "Gate pass" },
++};
++
++const STATUS_LABEL: Record<MobilizationRequest["status"], { fa: string; en: string }> = {
++  draft: { fa: "پیش‌نویس", en: "Draft" },
++  submitted: { fa: "ارسال‌شده", en: "Submitted" },
++  approved: { fa: "تأییدشده", en: "Approved" },
++  in_progress: { fa: "در جریان جذب", en: "In progress" },
++  fulfilled: { fa: "تکمیل‌شده", en: "Fulfilled" },
++  rejected: { fa: "رد شده", en: "Rejected" },
++  cancelled: { fa: "لغو شده", en: "Cancelled" },
++};
++
++const STATUS_TONE: Record<MobilizationRequest["status"], string> = {
++  draft: "bg-white/5 tx3",
++  submitted: "bg-sky-400/15 text-sky-300",
++  approved: "bg-indigo-400/15 text-indigo-300",
++  in_progress: "bg-amber-400/15 text-amber-200",
++  fulfilled: "bg-emerald-400/15 text-emerald-300",
++  rejected: "bg-rose-400/15 text-rose-300",
++  cancelled: "bg-white/5 tx4",
++};
++
++function round1(n: number): number {
++  return Math.round(n * 10) / 10;
++}
+diff --git a/src/data/framework.ts b/src/data/framework.ts
+index f19aba0..dddfdb5 100644
+--- a/src/data/framework.ts
++++ b/src/data/framework.ts
+@@ -790,6 +790,164 @@ export const domains: Domain[] = [
+       },
+     ],
+   },
++  {
++    id: "d8",
++    icon: "🔬",
++    accent: "#34D399",
++    title: { fa: "مدیریت کیفیت و بازرسی", en: "Quality & Inspection Management" },
++    processes: [
++      {
++        id: "d8-p1",
++        title: { fa: "برنامه‌ریزی کیفیت و ITP", en: "Quality Planning & ITP" },
++        subs: [
++          { id: "d8-p1-s1", title: { fa: "برنامه کیفیت و نقاط بازرسی", en: "Quality Plan & Inspection Points" }, activity: { fa: "تدوین QMP و ITP با نقاط توقف و شاهد", en: "Author QMP and ITP with hold/witness points" }, source: "QMP, Specification, Code", sql: ["Quality_Plan", "ITP_Master", "ITP_Point"], output: "Approved ITP", connectsTo: "Engineering, Construction", ai: "AI ITP Generator" },
++        ],
++      },
++      {
++        id: "d8-p2",
++        title: { fa: "بازرسی و آزمون", en: "Inspection & Testing" },
++        subs: [
++          { id: "d8-p2-s1", title: { fa: "درخواست بازرسی و نتیجه آزمون", en: "Inspection Request & Test Result" }, activity: { fa: "صدور IR، اجرای بازرسی و ثبت نتیجه", en: "Raise IR, inspect and record result" }, source: "Site, Lab, TPI", sql: ["Inspection_Request", "Inspection_Result", "Test_Report"], output: "Inspection Record", connectsTo: "Construction, Handover", ai: "AI Defect Classifier" },
++        ],
++      },
++      {
++        id: "d8-p3",
++        title: { fa: "عدم انطباق و اقدام اصلاحی", en: "Non-Conformance & CAPA" },
++        subs: [
++          { id: "d8-p3-s1", title: { fa: "ثبت NCR و ریشه‌یابی", en: "NCR Registration & Root Cause" }, activity: { fa: "ثبت عدم انطباق، تعیین تکلیف و اقدام اصلاحی", en: "Log NCR, disposition and corrective action" }, source: "Inspection, Audit, Site", sql: ["NCR_Register", "CAPA_Action"], output: "NCR & CAPA Report", connectsTo: "Governance, Claims", ai: "AI Root Cause Advisor" },
++        ],
++      },
++      {
++        id: "d8-p4",
++        title: { fa: "کنترل مواد و گواهی‌ها", en: "Material Control & Certificates" },
++        subs: [
++          { id: "d8-p4-s1", title: { fa: "گواهی مواد و ردیابی ذوب", en: "Material Certificate & Heat Traceability" }, activity: { fa: "کنترل MTC، انطباق گرید و ردیابی شماره ذوب", en: "Verify MTC, grade match and heat traceability" }, source: "Vendor, Lab, Warehouse", sql: ["Material_Certificate", "Heat_Trace_Link"], output: "Material Release Note", connectsTo: "Procurement, Warehouse", ai: "AI Certificate Reader" },
++        ],
++      },
++      {
++        id: "d8-p5",
++        title: { fa: "ممیزی کیفیت و انطباق", en: "Quality Audit & Compliance" },
++        subs: [
++          { id: "d8-p5-s1", title: { fa: "ممیزی داخلی و انطباق ISO 9001", en: "Internal Audit & ISO 9001 Compliance" }, activity: { fa: "برنامه ممیزی، یافته‌ها و امتیاز انطباق", en: "Audit program, findings and compliance score" }, source: "ISO 9001, Procedures", sql: ["Quality_Audit", "Audit_Finding"], output: "Audit Report", connectsTo: "Governance, PMO", ai: "AI Compliance Analyzer" },
++        ],
++      },
++      {
++        id: "d8-p6",
++        title: { fa: "تحویل، پانچ و راه‌اندازی", en: "Handover, Punch & Commissioning" },
++        subs: [
++          { id: "d8-p6-s1", title: { fa: "پانچ‌لیست و تحویل مکانیکی", en: "Punch List & Mechanical Completion" }, activity: { fa: "پانچ کلاس A/B، داکیومنت کیفیت و دروازه MC", en: "Class A/B punch, quality dossier and MC gate" }, source: "Site, Commissioning", sql: ["Punch_List", "Completion_Certificate", "Quality_Dossier"], output: "MC / RFC Certificate", connectsTo: "Client, Operations", ai: "AI Punch Prioritizer" },
++        ],
++      },
++    ],
++  },
++  {
++    /* ماژول منابع انسانی — پس از HSE و پیش از مدیریت سامانه (ADR-13 بازنگری‌شده).
++       کد دامنه در src/services/workforce.ts → HRM_DOMAIN_ID متمرکز است (ADR-15). */
++    id: "d10",
++    icon: "👷",
++    accent: "#F59E0B",
++    title: { fa: "مدیریت منابع انسانی و بهره‌وری نیروی کار", en: "Human Resources & Workforce Productivity" },
++    processes: [
++      {
++        id: "d10-p1",
++        title: { fa: "برنامه‌ریزی نیرو، OBS و تجهیز", en: "Workforce Planning, OBS & Mobilization" },
++        subs: [
++          { id: "d10-p1-s1", title: { fa: "ساختار شکست سازمانی و ماتریس مسئولیت", en: "OBS & Responsibility Matrix" }, activity: { fa: "تعریف سازمان شش‌سطحی و پیوند آن به WBS", en: "Define six-level org and link to WBS" }, source: "PMO, Site Org Chart", sql: ["hrm_obs_node", "hrm_crew"], output: "OBS & RAM Report", connectsTo: "Planning, Governance", ai: "AI Span-of-Control Advisor" },
++          { id: "d10-p1-s2", title: { fa: "برنامه نیرو و هیستوگرام", en: "Manpower Plan & Histogram" }, activity: { fa: "تبدیل نفر-ساعت برنامه به نفرات دوره‌ای و ترازسازی", en: "Convert planned man-hours to periodic headcount and level" }, source: "Primavera, Excel", sql: ["hrm_manpower_plan", "hrm_manpower_plan_line"], output: "Manpower Histogram", connectsTo: "Planning, Cost", ai: "AI Resource Leveling" },
++          { id: "d10-p1-s3", title: { fa: "درخواست تجهیز و تخلیه نیرو", en: "Mobilization & Demobilization" }, activity: { fa: "گردش درخواست نیرو با پنج گیت انطباق", en: "Request workflow with five compliance gates" }, source: "Site Request", sql: ["hrm_mobilization_request"], output: "Mobilization Status", connectsTo: "HSE, Procurement", ai: "AI Demand Forecast" },
++        ],
++      },
++      {
++        id: "d10-p2",
++        title: { fa: "تایم‌شیت و حضور و غیاب", en: "Timesheet & Attendance" },
++        subs: [
++          { id: "d10-p2-s1", title: { fa: "ثبت کارکرد و تفکیک ساعت", en: "Timesheet Entry & Hours Split" }, activity: { fa: "ثبت میدانی ساعت و تفکیک عادی، اضافه‌کاری، شب و تعطیل", en: "Field capture and split into normal, overtime, night and holiday" }, source: "Mobile PWA, Excel", sql: ["hrm_timesheet_header", "hrm_timesheet_entry", "hrm_leave_log"], output: "Approved Timesheet", connectsTo: "Cost, Planning", ai: "AI Anomaly Detection" },
++        ],
++      },
++      {
++        id: "d10-p3",
++        title: { fa: "بهره‌وری و عملکرد نیرو", en: "Workforce Productivity & Performance" },
++        subs: [
++          { id: "d10-p3-s1", title: { fa: "شاخص بهره‌وری و ریشه‌یابی افت", en: "Productivity Index & Root Cause" }, activity: { fa: "محاسبه شاخص بهره‌وری از پیشرفت تأییدشده و ریشه‌یابی انحراف", en: "Compute PI from approved progress and analyse variance" }, source: "Timesheet, Progress", sql: ["hrm_productivity_log", "hrm_rca_reason"], output: "Productivity Report", connectsTo: "Planning, Claims", ai: "AI Productivity Forecast" },
++        ],
++      },
++      {
++        id: "d10-p4",
++        title: { fa: "اکیپ و نیروی پیمانکاری", en: "Crews & Subcontracted Labor" },
++        subs: [
++          { id: "d10-p4-s1", title: { fa: "مدیریت اکیپ و صورت‌کارکرد پیمانکار", en: "Crew Management & Subcontractor Certificates" }, activity: { fa: "ترکیب اکیپ، حضور دست‌مزدی و کنترل صورت‌کارکرد", en: "Crew mix, daily-wage attendance and payment certificate control" }, source: "Site, Gate Pass", sql: ["hrm_crew", "hrm_sub_contract", "hrm_sub_attendance"], output: "Subcontractor Payment Certificate", connectsTo: "Cost, Contracts", ai: "AI Overbilling Detection" },
++        ],
++      },
++      {
++        id: "d10-p5",
++        title: { fa: "پذیرش، احکام و انطباق", en: "Onboarding, Assignment & Compliance" },
++        subs: [
++          { id: "d10-p5-s1", title: { fa: "پرونده پرسنلی و پایش مدارک", en: "Personnel File & Document Watch" }, activity: { fa: "پذیرش نیرو، صدور حکم و پایش انقضای مدارک و صلاحیت", en: "Onboard, assign and monitor document and competency expiry" }, source: "HR, HSE, Medical", sql: ["hrm_person", "hrm_assignment", "hrm_document", "hrm_skill_matrix"], output: "Compliance Dashboard", connectsTo: "HSE, Governance", ai: "AI Expiry Predictor" },
++        ],
++      },
++      {
++        id: "d10-p6",
++        title: { fa: "تحلیل، هیستوگرام و گزارش", en: "Analytics, Histogram & Reporting" },
++        subs: [
++          { id: "d10-p6-s1", title: { fa: "شاخص‌های کلیدی و هشدار زودهنگام", en: "KPIs & Early Warning" }, activity: { fa: "شش شاخص کلیدی نیرو و چهار قاعده هشدار زودهنگام", en: "Six workforce KPIs and four early-warning rules" }, source: "Timesheet, Plan", sql: ["hrm_metric_snapshot", "hrm_alert_rule", "hrm_alert"], output: "Workforce KPI Report", connectsTo: "Dashboard, Cost", ai: "AI Trend Analysis" },
++        ],
++      },
++    ],
++  },
++  {
++    /* ماژول ارتباطات و دانش — مالک گردش مکاتبات، جلسات، ذی‌نفعان و درس‌آموخته.
++       مالک فایل مدرک همچنان d1 است و ماتریس اختیار همچنان d6. */
++    id: "d11",
++    icon: "📡",
++    accent: "#A78BFA",
++    title: { fa: "مدیریت ارتباطات و دانش", en: "Communications & Knowledge Management" },
++    processes: [
++      {
++        id: "d11-p1",
++        title: { fa: "مکاتبات و اعلان قراردادی", en: "Correspondence & Contractual Notices" },
++        subs: [
++          { id: "d11-p1-s1", title: { fa: "دفتر مکاتبات و مهلت پاسخ", en: "Correspondence Register & Response Deadline" }, activity: { fa: "ثبت نامه وارده و صادره با مهلت پاسخ بر پایه روز کاری", en: "Register letters with working-day response deadlines" }, source: "Outlook, Secretariat, Upload", sql: ["ckm_letter", "ckm_letter_link"], output: "Correspondence & Overdue Report", connectsTo: "Documents, Claims", ai: "AI Letter Summarization" },
++          { id: "d11-p1-s2", title: { fa: "اعلان قراردادی و پایش Time-Bar", en: "Contractual Notice & Time-Bar Watch" }, activity: { fa: "پایش مهلت اعلان ادعا و هشدار پیش از سقوط حق", en: "Track notice windows and warn before the right lapses" }, source: "Contract, Claim Register", sql: ["ckm_letter", "ckm_notice_watch"], output: "Time-Bar Status", connectsTo: "Risk & Claims", ai: "AI Notice Drafter" },
++        ],
++      },
++      {
++        id: "d11-p2",
++        title: { fa: "جلسات و مصوبات", en: "Meetings & Action Register" },
++        subs: [
++          { id: "d11-p2-s1", title: { fa: "صورت‌جلسه و پیگیری مصوبات", en: "Minutes & Action Follow-up" }, activity: { fa: "ثبت صورت‌جلسه، تصویب، توزیع و پیگیری مصوبات دارای مالک و موعد", en: "Record, approve, distribute minutes and track owned actions" }, source: "Meeting, User Entry", sql: ["ckm_meeting", "ckm_action_item"], output: "Minutes & Action Status", connectsTo: "Governance, Planning", ai: "AI Minutes Generator" },
++        ],
++      },
++      {
++        id: "d11-p3",
++        title: { fa: "ذی‌نفعان و برنامه ارتباطات", en: "Stakeholders & Communication Plan" },
++        subs: [
++          { id: "d11-p3-s1", title: { fa: "ثبت ذی‌نفعان و شبکه قدرت-علاقه", en: "Stakeholder Register & Power-Interest Grid" }, activity: { fa: "تحلیل قدرت و علاقه و سنجش شکاف سطح تعامل", en: "Assess power, interest and engagement gap" }, source: "PMO, Interviews", sql: ["ckm_stakeholder", "ckm_engagement_log"], output: "Stakeholder Engagement Report", connectsTo: "Governance", ai: "AI Engagement Advisor" },
++          { id: "d11-p3-s2", title: { fa: "ماتریس ارتباطات و ابلاغ", en: "Communication & Distribution Matrix" }, activity: { fa: "تعیین کانال، تناوب و مالک ارتباط با هر ذی‌نفع", en: "Define channel, cadence and owner per stakeholder" }, source: "Comms Plan", sql: ["ckm_comm_matrix"], output: "Communication Matrix", connectsTo: "All Modules", ai: "AI Channel Optimizer" },
++        ],
++      },
++      {
++        id: "d11-p4",
++        title: { fa: "اطلاع‌رسانی و تشدید", en: "Notification & Escalation" },
++        subs: [
++          { id: "d11-p4-s1", title: { fa: "قواعد اعلان و سطوح تشدید", en: "Notification Rules & Escalation Levels" }, activity: { fa: "تعریف رویداد، کانال، مخاطب و زمان تشدید", en: "Define event, channel, audience and escalation timing" }, source: "System Events", sql: ["ckm_notification_rule", "ckm_notification_log"], output: "Escalation Log", connectsTo: "Alerts, Governance", ai: "AI Alert Deduplication" },
++        ],
++      },
++      {
++        id: "d11-p5",
++        title: { fa: "دانش و درس‌آموخته", en: "Knowledge & Lessons Learned" },
++        subs: [
++          { id: "d11-p5-s1", title: { fa: "بانک درس‌آموخته و استفاده مجدد", en: "Lessons Register & Reuse Tracking" }, activity: { fa: "ثبت درس با منشأ الزامی، تأیید شورای دانش و ردیابی استفاده مجدد", en: "Capture lessons with mandatory source, validate and track reuse" }, source: "NCR, Claim, Incident, Meeting", sql: ["ckm_lesson", "ckm_lesson_reuse"], output: "Knowledge Value Report", connectsTo: "Quality, Risk, HSE", ai: "AI Knowledge Recommender" },
++        ],
++      },
++      {
++        id: "d11-p6",
++        title: { fa: "تحلیل و گزارش ارتباطات", en: "Communication Analytics & Reporting" },
++        subs: [
++          { id: "d11-p6-s1", title: { fa: "شاخص‌های ارتباطی و هشدار زودهنگام", en: "Communication KPIs & Early Warning" }, activity: { fa: "زمان پاسخ، نرخ بستن مصوبه، پوشش ارتباطات و نرخ استفاده از دانش", en: "Response time, action closure, comms coverage and knowledge utilization" }, source: "CKM Data", sql: ["ckm_metric_snapshot", "ckm_alert"], output: "Communication KPI Report", connectsTo: "Dashboard", ai: "AI Trend Analysis" },
++        ],
++      },
++    ],
++  },
+   {
+     id: "d7",
+     icon: "⚙️",
+@@ -897,6 +1055,7 @@ export const domainExportFormats: Record<string, FormatKind[]> = {
+   d4: ["excel", "word", "pdf", "csv"],                     // Risk / Claims
+   d5: ["excel", "pdf", "csv", "xml"],                      // Cost / Procurement
+   d6: ["pdf", "word", "excel", "json"],                    // Governance
++  d8: ["excel", "pdf", "word", "csv"],                     // Quality & Inspection
+ };
+ 
+ /* Legacy module shape — derived from domains for backward compatibility */
+diff --git a/src/data/pexProject.ts b/src/data/pexProject.ts
+new file mode 100644
+index 0000000..3d978e9
+--- /dev/null
++++ b/src/data/pexProject.ts
+@@ -0,0 +1,233 @@
++/**
++ * داده نمونه ماژول PEX (d2) — پروژه OG-2401.
++ * تنها مصرف‌کننده منطق: src/services/planning.ts . این فایل «ظرف» داده است، نه موتور.
++ * وزن گام‌های RoC از pex/data/roc_iran.json (مقیاس ۰..۱) با ضریب ۱۰۰ به مقیاس درصد آمده است.
++ */
++import type { Activity, Milestone, Period, Relation, RocStep, StepProgress, WeightItem } from "../services/planning";
++
++export const PEX_PROJECT = {
++  code: "OG-2401",
++  nameFa: "واحد بازیافت گاز — فاز ۲",
++  nameEn: "Gas Recovery Unit — Phase 2",
++  start: "2026-01-03",
++  dataDate: "2026-09-04",
++  /** طول مسیر بحرانی در Baseline BL-01 (روز کاری) — مرجع محاسبه CP Drift. */
++  baselineCpLength: 291,
++  baselineEnd: "2026-12-07",
++  baselineId: "BL-01",
++  currency: "USD",
++};
++
++/** فعالیت‌های زمان‌بندی؛ cost/manHours مبنای وزن‌دهی PMS است. */
++export type PexActivity = Activity & {
++  wbs: string;
++  nameEn: string;
++  cost: number;
++  manHours: number;
++  /** کد دستور Rule of Credit */
++  roc: string;
++  progress: StepProgress[];
++};
++
++export const PEX_ACTIVITIES: PexActivity[] = [
++  { id: "ENG-Bd", wbs: "1", nameFa: "طراحی پایه", nameEn: "Basic design", duration: 30, cost: 420_000, manHours: 5_400, actualStart: "2026-01-03", actualFinish: "2026-02-05", roc: "ENG-DOC", progress: [{ code: "idc", percent: 100, irApproved: true }, { code: "issue_review", percent: 100, irApproved: true }, { code: "issue_afc", percent: 100, irApproved: true }, { code: "drafting", percent: 100 }, { code: "calc", percent: 100 }] },
++  { id: "ENG-DD", wbs: "1", nameFa: "مهندسی تفصیلی", nameEn: "Detail engineering", duration: 55, cost: 780_000, manHours: 11_200, actualStart: "2026-02-07", roc: "ENG-DOC", progress: [{ code: "drafting", percent: 100 }, { code: "calc", percent: 100 }, { code: "idc", percent: 100, irApproved: true }, { code: "issue_review", percent: 100, irApproved: true }, { code: "issue_afc", percent: 70, irApproved: true }] },
++  { id: "PRC-LLI", wbs: "2", nameFa: "خرید اقلام بلندمدت", nameEn: "Long-lead items", duration: 110, cost: 3_150_000, manHours: 1_800, actualStart: "2026-02-14", roc: "PRC-EQP", progress: [{ code: "po", percent: 100 }, { code: "fabrication", percent: 100 }, { code: "fat", percent: 100, irApproved: true }, { code: "delivery", percent: 70, irApproved: true }] },
++  { id: "PRC-BULK", wbs: "2", nameFa: "خرید اقلام بالک", nameEn: "Bulk materials", duration: 60, cost: 1_240_000, manHours: 900, actualStart: "2026-03-07", roc: "PRC-EQP", progress: [{ code: "po", percent: 100 }, { code: "fabrication", percent: 100 }, { code: "fat", percent: 100, irApproved: true }, { code: "delivery", percent: 90, irApproved: true }] },
++  { id: "CIV-EXC", wbs: "3", nameFa: "خاکبرداری و تسطیح", nameEn: "Excavation & grading", duration: 20, cost: 310_000, manHours: 4_100, actualStart: "2026-02-09", actualFinish: "2026-03-10", roc: "CIV-EXC", progress: [{ code: "excavation", percent: 100 }, { code: "grading", percent: 100 }, { code: "compaction", percent: 100, irApproved: true }] },
++  { id: "CIV-FND", wbs: "3", nameFa: "فونداسیون تجهیزات", nameEn: "Equipment foundations", duration: 55, cost: 890_000, manHours: 12_600, actualStart: "2026-04-25", roc: "CIV-FND", progress: [{ code: "excavation", percent: 100 }, { code: "blinding", percent: 100, irApproved: true }, { code: "rebar", percent: 100, irApproved: true }, { code: "form", percent: 100 }, { code: "pour", percent: 100, irApproved: true }, { code: "cure_strip", percent: 70 }] },
++  { id: "STR-ERC", wbs: "3", nameFa: "نصب اسکلت فلزی", nameEn: "Steel erection", duration: 70, cost: 1_060_000, manHours: 14_800, actualStart: "2026-06-20", roc: "STR-STL", progress: [{ code: "fabrication", percent: 100 }, { code: "erection", percent: 85 }, { code: "bolting", percent: 70, irApproved: true }, { code: "grouting", percent: 40 }, { code: "painting", percent: 0 }] },
++  { id: "MEC-EQP", wbs: "3", nameFa: "نصب تجهیزات مکانیکی", nameEn: "Mechanical equipment", duration: 50, cost: 1_480_000, manHours: 9_300, actualStart: "2026-08-15", roc: "MEC-EQP", progress: [{ code: "setting", percent: 100 }, { code: "alignment", percent: 80, irApproved: true }, { code: "grouting", percent: 60 }, { code: "internals", percent: 20 }, { code: "final_check", percent: 0, irApproved: false }] },
++  { id: "PIP-SPL", wbs: "3", nameFa: "ساخت اسپول پایپینگ", nameEn: "Pipe spool fabrication", duration: 70, cost: 940_000, manHours: 15_500, actualStart: "2026-05-09", roc: "PIP-SPL", progress: [{ code: "cutting", percent: 100 }, { code: "fitup", percent: 100, irApproved: true }, { code: "welding", percent: 75, irApproved: true }, { code: "ndt", percent: 50, irApproved: true }, { code: "painting", percent: 15 }] },
++  { id: "PIP-ERC", wbs: "3", nameFa: "نصب خطوط لوله", nameEn: "Piping erection", duration: 95, cost: 1_320_000, manHours: 21_400, actualStart: "2026-08-01", roc: "PIP-ERC", progress: [{ code: "erection", percent: 55 }, { code: "welding", percent: 45, irApproved: true }, { code: "ndt", percent: 30, irApproved: false }, { code: "support", percent: 25 }, { code: "hydrotest", percent: 0 }] },
++  { id: "ELE-CBL", wbs: "3", nameFa: "کابل‌کشی برق", nameEn: "Electrical cabling", duration: 55, cost: 610_000, manHours: 8_700, actualStart: "2026-07-11", roc: "ELE-CBL", progress: [{ code: "tray", percent: 100 }, { code: "pulling", percent: 85 }, { code: "termination", percent: 30, irApproved: true }, { code: "megger", percent: 0 }] },
++  { id: "INS-LOOP", wbs: "3", nameFa: "ابزار دقیق و لوپ", nameEn: "Instrumentation & loops", duration: 45, cost: 520_000, manHours: 6_200, actualStart: "2026-08-29", roc: "INS-LOOP", progress: [{ code: "mounting", percent: 60 }, { code: "tubing", percent: 40 }, { code: "cabling", percent: 20 }, { code: "calibration", percent: 10, irApproved: false }, { code: "loop_test", percent: 0, irApproved: false }] },
++  { id: "PSU-FLS", wbs: "4", nameFa: "فلاشینگ و تست نهایی", nameEn: "Flushing & final test", duration: 25, cost: 260_000, manHours: 3_100, roc: "PSU-CHK", progress: [{ code: "punch", percent: 0 }, { code: "flushing", percent: 0 }, { code: "loop_check", percent: 0, irApproved: false }, { code: "handover", percent: 0, irApproved: false }] },
++  { id: "PSU-RFSU", wbs: "4", nameFa: "آمادگی راه‌اندازی", nameEn: "Ready for start-up", duration: 0, cost: 0, manHours: 0, roc: "PSU-CHK", isMilestone: true, progress: [] },
++];
++
++export const PEX_RELATIONS: Relation[] = [
++  { pred: "ENG-Bd", succ: "ENG-DD", type: "FS" },
++  { pred: "ENG-Bd", succ: "PRC-LLI", type: "FS" },
++  { pred: "ENG-DD", succ: "PRC-BULK", type: "SS", lag: 10 },
++  { pred: "ENG-DD", succ: "CIV-FND", type: "FS", lag: 5 },
++  { pred: "ENG-Bd", succ: "CIV-EXC", type: "FS" },
++  { pred: "CIV-EXC", succ: "CIV-FND", type: "FS" },
++  { pred: "CIV-FND", succ: "STR-ERC", type: "FS" },
++  { pred: "CIV-FND", succ: "MEC-EQP", type: "FS", lag: 5 },
++  { pred: "PRC-LLI", succ: "MEC-EQP", type: "FS" },
++  { pred: "PRC-BULK", succ: "PIP-SPL", type: "FS" },
++  { pred: "STR-ERC", succ: "PIP-ERC", type: "SS", lag: 15 },
++  { pred: "PIP-SPL", succ: "PIP-ERC", type: "SS", lag: 20 },
++  { pred: "MEC-EQP", succ: "PIP-ERC", type: "SS", lag: 10 },
++  { pred: "STR-ERC", succ: "ELE-CBL", type: "SS", lag: 20 },
++  { pred: "ELE-CBL", succ: "INS-LOOP", type: "FS" },
++  { pred: "PIP-ERC", succ: "PSU-FLS", type: "FS" },
++  { pred: "INS-LOOP", succ: "PSU-FLS", type: "FS" },
++  { pred: "PSU-FLS", succ: "PSU-RFSU", type: "FS" },
++];
++
++/** فعالیت‌های مرجع پیش‌بینی مایلستون: Forecast = EF همان فعالیت در CPM. */
++export const PEX_MILESTONES: (Milestone & { driverActivity: string; nameEn: string })[] = [
++  { id: "MS-ENG-IFC", nameFa: "صدور نقشه‌های IFC", nameEn: "IFC drawings issued", type: "Key", contractualDate: "2026-04-25", baselineDate: "2026-04-11", forecastDate: "2026-04-25", actualDate: "2026-05-02", driverActivity: "ENG-DD", alertDaysBefore: [30, 14, 7, 3, 1] },
++  { id: "MS-CIV-FOC", nameFa: "تکمیل فونداسیون‌ها", nameEn: "Foundations complete", type: "Key", contractualDate: "2026-08-27", baselineDate: "2026-08-27", forecastDate: "2026-08-27", penaltyPerDay: 4_000, driverActivity: "CIV-FND", alertDaysBefore: [30, 14, 7, 3, 1] },
++  { id: "MS-EQP-DEL", nameFa: "تحویل تجهیزات بلندمدت", nameEn: "Long-lead delivery", type: "Gate", contractualDate: "2026-09-30", baselineDate: "2026-09-30", forecastDate: "2026-09-30", penaltyPerDay: 6_500, driverActivity: "PRC-LLI", alertDaysBefore: [30, 14, 7, 3, 1] },
++  { id: "MS-MECH-RFSU", nameFa: "تحویل مکانیکی و آمادگی راه‌اندازی", nameEn: "Mechanical completion / RFSU", type: "Contractual", contractualDate: "2026-12-14", baselineDate: "2026-12-07", forecastDate: "2026-11-14", penaltyPerDay: 25_000, bonusPerDay: 10_000, driverActivity: "PSU-RFSU", alertDaysBefore: [30, 14, 7, 3, 1] },
++];
++
++/** منحنی S برنامه‌ای (Baseline) — مبنای Planned% در Data Date. */
++export const PEX_SCURVE: { date: string; cumPct: number }[] = [
++  { date: "2026-01-03", cumPct: 0 },
++  { date: "2026-03-01", cumPct: 9.4 },
++  { date: "2026-04-30", cumPct: 26.8 },
++  { date: "2026-06-30", cumPct: 52.5 },
++  { date: "2026-08-31", cumPct: 84.2 },
++  { date: "2026-09-30", cumPct: 92.6 },
++  { date: "2026-10-31", cumPct: 97.1 },
++  { date: "2026-12-07", cumPct: 100 },
++];
++
++/** تعهدات نگاه‌به‌جلو هفته جاری — مبنای PPC. */
++export const PEX_COMMITMENTS: { week: string; activityId: string; committed: number; completed: number }[] = [
++  { week: "W36", activityId: "CIV-FND", committed: 6, completed: 5 },
++  { week: "W36", activityId: "STR-ERC", committed: 5, completed: 4 },
++  { week: "W36", activityId: "PIP-SPL", committed: 7, completed: 6 },
++  { week: "W36", activityId: "PIP-ERC", committed: 4, completed: 2 },
++  { week: "W36", activityId: "ELE-CBL", committed: 3, completed: 3 },
++];
++
++export const PEX_PERIODS: Period[] = [
++  { code: "1405-05", from: "2026-07-23", to: "2026-08-22", closedAt: "2026-08-28" },
++  { code: "1405-06", from: "2026-08-23", to: "2026-09-22" },
++];
++
++/** دستورهای Rule of Credit مصرف‌شده در این پروژه (برگرفته از pex/data/roc_iran.json، مقیاس درصد). */
++export const PEX_ROC: Record<string, { nameFa: string; ref: string; steps: RocStep[] }> = {
++  "CIV-FND": {
++    nameFa: "فونداسیون بتنی",
++    ref: "نشریه ۵۵ · ACI 318 · ITP سیویل",
++    steps: [
++      { code: "excavation", nameFa: "گود/خاکبرداری پی", weight: 10 },
++      { code: "blinding", nameFa: "بتن مگر", weight: 8, ir: true },
++      { code: "rebar", nameFa: "آرماتوربندی", weight: 22, ir: true },
++      { code: "form", nameFa: "قالب‌بندی", weight: 12 },
++      { code: "pour", nameFa: "بتن‌ریزی", weight: 30, ir: true },
++      { code: "cure_strip", nameFa: "عمل‌آوری و باز کردن قالب", weight: 18 },
++    ],
++  },
++  "CIV-EXC": {
++    nameFa: "خاکبرداری و تسطیح",
++    ref: "نشریه ۵۵ · ITP خاکی",
++    steps: [
++      { code: "excavation", nameFa: "خاکبرداری", weight: 55 },
++      { code: "grading", nameFa: "تسطیح", weight: 25 },
++      { code: "compaction", nameFa: "تراکم و تست خاک", weight: 20, ir: true },
++    ],
++  },
++  "STR-STL": {
++    nameFa: "اسکلت فلزی",
++    ref: "AISC 360 · مبحث ۱۰",
++    steps: [
++      { code: "fabrication", nameFa: "ساخت در کارگاه", weight: 30 },
++      { code: "erection", nameFa: "نصب", weight: 30 },
++      { code: "bolting", nameFa: "پیچ و جوش نهایی", weight: 20, ir: true },
++      { code: "grouting", nameFa: "گروت‌ریزی", weight: 10 },
++      { code: "painting", nameFa: "رنگ نهایی", weight: 10 },
++    ],
++  },
++  "PIP-SPL": {
++    nameFa: "ساخت اسپول",
++    ref: "ASME B31.3 · ITP پایپینگ",
++    steps: [
++      { code: "cutting", nameFa: "برش و آماده‌سازی", weight: 15 },
++      { code: "fitup", nameFa: "فیت‌آپ", weight: 20, ir: true },
++      { code: "welding", nameFa: "جوشکاری", weight: 30, ir: true },
++      { code: "ndt", nameFa: "آزمون غیرمخرب", weight: 20, ir: true },
++      { code: "painting", nameFa: "رنگ", weight: 15 },
++    ],
++  },
++  "PIP-ERC": {
++    nameFa: "نصب خط لوله",
++    ref: "ASME B31.3",
++    steps: [
++      { code: "erection", nameFa: "نصب اسپول", weight: 30 },
++      { code: "welding", nameFa: "جوش فیلد", weight: 25, ir: true },
++      { code: "ndt", nameFa: "NDT فیلد", weight: 15, ir: true },
++      { code: "support", nameFa: "ساپورت‌گذاری", weight: 15 },
++      { code: "hydrotest", nameFa: "تست هیدرواستاتیک", weight: 15, ir: true },
++    ],
++  },
++  "ELE-CBL": {
++    nameFa: "کابل‌کشی",
++    ref: "IEC 60364 · مبحث ۱۳",
++    steps: [
++      { code: "tray", nameFa: "سینی و راه کابل", weight: 20 },
++      { code: "pulling", nameFa: "کشیدن کابل", weight: 35 },
++      { code: "termination", nameFa: "سرسیم‌بندی", weight: 30, ir: true },
++      { code: "megger", nameFa: "تست مگر", weight: 15, ir: true },
++    ],
++  },
++  "INS-LOOP": {
++    nameFa: "ابزار دقیق و لوپ",
++    ref: "ISA 5.1 · ITP ابزار دقیق",
++    steps: [
++      { code: "mounting", nameFa: "نصب ترانسمیتر", weight: 25 },
++      { code: "tubing", nameFa: "تیوبینگ", weight: 20 },
++      { code: "cabling", nameFa: "کابل ابزار دقیق", weight: 20 },
++      { code: "calibration", nameFa: "کالیبراسیون", weight: 20, ir: true },
++      { code: "loop_test", nameFa: "لوپ‌تست", weight: 15, ir: true },
++    ],
++  },
++  "MEC-EQP": {
++    nameFa: "نصب تجهیز مکانیکی",
++    ref: "ITP مکانیک · دستورالعمل سازنده",
++    steps: [
++      { code: "setting", nameFa: "استقرار روی فونداسیون", weight: 30 },
++      { code: "alignment", nameFa: "الاینمنت", weight: 25, ir: true },
++      { code: "grouting", nameFa: "گروت", weight: 15 },
++      { code: "internals", nameFa: "نصب اینترنال/متعلقات", weight: 20 },
++      { code: "final_check", nameFa: "بازرسی نهایی", weight: 10, ir: true },
++    ],
++  },
++  "ENG-DOC": {
++    nameFa: "مدرک مهندسی",
++    ref: "رویه کنترل مدارک پروژه",
++    steps: [
++      { code: "drafting", nameFa: "تهیه پیش‌نویس", weight: 30 },
++      { code: "calc", nameFa: "محاسبات", weight: 20 },
++      { code: "idc", nameFa: "بازبینی بین‌رشته‌ای", weight: 20, ir: true },
++      { code: "issue_review", nameFa: "ارسال برای بازبینی کارفرما", weight: 15, ir: true },
++      { code: "issue_afc", nameFa: "صدور AFC", weight: 15, ir: true },
++    ],
++  },
++  "PRC-EQP": {
++    nameFa: "تدارک تجهیز",
++    ref: "رویه بازرگانی پروژه",
++    steps: [
++      { code: "po", nameFa: "صدور سفارش", weight: 15 },
++      { code: "fabrication", nameFa: "ساخت نزد سازنده", weight: 45 },
++      { code: "fat", nameFa: "آزمون کارخانه‌ای", weight: 20, ir: true },
++      { code: "delivery", nameFa: "تحویل در سایت", weight: 20, ir: true },
++    ],
++  },
++  "PSU-CHK": {
++    nameFa: "پیش‌راه‌اندازی",
++    ref: "رویه Pre-commissioning",
++    steps: [
++      { code: "punch", nameFa: "رفع پانچ", weight: 25 },
++      { code: "flushing", nameFa: "فلاشینگ/تمیزکاری", weight: 25 },
++      { code: "loop_check", nameFa: "لوپ‌چک", weight: 25, ir: true },
++      { code: "handover", nameFa: "تحویل به راه‌اندازی", weight: 25, ir: true },
++    ],
++  },
++};
++
++/** ساختار شکست کار — وزن هر بسته از جمع هزینه فرزندان محاسبه می‌شود. */
++export const PEX_WBS: { id: string; nameFa: string; nameEn: string }[] = [
++  { id: "1", nameFa: "مهندسی", nameEn: "Engineering" },
++  { id: "2", nameFa: "تدارکات", nameEn: "Procurement" },
++  { id: "3", nameFa: "اجرا", nameEn: "Construction" },
++  { id: "4", nameFa: "پیش‌راه‌اندازی", nameEn: "Pre-commissioning" },
++];
++
++export const PEX_WEIGHT_ITEMS: WeightItem[] = PEX_ACTIVITIES.map((a) => ({ id: a.id, cost: a.cost, manHours: a.manHours }));
+diff --git a/src/hooks/useAccess.ts b/src/hooks/useAccess.ts
+new file mode 100644
+index 0000000..4354257
+--- /dev/null
++++ b/src/hooks/useAccess.ts
+@@ -0,0 +1,54 @@
++import { useMemo } from "react";
++import { useAuth } from "../context/AuthContext";
++import {
++  DEMO_DELEGATIONS,
++  DEMO_SUBJECTS,
++  can as canEval,
++  evaluate,
++  maskRecord,
++  type AccessContext,
++  type Subject,
++} from "../services/accessControl";
++
++/**
++ * پل میان AuthContext موجود و موتور RBAC.
++ *
++ * AuthContext دست‌نخورده می‌ماند (چند کامپوننت به شکل فعلی‌اش وابسته‌اند)؛
++ * این قلاب فقط کاربر جاری را به Subject موتور ترجمه می‌کند تا هر جای برنامه
++ * بتواند `can("fin.ipc.approve")` بپرسد.
++ */
++export function useAccess() {
++  const { user } = useAuth();
++
++  const subject = useMemo<Subject | null>(() => {
++    if (!user) return null;
++    // کاربر متناظر در کاتالوگ موتور؛ اگر نبود، از روی نقش AuthContext ساخته می‌شود.
++    const known = DEMO_SUBJECTS.find((s) => s.id === user.id);
++    if (known) return known;
++    return {
++      id: user.id,
++      displayName: user.displayName,
++      roles: [user.role],
++      projectIds: user.projectIds,
++      active: user.active,
++    };
++  }, [user]);
++
++  const today = new Date().toISOString().slice(0, 10);
++
++  const withDefaults = (ctx: AccessContext = {}): AccessContext => ({
++    delegations: DEMO_DELEGATIONS,
++    onDate: today,
++    ...ctx,
++  });
++
++  return {
++    subject,
++    can: (permission: string, ctx?: AccessContext) => canEval(subject, permission, withDefaults(ctx)),
++    explain: (permission: string, ctx?: AccessContext) =>
++      subject
++        ? evaluate(subject, permission, withDefaults(ctx))
++        : { allow: false, code: "DENY_INACTIVE" as const, reason: { fa: "کاربری وارد نشده است", en: "No authenticated user" }, audit: true },
++    mask: <T extends Record<string, unknown>>(row: T, ctx?: AccessContext) => maskRecord(subject, row, withDefaults(ctx)),
++  };
++}
+diff --git a/src/services/accessControl.ts b/src/services/accessControl.ts
+new file mode 100644
+index 0000000..36c6137
+--- /dev/null
++++ b/src/services/accessControl.ts
+@@ -0,0 +1,949 @@
++/**
++ * Arena Platform — Unified RBAC & Security Engine (rbac-v1)
++ * ---------------------------------------------------------------------------
++ * موتور یکپارچهٔ کنترل دسترسی و امنیت.
++ *
++ * قید طراحی: این فایل کاملاً خالص است — هیچ ارجاعی به window، document،
++ * localStorage یا fetch ندارد، تا مستقیم در Node تست شود و در سرور هم
++ * قابل استفاده باشد. لایهٔ React فقط آن را مصرف می‌کند.
++ *
++ * می‌بندد: PEX-G4 · CKM-C06 · HRM-D14 · RPT R-06
++ */
++
++export const RBAC_ENGINE_VERSION = "rbac-v1";
++
++export type Bi = { fa: string; en: string };
++export type Lang = "fa" | "en";
++
++/* ═══════════════════════════ ۱. طبقه‌بندی داده ═══════════════════════════ */
++
++/** سطوح طبقه‌بندی، از باز به بسته. عدد بزرگ‌تر = محرمانه‌تر. */
++export type Classification = "public" | "internal" | "confidential" | "restricted";
++
++export const CLASSIFICATION_RANK: Record<Classification, number> = {
++  public: 0,
++  internal: 1,
++  confidential: 2,
++  restricted: 3,
++};
++
++export const CLASSIFICATION_LABEL: Record<Classification, Bi> = {
++  public: { fa: "عمومی", en: "Public" },
++  internal: { fa: "داخلی", en: "Internal" },
++  confidential: { fa: "محرمانه", en: "Confidential" },
++  restricted: { fa: "سری", en: "Restricted" },
++};
++
++/** آیا سطح دسترسی کاربر برای دیدن این طبقه‌بندی کافی است؟ */
++export function meetsClearance(clearance: Classification, required: Classification): boolean {
++  return CLASSIFICATION_RANK[clearance] >= CLASSIFICATION_RANK[required];
++}
++
++/* ═══════════════════════════ ۲. کاتالوگ مجوزها ═══════════════════════════ */
++
++/**
++ * قالب کد مجوز: `<domain>.<resource>.<action>`
++ * domainها با ماژول‌های framework هم‌نام‌اند تا ردیابی ممیزی ساده بماند.
++ */
++export type PermissionDef = {
++  code: string;
++  module: string;            // d1..d11 یا "core"
++  title: Bi;
++  /** حداقل طبقه‌بندی‌ای که این مجوز به آن دست می‌زند */
++  touches: Classification;
++  /** آیا استفاده از آن باید حتماً در لاگ ممیزی ثبت شود */
++  audited: boolean;
++};
++
++const P = (code: string, module: string, fa: string, en: string, touches: Classification = "internal", audited = false): PermissionDef =>
++  ({ code, module, title: { fa, en }, touches, audited });
++
++export const PERMISSION_CATALOG: PermissionDef[] = [
++  /* ── هسته و سامانه ── */
++  P("core.portfolio.view", "core", "مشاهده سبد پروژه", "View portfolio", "internal"),
++  P("core.project.view", "core", "مشاهده پروژه", "View project", "internal"),
++  P("core.project.edit", "core", "ویرایش مشخصات پروژه", "Edit project", "confidential", true),
++  P("core.ai.run", "core", "اجرای دستیار هوشمند", "Run AI assistant", "internal"),
++  P("sys.config.manage", "d7", "پیکربندی سامانه", "Manage system config", "restricted", true),
++  P("sys.user.manage", "d7", "مدیریت کاربران و نقش‌ها", "Manage users & roles", "restricted", true),
++  P("sys.audit.view", "d7", "مشاهده لاگ ممیزی", "View audit log", "confidential", true),
++  P("sys.audit.purge", "d7", "پاک‌سازی لاگ ممیزی", "Purge audit log", "restricted", true),
++  P("sys.backup.export", "d7", "تهیه نسخه پشتیبان", "Export backup", "restricted", true),
++  P("sys.backup.restore", "d7", "بازیابی نسخه پشتیبان", "Restore backup", "restricted", true),
++
++  /* ── d1 اسناد و مدارک ── */
++  P("doc.document.view", "d1", "مشاهده مدارک", "View documents", "internal"),
++  P("doc.document.upload", "d1", "بارگذاری مدرک", "Upload document", "internal", true),
++  P("doc.document.approve", "d1", "تأیید مدرک", "Approve document", "confidential", true),
++  P("doc.transmittal.issue", "d1", "صدور ترانسمیتال", "Issue transmittal", "confidential", true),
++
++  /* ── d2 برنامه‌ریزی و اجرا ── */
++  P("plan.schedule.view", "d2", "مشاهده برنامه زمان‌بندی", "View schedule", "internal"),
++  P("plan.schedule.edit", "d2", "ویرایش برنامه زمان‌بندی", "Edit schedule", "confidential", true),
++  P("plan.baseline.set", "d2", "تثبیت برنامه مبنا", "Set baseline", "confidential", true),
++  P("plan.progress.report", "d2", "ثبت پیشرفت اجرا", "Report progress", "internal"),
++  P("plan.progress.approve", "d2", "تأیید پیشرفت اجرا", "Approve progress", "confidential", true),
++
++  /* ── d3 پایش و کنترل ── */
++  P("pex.dashboard.view", "d3", "مشاهده داشبورد عملکرد", "View performance dashboard", "internal"),
++  P("pex.evm.view", "d3", "مشاهده ارزش کسب‌شده", "View earned value", "confidential"),
++  P("pex.kpi.edit", "d3", "ویرایش شاخص‌ها", "Edit KPIs", "confidential", true),
++  P("pex.forecast.edit", "d3", "ویرایش پیش‌بینی", "Edit forecast", "confidential", true),
++
++  /* ── d4 ریسک، تغییر و ادعا ── */
++  P("rcc.risk.view", "d4", "مشاهده ریسک", "View risks", "internal"),
++  P("rcc.risk.edit", "d4", "ویرایش ریسک", "Edit risks", "confidential"),
++  P("rcc.change.raise", "d4", "ثبت درخواست تغییر", "Raise change request", "confidential", true),
++  P("rcc.change.approve", "d4", "تصویب تغییر در CCB", "Approve change (CCB)", "restricted", true),
++  P("rcc.claim.view", "d4", "مشاهده ادعا", "View claims", "confidential"),
++  P("rcc.claim.edit", "d4", "تنظیم ادعا", "Draft claim", "restricted", true),
++  P("rcc.claim.submit", "d4", "ارسال رسمی ادعا", "Submit claim", "restricted", true),
++
++  /* ── d5 مالی و هزینه ── */
++  P("fin.cost.view", "d5", "مشاهده هزینه", "View cost", "confidential"),
++  P("fin.budget.edit", "d5", "ویرایش بودجه", "Edit budget", "restricted", true),
++  P("fin.ipc.prepare", "d5", "تهیه صورت‌وضعیت", "Prepare payment certificate", "confidential", true),
++  P("fin.ipc.approve", "d5", "تأیید صورت‌وضعیت", "Approve payment certificate", "restricted", true),
++  P("fin.rate.view", "d5", "مشاهده نرخ و قیمت واحد", "View unit rates", "restricted"),
++  P("fin.invoice.issue", "d5", "صدور فاکتور", "Issue invoice", "restricted", true),
++
++  /* ── d6 حاکمیت ── */
++  P("gov.process.view", "d6", "مشاهده فرآیندها", "View processes", "internal"),
++  P("gov.gate.review", "d6", "بازبینی دروازه مرحله", "Review stage gate", "confidential", true),
++  P("gov.gate.approve", "d6", "تصویب دروازه مرحله", "Approve stage gate", "restricted", true),
++  P("gov.owner.assign", "d6", "انتصاب مالک داده", "Assign data owner", "confidential", true),
++
++  /* ── d8 کیفیت ── */
++  P("qms.itp.view", "d8", "مشاهده ITP", "View ITP", "internal"),
++  P("qms.inspection.record", "d8", "ثبت نتیجه بازرسی", "Record inspection", "internal", true),
++  P("qms.ncr.raise", "d8", "صدور عدم انطباق", "Raise NCR", "confidential", true),
++  P("qms.ncr.close", "d8", "بستن عدم انطباق", "Close NCR", "confidential", true),
++  P("qms.audit.conduct", "d8", "اجرای ممیزی کیفیت", "Conduct quality audit", "confidential", true),
++
++  /* ── d10 منابع انسانی ── */
++  P("hrm.roster.view", "d10", "مشاهده فهرست نیرو", "View workforce roster", "internal"),
++  P("hrm.timesheet.enter", "d10", "ثبت تایم‌شیت", "Enter timesheet", "internal"),
++  P("hrm.timesheet.approve", "d10", "تأیید تایم‌شیت", "Approve timesheet", "confidential", true),
++  P("hrm.rate.view", "d10", "مشاهده نرخ دستمزد", "View labour rates", "restricted"),
++  P("hrm.personal.view", "d10", "مشاهده اطلاعات فردی", "View personal data", "restricted", true),
++  P("hrm.productivity.view", "d10", "مشاهده بهره‌وری", "View productivity", "confidential"),
++
++  /* ── d11 ارتباطات و دانش ── */
++  P("ckm.letter.view", "d11", "مشاهده مکاتبات", "View correspondence", "confidential"),
++  P("ckm.letter.draft", "d11", "تنظیم پیش‌نویس نامه", "Draft letter", "confidential"),
++  P("ckm.letter.sign", "d11", "امضا و صدور نامه", "Sign & issue letter", "restricted", true),
++  P("ckm.meeting.record", "d11", "ثبت صورت‌جلسه", "Record meeting minutes", "internal"),
++  P("ckm.lesson.publish", "d11", "انتشار درس آموخته", "Publish lesson learned", "internal"),
++
++  /* ── گزارش‌ساز ── */
++  P("report.internal.generate", "core", "تولید گزارش داخلی", "Generate internal report", "internal"),
++  P("report.official.publish", "core", "انتشار گزارش ابلاغی", "Publish official report", "restricted", true),
++  P("report.export.bulk", "core", "خروجی انبوه داده", "Bulk data export", "restricted", true),
++];
++
++export const PERMISSION_CODES: string[] = PERMISSION_CATALOG.map((p) => p.code);
++
++const PERM_BY_CODE = new Map(PERMISSION_CATALOG.map((p) => [p.code, p]));
++
++export function permissionDef(code: string): PermissionDef | undefined {
++  return PERM_BY_CODE.get(code);
++}
++
++export function permissionsOfModule(module: string): PermissionDef[] {
++  return PERMISSION_CATALOG.filter((p) => p.module === module);
++}
++
++/* ═══════════════════════════ ۳. کاتالوگ نقش‌ها ═══════════════════════════ */
++
++export type RoleDef = {
++  code: string;
++  title: Bi;
++  /** نقش‌هایی که مجوزهایشان به ارث می‌رسد */
++  inherits: string[];
++  /** مجوزهای مستقیم این نقش */
++  grants: string[];
++  /** حداکثر طبقه‌بندی‌ای که این نقش می‌تواند ببیند */
++  clearance: Classification;
++  /** طرف قرارداد — برای جداسازی داده پیمانکار از کارفرما */
++  party: "contractor" | "client" | "consultant" | "subcontractor" | "any";
++};
++
++export const ROLE_CATALOG: RoleDef[] = [
++  {
++    code: "viewer",
++    title: { fa: "بیننده", en: "Viewer" },
++    inherits: [],
++    clearance: "internal",
++    party: "any",
++    grants: ["core.portfolio.view", "core.project.view", "doc.document.view", "plan.schedule.view", "pex.dashboard.view", "gov.process.view", "report.internal.generate"],
++  },
++  {
++    code: "site_engineer",
++    title: { fa: "مهندس/سرپرست کارگاه", en: "Site Engineer" },
++    inherits: ["viewer"],
++    clearance: "internal",
++    party: "contractor",
++    grants: ["plan.progress.report", "doc.document.upload", "qms.itp.view", "qms.inspection.record", "hrm.roster.view", "hrm.timesheet.enter", "ckm.meeting.record"],
++  },
++  {
++    code: "planner",
++    title: { fa: "کارشناس برنامه‌ریزی", en: "Planner" },
++    inherits: ["viewer"],
++    clearance: "confidential",
++    party: "contractor",
++    grants: ["plan.schedule.edit", "plan.progress.report", "pex.evm.view", "pex.forecast.edit", "rcc.risk.view", "core.ai.run"],
++  },
++  {
++    code: "cost_controller",
++    title: { fa: "کنترل هزینه", en: "Cost Controller" },
++    inherits: ["viewer"],
++    clearance: "confidential",
++    party: "contractor",
++    grants: ["fin.cost.view", "fin.ipc.prepare", "fin.invoice.issue", "fin.rate.view", "pex.evm.view", "hrm.productivity.view", "core.ai.run"],
++  },
++  {
++    code: "qc_inspector",
++    title: { fa: "بازرس کیفیت", en: "QC Inspector" },
++    inherits: ["viewer"],
++    clearance: "internal",
++    party: "any",
++    grants: ["qms.itp.view", "qms.inspection.record", "qms.ncr.raise"],
++  },
++  {
++    code: "qa_manager",
++    title: { fa: "مدیر تضمین کیفیت", en: "QA Manager" },
++    // عمداً از qc_inspector ارث نمی‌برد: صدور و بستن عدم انطباق باید جدا بماند (SOD-02).
++    inherits: ["viewer"],
++    clearance: "confidential",
++    party: "contractor",
++    grants: ["qms.itp.view", "qms.ncr.close", "qms.audit.conduct", "gov.gate.review", "doc.document.approve"],
++  },
++  {
++    code: "hr_manager",
++    title: { fa: "مدیر منابع انسانی", en: "HR Manager" },
++    inherits: ["viewer"],
++    clearance: "restricted",
++    party: "contractor",
++    grants: ["hrm.roster.view", "hrm.timesheet.approve", "hrm.rate.view", "hrm.personal.view", "hrm.productivity.view"],
++  },
++  {
++    code: "doc_controller",
++    title: { fa: "کنترل مدارک", en: "Document Controller" },
++    inherits: ["viewer"],
++    clearance: "confidential",
++    party: "contractor",
++    grants: ["doc.document.upload", "doc.transmittal.issue", "ckm.letter.view", "ckm.letter.draft", "ckm.meeting.record", "ckm.lesson.publish"],
++  },
++  {
++    code: "contracts_manager",
++    title: { fa: "مدیر پیمان و ادعا", en: "Contracts Manager" },
++    inherits: ["viewer"],
++    clearance: "restricted",
++    party: "contractor",
++    grants: ["rcc.claim.view", "rcc.claim.edit", "rcc.change.raise", "fin.cost.view", "fin.rate.view", "ckm.letter.view", "ckm.letter.draft"],
++  },
++  {
++    code: "project_manager",
++    title: { fa: "مدیر پروژه", en: "Project Manager" },
++    // عمداً از نقش‌های «تهیه‌کننده» ارث نمی‌برد؛ اقتدار مدیر پروژه تأیید است نه ثبت داده.
++    inherits: ["viewer"],
++    clearance: "restricted",
++    party: "contractor",
++    grants: [
++      "core.project.edit", "core.ai.run",
++      "plan.baseline.set", "plan.progress.approve",
++      "pex.evm.view", "pex.kpi.edit", "pex.forecast.edit",
++      "rcc.risk.view", "rcc.risk.edit", "rcc.change.raise", "rcc.claim.view", "rcc.claim.submit",
++      "fin.cost.view", "fin.rate.view", "fin.ipc.approve",
++      "qms.itp.view", "qms.ncr.close",
++      "hrm.roster.view", "hrm.timesheet.approve", "hrm.productivity.view",
++      "doc.document.approve", "doc.transmittal.issue",
++      "ckm.letter.view", "ckm.letter.draft", "ckm.letter.sign",
++      "gov.gate.review", "report.official.publish",
++    ],
++  },
++  {
++    code: "pmo",
++    title: { fa: "دفتر مدیریت پروژه", en: "PMO" },
++    inherits: ["planner"],
++    clearance: "restricted",
++    party: "contractor",
++    grants: ["gov.process.view", "gov.gate.review", "gov.owner.assign", "pex.kpi.edit", "rcc.risk.edit", "fin.cost.view", "report.official.publish", "report.export.bulk", "sys.audit.view"],
++  },
++  {
++    code: "executive",
++    title: { fa: "مدیر ارشد", en: "Executive" },
++    inherits: ["viewer"],
++    clearance: "restricted",
++    party: "contractor",
++    grants: ["fin.cost.view", "fin.budget.edit", "pex.evm.view", "rcc.change.approve", "gov.gate.approve", "rcc.claim.view", "core.ai.run"],
++  },
++  {
++    code: "consultant",
++    title: { fa: "مشاور / نظارت", en: "Consultant" },
++    inherits: ["viewer"],
++    clearance: "confidential",
++    party: "consultant",
++    grants: ["doc.document.approve", "plan.progress.approve", "qms.itp.view", "qms.inspection.record", "qms.ncr.raise", "fin.ipc.prepare", "ckm.letter.view", "ckm.letter.draft", "gov.gate.review"],
++  },
++  {
++    code: "client",
++    title: { fa: "کارفرما", en: "Client" },
++    inherits: ["viewer"],
++    // سطح «سری»: نمایندهٔ کارفرما صورت‌وضعیت را تأیید و نامهٔ رسمی را امضا می‌کند.
++    // جداسازی دادهٔ پیمانکار از کارفرما محور جداگانه‌ای است (party) نه سطح دسترسی.
++    clearance: "restricted",
++    party: "client",
++    grants: ["fin.cost.view", "fin.ipc.approve", "pex.evm.view", "rcc.change.approve", "gov.gate.approve", "ckm.letter.view", "ckm.letter.sign", "doc.document.approve"],
++  },
++  {
++    code: "subcontractor",
++    title: { fa: "پیمانکار جزء", en: "Subcontractor" },
++    inherits: [],
++    clearance: "internal",
++    party: "subcontractor",
++    grants: ["core.project.view", "plan.schedule.view", "plan.progress.report", "doc.document.view", "hrm.timesheet.enter", "qms.itp.view"],
++  },
++  {
++    code: "auditor",
++    title: { fa: "ممیز داخلی", en: "Internal Auditor" },
++    inherits: ["viewer"],
++    clearance: "restricted",
++    party: "any",
++    grants: ["sys.audit.view", "qms.audit.conduct", "fin.cost.view", "fin.rate.view", "rcc.claim.view", "ckm.letter.view", "hrm.productivity.view"],
++  },
++  {
++    code: "admin",
++    title: { fa: "مدیر سامانه", en: "System Admin" },
++    inherits: [],
++    clearance: "restricted",
++    party: "contractor",
++    // sys.audit.view عمداً داده نشده: مدیر سامانه نباید ممیزِ کارِ خودش باشد (SOD-06).
++    grants: ["sys.config.manage", "sys.user.manage", "sys.audit.purge", "sys.backup.export", "sys.backup.restore", "report.export.bulk", "core.portfolio.view", "core.project.view"],
++  },
++];
++
++const ROLE_BY_CODE = new Map(ROLE_CATALOG.map((r) => [r.code, r]));
++
++export function roleDef(code: string): RoleDef | undefined {
++  return ROLE_BY_CODE.get(code);
++}
++
++export function roleTitle(code: string, lang: Lang = "fa"): string {
++  const r = ROLE_BY_CODE.get(code);
++  if (!r) return code;
++  return lang === "fa" ? r.title.fa : r.title.en;
++}
++
++/**
++ * مجوزهای مؤثر یک نقش با پیمایش وراثت.
++ * حلقهٔ وراثت باعث بی‌نهایت نمی‌شود چون نقش‌های دیده‌شده علامت می‌خورند.
++ */
++export function effectivePermissions(roleCode: string, seen = new Set<string>()): string[] {
++  const role = ROLE_BY_CODE.get(roleCode);
++  if (!role || seen.has(roleCode)) return [];
++  seen.add(roleCode);
++  const out = new Set<string>(role.grants);
++  for (const parent of role.inherits) {
++    for (const p of effectivePermissions(parent, seen)) out.add(p);
++  }
++  return [...out].sort();
++}
++
++/** بالاترین سطح دسترسی میان چند نقش. */
++export function combinedClearance(roleCodes: string[]): Classification {
++  let best: Classification = "public";
++  for (const rc of roleCodes) {
++    const r = ROLE_BY_CODE.get(rc);
++    if (r && CLASSIFICATION_RANK[r.clearance] > CLASSIFICATION_RANK[best]) best = r.clearance;
++  }
++  return best;
++}
++
++/** آیا زنجیرهٔ وراثت نقش‌ها حلقه دارد؟ (برای اعتبارسنجی کاتالوگ) */
++export function hasInheritanceCycle(): string[] {
++  const bad: string[] = [];
++  for (const role of ROLE_CATALOG) {
++    const stack = [...role.inherits];
++    const seen = new Set<string>();
++    while (stack.length) {
++      const cur = stack.pop()!;
++      if (cur === role.code) { bad.push(role.code); break; }
++      if (seen.has(cur)) continue;
++      seen.add(cur);
++      const r = ROLE_BY_CODE.get(cur);
++      if (r) stack.push(...r.inherits);
++    }
++  }
++  return bad;
++}
++
++/* ═══════════════════ ۴. تفکیک وظایف (Segregation of Duties) ═══════════════════ */
++
++export type SodRule = {
++  id: string;
++  a: string;
++  b: string;
++  severity: "high" | "critical";
++  reason: Bi;
++};
++
++/**
++ * جفت مجوزهایی که نباید هم‌زمان به یک نفر داده شود.
++ * منطق: «تهیه‌کننده نباید تأییدکننده باشد» و «صادرکنندهٔ ایراد نباید بستن آن را امضا کند».
++ */
++export const SOD_RULES: SodRule[] = [
++  {
++    id: "SOD-01",
++    a: "fin.ipc.prepare",
++    b: "fin.ipc.approve",
++    severity: "critical",
++    reason: { fa: "تهیه و تأیید صورت‌وضعیت نباید بر عهدهٔ یک نفر باشد", en: "Preparing and approving a payment certificate must be separated" },
++  },
++  {
++    id: "SOD-02",
++    a: "qms.ncr.raise",
++    b: "qms.ncr.close",
++    severity: "high",
++    reason: { fa: "صادرکنندهٔ عدم انطباق نباید خودش آن را ببندد", en: "The raiser of an NCR must not close it" },
++  },
++  {
++    id: "SOD-03",
++    a: "rcc.change.raise",
++    b: "rcc.change.approve",
++    severity: "critical",
++    reason: { fa: "درخواست‌کنندهٔ تغییر نباید در CCB رأی تصویب بدهد", en: "The change requester must not approve it in CCB" },
++  },
++  {
++    id: "SOD-04",
++    a: "hrm.timesheet.enter",
++    b: "hrm.timesheet.approve",
++    severity: "high",
++    reason: { fa: "ثبت‌کنندهٔ تایم‌شیت نباید تأییدکنندهٔ آن باشد", en: "Timesheet entry and approval must be separated" },
++  },
++  {
++    id: "SOD-05",
++    a: "plan.progress.report",
++    b: "plan.progress.approve",
++    severity: "high",
++    reason: { fa: "اعلام‌کنندهٔ پیشرفت نباید تأییدکنندهٔ آن باشد", en: "Progress reporting and approval must be separated" },
++  },
++  {
++    id: "SOD-06",
++    a: "sys.audit.view",
++    b: "sys.audit.purge",
++    severity: "critical",
++    reason: { fa: "پاک‌سازی لاگ ممیزی باید از مشاهدهٔ آن جدا باشد", en: "Audit purge must be separated from audit review" },
++  },
++  {
++    id: "SOD-07",
++    a: "fin.budget.edit",
++    b: "fin.invoice.issue",
++    severity: "critical",
++    reason: { fa: "ویرایش بودجه و صدور فاکتور نباید در یک دست جمع شود", en: "Budget editing and invoicing must not be combined" },
++  },
++];
++
++/** تخلف‌های تفکیک وظیفه در مجموعه‌ای از مجوزها. */
++export function sodViolations(permissions: string[]): SodRule[] {
++  const set = new Set(permissions);
++  return SOD_RULES.filter((r) => set.has(r.a) && set.has(r.b));
++}
++
++/**
++ * تفکیک وظیفه در سطح رکورد: کسی که رکورد را تهیه کرده نمی‌تواند تأییدش کند.
++ * مهم‌تر از تفکیک سطح نقش است، چون مدیر پروژه هر دو مجوز را دارد.
++ */
++export function sodInstanceConflict(subjectId: string, record: { preparedBy?: string; raisedBy?: string; enteredBy?: string }): boolean {
++  return [record.preparedBy, record.raisedBy, record.enteredBy].some((v) => !!v && v === subjectId);
++}
++
++/* ═══════════════════════════ ۵. تفویض اختیار ═══════════════════════════ */
++
++export type Delegation = {
++  id: string;
++  fromUserId: string;
++  toUserId: string;
++  permissions: string[];
++  /** ISO date YYYY-MM-DD — هر دو سرِ بازه شامل است */
++  from: string;
++  to: string;
++  reason: string;
++  revoked?: boolean;
++};
++
++export function isDelegationActive(d: Delegation, onDate: string): boolean {
++  if (d.revoked) return false;
++  return d.from <= onDate && onDate <= d.to;
++}
++
++/** مجوزهایی که در تاریخ داده‌شده به این کاربر تفویض شده است. */
++export function delegatedPermissions(delegations: Delegation[], userId: string, onDate: string): string[] {
++  const out = new Set<string>();
++  for (const d of delegations) {
++    if (d.toUserId !== userId) continue;
++    if (!isDelegationActive(d, onDate)) continue;
++    for (const p of d.permissions) out.add(p);
++  }
++  return [...out].sort();
++}
++
++export type DelegationIssue = { code: string; message: Bi };
++
++/** اعتبارسنجی یک تفویض پیش از ثبت. */
++export function validateDelegation(d: Delegation, granterPermissions: string[]): DelegationIssue[] {
++  const issues: DelegationIssue[] = [];
++  if (d.fromUserId === d.toUserId) {
++    issues.push({ code: "E-DLG-01", message: { fa: "تفویض به خود بی‌معناست", en: "Cannot delegate to self" } });
++  }
++  if (d.to < d.from) {
++    issues.push({ code: "E-DLG-02", message: { fa: "تاریخ پایان پیش از تاریخ شروع است", en: "End date precedes start date" } });
++  }
++  if (d.permissions.length === 0) {
++    issues.push({ code: "E-DLG-03", message: { fa: "هیچ مجوزی برای تفویض انتخاب نشده", en: "No permission selected" } });
++  }
++  const notOwned = d.permissions.filter((p) => !granterPermissions.includes(p));
++  if (notOwned.length) {
++    issues.push({ code: "E-DLG-04", message: { fa: `تفویض مجوزی که خود ندارید ممکن نیست: ${notOwned.join("، ")}`, en: `Cannot delegate permissions you lack: ${notOwned.join(", ")}` } });
++  }
++  const unknown = d.permissions.filter((p) => !PERM_BY_CODE.has(p));
++  if (unknown.length) {
++    issues.push({ code: "E-DLG-05", message: { fa: `کد مجوز ناشناخته: ${unknown.join("، ")}`, en: `Unknown permission code: ${unknown.join(", ")}` } });
++  }
++  if (!d.reason.trim()) {
++    issues.push({ code: "E-DLG-06", message: { fa: "دلیل تفویض الزامی است", en: "Delegation reason is mandatory" } });
++  }
++  const days = dayDiff(d.from, d.to);
++  if (days > 90) {
++    issues.push({ code: "W-DLG-07", message: { fa: "تفویض بیش از ۹۰ روز — بازنگری لازم است", en: "Delegation exceeds 90 days — review required" } });
++  }
++  return issues;
++}
++
++function dayDiff(from: string, to: string): number {
++  const a = Date.parse(`${from}T00:00:00Z`);
++  const b = Date.parse(`${to}T00:00:00Z`);
++  if (Number.isNaN(a) || Number.isNaN(b)) return 0;
++  return Math.round((b - a) / 86_400_000);
++}
++
++/* ═══════════════════════════ ۶. کاربر و ارزیابی ═══════════════════════════ */
++
++export type Subject = {
++  id: string;
++  displayName: string;
++  roles: string[];
++  /** ["*"] یعنی همهٔ پروژه‌ها */
++  projectIds: string[];
++  /** ["*"] یعنی همهٔ دیسیپلین‌ها؛ خالی هم یعنی بدون محدودیت */
++  disciplines?: string[];
++  /** مجوزهای اضافه‌شدهٔ موردی */
++  extraGrants?: string[];
++  /** ممنوعیت صریح — همیشه بر همه‌چیز غالب است */
++  denies?: string[];
++  active: boolean;
++  /** اگر تعیین نشود از نقش‌ها استنتاج می‌شود */
++  clearance?: Classification;
++  party?: RoleDef["party"];
++};
++
++export type AccessContext = {
++  projectId?: string | null;
++  discipline?: string | null;
++  classification?: Classification;
++  /** برای بررسی تفکیک وظیفه در سطح رکورد */
++  record?: { preparedBy?: string; raisedBy?: string; enteredBy?: string };
++  delegations?: Delegation[];
++  /** تاریخ ISO برای ارزیابی تفویض — پیش‌فرض «امروز» را فراخوان می‌دهد */
++  onDate?: string;
++};
++
++export type DecisionCode =
++  | "ALLOW"
++  | "ALLOW_DELEGATED"
++  | "DENY_INACTIVE"
++  | "DENY_EXPLICIT"
++  | "DENY_NO_PERMISSION"
++  | "DENY_PROJECT_SCOPE"
++  | "DENY_DISCIPLINE_SCOPE"
++  | "DENY_CLEARANCE"
++  | "DENY_SOD"
++  | "DENY_UNKNOWN_PERMISSION";
++
++export type Decision = {
++  allow: boolean;
++  code: DecisionCode;
++  reason: Bi;
++  /** آیا این تصمیم باید در لاگ ممیزی ثبت شود */
++  audit: boolean;
++};
++
++const DECISION_REASON: Record<DecisionCode, Bi> = {
++  ALLOW: { fa: "دسترسی مجاز است", en: "Access granted" },
++  ALLOW_DELEGATED: { fa: "دسترسی از طریق تفویض اختیار مجاز است", en: "Access granted via delegation" },
++  DENY_INACTIVE: { fa: "حساب کاربری غیرفعال است", en: "User account is inactive" },
++  DENY_EXPLICIT: { fa: "این مجوز صریحاً برای کاربر ممنوع شده است", en: "Permission explicitly denied for this user" },
++  DENY_NO_PERMISSION: { fa: "هیچ‌یک از نقش‌های کاربر این مجوز را ندارد", en: "None of the user roles grant this permission" },
++  DENY_PROJECT_SCOPE: { fa: "کاربر به این پروژه دسترسی ندارد", en: "User is not assigned to this project" },
++  DENY_DISCIPLINE_SCOPE: { fa: "کاربر به این دیسیپلین دسترسی ندارد", en: "User is not assigned to this discipline" },
++  DENY_CLEARANCE: { fa: "سطح دسترسی کاربر برای این طبقه‌بندی کافی نیست", en: "User clearance is insufficient for this classification" },
++  DENY_SOD: { fa: "تفکیک وظایف نقض می‌شود: تهیه‌کننده نمی‌تواند تأییدکننده باشد", en: "Segregation of duties violated: preparer cannot approve" },
++  DENY_UNKNOWN_PERMISSION: { fa: "کد مجوز در کاتالوگ نیست", en: "Permission code is not in the catalogue" },
++};
++
++const deny = (code: DecisionCode): Decision => ({ allow: false, code, reason: DECISION_REASON[code], audit: true });
++
++/** همهٔ مجوزهای پایهٔ کاربر بدون در نظر گرفتن تفویض. */
++export function subjectPermissions(subject: Subject): string[] {
++  const out = new Set<string>();
++  for (const rc of subject.roles) for (const p of effectivePermissions(rc)) out.add(p);
++  for (const p of subject.extraGrants ?? []) out.add(p);
++  for (const p of subject.denies ?? []) out.delete(p);
++  return [...out].sort();
++}
++
++export function subjectClearance(subject: Subject): Classification {
++  return subject.clearance ?? combinedClearance(subject.roles);
++}
++
++function inScope(list: string[] | undefined, value: string | null | undefined): boolean {
++  if (!value) return true;
++  if (!list || list.length === 0) return true;
++  if (list.includes("*")) return true;
++  return list.includes(value);
++}
++
++/**
++ * تصمیم‌گیری واحد. ترتیب بررسی عمداً «رد غالب» است:
++ * غیرفعال ← ممنوعیت صریح ← دامنه ← سطح دسترسی ← مجوز ← تفکیک وظیفه.
++ */
++export function evaluate(subject: Subject, permission: string, ctx: AccessContext = {}): Decision {
++  const def = PERM_BY_CODE.get(permission);
++  if (!def) return deny("DENY_UNKNOWN_PERMISSION");
++  if (!subject.active) return deny("DENY_INACTIVE");
++  if ((subject.denies ?? []).includes(permission)) return deny("DENY_EXPLICIT");
++  if (!inScope(subject.projectIds, ctx.projectId)) return deny("DENY_PROJECT_SCOPE");
++  if (!inScope(subject.disciplines, ctx.discipline)) return deny("DENY_DISCIPLINE_SCOPE");
++
++  const required = ctx.classification ?? def.touches;
++  if (!meetsClearance(subjectClearance(subject), required)) return deny("DENY_CLEARANCE");
++
++  const base = subjectPermissions(subject);
++  let via: "role" | "delegation" | null = base.includes(permission) ? "role" : null;
++  if (!via && ctx.delegations && ctx.onDate) {
++    if (delegatedPermissions(ctx.delegations, subject.id, ctx.onDate).includes(permission)) via = "delegation";
++  }
++  if (!via) return deny("DENY_NO_PERMISSION");
++
++  // تفکیک وظیفه در سطح رکورد فقط روی اقدام‌های تأییدی معنا دارد.
++  if (ctx.record && isApprovalPermission(permission) && sodInstanceConflict(subject.id, ctx.record)) {
++    return deny("DENY_SOD");
++  }
++
++  const code: DecisionCode = via === "delegation" ? "ALLOW_DELEGATED" : "ALLOW";
++  return { allow: true, code, reason: DECISION_REASON[code], audit: def.audited || via === "delegation" };
++}
++
++/** آیا این مجوز یک اقدام «تأیید/امضا/بستن» است؟ */
++export function isApprovalPermission(permission: string): boolean {
++  return /\.(approve|sign|close|publish|submit|issue)$/.test(permission);
++}
++
++/** میان‌بر بولی برای مصرف در UI. */
++export function can(subject: Subject | null, permission: string, ctx: AccessContext = {}): boolean {
++  if (!subject) return false;
++  return evaluate(subject, permission, ctx).allow;
++}
++
++/* ═══════════════════════════ ۷. پوشاندن میدان‌های حساس ═══════════════════════════ */
++
++export type MaskRule = { field: string; permission: string; mask: string };
++
++/** میدان‌هایی که بدون مجوز مربوطه پوشانده می‌شوند. */
++export const MASK_RULES: MaskRule[] = [
++  { field: "dailyRate", permission: "hrm.rate.view", mask: "•••" },
++  { field: "monthlySalary", permission: "hrm.rate.view", mask: "•••" },
++  { field: "nationalId", permission: "hrm.personal.view", mask: "••••••••••" },
++  { field: "mobile", permission: "hrm.personal.view", mask: "•••••••••••" },
++  { field: "unitRate", permission: "fin.rate.view", mask: "•••" },
++  { field: "contractValue", permission: "fin.cost.view", mask: "•••" },
++  { field: "claimStrategy", permission: "rcc.claim.edit", mask: "[محرمانه]" },
++];
++
++/** یک رکورد را بر اساس مجوزهای کاربر می‌پوشاند. رکورد ورودی تغییر نمی‌کند. */
++export function maskRecord<T extends Record<string, unknown>>(subject: Subject | null, row: T, ctx: AccessContext = {}): T {
++  const out: Record<string, unknown> = { ...row };
++  for (const rule of MASK_RULES) {
++    if (!(rule.field in out)) continue;
++    if (!can(subject, rule.permission, ctx)) out[rule.field] = rule.mask;
++  }
++  return out as T;
++}
++
++export function maskedFields(subject: Subject | null, row: Record<string, unknown>, ctx: AccessContext = {}): string[] {
++  return MASK_RULES.filter((r) => r.field in row && !can(subject, r.permission, ctx)).map((r) => r.field);
++}
++
++/* ═══════════════════════════ ۸. سیاست‌های امنیتی ═══════════════════════════ */
++
++export type PasswordPolicy = {
++  minLength: number;
++  requireUpper: boolean;
++  requireDigit: boolean;
++  requireSymbol: boolean;
++  maxAgeDays: number;
++  historyDepth: number;
++};
++
++export const DEFAULT_PASSWORD_POLICY: PasswordPolicy = {
++  minLength: 12,
++  requireUpper: true,
++  requireDigit: true,
++  requireSymbol: true,
++  maxAgeDays: 90,
++  historyDepth: 5,
++};
++
++export type PasswordCheck = { ok: boolean; score: number; issues: Bi[] };
++
++export function checkPassword(pw: string, policy: PasswordPolicy = DEFAULT_PASSWORD_POLICY): PasswordCheck {
++  const issues: Bi[] = [];
++  if (pw.length < policy.minLength) issues.push({ fa: `حداقل ${policy.minLength} نویسه لازم است`, en: `At least ${policy.minLength} characters required` });
++  if (policy.requireUpper && !/[A-Z]/.test(pw)) issues.push({ fa: "حرف بزرگ لاتین لازم است", en: "An uppercase letter is required" });
++  if (policy.requireDigit && !/\d/.test(pw)) issues.push({ fa: "رقم لازم است", en: "A digit is required" });
++  if (policy.requireSymbol && !/[^A-Za-z0-9]/.test(pw)) issues.push({ fa: "نویسهٔ ویژه لازم است", en: "A symbol is required" });
++  if (/^(.)\1+$/.test(pw)) issues.push({ fa: "نویسهٔ تکراری مطلق", en: "All characters identical" });
++
++  let score = 0;
++  score += Math.min(40, pw.length * 3);
++  if (/[A-Z]/.test(pw)) score += 15;
++  if (/[a-z]/.test(pw)) score += 10;
++  if (/\d/.test(pw)) score += 15;
++  if (/[^A-Za-z0-9]/.test(pw)) score += 20;
++  score = Math.max(0, Math.min(100, score - issues.length * 10));
++
++  return { ok: issues.length === 0, score, issues };
++}
++
++export type SessionPolicy = { idleMinutes: number; absoluteHours: number; mfaRequired: boolean };
++
++/** هرچه سطح دسترسی بالاتر، نشست کوتاه‌تر و MFA الزامی. */
++export function sessionPolicyFor(clearance: Classification): SessionPolicy {
++  if (clearance === "restricted") return { idleMinutes: 15, absoluteHours: 8, mfaRequired: true };
++  if (clearance === "confidential") return { idleMinutes: 30, absoluteHours: 10, mfaRequired: true };
++  return { idleMinutes: 60, absoluteHours: 12, mfaRequired: false };
++}
++
++export type LockoutPolicy = { maxAttempts: number; windowMinutes: number; lockMinutes: number };
++
++export const DEFAULT_LOCKOUT: LockoutPolicy = { maxAttempts: 5, windowMinutes: 15, lockMinutes: 30 };
++
++export type LockoutState = { locked: boolean; remainingAttempts: number; unlockAfterMinutes: number };
++
++export function loginThrottle(failedAttempts: number, minutesSinceFirstFail: number, policy: LockoutPolicy = DEFAULT_LOCKOUT): LockoutState {
++  // پنجره منقضی شده باشد، شمارش از صفر است.
++  if (minutesSinceFirstFail > policy.windowMinutes) {
++    return { locked: false, remainingAttempts: policy.maxAttempts, unlockAfterMinutes: 0 };
++  }
++  const remaining = Math.max(0, policy.maxAttempts - failedAttempts);
++  if (remaining > 0) return { locked: false, remainingAttempts: remaining, unlockAfterMinutes: 0 };
++  return { locked: true, remainingAttempts: 0, unlockAfterMinutes: policy.lockMinutes };
++}
++
++/* ═══════════════════════════ ۹. امتیاز وضعیت امنیتی ═══════════════════════════ */
++
++export type PostureInput = {
++  subjects: Subject[];
++  delegations: Delegation[];
++  onDate: string;
++  httpsEnforced: boolean;
++  mfaEnabled: boolean;
++  auditRetentionDays: number;
++  backupAgeDays: number | null;
++  sqlEncrypted: boolean;
++};
++
++export type Finding = {
++  code: string;
++  severity: "critical" | "high" | "medium" | "low";
++  title: Bi;
++  detail: Bi;
++  weight: number;
++};
++
++export type Posture = { score: number; grade: "A" | "B" | "C" | "D" | "E"; findings: Finding[] };
++
++export function scorePosture(input: PostureInput): Posture {
++  const findings: Finding[] = [];
++
++  // ۱. تفکیک وظایف در سطح نقش
++  for (const s of input.subjects) {
++    if (!s.active) continue;
++    const v = sodViolations(subjectPermissions(s));
++    for (const rule of v) {
++      findings.push({
++        code: `SEC-SOD-${rule.id}`,
++        severity: rule.severity === "critical" ? "critical" : "high",
++        title: { fa: `نقض تفکیک وظیفه — ${s.displayName}`, en: `SoD violation — ${s.displayName}` },
++        detail: rule.reason,
++        weight: rule.severity === "critical" ? 12 : 7,
++      });
++    }
++  }
++
++  // ۲. کاربران با دسترسی همهٔ پروژه‌ها
++  const wildcard = input.subjects.filter((s) => s.active && s.projectIds.includes("*"));
++  if (wildcard.length > 3) {
++    findings.push({
++      code: "SEC-SCOPE-01",
++      severity: "medium",
++      title: { fa: "دسترسی سراسری بیش از حد", en: "Excessive portfolio-wide access" },
++      detail: { fa: `${wildcard.length} کاربر به همهٔ پروژه‌ها دسترسی دارند`, en: `${wildcard.length} users have access to every project` },
++      weight: 6,
++    });
++  }
++
++  // ۳. تفویض‌های منقضی‌نشدهٔ طولانی
++  const stale = input.delegations.filter((d) => isDelegationActive(d, input.onDate) && dayDiff(d.from, d.to) > 90);
++  if (stale.length) {
++    findings.push({
++      code: "SEC-DLG-01",
++      severity: "medium",
++      title: { fa: "تفویض اختیار طولانی‌مدت", en: "Long-running delegation" },
++      detail: { fa: `${stale.length} تفویض فعال بیش از ۹۰ روز`, en: `${stale.length} active delegations exceed 90 days` },
++      weight: 5,
++    });
++  }
++
++  // ۴. کاربران غیرفعال با مجوز باقی‌مانده
++  const zombie = input.subjects.filter((s) => !s.active && subjectPermissions(s).length > 0);
++  if (zombie.length) {
++    findings.push({
++      code: "SEC-USR-01",
++      severity: "high",
++      title: { fa: "حساب غیرفعال با مجوز باقی‌مانده", en: "Inactive account retains grants" },
++      detail: { fa: `${zombie.length} حساب غیرفعال هنوز نقش دارد`, en: `${zombie.length} inactive accounts still hold roles` },
++      weight: 8,
++    });
++  }
++
++  if (!input.httpsEnforced) {
++    findings.push({ code: "SEC-NET-01", severity: "critical", title: { fa: "HTTPS اجباری نیست", en: "HTTPS is not enforced" }, detail: { fa: "ترافیک باید روی TLS اجبار شود", en: "Traffic must be forced over TLS" }, weight: 15 });
++  }
++  if (!input.mfaEnabled) {
++    findings.push({ code: "SEC-AUTH-01", severity: "high", title: { fa: "احراز هویت دومرحله‌ای غیرفعال", en: "MFA disabled" }, detail: { fa: "برای نقش‌های سطح سری الزامی است", en: "Mandatory for restricted-clearance roles" }, weight: 10 });
++  }
++  if (!input.sqlEncrypted) {
++    findings.push({ code: "SEC-DB-01", severity: "high", title: { fa: "رمزنگاری پایگاه داده غیرفعال", en: "Database encryption off" }, detail: { fa: "TDE یا رمزنگاری ستونی فعال نیست", en: "TDE or column encryption is not enabled" }, weight: 9 });
++  }
++  if (input.auditRetentionDays < 365) {
++    findings.push({ code: "SEC-AUD-01", severity: "medium", title: { fa: "نگهداشت لاگ ممیزی کوتاه", en: "Short audit retention" }, detail: { fa: `${input.auditRetentionDays} روز — حداقل ۳۶۵ روز توصیه می‌شود`, en: `${input.auditRetentionDays} days — 365 recommended` }, weight: 5 });
++  }
++  if (input.backupAgeDays === null) {
++    findings.push({ code: "SEC-BKP-01", severity: "critical", title: { fa: "هیچ نسخهٔ پشتیبانی وجود ندارد", en: "No backup snapshot" }, detail: { fa: "پیش از بهره‌برداری پشتیبان بگیرید", en: "Take a backup before go-live" }, weight: 14 });
++  } else if (input.backupAgeDays > 7) {
++    findings.push({ code: "SEC-BKP-02", severity: "medium", title: { fa: "پشتیبان قدیمی", en: "Stale backup" }, detail: { fa: `${input.backupAgeDays} روز از آخرین پشتیبان گذشته`, en: `${input.backupAgeDays} days since last backup` }, weight: 6 });
++  }
++
++  const penalty = findings.reduce((s, f) => s + f.weight, 0);
++  const score = Math.max(0, Math.min(100, 100 - penalty));
++  const grade: Posture["grade"] = score >= 90 ? "A" : score >= 75 ? "B" : score >= 60 ? "C" : score >= 40 ? "D" : "E";
++  return { score, grade, findings: findings.sort((a, b) => b.weight - a.weight) };
++}
++
++/* ═══════════════════════════ ۱۰. ماتریس و ممیزی ═══════════════════════════ */
++
++/** ماتریس نقش × مجوز برای نمایش و صدور. */
++export function roleMatrix(): { role: string; title: Bi; clearance: Classification; permissions: string[] }[] {
++  return ROLE_CATALOG.map((r) => ({ role: r.code, title: r.title, clearance: r.clearance, permissions: effectivePermissions(r.code) }));
++}
++
++/** مجوزهایی که هیچ نقشی ندارد — نشانهٔ کاتالوگ ناقص. */
++export function orphanPermissions(): string[] {
++  const granted = new Set<string>();
++  for (const r of ROLE_CATALOG) for (const p of effectivePermissions(r.code)) granted.add(p);
++  return PERMISSION_CODES.filter((c) => !granted.has(c));
++}
++
++/** مجوزهایی که در نقش‌ها آمده ولی در کاتالوگ نیست — نشانهٔ غلط املایی. */
++export function danglingGrants(): { role: string; permission: string }[] {
++  const out: { role: string; permission: string }[] = [];
++  for (const r of ROLE_CATALOG) {
++    for (const p of r.grants) if (!PERM_BY_CODE.has(p)) out.push({ role: r.code, permission: p });
++  }
++  return out;
++}
++
++export type AccessAuditRecord = {
++  at: string;
++  subjectId: string;
++  permission: string;
++  decision: DecisionCode;
++  projectId?: string | null;
++  severity: "info" | "warning" | "security" | "critical";
++};
++
++/** شدت رویداد ممیزی از روی تصمیم و حساسیت مجوز. */
++export function auditSeverity(permission: string, decision: DecisionCode): AccessAuditRecord["severity"] {
++  if (decision === "DENY_SOD" || decision === "DENY_EXPLICIT") return "critical";
++  if (decision.startsWith("DENY")) return "warning";
++  const def = PERM_BY_CODE.get(permission);
++  if (def && def.touches === "restricted") return "security";
++  return "info";
++}
++
++export function buildAuditRecord(subject: Subject, permission: string, decision: Decision, at: string, projectId?: string | null): AccessAuditRecord {
++  return {
++    at,
++    subjectId: subject.id,
++    permission,
++    decision: decision.code,
++    projectId: projectId ?? null,
++    severity: auditSeverity(permission, decision.code),
++  };
++}
++
++/* ═══════════════════════════ ۱۱. کاربران نمونه ═══════════════════════════ */
++
++export const DEMO_SUBJECTS: Subject[] = [
++  { id: "u-admin", displayName: "محمدرضا هاشمی‌پور", roles: ["admin"], projectIds: ["*"], active: true, party: "contractor" },
++  { id: "u-pm", displayName: "مدیر پروژه آزادگان", roles: ["project_manager"], projectIds: ["c1-p1", "c1-p2"], active: true, party: "contractor" },
++  { id: "u-pmo", displayName: "دفتر مدیریت پروژه", roles: ["pmo"], projectIds: ["*"], active: true, party: "contractor" },
++  { id: "u-planner", displayName: "کارشناس برنامه‌ریزی", roles: ["planner"], projectIds: ["*"], active: true, party: "contractor" },
++  { id: "u-cost", displayName: "کنترل هزینه", roles: ["cost_controller"], projectIds: ["c1-p1"], active: true, party: "contractor" },
++  { id: "u-qc", displayName: "بازرس کیفیت", roles: ["qc_inspector"], projectIds: ["c1-p1"], disciplines: ["mechanical", "piping"], active: true, party: "contractor" },
++  { id: "u-qa", displayName: "مدیر تضمین کیفیت", roles: ["qa_manager"], projectIds: ["c1-p1", "c1-p2"], active: true, party: "contractor" },
++  { id: "u-hr", displayName: "مدیر منابع انسانی", roles: ["hr_manager"], projectIds: ["*"], active: true, party: "contractor" },
++  { id: "u-doc", displayName: "کنترل مدارک", roles: ["doc_controller"], projectIds: ["c1-p1"], active: true, party: "contractor" },
++  { id: "u-contracts", displayName: "مدیر پیمان", roles: ["contracts_manager"], projectIds: ["c1-p1", "c1-p2"], active: true, party: "contractor" },
++  { id: "u-site", displayName: "سرپرست کارگاه", roles: ["site_engineer"], projectIds: ["c1-p1"], disciplines: ["civil"], active: true, party: "contractor" },
++  { id: "u-consultant", displayName: "نماینده مشاور", roles: ["consultant"], projectIds: ["c1-p1", "c5-p1"], active: true, party: "consultant" },
++  { id: "u-client", displayName: "نماینده کارفرما", roles: ["client"], projectIds: ["c1-p1", "c3-p1"], active: true, party: "client" },
++  { id: "u-ceo", displayName: "مدیر ارشد", roles: ["executive"], projectIds: ["*"], active: true, party: "contractor" },
++  { id: "u-sub", displayName: "پیمانکار جزء — ابنیه", roles: ["subcontractor"], projectIds: ["c1-p1"], disciplines: ["civil"], active: true, party: "subcontractor" },
++  { id: "u-auditor", displayName: "ممیز داخلی", roles: ["auditor"], projectIds: ["*"], active: true, party: "any" },
++  // کاربر عمداً پرمجوز: دو نقش هم‌زمان که تفکیک وظیفه را نقض می‌کند — ورودی آزمون وضعیت امنیتی.
++  { id: "u-over", displayName: "سرپرست مالی کارگاه (دو نقش)", roles: ["cost_controller", "project_manager"], projectIds: ["c1-p1"], active: true, party: "contractor" },
++  { id: "u-left", displayName: "کارشناس منتقل‌شده", roles: ["planner"], projectIds: ["c1-p1"], active: false, party: "contractor" },
++];
++
++export const DEMO_DELEGATIONS: Delegation[] = [
++  {
++    id: "dlg-1",
++    fromUserId: "u-pm",
++    toUserId: "u-planner",
++    permissions: ["plan.baseline.set", "plan.progress.approve"],
++    from: "2026-09-01",
++    to: "2026-09-20",
++    reason: "مأموریت مدیر پروژه به تهران",
++  },
++  {
++    id: "dlg-2",
++    fromUserId: "u-pm",
++    toUserId: "u-cost",
++    permissions: ["fin.ipc.approve"],
++    from: "2026-06-01",
++    to: "2026-12-30",
++    reason: "تفویض دائم تأیید صورت‌وضعیت",
++  },
++];
+diff --git a/src/services/communication.ts b/src/services/communication.ts
+new file mode 100644
+index 0000000..e4d2a28
+--- /dev/null
++++ b/src/services/communication.ts
+@@ -0,0 +1,424 @@
++/**
++ * CKM — موتور مدیریت ارتباطات و دانش
++ * منبع یگانه منطق. آینه سرور با `npm run build:ckm` ساخته می‌شود.
++ *
++ * اصول حاکم:
++ * ۱) نامه‌ای که تعهد قراردادی دارد بدون مهلت پاسخ ثبت نمی‌شود.
++ * ۲) هر مصوبه جلسه باید مالک و موعد داشته باشد، وگرنه مصوبه نیست.
++ * ۳) درس‌آموخته بدون منشأ و بدون ردیابی استفاده مجدد، دانش نیست؛ بایگانی است.
++ * ۴) ذی‌نفع با سطح تعامل مطلوب سنجیده می‌شود، نه با فهرست اسامی.
++ */
++
++import { IRAN_CALENDAR, addWorkingDays, isWorkingDay, type WorkCalendar } from "./planning";
++
++export const CKM_FORMULA_VERSION = "ckm-v1";
++
++/** کد دامنه در یک نقطه متمرکز — تغییر آن تک‌خطی است. */
++export const CKM_DOMAIN_ID = "d11";
++
++/* ══════════════════════════ مکاتبات ══════════════════════════ */
++
++export type LetterDirection = "incoming" | "outgoing";
++
++export type LetterStatus =
++  | "draft" | "registered" | "under_review" | "responded" | "closed" | "overdue";
++
++/** طبقه‌بندی قراردادی نامه — تعیین‌کننده مهلت و پیامد حقوقی. */
++export type LetterClass =
++  | "general"        // مکاتبه عادی، بدون تعهد
++  | "instruction"    // دستور کار کارفرما
++  | "notice"         // اعلان قراردادی (Time-Bar دارد)
++  | "claim_notice"   // اعلان ادعا — بحرانی‌ترین نوع
++  | "submittal"      // ارسال مدرک برای تأیید
++  | "rfi"            // درخواست اطلاعات
++  | "ncr_related";   // مرتبط با عدم انطباق
++
++export type Letter = {
++  id: string;
++  ref: string;
++  direction: LetterDirection;
++  letterClass: LetterClass;
++  subject: string;
++  from: string;
++  to: string;
++  issuedAt: string;      // ISO
++  receivedAt?: string;   // تاریخ ثبت در دبیرخانه
++  /** مهلت پاسخ بر حسب روز — اگر تعریف نشود از جدول پیش‌فرض کلاس گرفته می‌شود */
++  responseDays?: number;
++  respondedAt?: string;
++  status: LetterStatus;
++  /** ارجاع متقابل: ادعا، تغییر، ریسک، NCR یا فعالیت */
++  links?: string[];
++  ownerRole?: string;
++  attachments?: number;
++};
++
++/**
++ * مهلت پیش‌فرض پاسخ به تفکیک کلاس نامه (روز کاری).
++ * مبنا: عرف قراردادهای EPC ایران و FIDIC — اعلان ادعا ۲۸ روز تقویمی که
++ * محافظه‌کارانه به ۲۰ روز کاری تبدیل شده است.
++ */
++export const DEFAULT_RESPONSE_DAYS: Record<LetterClass, number> = {
++  general: 14,
++  instruction: 7,
++  notice: 14,
++  claim_notice: 20,
++  submittal: 10,
++  rfi: 5,
++  ncr_related: 7,
++};
++
++/** آیا این کلاس نامه مهلت قراردادی الزام‌آور دارد؟ */
++export function isTimeBarred(letterClass: LetterClass): boolean {
++  return letterClass === "claim_notice" || letterClass === "notice";
++}
++
++export type DueResult = {
++  dueDate: string;
++  daysRemaining: number;
++  overdue: boolean;
++  /** نامه‌ای که مهلت قراردادی دارد و از دست رفته — حق ادعا ساقط می‌شود */
++  timeBarBreached: boolean;
++  severity: "ok" | "due_soon" | "overdue" | "critical";
++};
++
++/**
++ * مهلت پاسخ بر پایه روز کاری تقویم پروژه (نه روز تقویمی).
++ * از همان `addWorkingDays` ماژول برنامه‌ریزی استفاده می‌کند تا تقویم یگانه بماند.
++ */
++export function responseDue(
++  letter: Letter,
++  today: string,
++  cal: WorkCalendar = IRAN_CALENDAR
++): DueResult {
++  const base = letter.receivedAt ?? letter.issuedAt;
++  const days = letter.responseDays ?? DEFAULT_RESPONSE_DAYS[letter.letterClass];
++  const dueDate = addWorkingDays(base, days, cal);
++  const remaining = workingDaysBetween(today, dueDate, cal);
++  const answered = !!letter.respondedAt;
++  const overdue = !answered && remaining < 0;
++  const timeBarBreached = overdue && isTimeBarred(letter.letterClass);
++
++  let severity: DueResult["severity"] = "ok";
++  if (answered) severity = "ok";
++  else if (timeBarBreached) severity = "critical";
++  else if (overdue) severity = "overdue";
++  else if (remaining <= 3) severity = "due_soon";
++
++  return { dueDate, daysRemaining: remaining, overdue, timeBarBreached, severity };
++}
++
++/** شمارش روزهای کاری بین دو تاریخ؛ منفی یعنی تاریخ دوم گذشته است. */
++export function workingDaysBetween(fromIso: string, toIso: string, cal: WorkCalendar = IRAN_CALENDAR): number {
++  if (fromIso === toIso) return 0;
++  const forward = fromIso < toIso;
++  const [a, b] = forward ? [fromIso, toIso] : [toIso, fromIso];
++  let count = 0;
++  const d = new Date(a + "T00:00:00Z");
++  const end = new Date(b + "T00:00:00Z");
++  while (d < end) {
++    d.setUTCDate(d.getUTCDate() + 1);
++    if (isWorkingDay(d.toISOString().slice(0, 10), cal)) count++;
++  }
++  return forward ? count : -count;
++}
++
++/** میانگین زمان پاسخ‌گویی بر حسب روز کاری — شاخص کلیدی سلامت ارتباطات. */
++export function averageResponseTime(letters: Letter[], cal: WorkCalendar = IRAN_CALENDAR): number {
++  const answered = letters.filter((l) => l.respondedAt);
++  if (!answered.length) return 0;
++  const total = answered.reduce(
++    (a, l) => a + workingDaysBetween(l.receivedAt ?? l.issuedAt, l.respondedAt!, cal),
++    0
++  );
++  return round1(total / answered.length);
++}
++
++/** اعتبارسنجی نامه پیش از ثبت. */
++export function validateLetter(l: Letter): { code: string; severity: "error" | "warning"; message: string }[] {
++  const out: { code: string; severity: "error" | "warning"; message: string }[] = [];
++  if (!l.subject?.trim()) out.push({ code: "E-CKM-101", severity: "error", message: "موضوع نامه خالی است" });
++  if (!l.ref?.trim()) out.push({ code: "E-CKM-102", severity: "error", message: "شماره ثبت نامه الزامی است" });
++  if (isTimeBarred(l.letterClass) && !(l.links?.length)) {
++    out.push({ code: "E-CKM-103", severity: "error", message: "اعلان قراردادی باید به ادعا، تغییر یا ریسک ارجاع داشته باشد" });
++  }
++  if (l.direction === "incoming" && !l.receivedAt) {
++    out.push({ code: "E-CKM-104", severity: "error", message: "نامه وارده بدون تاریخ ثبت دبیرخانه پذیرفته نمی‌شود" });
++  }
++  if (!l.ownerRole) {
++    out.push({ code: "W-CKM-301", severity: "warning", message: "نامه مالک پاسخ ندارد" });
++  }
++  return out;
++}
++
++/* ══════════════════════════ جلسات و مصوبات ══════════════════════════ */
++
++export type ActionStatus = "open" | "in_progress" | "done" | "cancelled" | "overdue";
++
++export type ActionItem = {
++  id: string;
++  meetingId: string;
++  title: string;
++  ownerRole: string;
++  dueDate: string;
++  status: ActionStatus;
++  closedAt?: string;
++  /** ارجاع به ریسک، ادعا، NCR یا فعالیت */
++  links?: string[];
++};
++
++export type Meeting = {
++  id: string;
++  title: string;
++  type: "kickoff" | "weekly" | "monthly" | "technical" | "client" | "hse" | "claim";
++  heldAt: string;
++  chair: string;
++  attendees: string[];
++  invited: string[];
++  minutesApproved: boolean;
++  distributedAt?: string;
++};
++
++/** وضعیت واقعی مصوبه با در نظر گرفتن تاریخ امروز. */
++export function actionState(a: ActionItem, today: string): ActionStatus {
++  if (a.status === "done" || a.status === "cancelled") return a.status;
++  return a.dueDate < today ? "overdue" : a.status;
++}
++
++export function actionAgeDays(a: ActionItem, today: string, cal: WorkCalendar = IRAN_CALENDAR): number {
++  return workingDaysBetween(a.dueDate, today, cal);
++}
++
++/** سلامت جلسه: حضور، تصویب صورت‌جلسه، توزیع و نرخ بستن مصوبات. */
++export function meetingHealth(m: Meeting, actions: ActionItem[], today: string) {
++  const mine = actions.filter((a) => a.meetingId === m.id);
++  const closed = mine.filter((a) => actionState(a, today) === "done").length;
++  const overdue = mine.filter((a) => actionState(a, today) === "overdue").length;
++  const attendanceRate = m.invited.length ? round1((m.attendees.length / m.invited.length) * 100) : 100;
++  const closureRate = mine.length ? round1((closed / mine.length) * 100) : 100;
++
++  const issues: string[] = [];
++  if (!m.minutesApproved) issues.push("صورت‌جلسه تصویب نشده");
++  if (!m.distributedAt) issues.push("صورت‌جلسه توزیع نشده");
++  if (attendanceRate < 70) issues.push("حضور زیر ۷۰٪");
++  if (overdue > 0) issues.push(`${overdue} مصوبه معوق`);
++
++  return {
++    actions: mine.length,
++    closed,
++    overdue,
++    attendanceRate,
++    closureRate,
++    status: issues.length === 0 ? ("green" as const) : overdue > 0 || !m.minutesApproved ? ("red" as const) : ("amber" as const),
++    issues,
++  };
++}
++
++/** مصوبه بدون مالک یا بدون موعد، مصوبه نیست (اصل ۲). */
++export function validateAction(a: ActionItem): { code: string; severity: "error" | "warning"; message: string }[] {
++  const out: { code: string; severity: "error" | "warning"; message: string }[] = [];
++  if (!a.ownerRole?.trim()) out.push({ code: "E-CKM-201", severity: "error", message: "مصوبه بدون مالک پذیرفته نمی‌شود" });
++  if (!a.dueDate) out.push({ code: "E-CKM-202", severity: "error", message: "مصوبه بدون موعد پذیرفته نمی‌شود" });
++  if (!a.title?.trim() || a.title.trim().length < 8) {
++    out.push({ code: "W-CKM-302", severity: "warning", message: "شرح مصوبه بیش از حد کوتاه است و قابل پیگیری نیست" });
++  }
++  return out;
++}
++
++/* ══════════════════════════ ذی‌نفعان ══════════════════════════ */
++
++export type EngagementLevel = "unaware" | "resistant" | "neutral" | "supportive" | "leading";
++
++export const ENGAGEMENT_ORDER: EngagementLevel[] = ["unaware", "resistant", "neutral", "supportive", "leading"];
++
++export type Stakeholder = {
++  id: string;
++  name: string;
++  org: string;
++  role: string;
++  /** ۱ تا ۵ */
++  power: number;
++  interest: number;
++  current: EngagementLevel;
++  desired: EngagementLevel;
++  channel: string[];
++  frequency: "daily" | "weekly" | "biweekly" | "monthly" | "on_event";
++  ownerRole: string;
++};
++
++/** راهبرد مواجهه بر پایه شبکه قدرت–علاقه (PMBOK 13). */
++export function powerInterestQuadrant(s: Stakeholder): "manage_closely" | "keep_satisfied" | "keep_informed" | "monitor" {
++  const highPower = s.power >= 4;
++  const highInterest = s.interest >= 4;
++  if (highPower && highInterest) return "manage_closely";
++  if (highPower && !highInterest) return "keep_satisfied";
++  if (!highPower && highInterest) return "keep_informed";
++  return "monitor";
++}
++
++/** فاصله سطح تعامل فعلی تا مطلوب — عدد مثبت یعنی نیازمند اقدام است. */
++export function engagementGap(s: Stakeholder): number {
++  return ENGAGEMENT_ORDER.indexOf(s.desired) - ENGAGEMENT_ORDER.indexOf(s.current);
++}
++
++/** ذی‌نفعان بحرانی: قدرت بالا و شکاف تعامل مثبت. */
++export function criticalStakeholders(list: Stakeholder[]): Stakeholder[] {
++  return list.filter((s) => s.power >= 4 && engagementGap(s) > 0);
++}
++
++/**
++ * تعداد کانال ارتباطی بالقوه = n(n−1)/2 (PMBOK 10).
++ * پایه استدلال برای محدود کردن اعضای رسمی جلسات.
++ */
++export function communicationChannels(n: number): number {
++  return n > 1 ? (n * (n - 1)) / 2 : 0;
++}
++
++/** پوشش برنامه ارتباطات: چند درصد ذی‌نفعان کانال و تناوب مشخص دارند. */
++export function commsPlanCoverage(list: Stakeholder[]): number {
++  if (!list.length) return 0;
++  const ok = list.filter((s) => s.channel.length > 0 && !!s.frequency && !!s.ownerRole).length;
++  return round1((ok / list.length) * 100);
++}
++
++/* ══════════════════════════ دانش و درس‌آموخته ══════════════════════════ */
++
++export type LessonCategory =
++  | "technical" | "schedule" | "cost" | "quality" | "hse"
++  | "contract" | "procurement" | "hr" | "stakeholder";
++
++export type Lesson = {
++  id: string;
++  title: string;
++  category: LessonCategory;
++  /** منشأ الزامی: NCR، ادعا، ریسک، حادثه یا جلسه */
++  sourceRef: string;
++  situation: string;
++  recommendation: string;
++  capturedAt: string;
++  capturedBy: string;
++  /** تأیید شورای دانش — درس تأییدنشده در جستجوی سازمانی ظاهر نمی‌شود */
++  validated: boolean;
++  /** دفعات استفاده مجدد در پروژه‌های بعدی */
++  reuseCount: number;
++  impact: "low" | "medium" | "high";
++  tags: string[];
++};
++
++/**
++ * امتیاز ارزش یک درس‌آموخته (۰ تا ۱۰۰).
++ * وزن اصلی روی «استفاده مجدد» است، نه روی «ثبت شدن» —
++ * چون دانشی که به کار نرود هزینه است نه دارایی.
++ */
++export function lessonValue(l: Lesson): number {
++  const impactWeight = { low: 10, medium: 20, high: 30 }[l.impact];
++  const validatedWeight = l.validated ? 20 : 0;
++  const reuseWeight = Math.min(40, l.reuseCount * 10);
++  const linkWeight = l.sourceRef ? 10 : 0;
++  return impactWeight + validatedWeight + reuseWeight + linkWeight;
++}
++
++/** نرخ تبدیل دانش: چند درصد درس‌های تأییدشده دست‌کم یک‌بار استفاده شده‌اند. */
++export function knowledgeUtilization(list: Lesson[]): number {
++  const validated = list.filter((l) => l.validated);
++  if (!validated.length) return 0;
++  return round1((validated.filter((l) => l.reuseCount > 0).length / validated.length) * 100);
++}
++
++/** توزیع درس‌ها بر حسب دسته — برای یافتن حوزه‌های کور. */
++export function lessonCoverage(list: Lesson[], categories: LessonCategory[]) {
++  return categories.map((c) => ({
++    category: c,
++    count: list.filter((l) => l.category === c).length,
++  }));
++}
++
++export function validateLesson(l: Lesson): { code: string; severity: "error" | "warning"; message: string }[] {
++  const out: { code: string; severity: "error" | "warning"; message: string }[] = [];
++  if (!l.sourceRef?.trim()) {
++    out.push({ code: "E-CKM-401", severity: "error", message: "درس‌آموخته بدون منشأ ثبت نمی‌شود" });
++  }
++  if (!l.recommendation?.trim() || l.recommendation.trim().length < 15) {
++    out.push({ code: "E-CKM-402", severity: "error", message: "توصیه اجرایی باید مشخص و قابل اقدام باشد" });
++  }
++  if (l.validated && l.reuseCount === 0) {
++    out.push({ code: "W-CKM-303", severity: "warning", message: "درس تأییدشده اما هرگز استفاده نشده است" });
++  }
++  return out;
++}
++
++/* ══════════════════════════ اطلاع‌رسانی و توزیع ══════════════════════════ */
++
++export type NotificationRule = {
++  id: string;
++  event: string;
++  channels: ("email" | "sms" | "in_app" | "board")[];
++  audienceRoles: string[];
++  /** ساعت تا تشدید در صورت بی‌پاسخ ماندن */
++  escalateAfterHours: number;
++  escalateToRole: string;
++  active: boolean;
++};
++
++/** سطح تشدید بر پایه ساعت سپری‌شده. */
++export function escalationLevel(hoursElapsed: number, rule: NotificationRule): 0 | 1 | 2 | 3 {
++  if (!rule.active || hoursElapsed < rule.escalateAfterHours) return 0;
++  const factor = hoursElapsed / rule.escalateAfterHours;
++  if (factor >= 3) return 3;
++  if (factor >= 2) return 2;
++  return 1;
++}
++
++/** کامل بودن توزیع: آیا همه مخاطبان لازم پوشش داده شده‌اند؟ */
++export function distributionGap(required: string[], actual: string[]): string[] {
++  const have = new Set(actual);
++  return required.filter((r) => !have.has(r));
++}
++
++/* ══════════════════════════ هشدار زودهنگام ══════════════════════════ */
++
++export type CkmAlert = { code: string; severity: "critical" | "high" | "medium"; message: string };
++
++export function ckmEws(input: {
++  timeBarBreaches: number;
++  overdueLetters: number;
++  overdueActions: number;
++  avgResponseDays: number;
++  engagementGaps: number;
++  knowledgeUtilizationPct: number;
++  unapprovedMinutes: number;
++}): CkmAlert[] {
++  const out: CkmAlert[] = [];
++  if (input.timeBarBreaches > 0) {
++    out.push({
++      code: "EWS-CKM-01",
++      severity: "critical",
++      message: `${input.timeBarBreaches} اعلان قراردادی از مهلت گذشته — ریسک سقوط حق ادعا`,
++    });
++  }
++  if (input.overdueLetters > 5) {
++    out.push({ code: "EWS-CKM-02", severity: "high", message: `${input.overdueLetters} نامه بی‌پاسخ از مهلت گذشته` });
++  }
++  if (input.overdueActions > 3) {
++    out.push({ code: "EWS-CKM-03", severity: "high", message: `${input.overdueActions} مصوبه جلسه معوق` });
++  }
++  if (input.avgResponseDays > 10) {
++    out.push({ code: "EWS-CKM-04", severity: "medium", message: `میانگین زمان پاسخ ${input.avgResponseDays} روز کاری — بیش از آستانه ۱۰` });
++  }
++  if (input.engagementGaps > 0) {
++    out.push({ code: "EWS-CKM-05", severity: "medium", message: `${input.engagementGaps} ذی‌نفع پرقدرت با شکاف تعامل` });
++  }
++  if (input.knowledgeUtilizationPct < 40) {
++    out.push({ code: "EWS-CKM-06", severity: "medium", message: `نرخ استفاده از دانش ${input.knowledgeUtilizationPct}٪ زیر آستانه ۴۰٪` });
++  }
++  if (input.unapprovedMinutes > 2) {
++    out.push({ code: "EWS-CKM-07", severity: "medium", message: `${input.unapprovedMinutes} صورت‌جلسه تصویب‌نشده` });
++  }
++  return out;
++}
++
++/* ══════════════════════════ ابزار ══════════════════════════ */
++
++function round1(n: number): number {
++  return Math.round(n * 10) / 10;
++}
+diff --git a/src/services/finance.ts b/src/services/finance.ts
+new file mode 100644
+index 0000000..fd378a2
+--- /dev/null
++++ b/src/services/finance.ts
+@@ -0,0 +1,555 @@
++/**
++ * FIN — موتور هزینه، تأمین و لجستیک (d5).
++ * قواعد: AC مالک d5 است · Snapshot غیرقابل تغییر با نسخه فرمول · Commitment پیش از Actual ·
++ * 3-Way Match پیش از پرداخت · چندارزی بومی · هیچ نوشتنی روی داده d2/d3/d4.
++ */
++
