@@ -1,41 +1,91 @@
 # انتقال به چت جدید — Arena Platform
-تاریخ: 2026-09-04
+تاریخ به‌روزرسانی: 2026-09-14 — **این بخش جدیدتر از جدول‌های پایین است.**
+
+## وضعیت نشست جاری (۲۰۲۶-۰۹-۱۴)
+
+- **شاخه:** `arena/01a09fd7-repo` · **PR:** [#2](https://github.com/padircom/-/pull/2) به `main`
+- کل کار نشست پیشین (`arena/01a07ee6-repo`) که روی گیت‌هاب نرفته بود، از بستهٔ
+  `transfer/previous-chat-patch` بازیابی و روی همین شاخه سوار شد: ۲۱۴ فایل جدید، ۲۴ به‌روزشده.
+- ریشه تمیز شد: حذف ۲۱۰ فایل بازماندهٔ یک `.git` رهاشده (`02/…`, `db/<sha>`, `index`).
+- **دروازه: `npm test` → ۴۱۲۰/۴۱۲۰ سبز** روی هر ۹۰ فایل `server/*.test.mjs`.
+  (پیش‌تر اسکریپت آزمون ۱۶ فایل CNT/HSE را جا انداخته بود و ۳۳۶۷ می‌شمرد — اصلاح شد.)
+- بیلد تولیدی سالم: `npm run build` → `dist/index.html` تک‌فایل ۱٫۸ MB.
+
+### اجرا (سه گام)
+```bash
+npm install --no-audit --no-fund                    # node_modules در snapshot نیست
+PORT=4000 PERSIST_DRIVER=json DATA_DIR=./server/rundata node server/index.js
+node server/seed.mjs                                # فقط بار اول
+npm run dev -- --port 5173 --host 0.0.0.0
+```
+- `PERSIST_DRIVER=json` **اجباری**؛ بدون آن سرور به SQL Server واقعی (`.\SQL2008EXPRESS`) می‌رود.
+- `DATA_DIR=./server/rundata` — **نه `server/data`**؛ آن مسیر نقطهٔ شروع ۲۹ آزمون REST است.
+- `/api/health` عمداً ۵۰۰ می‌دهد (سلامت SQL واقعی)؛ نشانهٔ خرابی نیست.
+
+### بعدی پیشنهادی
+۱) فاز F5 پایداری PEX: جداول `pex_*` + ثبت واقعی DPR (G1+G2).
+۲) اتصال GOV به SQL واقعی (G1+G2 حاکمیت).
+۳) دامنهٔ بعدی بدون سند. → جزئیات هر ماژول در `docs/SESSION_HANDOFF.md` و `transfer/hrm/README.md`.
+
+---
+
+تاریخ بخش قدیمی: 2026-09-08
 دستور کاربر: از این پوشه ادامه بده. فایل‌های چت قبلی را دوباره لود نکن مگر فایل جدید بفرستد.
-پاسخ‌ها: کوتاه فارسی. ظاهر/فونت Vazirmatn و سایدبار اصلی را تغییر نده.
+پاسخ‌ها: کوتاه فارسی. ظاهر/فونت Vazirmatn، `src/index.css` و سایدبار اصلی (domains) را تغییر نده.
 
 ## قانون UI
 - سایدبار اصلی: ساختار domains دست‌نخورده برای آیتم جدید.
-- زیرماژول‌های جدید فقط صفحه حوزه (الگوی d1 DocumentWorkspace).
+- زیرماژول‌های جدید فقط داخل صفحه حوزه (الگوی d1 DocumentWorkspace).
 - Excel ظرف است نه SoT.
+- `vite.config.ts` فقط `server.host: true` و `allowedHosts: true`.
 
-## PIM/EDMS (d1) — تمام شده
-- UI صفحه d1 بازطراحی شده (DocumentWorkspace + زیرماژول داخلی).
-- docs/PIM_DMS_D1 … D9 + FINAL_QUALITY_REPORT + F2 stories + TEST_CASES
-- OpenAPI: docs/openapi/pim-edms-v1.yaml
-- Postgres migrations: db/postgres/V001–V013 (محصول Arena همچنان SQL Server)
+## وضعیت ماژول‌ها
 
-## PEX برنامه‌ریزی و اجرا (d2) — در جریان طراحی
-تأییدشده بدون بازخورد: D1 تا D10
-- docs/PEX_D1_Architecture.md
-- docs/PEX_D2_DataModel.md
-- docs/PEX_D3_Scope_WBS_AI.md
-- docs/PEX_D4_Schedule_CPM.md
-- docs/PEX_D5_Milestone.md
-- docs/PEX_D6_CriticalPath.md
-- docs/PEX_D7_Cost_EVM.md
-- docs/PEX_D8_Resources.md
-- docs/PEX_D9_SiteOps.md
-- docs/PEX_D10_PMS.md
-**بعدی: Deliverable 11 Reporting & Templates** (سپس D12 Alert/API/MVP)
-پرامپت اصلی کاربر: uploads بود 1.txt ؛ ادامه با قالب 2.txt حالت الف.
+| دامنه | ماژول | اسناد | UI | موتور/تست |
+|---|---|---|---|---|
+| d1 | PIM/EDMS | D1–D9 + F2 + TEST_CASES + کیفیت | DocumentWorkspace | — |
+| d2 | PEX برنامه‌ریزی و اجرا | D1–D12 + UIUX + RoC + کیفیت | PlanningWorkspace | pex/cpm |
+| d3 | PMA/MON پایش | D1، D2 + کیفیت (D3–D14 نوشته نشده) | PmaWorkspace | projectControls |
+| d4 | RCC ریسک/ادعا | DELIVERABLE_01–14 + کیفیت | RiskClaimsWorkspace | rccLogic + rcc.test |
+| **d6** | **GOV حاکمیت — بسته شد ✅** | **D1–D10 + کیفیت + openapi/gov-v1.yaml** | **GovernanceWorkspace (۵ تب) + بلوک d6 در ModuleDetail** | **governance.ts / govLogic.js + gov.test.mjs (۱۲ تست)** |
+| d5 | هزینه و تدارکات | ندارد | — | — |
+| d7 | مدیریت سامانه | — | AdminWorkspace | — |
 
-ایراد d2 در UI: صفحه حوزه خالی است؛ ProjectControl/ActionPlan به App وصل نیست — بازطراحی بعد از اتمام اسناد یا وقتی کاربر بگوید پیاده کن.
+## GOV (d6) — جزئیات بستن
+- اسناد: `docs/GOV_D1_Architecture.md` … `docs/GOV_D10_API_MVP.md` + `docs/GOV_FINAL_QUALITY_REPORT.md`
+- قرارداد API: `docs/openapi/gov-v1.yaml`
+- موتور: `src/services/governance.ts` (SLA/تشدید L0–L3، DoA، دروازه تصمیم، CAPA، سلامت کانکتور، زنجیره ممیزی)
+- بک‌اند: `server/govLogic.js` + مسیرهای `/api/gov/*` در `server/index.js` (in-memory؛ SQL اختیاری)
+- کلاینت: `src/services/govApiClient.ts` — مسیر نسبی `/api/gov`؛ اگر بک‌اند نبود UI روی داده نمونه می‌ماند (چیپ «داده زنده / داده نمونه»)
+- تست: `npm test` → ۱۹/۱۹ سبز (۷ تست RCC + ۱۲ تست GOV)
+- زمان‌بند اختیاری: `GOV_SLA_TICK_MS` (میلی‌ثانیه) برای پایش دوره‌ای SLA
+
+### باقیمانده GOV (برآورد ~۱۲۸ نفر-ساعت، در گزارش کیفیت)
+G1 اجرای Migration روی SQL Server · G2 جایگزینی in-memory با جداول `gov_*` · G4 گزارش‌های GOV-R01…R07 · G5 آشتی‌دهی سه‌طرفه d2/d3/d5 · G6 seed چک‌لیست استانداردها.
+
+## PEX (d2) — تحویل‌شده در این نشست
+- **کد:** `src/services/planning.ts` (موتور `pex-v1`: تقویم ایران، CPM چهار رابطه + Lag، Data Date و Progress Override، شناوری کل از LF−EF، ۹ قاعده CP، DCMA 14، ۷ قاعده مایلستون با جریمه/پاداش و تشدید، وزن‌دهی Cost/MH/Hybrid، RoC با گیت IR، Roll-up، Period Close).
+- `src/data/pexProject.ts` (پروژه نمونه OG-2401 — ظرف داده) · `src/services/pexModel.ts` (ترکیب داده و موتور، Baseline از شبکه بدون تاریخ واقعی) · `src/services/pexApiClient.ts`.
+- **UI:** `src/components/PlanningWorkspace.tsx` — ۱۴ تب، صفر عدد hard-code، نشانگر «داده زنده / محاسبه محلی».
+- **API:** هفت روت `/api/pex/*` در `server/index.js` با `ownedFields=["progress","baseline"]`؛ POST پیشرفت با ۴۰۹ روی دوره بسته و `acceptedIntoEv=false` روی گام بدون IR.
+- **تست:** `server/pex.test.mjs` (۲۶ تست) → مجموع `npm test` = ۸۸ سبز. اسکریپت‌ها: `build:pex`, `build:pexdata` (آینه esbuild؛ `server/pexLogic.js` و `server/pexModelBundle.js` تولیدی‌اند).
+- **مستند:** `docs/PEX_D13_Implementation.md` (نگاشت طراحی→کد) و `docs/PEX_FINAL_QUALITY_REPORT_V2.md` (گزارش نهایی کیفیت ۷ بخشی؛ نسخه ۱ بایگانی شد).
+- **شکاف‌های باز PEX:** G1 داده در فایل TS به‌جای SQL · G2 ثبت DPR ذخیره نمی‌شود · G3 خروجی Excel/Word/PDF · G4 RBAC · G5 Parser XER · G6 ابلاغ ایمیل/SMS · G7 OpenAPI · G8 منابع · G9 گانت تعاملی. (G1+G2 یک برش دوهفته‌ای مشترک.)
 
 ## اجرا
-- مسیر پروژه: /home/user/arena-platform
-- Vite: npx vite --host 0.0.0.0 (allowedHosts در vite.config)
-- node_modules در snapshot نیست → npm ci
+- مسیر پروژه: `/home/user/-`
+- شاخه نشست: `arena/01a07ee6-repo` (روی GitHub؛ PR #1 در main مرج شد)
+- فرانت: `npx vite --host 0.0.0.0` (پورت 5173)
+- بک‌اند: `PORT=4000 node server/index.js` (پورت 4000؛ nginx مسیر `/api` را پراکسی می‌کند)
+- `node_modules` در snapshot نیست → `npm ci`
+- `.gitignore` اضافه شد: `node_modules/`, `dist/`, `test-results/`, `playwright-report/`, `.env`
 
-## سایر
-- BASELINE.md نسخه قدیمی‌تر PIM؛ این فایل جدیدتر است.
+## نکات فنی باز
+- `src/ForensicClaimsHub.tsx:1424` خطای نحوی از قبل دارد؛ هیچ‌جا import نشده (خارج از دامنه کار GOV).
+- `jalaali-js` فقط CJS است؛ در `server/index.js` با interop امن import می‌شود.
 - سازنده محصول در هدر App: محمدرضا هاشمی‌پور
+
+## بعدی پیشنهادی
+۱) فاز F5 پایداری داده PEX: جداول `pex_*` + ثبت واقعی DPR (G1+G2).
+۲) یا اتصال GOV به SQL Server واقعی (G1+G2 حاکمیت).
+۳) یا ماژول بعدی بدون سند.

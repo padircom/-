@@ -13,7 +13,7 @@ export type SystemSettings = {
   fontFamily: "vazir" | "shabnam" | "sahel" | "system";
   sqlConnectionString: string;
   databaseName: string;
-  aiProvider: "openai" | "deepseek" | "local" | "mock";
+  aiProvider: "arena" | "openai" | "deepseek" | "local" | "mock";
   aiModel: string;
   aiApiKey: string;
   autoSyncLive: boolean;

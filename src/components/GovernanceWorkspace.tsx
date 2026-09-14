@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { t, type Bi, type Lang } from "../data/framework";
 import { logAudit } from "../services/auditLogger";
-import { useSystem } from "../context/SystemContext";
+import { useAuth } from "../context/AuthContext";
 import {
   DOA,
   ESCALATION_ROLE,
@@ -22,6 +22,7 @@ import {
   type Finding,
   type TrailEntry,
 } from "../services/governance";
+import { govApi } from "../services/govApiClient";
 
 export type GovTab = "workflow" | "integration" | "stakeholders" | "audit" | "decision";
 
@@ -127,17 +128,50 @@ export default function GovernanceWorkspace({
   hideTabs?: boolean;
 }) {
   const rtl = lang === "fa";
-  const { settings } = useSystem();
+  const { user } = useAuth();
+  const activeRole = user?.role ?? "guest";
   const [tab, setTab] = useState<GovTab>(initialTab);
   const [workflows, setWorkflows] = useState<WorkflowRow[]>(sampleWorkflows);
   const [trail, setTrail] = useState<TrailEntry[]>([]);
+  const [source, setSource] = useState<"sample" | "api">("sample");
   useEffect(() => setTab(initialTab), [initialTab]);
 
-  const approveWorkflow = (id: string) => {
+  /* داده زنده در صورت در دسترس بودن سرویس؛ در غیر این‌صورت همان داده نمونه می‌ماند. */
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const rows = await govApi.workflowTasks();
+      if (!alive || !rows?.length) return;
+      setWorkflows(
+        rows.map((r) => ({
+          id: r.id,
+          code: r.code,
+          processName: { fa: r.processFa, en: r.processFa },
+          currentStep: r.closedAt ? { fa: "تأییدشده و نهایی", en: "Fully Approved" } : { fa: "در جریان بررسی", en: "In review" },
+          assignee: { fa: r.assignee, en: r.assignee },
+          dueAt: r.dueAt,
+          closedAt: r.closedAt,
+        }))
+      );
+      setSource("api");
+      const tr = await govApi.trail();
+      if (alive && tr) setTrail(tr.entries);
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const approveWorkflow = async (id: string) => {
     const today = new Date().toISOString().slice(0, 10);
     setWorkflows((prev) => prev.map((wf) => (wf.id === id ? { ...wf, closedAt: today, currentStep: { fa: "تأییدشده و نهایی", en: "Fully Approved" } } : wf)));
-    setTrail((prev) => appendTrail(prev, `APPROVE:${id}:${settings.activeRole}`));
-    logAudit("WORKFLOW_APPROVE", "Governance", `Approved workflow ${id} under role ${settings.activeRole}`);
+    setTrail((prev) => appendTrail(prev, `APPROVE:${id}:${activeRole}`));
+    logAudit("WORKFLOW_APPROVE", "Governance", `Approved workflow ${id} under role ${activeRole}`);
+    if (source === "api") {
+      await govApi.approveTask(id, String(activeRole));
+      const tr = await govApi.trail();
+      if (tr) setTrail(tr.entries);
+    }
   };
 
   const score = useMemo(() => complianceScore(sampleAudits), []);
@@ -172,6 +206,12 @@ export default function GovernanceWorkspace({
           </span>
           <span className="rounded-lg border b-line-soft px-2 py-1 text-[9px] tx3">
             {rtl ? "تصمیم باز" : "Open decisions"} {openDecisions.toLocaleString(rtl ? "fa-IR" : "en-US")}
+          </span>
+          <span
+            className={`rounded-lg px-2 py-1 text-[9px] ${source === "api" ? "bg-emerald-400/15 text-emerald-300" : "border b-line-soft tx3"}`}
+            title={source === "api" ? "/api/gov" : "mock"}
+          >
+            {source === "api" ? (rtl ? "داده زنده" : "Live data") : rtl ? "داده نمونه" : "Sample data"}
           </span>
           <span className="font-mono text-[9px] text-indigo-300" dir="ltr">dbo.Process_Master · dbo.Audit_Register</span>
         </div>
@@ -248,7 +288,7 @@ export default function GovernanceWorkspace({
                         </td>
                         <td className="px-2 py-1.5 text-end">
                           <button
-                            onClick={() => approveWorkflow(wf.id)}
+                            onClick={() => void approveWorkflow(wf.id)}
                             disabled={!!wf.closedAt}
                             className="rounded border border-emerald-400/40 bg-emerald-400/10 px-2 py-0.5 text-[8.5px] text-emerald-300 transition hover:bg-emerald-400/20 disabled:opacity-40"
                           >
