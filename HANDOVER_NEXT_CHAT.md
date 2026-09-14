@@ -1,5 +1,35 @@
 # انتقال به چت جدید — Arena Platform
-تاریخ به‌روزرسانی: 2026-09-08
+تاریخ به‌روزرسانی: 2026-09-14 — **این بخش جدیدتر از جدول‌های پایین است.**
+
+## وضعیت نشست جاری (۲۰۲۶-۰۹-۱۴)
+
+- **شاخه:** `arena/01a09fd7-repo` · **PR:** [#2](https://github.com/padircom/-/pull/2) به `main`
+- کل کار نشست پیشین (`arena/01a07ee6-repo`) که روی گیت‌هاب نرفته بود، از بستهٔ
+  `transfer/previous-chat-patch` بازیابی و روی همین شاخه سوار شد: ۲۱۴ فایل جدید، ۲۴ به‌روزشده.
+- ریشه تمیز شد: حذف ۲۱۰ فایل بازماندهٔ یک `.git` رهاشده (`02/…`, `db/<sha>`, `index`).
+- **دروازه: `npm test` → ۴۱۲۰/۴۱۲۰ سبز** روی هر ۹۰ فایل `server/*.test.mjs`.
+  (پیش‌تر اسکریپت آزمون ۱۶ فایل CNT/HSE را جا انداخته بود و ۳۳۶۷ می‌شمرد — اصلاح شد.)
+- بیلد تولیدی سالم: `npm run build` → `dist/index.html` تک‌فایل ۱٫۸ MB.
+
+### اجرا (سه گام)
+```bash
+npm install --no-audit --no-fund                    # node_modules در snapshot نیست
+PORT=4000 PERSIST_DRIVER=json DATA_DIR=./server/rundata node server/index.js
+node server/seed.mjs                                # فقط بار اول
+npm run dev -- --port 5173 --host 0.0.0.0
+```
+- `PERSIST_DRIVER=json` **اجباری**؛ بدون آن سرور به SQL Server واقعی (`.\SQL2008EXPRESS`) می‌رود.
+- `DATA_DIR=./server/rundata` — **نه `server/data`**؛ آن مسیر نقطهٔ شروع ۲۹ آزمون REST است.
+- `/api/health` عمداً ۵۰۰ می‌دهد (سلامت SQL واقعی)؛ نشانهٔ خرابی نیست.
+
+### بعدی پیشنهادی
+۱) فاز F5 پایداری PEX: جداول `pex_*` + ثبت واقعی DPR (G1+G2).
+۲) اتصال GOV به SQL واقعی (G1+G2 حاکمیت).
+۳) دامنهٔ بعدی بدون سند. → جزئیات هر ماژول در `docs/SESSION_HANDOFF.md` و `transfer/hrm/README.md`.
+
+---
+
+تاریخ بخش قدیمی: 2026-09-08
 دستور کاربر: از این پوشه ادامه بده. فایل‌های چت قبلی را دوباره لود نکن مگر فایل جدید بفرستد.
 پاسخ‌ها: کوتاه فارسی. ظاهر/فونت Vazirmatn، `src/index.css` و سایدبار اصلی (domains) را تغییر نده.
 
