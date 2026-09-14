@@ -4,6 +4,7 @@ import { useAuth } from "../context/AuthContext";
 import { pmisApiClient } from "../services/pmisApiClient";
 import { type KnowledgeDocumentDto, type OcrJobDto, type RagAnswerDto } from "../services/pmisContract";
 import { t, type Lang } from "../data/framework";
+import { toPlainError, areaHealth, HEALTH_LABEL } from "../services/plainErrors";
 
 export default function ProjectKnowledgePanel({ lang }: { lang: Lang }) {
   const rtl = lang === "fa";
@@ -24,6 +25,25 @@ export default function ProjectKnowledgePanel({ lang }: { lang: Lang }) {
   const project = projectScope ? projectsByCluster[projectScope.clusterId]?.find((row) => row.id === projectScope.projectId) : undefined;
   const projectCode = project?.code ?? projectScope?.projectId ?? "";
   const allowed = can("ai.run", projectScope?.projectId);
+  /* نبودِ پروژه هم یک حالت است، نه سکوت.
+   *
+   * پیش از این `load()` بی‌صدا برمی‌گشت، پس هیچ خطایی ثبت نمی‌شد و
+   * چراغ «آماده» می‌ماند در حالی که هیچ چیز کار نمی‌کرد — کاربر
+   * منتظر توضیحی می‌ماند که هرگز نمی‌آمد. */
+  const noProject = !projectCode;
+  const plain = error
+    ? toPlainError(error)
+    : noProject
+      ? {
+          titleFa: "هنوز پروژه‌ای انتخاب نشده است.",
+          titleEn: "No project selected yet.",
+          actionFa: "از نوار بالای صفحه یا کارت پورتفولیو، ابتدا یک پروژه را انتخاب کنید؛ اسناد به همان پروژه بسته می‌شوند.",
+          actionEn: "Pick a project first; documents are scoped to it.",
+          needsAdmin: false,
+          technical: "projectScope is empty",
+        }
+      : null;
+  const health = noProject ? "degraded" : areaHealth([error]);
 
   const load = async () => {
     if (!projectCode) return;
@@ -55,6 +75,15 @@ export default function ProjectKnowledgePanel({ lang }: { lang: Lang }) {
   };
 
   useEffect(() => { void load(); }, [projectCode]);
+
+  /* اگر پروژه هست ولی هنوز هیچ تلاشی نشده، یک بار وضعیت سرور سنجیده
+   * می‌شود. بدون آن، پنل تا نخستین کلیک کاربر ساکت می‌ماند و معلوم
+   * نیست آماده است یا خراب. */
+  useEffect(() => {
+    if (!projectCode || error || documents.length) return;
+    void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const upload = async (files: FileList | null) => {
     if (!files?.length || !projectCode || !allowed) return;
@@ -94,8 +123,48 @@ export default function ProjectKnowledgePanel({ lang }: { lang: Lang }) {
           <p className="text-[8.5px] font-extralight tx3">{rtl ? "پاسخ فقط با استناد به اسناد همان پروژه" : "Answers are grounded only in the active project's documents"}</p>
           {cluster && project && <p className="mt-0.5 text-[8px] text-fuchsia-200">{t(cluster.title, lang)} · <span dir="ltr">{project.code}</span> · {t(project.name, lang)}</p>}
         </div>
-        <button onClick={() => void load()} disabled={busy === "load" || !projectCode} className="ms-auto rounded-lg border b-line-soft px-2.5 py-1 text-[9px] tx2 disabled:opacity-40">↻ {rtl ? "بازخوانی" : "Refresh"}</button>
+        {/* نشانگر وضعیت بخش.
+          * کاربر باید پیش از کلیک بداند این بخش آماده است یا نه. */}
+        <span
+          className="ms-auto rounded-lg px-2 py-1 text-[8.5px]"
+          style={{ color: HEALTH_LABEL[health].color, background: `${HEALTH_LABEL[health].color}1a` }}
+        >
+          ● {rtl ? HEALTH_LABEL[health].fa : HEALTH_LABEL[health].en}
+        </span>
+        <button onClick={() => void load()} disabled={busy === "load" || !projectCode} className="rounded-lg border b-line-soft px-2.5 py-1 text-[9px] tx2 disabled:opacity-40">↻ {rtl ? "بازخوانی" : "Refresh"}</button>
       </div>
+
+      {/* توضیح قابل فهم به‌جای خطای خام.
+        *
+        * پیش از این پیام سرور مستقیم نشان داده می‌شد و کاربر
+        * `getaddrinfo ENOTFOUND .` می‌دید — عبارتی که نه علت را
+        * می‌گوید و نه راه حل را. */}
+      {plain && (
+        <div
+          className="mt-3 rounded-xl border p-3"
+          style={{
+            borderColor: health === "offline" ? "rgba(255,159,159,.4)" : "rgba(245,197,110,.4)",
+            background: health === "offline" ? "rgba(255,159,159,.08)" : "rgba(245,197,110,.08)",
+          }}
+        >
+          <div className="flex items-start gap-2">
+            <span className="text-[13px]">{health === "offline" ? "⛔" : "⚠"}</span>
+            <div className="min-w-0 flex-1">
+              <div className="text-[10.5px] tx1">{rtl ? plain.titleFa : plain.titleEn}</div>
+              <div className="mt-1 text-[9px] tx3">{rtl ? plain.actionFa : plain.actionEn}</div>
+              {plain.needsAdmin && (
+                <div className="mt-1 text-[8.5px] tx4">
+                  {rtl ? "این مورد را خودتان نمی‌توانید درست کنید و به مدیر سامانه نیاز دارد." : "This needs an administrator."}
+                </div>
+              )}
+              <details className="mt-1.5">
+                <summary className="cursor-pointer text-[8px] tx4">{rtl ? "جزئیات فنی (برای پشتیبانی)" : "Technical detail"}</summary>
+                <code className="mt-1 block break-all text-[8px] tx4" dir="ltr">{plain.technical}</code>
+              </details>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="mt-3 grid grid-cols-1 gap-3 xl:grid-cols-[minmax(280px,.85fr)_minmax(0,1.4fr)]">
         <div className="rounded-xl border b-line-soft bg-black/10 p-3">
@@ -165,7 +234,8 @@ export default function ProjectKnowledgePanel({ lang }: { lang: Lang }) {
           </div>
         </div>
       </div>
-      {error && <div className="mt-2 rounded-lg border border-rose-400/40 bg-rose-400/10 px-3 py-2 text-[9px] text-rose-300">✕ {error}</div>}
+      {/* نوار قرمز خام حذف شد؛ توضیح قابل فهم بالای صفحه نشان داده
+        * می‌شود و متن فنی زیر «جزئیات» است. */}
       {!allowed && <div className="mt-2 text-[8.5px] text-amber-300">{rtl ? "نقش فعلی مجوز ai.run ندارد." : "Current role does not have ai.run permission."}</div>}
     </section>
   );

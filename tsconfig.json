@@ -27,5 +27,17 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src", "vite.config.ts"]
+  "include": ["src", "vite.config.ts"],
+  /* فایل‌های میراثی تم روشن (lucide-react) که هیچ‌جا import نشده‌اند و در باندل نمی‌آیند.
+     تا مهاجرت محتوایشان به ورک‌اسپیس‌های جدید، از بررسی نوع خارج‌اند (FIN D1 §M0). */
+  "exclude": [
+    "src/ActionPlan.tsx",
+    "src/AnalyticsReporting.tsx",
+    "src/Communications.tsx",
+    "src/DocumentFactory.tsx",
+    "src/EngConstruction.tsx",
+    "src/FinanceWorkspace.tsx",
+    "src/ForensicClaimsHub.tsx",
+    "src/ProjectControl.tsx"
+  ]
 }

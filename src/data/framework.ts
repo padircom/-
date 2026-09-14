@@ -46,6 +46,118 @@ export type Domain = {
 
 export const domains: Domain[] = [
   {
+    id: "d6",
+    icon: "🏛",
+    accent: "#B8D4FF",
+    title: { fa: "مدیریت حاکمیت و فرآیندهای PMBOK", en: "Governance & PMBOK Processes" },
+    processes: [
+      {
+        id: "d6-p1",
+        title: { fa: "حاکمیت (Governance)", en: "Governance" },
+        subs: [
+          { id: "d6-p1-s1", title: { fa: "گردش فرآیند", en: "Process Workflow" }, activity: { fa: "گردش فرآیند سازمانی", en: "Org workflow" }, source: "PMBOK, سازمان / Org", sql: ["Process_Master", "Workflow_Instance"], output: "Process Report", connectsTo: "PMO", ai: "AI Process Advisor" },
+        ],
+      },
+      {
+        id: "d6-p2",
+        title: { fa: "مدیریت یکپارچگی", en: "Integration Management" },
+        subs: [
+          { id: "d6-p2-s1", title: { fa: "تجمیع داده‌ها", en: "Data Integration" }, activity: { fa: "تجمیع داده‌ها", en: "Data consolidation" }, source: "API, ERP, Primavera", sql: ["Project_Master", "Integration_Log"], output: "Executive Report", connectsTo: "BI Platform", ai: "AI Project Advisor" },
+        ],
+      },
+      {
+        id: "d6-p3",
+        title: { fa: "مدیریت ذی‌نفعان", en: "Stakeholder Management" },
+        subs: [
+          { id: "d6-p3-s1", title: { fa: "ذی‌نفعان", en: "Stakeholders" }, activity: { fa: "مدیریت ارتباط", en: "Relation management" }, source: "User Entry", sql: ["Stakeholder_Register"], output: "Stakeholder Report", connectsTo: "Communication", ai: "AI Stakeholder Analysis" },
+        ],
+      },
+      {
+        id: "d6-p4",
+        title: { fa: "ممیزی (Audit)", en: "Audit" },
+        subs: [
+          { id: "d6-p4-s1", title: { fa: "کنترل انطباق", en: "Compliance Control" }, activity: { fa: "کنترل انطباق", en: "Compliance check" }, source: "EDMS, Process Data", sql: ["Audit_Register"], output: "Audit Report", connectsTo: "PMO", ai: "AI Compliance Check" },
+        ],
+      },
+      {
+        id: "d6-p5",
+        title: { fa: "پشتیبان تصمیم‌گیری", en: "Decision Support" },
+        subs: [
+          { id: "d6-p5-s1", title: { fa: "تصمیم‌یار مدیریتی", en: "Executive Decision Aid" }, activity: { fa: "تحلیل کل پروژه", en: "Whole-project analysis" }, source: "Data Warehouse", sql: ["AI_Model_Input", "Decision_Log"], output: "Decision Report", connectsTo: "CEO Dashboard", ai: "AI Executive Assistant" },
+        ],
+      },
+    ],
+  },
+  {
+    /* مدیریت پیمان (MOD-14).
+     *
+     * این حوزه ۲۴ جدول، ۵۷ مسیر REST و ۷۴۰ آزمون داشت ولی در نقشهٔ
+     * فرایندی ثبت نشده بود — یعنی کاربر راهی برای رسیدن به آن نداشت.
+     * شمارهٔ d13 عمداً خالی است و به کسی تخصیص نیافته.
+     */
+    id: "d14",
+    icon: "📜",
+    accent: "#D97706",
+    title: { fa: "مدیریت پیمان و صورت‌وضعیت", en: "Contract & Payment Management" },
+    processes: [
+      {
+        id: "d14-p1",
+        title: { fa: "شناسنامه پیمان و فهرست بها", en: "Contract Register & BOQ" },
+        subs: [
+          { id: "d14-p1-s1", title: { fa: "ثبت شناسنامه و الحاقیه‌ها", en: "Contract Master & Amendments" }, activity: { fa: "ثبت مشخصات پیمان، مبلغ اولیه، مدت و الحاقیه‌های بعدی با سطح اختیار تأیید", en: "Register contract terms, original value, duration and subsequent amendments with approval authority" }, source: "Contract Document, Employer", sql: ["ContractMaster", "ContractAmendment", "ApprovalAuthority"], output: "Contract Register", connectsTo: "Cost, Governance", ai: "AI Clause Extractor" },
+          { id: "d14-p1-s2", title: { fa: "فهرست بها و مراحل مقطوع", en: "BOQ Items & Lump-Sum Milestones" }, activity: { fa: "بارگذاری ردیف‌های فهرست بها با مقدار و نرخ، یا تعریف مراحل پرداخت مقطوع", en: "Load BOQ lines with quantity and rate, or define lump-sum payment milestones" }, source: "Tender BOQ, Excel", sql: ["ContractBOQ_Item", "LumpSumMilestone"], output: "Priced BOQ", connectsTo: "Cost, Planning", ai: "AI Rate Benchmark" },
+        ],
+      },
+      {
+        id: "d14-p2",
+        title: { fa: "ریزمتره و صورت‌وضعیت موقت", en: "Measurement & Interim Payment" },
+        subs: [
+          { id: "d14-p2-s1", title: { fa: "برگه ریزمتره و تأیید مقدار", en: "Measurement Sheet & Quantity Approval" }, activity: { fa: "ثبت متره کارکرد دوره با ارجاع به ردیف فهرست بها و تأیید ناظر", en: "Record period measurement against BOQ lines with supervisor verification" }, source: "Site Measurement, As-Built", sql: ["MeasurementSheet"], output: "Approved Measurement", connectsTo: "Quality, Planning", ai: "AI Quantity Anomaly" },
+          { id: "d14-p2-s2", title: { fa: "تهیه و گردش صورت‌وضعیت", en: "IPC Preparation & Workflow" }, activity: { fa: "تولید صورت‌وضعیت از متره تأییدشده و گذر از گام‌های تأیید تا ابلاغ", en: "Generate IPC from approved measurement and route through approval steps" }, source: "Measurement, Contract", sql: ["InterimPaymentCertificate", "IPC_LineItem", "IPC_WorkflowStep"], output: "Certified IPC", connectsTo: "Cost, Governance", ai: "AI Workflow Bottleneck" },
+        ],
+      },
+      {
+        id: "d14-p3",
+        title: { fa: "تغییر مقادیر و کار جدید", en: "Variation & Extra Work" },
+        subs: [
+          { id: "d14-p3-s1", title: { fa: "تغییر مقادیر و کار جدید", en: "Quantity Change & New Items" }, activity: { fa: "ثبت افزایش یا کاهش مقادیر و قیمت‌گذاری ردیف‌های کار جدید خارج از فهرست بها", en: "Record quantity variation and price extra-work items outside the original BOQ" }, source: "Site Instruction, Change Order", sql: ["BOQ_QuantityChange", "ExtraWorkItem"], output: "Variation Order", connectsTo: "Claims, Cost", ai: "AI Price Analysis" },
+        ],
+      },
+      {
+        id: "d14-p4",
+        title: { fa: "تعدیل و مابه‌التفاوت", en: "Price Adjustment & Material Differential" },
+        subs: [
+          { id: "d14-p4-s1", title: { fa: "محاسبه تعدیل بر پایه شاخص", en: "Index-Based Price Adjustment" }, activity: { fa: "اعمال شاخص دوره‌ای بر کارکرد و محاسبه مبلغ تعدیل بر اساس فرمول پیمان", en: "Apply periodic index to progress and compute adjustment per contract formula" }, source: "Statistical Center Index", sql: ["AdjustmentIndexCatalog", "PriceAdjustmentCalculation"], output: "Adjustment Statement", connectsTo: "Cost, Finance", ai: "AI Index Forecast" },
+          { id: "d14-p4-s2", title: { fa: "مابه‌التفاوت مصالح", en: "Material Price Differential" }, activity: { fa: "محاسبه اختلاف قیمت مصالح شاخص نسبت به مبنای پیمان", en: "Compute differential for indexed materials against contract baseline" }, source: "Invoice, Market Price", sql: ["MaterialDiffCalc"], output: "Material Differential", connectsTo: "Procurement, Cost", ai: "AI Market Trend" },
+        ],
+      },
+      {
+        id: "d14-p5",
+        title: { fa: "کسورات، پیش‌پرداخت و سپرده", en: "Deductions, Advance & Retention" },
+        subs: [
+          { id: "d14-p5-s1", title: { fa: "کسور صورت‌وضعیت", en: "IPC Deductions" }, activity: { fa: "اعمال کسور قانونی و قراردادی شامل بیمه، مالیات، جریمه و استرداد پیش‌پرداخت", en: "Apply statutory and contractual deductions including insurance, tax, penalty and advance recovery" }, source: "Contract Terms, Regulation", sql: ["IPC_Deduction"], output: "Net Payable", connectsTo: "Finance, Governance", ai: "AI Deduction Check" },
+          { id: "d14-p5-s2", title: { fa: "پیش‌پرداخت و سپرده حسن انجام کار", en: "Advance Payment & Retention Ledger" }, activity: { fa: "پایش مانده پیش‌پرداخت و دفتر سپرده تا آزادسازی در تحویل موقت و قطعی", en: "Track advance balance and retention ledger through provisional and final release" }, source: "Contract, Guarantee", sql: ["AdvancePaymentSchedule", "RetainageLedger"], output: "Advance & Retention Position", connectsTo: "Finance, Commissioning", ai: "AI Release Reminder" },
+        ],
+      },
+      {
+        id: "d14-p6",
+        title: { fa: "ضمانت‌نامه و پیمانکار جزء", en: "Guarantees & Subcontractors" },
+        subs: [
+          { id: "d14-p6-s1", title: { fa: "ضمانت‌نامه و پایش انقضا", en: "Guarantee Register & Expiry Watch" }, activity: { fa: "ثبت ضمانت‌نامه‌های شرکت در مناقصه، انجام تعهدات و پیش‌پرداخت با هشدار انقضا", en: "Register bid, performance and advance guarantees with expiry alerts" }, source: "Bank Guarantee", sql: ["ContractGuarantee"], output: "Guarantee Status", connectsTo: "Finance, Risk", ai: "AI Expiry Predictor" },
+          { id: "d14-p6-s2", title: { fa: "صورت‌وضعیت پیمانکار جزء و کسور متقابل", en: "Subcontractor IPC & Back-to-Back" }, activity: { fa: "تهیه صورت‌وضعیت پیمانکار جزء و اعمال کسور متقابل هم‌راستا با پیمان اصلی", en: "Prepare subcontractor IPC and apply back-to-back deductions aligned with the main contract" }, source: "Subcontract, Site Record", sql: ["SubcontractorIPC", "SubcontractorIPC_LineItem", "BackToBackDeduction"], output: "Subcontractor Payment", connectsTo: "Workforce, Finance", ai: "AI Overbilling Detection" },
+        ],
+      },
+      {
+        id: "d14-p7",
+        title: { fa: "شاخص پیمان و انطباق مالی", en: "Contract KPIs & Financial Reconciliation" },
+        subs: [
+          { id: "d14-p7-s1", title: { fa: "شاخص‌های کلیدی و هشدار زودهنگام", en: "Contract KPIs & Early Warning" }, activity: { fa: "پنج شاخص پیمان و قواعد هشدار انحراف مبلغ، تأخیر پرداخت و انقضای ضمانت", en: "Five contract KPIs with alert rules for value variance, payment delay and guarantee expiry" }, source: "IPC, Guarantee, Schedule", sql: ["ContractMetricsSnapshot", "ContractAlertRule"], output: "Contract KPI Report", connectsTo: "Dashboard, Risk", ai: "AI Trend Analysis" },
+          { id: "d14-p7-s2", title: { fa: "انطباق صورت‌وضعیت با دفتر مالی", en: "IPC to Finance Reconciliation" }, activity: { fa: "ثبت صورت‌وضعیت ابلاغی در دفتر مالی و آشتی دو دفتر برای کشف شکاف", en: "Post certified IPC to the finance ledger and reconcile both books to surface gaps" }, source: "Certified IPC", sql: ["ContractFinPosting"], output: "Reconciliation Report", connectsTo: "Finance", ai: "AI Gap Detection" },
+        ],
+      },
+    ],
+  },
+  {
     id: "d1",
     icon: "🗂",
     accent: "#7FB2FF",
@@ -98,7 +210,10 @@ export const domains: Domain[] = [
         id: "d2-p2",
         title: { fa: "مدیریت برنامه زمان‌بندی", en: "Schedule Management" },
         subs: [
-          { id: "d2-p2-s0", title: { fa: "ساختار شکست کار (WBS)", en: "Work Breakdown Structure (WBS)" }, activity: { fa: "تعریف فعالیت‌ها و ساختار کار", en: "Activity & work structure definition" }, source: "Primavera, MSP", sql: ["Project_WBS", "WBS_Activity"], output: "WBS Report", connectsTo: "Schedule Engine", ai: "AI WBS Generator" },
+          /* قرارداد و ساختار شکست پیش از برنامه پایه می‌آید: برنامه از
+           * دل همین ساختار ساخته می‌شود، پس ترتیب سایدبار باید همان
+           * ترتیب کار باشد. */
+          { id: "d2-p2-ws", title: { fa: "قرارداد و ساختار شکست", en: "Contract & Breakdown" }, activity: { fa: "بارگذاری قرارداد، استخراج ساختار و وزن‌دهی", en: "Contract intake, extraction and weighting" }, source: "PDF / DOCX", sql: ["CtrDocument", "BreakdownNode"], output: "WBS / CBS / WPA / PMS", connectsTo: "Schedule Engine", ai: "AI WBS Extraction" },
           { id: "d2-p2-s1", title: { fa: "برنامه پایه (Baseline)", en: "Baseline Schedule" }, activity: { fa: "برنامه پایه", en: "Baseline plan" }, source: "Primavera P6", sql: ["Schedule_Master", "Schedule_Activity"], output: "Baseline Report", connectsTo: "Primavera Integration", ai: "AI Schedule Optimization" },
         ],
       },
@@ -121,6 +236,542 @@ export const domains: Domain[] = [
         title: { fa: "برنامه‌ریزی ماهانه", en: "Monthly Planning" },
         subs: [
           { id: "d2-p6-s1", title: { fa: "گزارش ماهانه (MPR)", en: "Monthly Progress Report" }, activity: { fa: "MPR", en: "MPR" }, source: "KPI, Cost, Schedule", sql: ["Monthly_Report"], output: "MPR", connectsTo: "Executive Dashboard", ai: "AI Executive Summary" },
+        ],
+      },
+    ],
+  },
+  {
+    id: "d12",
+    icon: "📐",
+    accent: "#A78BFA",
+    title: { fa: "مدیریت مهندسی و طراحی", en: "Engineering & Design Management" },
+    processes: [
+      {
+        id: "d12-p1",
+        title: { fa: "فهرست و برنامه‌ریزی مدارک", en: "MDR Planning" },
+        subs: [
+          { id: "d12-p1-s1", title: { fa: "تدوین فهرست اصلی مدارک", en: "Master Document Register" }, activity: { fa: "ثبت مدارک به تفکیک دیسیپلین و نوع، با وزن برنامه‌ای و نفرساعت برآوردی", en: "Register deliverables by discipline and type with planned weight and manhours" }, source: "Contract Scope, Discipline Leads", sql: ["MdrDeliverable"], output: "MDR Status Matrix", connectsTo: "Planning, Documents", ai: "AI Weight Advisor" },
+          { id: "d12-p1-s2", title: { fa: "تاریخ‌های هدف IFA و IFC", en: "Target IFA & IFC Dates" }, activity: { fa: "تعیین سررسید ارسال برای تأیید و صدور برای ساخت، هم‌راستا با گره WBS", en: "Set approval and construction issue targets aligned with WBS nodes" }, source: "Master Schedule", sql: ["MdrDeliverable", "WbsNode"], output: "Engineering Schedule", connectsTo: "Planning", ai: "AI Date Conflict Detector" },
+        ],
+      },
+      {
+        id: "d12-p2",
+        title: { fa: "بررسی، کدگذاری و پاسخ نظرات", en: "Review & CRS" },
+        subs: [
+          { id: "d12-p2-s1", title: { fa: "چرخه کدهای بررسی ۱ تا ۴", en: "Review Codes 1-4" }, activity: { fa: "ثبت کد بررسی کارفرما و پایش مهلت قراردادی با محاسبه تأخیر", en: "Record client review code and track contractual deadline with aging" }, source: "Client, Consultant", sql: ["EngineeringRevision"], output: "Review Aging Report", connectsTo: "Claims, Documents", ai: "AI Review Delay Predictor" },
+          { id: "d12-p2-s2", title: { fa: "شیت ثبت و پاسخ نظرات", en: "Comment Resolution Sheet" }, activity: { fa: "ثبت نظر بازبین، پاسخ طراح و صحه‌گذاری ناظر در یک برگه یکپارچه", en: "Capture reviewer comment, designer response and supervisor verification" }, source: "Review Meetings", sql: ["CrsComment"], output: "CRS Report", connectsTo: "Quality, Documents", ai: "AI Comment Clusterer" },
+        ],
+      },
+      {
+        id: "d12-p3",
+        title: { fa: "هماهنگی بین‌دیسیپلینی", en: "Inter-Discipline Coordination" },
+        subs: [
+          { id: "d12-p3-s1", title: { fa: "بررسی داخلی و Squad Check", en: "Internal Squad Check" }, activity: { fa: "گردش بررسی میان دیسیپلین‌ها پیش از ارسال بیرونی و ثبت اعتراض‌ها", en: "Route review across disciplines before external issue and log objections" }, source: "Discipline Leads", sql: ["SquadCheck"], output: "IDC Status Report", connectsTo: "Quality", ai: "AI Reviewer Assigner" },
+          { id: "d12-p3-s2", title: { fa: "ثبت تداخل مدل سه‌بعدی", en: "3D Clash Log" }, activity: { fa: "ورود خروجی ابزار تشخیص تداخل و پیگیری رفع آن به تفکیک جفت دیسیپلین", en: "Import clash detection output and track resolution by discipline pair" }, source: "Navisworks, Solibri", sql: ["InterfaceClashLog"], output: "Clash Report", connectsTo: "Planning, Quality", ai: "AI Clash Prioritizer" },
+        ],
+      },
+      {
+        id: "d12-p4",
+        title: { fa: "تغییرات کارگاهی و چون‌ساخت", en: "Field Changes & As-Built" },
+        subs: [
+          { id: "d12-p4-s1", title: { fa: "استعلام فنی و تغییر کارگاهی", en: "TQ & Field Change Request" }, activity: { fa: "ثبت استعلام کارگاه و درخواست تغییر با تشخیص خودکار اثر مالی و زمانی", en: "Log site query and change request with automatic cost and time impact detection" }, source: "Site Engineering", sql: ["TechnicalQuery"], output: "TQ/FCR Register", connectsTo: "Claims, Cost", ai: "AI Impact Estimator" },
+          { id: "d12-p4-s2", title: { fa: "نقشه قرمز و چون‌ساخت", en: "Red-Line & As-Built" }, activity: { fa: "ثبت اصلاحات قرمز کارگاه و پیگیری تبدیل به نقشه چون‌ساخت تأییدشده", en: "Record site red-line markups and track conversion to approved as-built" }, source: "Site, Resident Engineer", sql: ["TechnicalQuery", "EngineeringRevision"], output: "As-Built Status", connectsTo: "Documents, Commissioning", ai: "AI As-Built Gap Finder" },
+        ],
+      },
+      {
+        id: "d12-p5",
+        title: { fa: "مدارک سازندگان", en: "Vendor Print Review" },
+        subs: [
+          { id: "d12-p5-s1", title: { fa: "بررسی و کدگذاری مدرک سازنده", en: "Vendor Document Review" }, activity: { fa: "دریافت مدرک فنی سازنده، نگاشت به سفارش خرید و صدور کد بررسی", en: "Receive vendor document, map to purchase order and issue review code" }, source: "Vendors, Procurement", sql: ["VendorPrintReview"], output: "VPR Register", connectsTo: "Cost, Quality", ai: "AI Vendor Doc Classifier" },
+        ],
+      },
+      {
+        id: "d12-p6",
+        title: { fa: "پیشرفت و شاخص‌های مهندسی", en: "Engineering Progress & KPIs" },
+        subs: [
+          { id: "d12-p6-s1", title: { fa: "پیشرفت پله‌ای مبتنی بر شاهد", en: "Evidence-Based Rule of Credit" }, activity: { fa: "محاسبه پیشرفت از شش پله مصوب؛ پله بدون شاهد در مخزن باز نمی‌شود", en: "Derive progress from six approved steps; a step without evidence stays locked" }, source: "Revisions, Document Repository", sql: ["EngineeringRevision", "EngineeringProgressSnapshot"], output: "Engineering S-Curve", connectsTo: "Monitoring, Planning", ai: "AI Progress Validator" },
+          { id: "d12-p6-s2", title: { fa: "شاخص‌ها و هشدار زودهنگام", en: "KPIs & Early Warning" }, activity: { fa: "شش شاخص مهندسی و پنج قاعده هشدار شامل قفل ساخت تا صدور نقشه IFC", en: "Six engineering KPIs and five alert rules including construction lock until IFC" }, source: "Engine Computation", sql: ["EngineeringProgressSnapshot", "Activity"], output: "Engineering Dashboard", connectsTo: "Monitoring, Planning", ai: "AI Early Warning Engine" },
+        ],
+      },
+    ],
+  },
+  {
+    id: "d5",
+    icon: "💠",
+    accent: "#C9A7FF",
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    title: { fa: "مدیریت هزینه، تأمین و لجستیک پروژه", en: "Cost, Procurement & Logistics" },
+    processes: [
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+      {
+        id: "d5-p1",
+        title: { fa: "مدیریت هزینه", en: "Cost Management" },
+        subs: [
+          { id: "d5-p1-s1", title: { fa: "کنترل بودجه", en: "Budget Control" }, activity: { fa: "بودجه پروژه", en: "Project budget" }, source: "ERP, Excel", sql: ["Project_Budget"], output: "Budget Report", connectsTo: "Finance Dashboard", ai: "AI Cost Forecast" },
+        ],
+      },
+      {
+        id: "d5-p2",
+        title: { fa: "کنترل هزینه", en: "Cost Control" },
+        subs: [
+          { id: "d5-p2-s1", title: { fa: "هزینه واقعی", en: "Actual Cost" }, activity: { fa: "ثبت هزینه واقعی", en: "Actual cost entry" }, source: "ERP, SAP", sql: ["Cost_Transaction"], output: "Cost Report", connectsTo: "EVM", ai: "AI Cost Prediction" },
+        ],
+      },
+      {
+        id: "d5-p3",
+        title: { fa: "جریان نقدینگی", en: "Cash Flow" },
+        subs: [
+          { id: "d5-p3-s1", title: { fa: "دریافت و پرداخت", en: "Receipt & Payment" }, activity: { fa: "دریافت و پرداخت", en: "In / out" }, source: "Finance System", sql: ["Cash_Flow"], output: "Cash Flow Report", connectsTo: "Executive Dashboard", ai: "AI Cash Forecast" },
+        ],
+      },
+      {
+        id: "d5-p4",
+        title: { fa: "درخواست خرید", en: "Purchase Request" },
+        subs: [
+          { id: "d5-p4-s1", title: { fa: "مدیریت PR", en: "PR Management" }, activity: { fa: "درخواست خرید", en: "Purchase requisition" }, source: "ERP", sql: ["Purchase_Request"], output: "PR Status", connectsTo: "Procurement", ai: "AI Procurement Analysis" },
+        ],
+      },
+      {
+        id: "d5-p5",
+        title: { fa: "سفارش خرید", en: "Purchase Order" },
+        subs: [
+          { id: "d5-p5-s1", title: { fa: "مدیریت PO", en: "PO Management" }, activity: { fa: "سفارش خرید", en: "Purchase order" }, source: "ERP", sql: ["Purchase_Order"], output: "PO Status", connectsTo: "Supply Chain", ai: "AI Vendor Risk" },
+        ],
+      },
+      {
+        id: "d5-p6",
+        title: { fa: "مدیریت کالا و انبار", en: "Material & Warehouse" },
+        subs: [
+          { id: "d5-p6-s1", title: { fa: "کنترل موجودی", en: "Inventory Control" }, activity: { fa: "کنترل موجودی", en: "Stock control" }, source: "Warehouse", sql: ["Material_Register"], output: "Material Status", connectsTo: "Logistics", ai: "AI Shortage Prediction" },
+        ],
+      },
+    ],
+  },
+  {
+    /* ماژول منابع انسانی — پس از HSE و پیش از مدیریت سامانه (ADR-13 بازنگری‌شده).
+       کد دامنه در src/services/workforce.ts → HRM_DOMAIN_ID متمرکز است (ADR-15). */
+    id: "d10",
+    icon: "👷",
+    accent: "#F59E0B",
+    title: { fa: "مدیریت منابع انسانی و بهره‌وری نیروی کار", en: "Human Resources & Workforce Productivity" },
+    processes: [
+      {
+        id: "d10-p1",
+        title: { fa: "برنامه‌ریزی نیرو، OBS و تجهیز", en: "Workforce Planning, OBS & Mobilization" },
+        subs: [
+          { id: "d10-p1-s1", title: { fa: "ساختار شکست سازمانی و ماتریس مسئولیت", en: "OBS & Responsibility Matrix" }, activity: { fa: "تعریف سازمان شش‌سطحی و پیوند آن به WBS", en: "Define six-level org and link to WBS" }, source: "PMO, Site Org Chart", sql: ["hrm_obs_node", "hrm_crew"], output: "OBS & RAM Report", connectsTo: "Planning, Governance", ai: "AI Span-of-Control Advisor" },
+          { id: "d10-p1-s2", title: { fa: "برنامه نیرو و هیستوگرام", en: "Manpower Plan & Histogram" }, activity: { fa: "تبدیل نفر-ساعت برنامه به نفرات دوره‌ای و ترازسازی", en: "Convert planned man-hours to periodic headcount and level" }, source: "Primavera, Excel", sql: ["hrm_manpower_plan", "hrm_manpower_plan_line"], output: "Manpower Histogram", connectsTo: "Planning, Cost", ai: "AI Resource Leveling" },
+          { id: "d10-p1-s3", title: { fa: "درخواست تجهیز و تخلیه نیرو", en: "Mobilization & Demobilization" }, activity: { fa: "گردش درخواست نیرو با پنج گیت انطباق", en: "Request workflow with five compliance gates" }, source: "Site Request", sql: ["hrm_mobilization_request"], output: "Mobilization Status", connectsTo: "HSE, Procurement", ai: "AI Demand Forecast" },
+        ],
+      },
+      {
+        id: "d10-p2",
+        title: { fa: "تایم‌شیت و حضور و غیاب", en: "Timesheet & Attendance" },
+        subs: [
+          { id: "d10-p2-s1", title: { fa: "ثبت کارکرد و تفکیک ساعت", en: "Timesheet Entry & Hours Split" }, activity: { fa: "ثبت میدانی ساعت و تفکیک عادی، اضافه‌کاری، شب و تعطیل", en: "Field capture and split into normal, overtime, night and holiday" }, source: "Mobile PWA, Excel", sql: ["hrm_timesheet_header", "hrm_timesheet_entry", "hrm_leave_log"], output: "Approved Timesheet", connectsTo: "Cost, Planning", ai: "AI Anomaly Detection" },
+        ],
+      },
+      {
+        id: "d10-p3",
+        title: { fa: "بهره‌وری و عملکرد نیرو", en: "Workforce Productivity & Performance" },
+        subs: [
+          { id: "d10-p3-s1", title: { fa: "شاخص بهره‌وری و ریشه‌یابی افت", en: "Productivity Index & Root Cause" }, activity: { fa: "محاسبه شاخص بهره‌وری از پیشرفت تأییدشده و ریشه‌یابی انحراف", en: "Compute PI from approved progress and analyse variance" }, source: "Timesheet, Progress", sql: ["hrm_productivity_log", "hrm_rca_reason"], output: "Productivity Report", connectsTo: "Planning, Claims", ai: "AI Productivity Forecast" },
+        ],
+      },
+      {
+        id: "d10-p4",
+        title: { fa: "اکیپ و نیروی پیمانکاری", en: "Crews & Subcontracted Labor" },
+        subs: [
+          { id: "d10-p4-s1", title: { fa: "مدیریت اکیپ و صورت‌کارکرد پیمانکار", en: "Crew Management & Subcontractor Certificates" }, activity: { fa: "ترکیب اکیپ، حضور دست‌مزدی و کنترل صورت‌کارکرد", en: "Crew mix, daily-wage attendance and payment certificate control" }, source: "Site, Gate Pass", sql: ["hrm_crew", "hrm_sub_contract", "hrm_sub_attendance"], output: "Subcontractor Payment Certificate", connectsTo: "Cost, Contracts", ai: "AI Overbilling Detection" },
+        ],
+      },
+      {
+        id: "d10-p5",
+        title: { fa: "پذیرش، احکام و انطباق", en: "Onboarding, Assignment & Compliance" },
+        subs: [
+          { id: "d10-p5-s1", title: { fa: "پرونده پرسنلی و پایش مدارک", en: "Personnel File & Document Watch" }, activity: { fa: "پذیرش نیرو، صدور حکم و پایش انقضای مدارک و صلاحیت", en: "Onboard, assign and monitor document and competency expiry" }, source: "HR, HSE, Medical", sql: ["hrm_person", "hrm_assignment", "hrm_document", "hrm_skill_matrix"], output: "Compliance Dashboard", connectsTo: "HSE, Governance", ai: "AI Expiry Predictor" },
+        ],
+      },
+      {
+        id: "d10-p6",
+        title: { fa: "تحلیل، هیستوگرام و گزارش", en: "Analytics, Histogram & Reporting" },
+        subs: [
+          { id: "d10-p6-s1", title: { fa: "شاخص‌های کلیدی و هشدار زودهنگام", en: "KPIs & Early Warning" }, activity: { fa: "شش شاخص کلیدی نیرو و چهار قاعده هشدار زودهنگام", en: "Six workforce KPIs and four early-warning rules" }, source: "Timesheet, Plan", sql: ["hrm_metric_snapshot", "hrm_alert_rule", "hrm_alert"], output: "Workforce KPI Report", connectsTo: "Dashboard, Cost", ai: "AI Trend Analysis" },
+        ],
+      },
+    ],
+  },
+  {
+    /* ماژول ماشین‌آلات و تجهیزات — ناوگان، ساعت کارکرد، اجاره، تعمیرات و بهره‌وری.
+       کد دامنه در src/services/equipment.ts → EQM_DOMAIN_ID متمرکز است (ADR-02). */
+    id: "d9",
+    icon: "🚜",
+    accent: "#38BDF8",
+    title: { fa: "مدیریت ماشین‌آلات و تجهیزات", en: "Machinery & Equipment Management" },
+    processes: [
+      {
+        id: "d9-p1",
+        title: { fa: "ناوگان و ثبت ماشین‌آلات", en: "Fleet Registry" },
+        subs: [
+          { id: "d9-p1-s1", title: { fa: "ثبت ناوگان و مشخصات فنی", en: "Equipment Registry & Specs" }, activity: { fa: "ثبت ماشین، مالکیت، ظرفیت و سال ساخت با اعتبارسنجی دسته‌بندی", en: "Register machine, ownership, capacity and year with category validation" }, source: "Site, Procurement", sql: ["Equipment"], output: "Fleet Inventory Report", connectsTo: "Finance, HRM", ai: "AI Replacement Advisor" },
+          { id: "d9-p1-s2", title: { fa: "تاکسونومی ISO 14224 و شناسه اسکن", en: "ISO 14224 Taxonomy & Scan ID" }, activity: { fa: "کدگذاری استاندارد دارایی و تولید شناسه یکتای اسکن برای هر ماشین", en: "Standard asset taxonomy coding and unique scan identifier per machine" }, source: "OEM Catalog, ISO 14224", sql: ["Equipment"], output: "Equipment ID Card", connectsTo: "Documents, HSE", ai: "AI Taxonomy Mapper" },
+        ],
+      },
+      {
+        id: "d9-p6",
+        title: { fa: "دیسپچ روزانه", en: "Daily Dispatch" },
+        subs: [
+          { id: "d9-p6-s1", title: { fa: "برگه دیسپچ و دروازه‌های پیش‌نیاز", en: "Dispatch Sheet & Precondition Gates" }, activity: { fa: "تخصیص ماشین و اپراتور به فعالیت با کنترل وضعیت، سرویس، گواهی‌نامه و ایمنی", en: "Assign machine and operator to activity with status, PM, licence and safety gates" }, source: "Site Supervisor", sql: ["EquipmentDispatch"], output: "Daily Dispatch Sheet", connectsTo: "Planning, HRM, HSE", ai: "AI Dispatch Optimizer" },
+        ],
+      },
+      {
+        id: "d9-p2",
+        title: { fa: "ساعت کارکرد", en: "Working Hours" },
+        subs: [
+          { id: "d9-p2-s1", title: { fa: "قرائت ساعت‌شمار و بهره‌برداری", en: "Meter Reading & Utilization" }, activity: { fa: "ثبت صعودی ساعت‌شمار و محاسبه بهره‌برداری از کارکرد دوره", en: "Monotonic meter reading and utilization from period hours" }, source: "Manual, Telemetry", sql: ["EquipmentMeter"], output: "Utilization Report", connectsTo: "Planning, Cost", ai: "AI Idle Detection" },
+        ],
+      },
+      {
+        id: "d9-p7",
+        title: { fa: "سوخت و مواد مصرفی", en: "Fuel & Consumables" },
+        subs: [
+          { id: "d9-p7-s1", title: { fa: "دفتر مصرف و شاخص مصرف ویژه", en: "Consumption Log & Specific Fuel Consumption" }, activity: { fa: "ثبت گازوئیل، روغن، گریس و لاستیک و محاسبه لیتر بر ساعت کارکرد", en: "Log diesel, oil, grease and tires; compute litres per work hour" }, source: "Fuel Store", sql: ["EquipmentFuelLog"], output: "Fuel Consumption Report", connectsTo: "Finance, Dashboard", ai: "AI Fuel Anomaly Detection" },
+        ],
+      },
+      {
+        id: "d9-p3",
+        title: { fa: "اجاره", en: "Rental" },
+        subs: [
+          { id: "d9-p3-s1", title: { fa: "قرارداد اجاره و هزینه تعهدی", en: "Rental Contracts & Accruals" }, activity: { fa: "ثبت نرخ و دوره و محاسبه هزینه تعهدی تا امروز", en: "Rate, term and accrued cost to date" }, source: "Contracts, Excel", sql: ["EquipmentRental"], output: "Rental Accrual Report", connectsTo: "Finance, Contracts", ai: "AI Rate Benchmark" },
+        ],
+      },
+      {
+        id: "d9-p4",
+        title: { fa: "تعمیرات", en: "Maintenance" },
+        subs: [
+          { id: "d9-p4-s1", title: { fa: "دستورکار تعمیر و قابلیت اطمینان", en: "Work Orders & Reliability" }, activity: { fa: "ثبت توقف، هزینه و پیشبرد وضعیت؛ محاسبه MTBF/MTTR و بک‌لاگ", en: "Downtime, cost, status flow; MTBF/MTTR and backlog" }, source: "Site, CMMS", sql: ["MaintenanceOrder"], output: "Reliability Report", connectsTo: "HSE, Cost", ai: "AI Failure Predictor" },
+          { id: "d9-p4-s2", title: { fa: "نگهداری پیشگیرانه چهارپایه", en: "Four-Basis Preventive Maintenance" }, activity: { fa: "سررسید سرویس بر پایه ساعت کارکرد، کیلومتر، روز تقویمی یا سیکل و پایش انطباق", en: "Service due on run hours, kilometers, calendar days or cycles with compliance tracking" }, source: "OEM Manual", sql: ["PmSchedule"], output: "PM Schedule & Compliance", connectsTo: "Dispatch, Cost", ai: "AI Interval Tuner" },
+          { id: "d9-p4-s3", title: { fa: "تحلیل ریشه‌ای خرابی (ISO 14224)", en: "Failure Root-Cause Analysis (ISO 14224)" }, activity: { fa: "طبقه‌بندی علل خرابی و توزیع پارتو برای کاهش توقف", en: "Classify failure causes and build a Pareto distribution to cut downtime" }, source: "Maintenance Team", sql: ["MaintenanceOrder"], output: "RCA Pareto Report", connectsTo: "Risk, Quality", ai: "AI Cause Classifier" },
+        ],
+      },
+      {
+        id: "d9-p8",
+        title: { fa: "انبار قطعات یدکی", en: "Spare Parts Inventory" },
+        subs: [
+          { id: "d9-p8-s1", title: { fa: "موجودی، نقطه سفارش و درخواست خرید", en: "Stock, Reorder Point & Requisition" }, activity: { fa: "پایش موجودی، محاسبه نقطه سفارش از مصرف و زمان تأمین و تولید پیش‌نویس درخواست خرید", en: "Track stock, compute ROP from usage and lead time, draft purchase requisitions" }, source: "Warehouse", sql: ["SparePart", "PartTransaction"], output: "Reorder & Requisition Report", connectsTo: "Finance, Procurement", ai: "AI Demand Forecast" },
+        ],
+      },
+      {
+        id: "d9-p5",
+        title: { fa: "بهره‌وری و هشدار", en: "Productivity & EWS" },
+        subs: [
+          { id: "d9-p5-s1", title: { fa: "شاخص بهره‌وری و هشدار زودهنگام", en: "Productivity KPIs & Early Warning" }, activity: { fa: "بهره‌برداری، دسترس‌پذیری، هزینه/ساعت و هفت قاعده هشدار", en: "Utilization, availability, cost/hour and seven warning rules" }, source: "All EQM tables", sql: ["Equipment", "EquipmentMeter", "MaintenanceOrder"], output: "Fleet KPI & EWS", connectsTo: "Dashboard, Cost", ai: "AI Fleet Optimization" },
+          { id: "d9-p5-s2", title: { fa: "تابلوی هشت شاخص و OEE", en: "Eight-KPI Board & OEE" }, activity: { fa: "دسترس‌پذیری، بهره‌برداری، OEE، MTBF، MTTR، نسبت هزینه نگهداری، انطباق PM و مصرف ویژه سوخت", en: "Availability, utilization, OEE, MTBF, MTTR, maintenance cost ratio, PM compliance and specific fuel consumption" }, source: "All EQP tables", sql: ["Equipment", "EquipmentMeter", "EquipmentFuelLog", "PmSchedule", "MaintenanceOrder"], output: "Fleet Performance Report", connectsTo: "Dashboard, Finance", ai: "AI Fleet Benchmark" },
+          { id: "d9-p5-s3", title: { fa: "هزینه کل مالکیت و خرید در برابر اجاره", en: "TCO & Buy-vs-Rent" }, activity: { fa: "محاسبه هزینه کل مالکیت، هزینه ساعتی و نقطه سربه‌سر خرید در برابر اجاره", en: "Total cost of ownership, hourly cost and buy-versus-rent break-even" }, source: "Finance, Contracts", sql: ["Equipment", "EquipmentRental"], output: "TCO Analysis", connectsTo: "Finance, Governance", ai: "AI Investment Advisor" },
+        ],
+      },
+    ],
+  },
+  {
+    id: "d8",
+    icon: "🔬",
+    accent: "#34D399",
+    title: { fa: "مدیریت کیفیت و بازرسی", en: "Quality & Inspection Management" },
+    processes: [
+      {
+        id: "d8-p1",
+        title: { fa: "برنامه‌ریزی کیفیت و ITP", en: "Quality Planning & ITP" },
+        subs: [
+          { id: "d8-p1-s1", title: { fa: "برنامه کیفیت و نقاط بازرسی", en: "Quality Plan & Inspection Points" }, activity: { fa: "تدوین QMP و ITP با نقاط توقف و شاهد", en: "Author QMP and ITP with hold/witness points" }, source: "QMP, Specification, Code", sql: ["Quality_Plan", "ITP_Master", "ITP_Point"], output: "Approved ITP", connectsTo: "Engineering, Construction", ai: "AI ITP Generator" },
+        ],
+      },
+      {
+        id: "d8-p2",
+        title: { fa: "بازرسی و آزمون", en: "Inspection & Testing" },
+        subs: [
+          { id: "d8-p2-s1", title: { fa: "درخواست بازرسی و نتیجه آزمون", en: "Inspection Request & Test Result" }, activity: { fa: "صدور IR، اجرای بازرسی و ثبت نتیجه", en: "Raise IR, inspect and record result" }, source: "Site, Lab, TPI", sql: ["Inspection_Request", "Inspection_Result", "Test_Report"], output: "Inspection Record", connectsTo: "Construction, Handover", ai: "AI Defect Classifier" },
+        ],
+      },
+      {
+        id: "d8-p3",
+        title: { fa: "عدم انطباق و اقدام اصلاحی", en: "Non-Conformance & CAPA" },
+        subs: [
+          { id: "d8-p3-s1", title: { fa: "ثبت NCR و ریشه‌یابی", en: "NCR Registration & Root Cause" }, activity: { fa: "ثبت عدم انطباق، تعیین تکلیف و اقدام اصلاحی", en: "Log NCR, disposition and corrective action" }, source: "Inspection, Audit, Site", sql: ["NCR_Register", "CAPA_Action"], output: "NCR & CAPA Report", connectsTo: "Governance, Claims", ai: "AI Root Cause Advisor" },
+        ],
+      },
+      {
+        id: "d8-p4",
+        title: { fa: "کنترل مواد و گواهی‌ها", en: "Material Control & Certificates" },
+        subs: [
+          { id: "d8-p4-s1", title: { fa: "گواهی مواد و ردیابی ذوب", en: "Material Certificate & Heat Traceability" }, activity: { fa: "کنترل MTC، انطباق گرید و ردیابی شماره ذوب", en: "Verify MTC, grade match and heat traceability" }, source: "Vendor, Lab, Warehouse", sql: ["Material_Certificate", "Heat_Trace_Link"], output: "Material Release Note", connectsTo: "Procurement, Warehouse", ai: "AI Certificate Reader" },
+        ],
+      },
+      {
+        id: "d8-p5",
+        title: { fa: "ممیزی کیفیت و انطباق", en: "Quality Audit & Compliance" },
+        subs: [
+          { id: "d8-p5-s1", title: { fa: "ممیزی داخلی و انطباق ISO 9001", en: "Internal Audit & ISO 9001 Compliance" }, activity: { fa: "برنامه ممیزی، یافته‌ها و امتیاز انطباق", en: "Audit program, findings and compliance score" }, source: "ISO 9001, Procedures", sql: ["Quality_Audit", "Audit_Finding"], output: "Audit Report", connectsTo: "Governance, PMO", ai: "AI Compliance Analyzer" },
+        ],
+      },
+      {
+        id: "d8-p6",
+        title: { fa: "تحویل، پانچ و راه‌اندازی", en: "Handover, Punch & Commissioning" },
+        subs: [
+          { id: "d8-p6-s1", title: { fa: "پانچ‌لیست و تحویل مکانیکی", en: "Punch List & Mechanical Completion" }, activity: { fa: "پانچ کلاس A/B، داکیومنت کیفیت و دروازه MC", en: "Class A/B punch, quality dossier and MC gate" }, source: "Site, Commissioning", sql: ["Punch_List", "Completion_Certificate", "Quality_Dossier"], output: "MC / RFC Certificate", connectsTo: "Client, Operations", ai: "AI Punch Prioritizer" },
+        ],
+      },
+    ],
+  },
+  {
+    id: "d16",
+    icon: "🦺",
+    accent: "#DC2626",
+    title: { fa: "مدیریت ایمنی، بهداشت و محیط‌زیست", en: "Health, Safety & Environment" },
+    processes: [
+      {
+        id: "d16-p1",
+        title: { fa: "برنامه‌ریزی و ارزیابی خطرات ایمنی", en: "HSE Planning & Risk Assessment" },
+        subs: [
+          { id: "d16-p1-s1", title: { fa: "ارزیابی ریسک شغلی و تفکیک گام‌های کار", en: "Job Safety Analysis & Job Steps" }, activity: { fa: "تفکیک هر فعالیت پرخطر به گام‌های کاری و شناسایی خطر هر گام با نمره احتمال در شدت", en: "Break each high-risk activity into job steps and score likelihood times severity per hazard" }, source: "Activity, JSA Templates", sql: ["HSE_RiskAssessment", "JSA_JobStep", "JSA_Hazard"], output: "Approved JSA", connectsTo: "Planning, Commissioning", ai: "AI Hazard Identifier" },
+          { id: "d16-p1-s2", title: { fa: "سلسله‌مراتب کنترل خطر و ریسک باقیمانده", en: "Hierarchy of Controls & Residual Risk" }, activity: { fa: "اعمال پنج سطح کنترل از حذف تا تجهیزات حفاظت فردی و هشدار در اتکای صرف به حفاظت فردی برای خطر بالا", en: "Apply five control levels from elimination to PPE and warn when high risk relies on PPE alone" }, source: "JSA Hazards", sql: ["JSA_Control", "JSA_Hazard"], output: "Residual Risk Matrix", connectsTo: "Quality, Planning", ai: "AI Control Advisor" },
+          { id: "d16-p1-s3", title: { fa: "جنبه‌ها و اثرات محیط‌زیستی", en: "Environmental Aspects & Impacts" }, activity: { fa: "ماتریس جنبه در اثر بر پایه ایزو ۱۴۰۰۱ با نمره اهمیت مشتق از شدت، احتمال، دامنه و الزام قانونی", en: "Aspect-impact matrix per ISO 14001 with significance derived from severity, likelihood, scope and legal duty" }, source: "Environmental Register", sql: ["EnvironmentalAspect", "AspectImpact"], output: "Significant Aspects", connectsTo: "Governance", ai: "AI Impact Assessor" },
+        ],
+      },
+      {
+        id: "d16-p2",
+        title: { fa: "سامانه مجوزهای انجام کار", en: "Permit to Work Engine" },
+        subs: [
+          { id: "d16-p2-s1", title: { fa: "صدور و گردش هشت نوع پروانه کار", en: "Issue & Workflow of Eight Permit Types" }, activity: { fa: "صدور پروانه کار گرم، سرد، فضای بسته، ارتفاع، برقی، گودبرداری، بالابری و پرتوکاری با پیش‌نیاز ارزیابی ریسک مصوب", en: "Issue hot, cold, confined space, height, electrical, excavation, lifting and radiation permits gated on an approved JSA" }, source: "Field Request", sql: ["WorkPermit", "PTW_Precaution"], output: "Active Permit", connectsTo: "Planning, Commissioning", ai: "AI Permit Validator" },
+          { id: "d16-p2-s2", title: { fa: "گازسنجی و ایزولاسیون انرژی", en: "Gas Testing & Energy Isolation" }, activity: { fa: "ثبت عددی گاز قابل اشتعال، اکسیژن، سولفید هیدروژن و مونوکسید کربن با ابطال خودکار پروانه در خروج از محدوده و ثبت قفل و برچسب", en: "Record LEL, oxygen, H2S and CO numerically with automatic permit suspension out of range, plus lock-out tag-out logging" }, source: "Gas Detector, LOTO", sql: ["GasTestLog", "IsolationLog"], output: "Safe to Work", connectsTo: "Equipment", ai: "AI Gas Trend Monitor" },
+          { id: "d16-p2-s3", title: { fa: "امضای سه سطحی و اعتبارسنجی میدانی", en: "Three-Level Signature & Field Validation" }, activity: { fa: "امضای ترتیبی سرپرست اجرا، افسر ایمنی و مدیر منطقه به همراه کد پاسخ سریع برای اعتبارسنجی پروانه در کارگاه", en: "Sequential supervisor, HSE officer and area manager signatures with a QR token for on-site permit validation" }, source: "Digital Signature", sql: ["PTW_Approval", "WorkPermit"], output: "Validated Permit", connectsTo: "Documents", ai: "AI Signature Auditor" },
+        ],
+      },
+      {
+        id: "d16-p3",
+        title: { fa: "مدیریت حوادث و شبه‌حوادث", en: "Incident & Near-Miss Management" },
+        subs: [
+          { id: "d16-p3-s1", title: { fa: "ثبت فوری حادثه و گزارش آنی", en: "Incident Capture & Flash Report" }, activity: { fa: "ثبت هشت طبقه از شبه‌حادثه تا فوت با گزارش آنی حداکثر پانزده دقیقه و فراخوان تیم واکنش اضطراری در موارد بحرانی", en: "Log eight categories from near-miss to fatality with a flash report within fifteen minutes and emergency team activation for critical cases" }, source: "Field Report, Mobile", sql: ["SafetyIncident", "InjuredPerson"], output: "Flash Incident Report", connectsTo: "Risk, Communications", ai: "AI Severity Classifier" },
+          { id: "d16-p3-s2", title: { fa: "کمیته حقیقت‌یاب و تحلیل علت ریشه‌ای", en: "Investigation Committee & Root Cause Analysis" }, activity: { fa: "تحلیل پنج چرا به‌صورت درخت چندشاخه با تفکیک علل بی‌واسطه، زمینه‌ای و ریشه‌ای و محاسبه هزینه مستقیم و غیرمستقیم حادثه", en: "Multi-branch five-whys tree separating immediate, underlying and root causes with direct and indirect incident cost" }, source: "Committee Minutes", sql: ["HSE_Investigation", "RootCauseNode"], output: "Investigation Report", connectsTo: "Knowledge, Risk", ai: "AI Root Cause Assistant" },
+          { id: "d16-p3-s3", title: { fa: "اقدامات اصلاحی و پیشگیرانه", en: "Corrective & Preventive Actions" }, activity: { fa: "تعریف اقدام با مسئول و مهلت؛ تحقیق تا نداشتن دست‌کم یک اقدام پیشگیرانه بسته نمی‌شود", en: "Define actions with owner and due date; an investigation cannot close without at least one preventive action" }, source: "CAPA Plan", sql: ["CapaAction", "HSE_Investigation"], output: "CAPA Register", connectsTo: "Quality, Governance", ai: "AI Action Tracker" },
+        ],
+      },
+      {
+        id: "d16-p4",
+        title: { fa: "بازرسی، تخلفات و دستور توقف کار", en: "Inspection, Violations & Stop Work Order" },
+        subs: [
+          { id: "d16-p4-s1", title: { fa: "بازرسی میدانی و یافته‌ها", en: "Field Inspection & Findings" }, activity: { fa: "ثبت بازدید میدانی، جلسه ایمنی روزانه، ممیزی و مانور با یافته‌های قابل پیگیری و نمره بازرسی", en: "Record walkthroughs, toolbox talks, audits and drills with trackable findings and an inspection score" }, source: "Mobile Checklist", sql: ["SafetyInspection", "InspectionFinding"], output: "Inspection Report", connectsTo: "Quality", ai: "AI Checklist Generator" },
+          { id: "d16-p4-s2", title: { fa: "دستور توقف کار و قفل فعالیت", en: "Stop Work Order & Activity Lock" }, activity: { fa: "صدور دستور توقف کار با موقعیت جغرافیایی و عکس؛ فعالیت زمان‌بندی قفل می‌شود نه حذف تا مبنای ادعای تمدید حفظ شود", en: "Issue a stop work order with GPS and photo; the schedule activity is locked rather than deleted so the EOT claim basis survives" }, source: "Field Observation", sql: ["HSE_Violation", "Activity"], output: "Stop Work Order", connectsTo: "Planning, Claims", ai: "AI Violation Detector" },
+          { id: "d16-p4-s3", title: { fa: "رفع تخلف و بازرسی مجدد", en: "Violation Closure & Re-Inspection" }, activity: { fa: "آزادسازی توقف کار تنها با بازرسی مجدد و امضای مدیر ایمنی، نه سرپرست اجرایی که عامل تخلف بوده", en: "Release a stop work order only after re-inspection and HSE manager signature, never by the supervisor who caused it" }, source: "Re-Inspection", sql: ["ViolationClosure", "HSE_Violation"], output: "Closure Certificate", connectsTo: "Contracts", ai: "AI Closure Verifier" },
+        ],
+      },
+      {
+        id: "d16-p5",
+        title: { fa: "آموزش، بهداشت و محیط‌زیست", en: "Training, Health & Environment" },
+        subs: [
+          { id: "d16-p5-s1", title: { fa: "آموزش ایمنی و اعتبار گواهی‌نامه", en: "Safety Training & Certificate Validity" }, activity: { fa: "ثبت آموزش ورودی، جلسه روزانه و دوره‌های تخصصی با کنترل انقضای گواهی؛ گیت آموزش منابع انسانی از این منبع خوانده می‌شود", en: "Record induction, toolbox and specialist courses with expiry control; the HR training gate reads from this source" }, source: "Training Session", sql: ["TrainingSession", "TrainingAttendee", "SafetyTrainingRecord"], output: "Training Matrix", connectsTo: "Human Resources", ai: "AI Training Planner" },
+          { id: "d16-p5-s2", title: { fa: "پسماند، پساب و آلاینده‌ها", en: "Waste, Effluent & Emissions" }, activity: { fa: "ثبت پسماند خطرناک، غیرخطرناک و قابل بازیافت با شماره مانیفست حمل و پایش پساب و آلاینده در برابر حد مجاز", en: "Log hazardous, non-hazardous and recyclable waste with manifest numbers, and monitor effluent and emissions against limits" }, source: "Waste Manifest", sql: ["WasteLog", "EnvironmentalMonitoring"], output: "Environmental Log", connectsTo: "Governance, Cost", ai: "AI Compliance Checker" },
+          { id: "d16-p5-s3", title: { fa: "طب کار و تجهیزات حفاظت فردی", en: "Occupational Health & PPE" }, activity: { fa: "معاینات بدو استخدام، دوره‌ای و خروج در برابر عوامل زیان‌آور و مدیریت تحویل و موجودی تجهیزات حفاظت فردی", en: "Pre-employment, periodic and exit examinations against occupational hazards, plus PPE issuance and stock control" }, source: "Medical Records", sql: ["HealthExamination", "OccupationalHazard", "PpeIssuance"], output: "Fitness Register", connectsTo: "Human Resources, Cost", ai: "AI Exposure Analyzer" },
+        ],
+      },
+      {
+        id: "d16-p6",
+        title: { fa: "پایش، شاخص‌ها و هشدار زودهنگام", en: "HSE Analytics, KPIs & Early Warning" },
+        subs: [
+          { id: "d16-p6-s1", title: { fa: "نفرساعت ایمن و شاخص‌های حادثه", en: "Safe Man-Hours & Incident Rates" }, activity: { fa: "محاسبه نفرساعت از برگه ساعت‌کارکرد موجود و شاخص‌های حادثه؛ بدون نفرساعت شاخص تهی می‌ماند نه صفر", en: "Derive man-hours from existing timesheets and compute incident rates; without man-hours the metric stays null, never zero" }, source: "Timesheet, Incidents", sql: ["HSE_ManHourLog", "HSE_MetricSnapshot"], output: "LTIFR & TRIR", connectsTo: "Monitoring", ai: "AI Trend Forecaster" },
+          { id: "d16-p6-s2", title: { fa: "شش شاخص ایمنی و پنج قاعده هشدار", en: "Six HSE KPIs & Five Alert Rules" }, activity: { fa: "پایش انطباق پروانه، ساعت آموزش سرانه و نرخ رفع تخلف با هشدار گازسنجی ناایمن، دستور توقف کار و پروانه منقضی", en: "Track permit compliance, training hours per worker and closure rate with alerts for unsafe gas readings, stop work orders and expired permits" }, source: "Engine Computation", sql: ["HSE_MetricSnapshot", "HSE_AlertRule"], output: "HSE Dashboard", connectsTo: "Monitoring, Governance", ai: "AI Early Warning Engine" },
+          { id: "d16-p6-s3", title: { fa: "نمره ایمنی و تغذیه شاخص سلامت پروژه", en: "HSE Score & Project Health Feed" }, activity: { fa: "تولید نمره ایمنی و تزریق آن به شاخص سلامت ترکیبی پروژه به‌جای مقدار ثابت پیشین", en: "Produce the HSE score and feed it into the composite project health index, replacing the former fixed value" }, source: "Metric Snapshot", sql: ["HSE_MetricSnapshot", "KpiSnapshot"], output: "HSE Score", connectsTo: "Monitoring, Portfolio", ai: "AI Health Scorer" },
         ],
       },
     ],
@@ -504,288 +1155,111 @@ export const domains: Domain[] = [
     ],
   },
   {
-    id: "d5",
-    icon: "💠",
-    accent: "#C9A7FF",
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    title: { fa: "مدیریت هزینه، تأمین و لجستیک پروژه", en: "Cost, Procurement & Logistics" },
+    /* ماژول ارتباطات و دانش — مالک گردش مکاتبات، جلسات، ذی‌نفعان و درس‌آموخته.
+       مالک فایل مدرک همچنان d1 است و ماتریس اختیار همچنان d6. */
+    id: "d11",
+    icon: "📡",
+    accent: "#A78BFA",
+    title: { fa: "مدیریت ارتباطات و دانش", en: "Communications & Knowledge Management" },
     processes: [
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
       {
-        id: "d5-p1",
-        title: { fa: "مدیریت هزینه", en: "Cost Management" },
+        id: "d11-p1",
+        title: { fa: "مکاتبات و اعلان قراردادی", en: "Correspondence & Contractual Notices" },
         subs: [
-          { id: "d5-p1-s1", title: { fa: "کنترل بودجه", en: "Budget Control" }, activity: { fa: "بودجه پروژه", en: "Project budget" }, source: "ERP, Excel", sql: ["Project_Budget"], output: "Budget Report", connectsTo: "Finance Dashboard", ai: "AI Cost Forecast" },
+          { id: "d11-p1-s1", title: { fa: "دفتر مکاتبات و مهلت پاسخ", en: "Correspondence Register & Response Deadline" }, activity: { fa: "ثبت نامه وارده و صادره با مهلت پاسخ بر پایه روز کاری", en: "Register letters with working-day response deadlines" }, source: "Outlook, Secretariat, Upload", sql: ["ckm_letter", "ckm_letter_link"], output: "Correspondence & Overdue Report", connectsTo: "Documents, Claims", ai: "AI Letter Summarization" },
+          { id: "d11-p1-s2", title: { fa: "اعلان قراردادی و پایش Time-Bar", en: "Contractual Notice & Time-Bar Watch" }, activity: { fa: "پایش مهلت اعلان ادعا و هشدار پیش از سقوط حق", en: "Track notice windows and warn before the right lapses" }, source: "Contract, Claim Register", sql: ["ckm_letter", "ckm_notice_watch"], output: "Time-Bar Status", connectsTo: "Risk & Claims", ai: "AI Notice Drafter" },
         ],
       },
       {
-        id: "d5-p2",
-        title: { fa: "کنترل هزینه", en: "Cost Control" },
+        id: "d11-p2",
+        title: { fa: "جلسات و مصوبات", en: "Meetings & Action Register" },
         subs: [
-          { id: "d5-p2-s1", title: { fa: "هزینه واقعی", en: "Actual Cost" }, activity: { fa: "ثبت هزینه واقعی", en: "Actual cost entry" }, source: "ERP, SAP", sql: ["Cost_Transaction"], output: "Cost Report", connectsTo: "EVM", ai: "AI Cost Prediction" },
+          { id: "d11-p2-s1", title: { fa: "صورت‌جلسه و پیگیری مصوبات", en: "Minutes & Action Follow-up" }, activity: { fa: "ثبت صورت‌جلسه، تصویب، توزیع و پیگیری مصوبات دارای مالک و موعد", en: "Record, approve, distribute minutes and track owned actions" }, source: "Meeting, User Entry", sql: ["ckm_meeting", "ckm_action_item"], output: "Minutes & Action Status", connectsTo: "Governance, Planning", ai: "AI Minutes Generator" },
         ],
       },
       {
-        id: "d5-p3",
-        title: { fa: "جریان نقدینگی", en: "Cash Flow" },
+        id: "d11-p3",
+        title: { fa: "ذی‌نفعان و برنامه ارتباطات", en: "Stakeholders & Communication Plan" },
         subs: [
-          { id: "d5-p3-s1", title: { fa: "دریافت و پرداخت", en: "Receipt & Payment" }, activity: { fa: "دریافت و پرداخت", en: "In / out" }, source: "Finance System", sql: ["Cash_Flow"], output: "Cash Flow Report", connectsTo: "Executive Dashboard", ai: "AI Cash Forecast" },
+          { id: "d11-p3-s1", title: { fa: "ثبت ذی‌نفعان و شبکه قدرت-علاقه", en: "Stakeholder Register & Power-Interest Grid" }, activity: { fa: "تحلیل قدرت و علاقه و سنجش شکاف سطح تعامل", en: "Assess power, interest and engagement gap" }, source: "PMO, Interviews", sql: ["ckm_stakeholder", "ckm_engagement_log"], output: "Stakeholder Engagement Report", connectsTo: "Governance", ai: "AI Engagement Advisor" },
+          { id: "d11-p3-s2", title: { fa: "ماتریس ارتباطات و ابلاغ", en: "Communication & Distribution Matrix" }, activity: { fa: "تعیین کانال، تناوب و مالک ارتباط با هر ذی‌نفع", en: "Define channel, cadence and owner per stakeholder" }, source: "Comms Plan", sql: ["ckm_comm_matrix"], output: "Communication Matrix", connectsTo: "All Modules", ai: "AI Channel Optimizer" },
         ],
       },
       {
-        id: "d5-p4",
-        title: { fa: "درخواست خرید", en: "Purchase Request" },
+        id: "d11-p4",
+        title: { fa: "اطلاع‌رسانی و تشدید", en: "Notification & Escalation" },
         subs: [
-          { id: "d5-p4-s1", title: { fa: "مدیریت PR", en: "PR Management" }, activity: { fa: "درخواست خرید", en: "Purchase requisition" }, source: "ERP", sql: ["Purchase_Request"], output: "PR Status", connectsTo: "Procurement", ai: "AI Procurement Analysis" },
+          { id: "d11-p4-s1", title: { fa: "قواعد اعلان و سطوح تشدید", en: "Notification Rules & Escalation Levels" }, activity: { fa: "تعریف رویداد، کانال، مخاطب و زمان تشدید", en: "Define event, channel, audience and escalation timing" }, source: "System Events", sql: ["ckm_notification_rule", "ckm_notification_log"], output: "Escalation Log", connectsTo: "Alerts, Governance", ai: "AI Alert Deduplication" },
         ],
       },
       {
-        id: "d5-p5",
-        title: { fa: "سفارش خرید", en: "Purchase Order" },
+        id: "d11-p5",
+        title: { fa: "دانش و درس‌آموخته", en: "Knowledge & Lessons Learned" },
         subs: [
-          { id: "d5-p5-s1", title: { fa: "مدیریت PO", en: "PO Management" }, activity: { fa: "سفارش خرید", en: "Purchase order" }, source: "ERP", sql: ["Purchase_Order"], output: "PO Status", connectsTo: "Supply Chain", ai: "AI Vendor Risk" },
+          { id: "d11-p5-s1", title: { fa: "بانک درس‌آموخته و استفاده مجدد", en: "Lessons Register & Reuse Tracking" }, activity: { fa: "ثبت درس با منشأ الزامی، تأیید شورای دانش و ردیابی استفاده مجدد", en: "Capture lessons with mandatory source, validate and track reuse" }, source: "NCR, Claim, Incident, Meeting", sql: ["ckm_lesson", "ckm_lesson_reuse"], output: "Knowledge Value Report", connectsTo: "Quality, Risk, HSE", ai: "AI Knowledge Recommender" },
         ],
       },
       {
-        id: "d5-p6",
-        title: { fa: "مدیریت کالا و انبار", en: "Material & Warehouse" },
+        id: "d11-p6",
+        title: { fa: "تحلیل و گزارش ارتباطات", en: "Communication Analytics & Reporting" },
         subs: [
-          { id: "d5-p6-s1", title: { fa: "کنترل موجودی", en: "Inventory Control" }, activity: { fa: "کنترل موجودی", en: "Stock control" }, source: "Warehouse", sql: ["Material_Register"], output: "Material Status", connectsTo: "Logistics", ai: "AI Shortage Prediction" },
+          { id: "d11-p6-s1", title: { fa: "شاخص‌های ارتباطی و هشدار زودهنگام", en: "Communication KPIs & Early Warning" }, activity: { fa: "زمان پاسخ، نرخ بستن مصوبه، پوشش ارتباطات و نرخ استفاده از دانش", en: "Response time, action closure, comms coverage and knowledge utilization" }, source: "CKM Data", sql: ["ckm_metric_snapshot", "ckm_alert"], output: "Communication KPI Report", connectsTo: "Dashboard", ai: "AI Trend Analysis" },
         ],
       },
     ],
   },
   {
-    id: "d6",
-    icon: "🏛",
-    accent: "#B8D4FF",
-    title: { fa: "مدیریت حاکمیت و فرآیندهای PMBOK", en: "Governance & PMBOK Processes" },
+    id: "d15",
+    icon: "🏁",
+    accent: "#F97316",
+    title: { fa: "مدیریت راه‌اندازی، تحویل و اختتام نهایی", en: "Commissioning, Handover & Project Closure" },
     processes: [
       {
-        id: "d6-p1",
-        title: { fa: "حاکمیت (Governance)", en: "Governance" },
+        id: "d15-p1",
+        title: { fa: "تفکیک سیستمی و برنامه‌ریزی تحویل", en: "Systemization & Completion Planning" },
         subs: [
-          { id: "d6-p1-s1", title: { fa: "گردش فرآیند", en: "Process Workflow" }, activity: { fa: "گردش فرآیند سازمانی", en: "Org workflow" }, source: "PMBOK, سازمان / Org", sql: ["Process_Master", "Workflow_Instance"], output: "Process Report", connectsTo: "PMO", ai: "AI Process Advisor" },
+          { id: "d15-p1-s1", title: { fa: "درخت سیستم‌ها و زیرسیستم‌ها", en: "Systems & Subsystems Breakdown" }, activity: { fa: "تعریف ساختار درختی سیستم‌ها مستقل از WBS و نگاشت دوطرفه به بسته‌های کاری", en: "Define a system tree independent of the WBS with two-way mapping to work packages" }, source: "P&ID, WBS", sql: ["SystemSubsystem", "SystemBoundaryMapping"], output: "Systemization Matrix", connectsTo: "Planning, Engineering", ai: "AI System Boundary Advisor" },
+          { id: "d15-p1-s2", title: { fa: "اولویت‌بندی و تاریخ‌های هدف تحویل", en: "Commissioning Priority & Target Dates" }, activity: { fa: "تعیین اولویت راه‌اندازی و تاریخ هدف چهار دروازه تکمیل مکانیکی، آمادگی راه‌اندازی، تحویل موقت و قطعی", en: "Set commissioning priority and target dates for the four completion gates" }, source: "Commissioning Plan", sql: ["SystemSubsystem"], output: "Completion Schedule", connectsTo: "Planning", ai: "AI Priority Optimizer" },
         ],
       },
       {
-        id: "d6-p2",
-        title: { fa: "مدیریت یکپارچگی", en: "Integration Management" },
+        id: "d15-p2",
+        title: { fa: "پیش‌راه‌اندازی و آزمون‌های سرد", en: "Pre-Commissioning & Cold Testing" },
         subs: [
-          { id: "d6-p2-s1", title: { fa: "تجمیع داده‌ها", en: "Data Integration" }, activity: { fa: "تجمیع داده‌ها", en: "Data consolidation" }, source: "API, ERP, Primavera", sql: ["Project_Master", "Integration_Log"], output: "Executive Report", connectsTo: "BI Platform", ai: "AI Project Advisor" },
+          { id: "d15-p2-s1", title: { fa: "بسته‌های آزمون و برگه‌های سرد", en: "Test Packs & A-Check Sheets" }, activity: { fa: "ثبت هیدروتست، فلاشینگ، لوپ چک ابزار دقیق و مگر تست برق به تفکیک دیسیپلین", en: "Record hydrotest, flushing, instrument loop check and megger test by discipline" }, source: "Field Test Records", sql: ["CheckRecordPack", "CheckSheet"], output: "Cold Test Clearance", connectsTo: "Quality", ai: "AI Test Pack Validator" },
+          { id: "d15-p2-s2", title: { fa: "کنترل پیش‌نیاز ساخت و کیفیت", en: "Construction & Quality Prerequisites" }, activity: { fa: "کنترل تکمیل ساخت فیزیکی و بسته‌بودن عدم انطباق‌ها پیش از شروع آزمون سرد", en: "Verify physical completion and closed non-conformances before cold testing" }, source: "Activity, NCR", sql: ["Activity", "Ncr"], output: "Readiness Check", connectsTo: "Planning, Quality", ai: "AI Prerequisite Checker" },
         ],
       },
       {
-        id: "d6-p3",
-        title: { fa: "مدیریت ذی‌نفعان", en: "Stakeholder Management" },
+        id: "d15-p3",
+        title: { fa: "راه‌اندازی، تست گرم و آزمون عملکرد", en: "Commissioning, Hot Test & PGTR" },
         subs: [
-          { id: "d6-p3-s1", title: { fa: "ذی‌نفعان", en: "Stakeholders" }, activity: { fa: "مدیریت ارتباط", en: "Relation management" }, source: "User Entry", sql: ["Stakeholder_Register"], output: "Stakeholder Report", connectsTo: "Communication", ai: "AI Stakeholder Analysis" },
+          { id: "d15-p3-s1", title: { fa: "برگه‌های آزمون گرم", en: "B-Check Sheets & Hot Testing" }, activity: { fa: "ثبت آزمون‌های گرم پس از صدور گواهی تکمیل مکانیکی و کنترل مجوز کار گرم", en: "Record hot tests after mechanical completion and check hot work permits" }, source: "Commissioning Records", sql: ["CheckSheet"], output: "Hot Test Log", connectsTo: "HSE, Quality", ai: "AI Hot Test Monitor" },
+          { id: "d15-p3-s2", title: { fa: "آزمون عملکرد ۷۲ ساعته", en: "Performance Guarantee Test Run" }, activity: { fa: "مقایسه مقادیر طراحی با مقادیر واقعی بهره‌برداری و اعتبارسنجی خودکار قبولی", en: "Compare design values with actual operating data and validate pass or fail" }, source: "Operating Data", sql: ["PerformanceTestRun", "PerformanceTestReading"], output: "PGTR Result Sheet", connectsTo: "Quality, Monitoring", ai: "AI Performance Analyzer" },
         ],
       },
       {
-        id: "d6-p4",
-        title: { fa: "ممیزی (Audit)", en: "Audit" },
+        id: "d15-p4",
+        title: { fa: "گواهی‌های تحویل و دروازه‌های تکمیل", en: "Handover Certificates & Gate Locks" },
         subs: [
-          { id: "d6-p4-s1", title: { fa: "کنترل انطباق", en: "Compliance Control" }, activity: { fa: "کنترل انطباق", en: "Compliance check" }, source: "EDMS, Process Data", sql: ["Audit_Register"], output: "Audit Report", connectsTo: "PMO", ai: "AI Compliance Check" },
+          { id: "d15-p4-s1", title: { fa: "صدور چهار گواهی تحویل", en: "MC, RFSU, PAC & FAC Certificates" }, activity: { fa: "گردش امضای سه سطحی پیمانکار، مشاور و کارفرما برای گواهی‌های زنجیره‌ای تحویل", en: "Three-level signature workflow across contractor, consultant and client" }, source: "Handover Committee", sql: ["CompletionCertificate"], output: "Signed Certificates", connectsTo: "Contracts, Finance", ai: "AI Certificate Drafter" },
+          { id: "d15-p4-s2", title: { fa: "قفل کیفی دروازه‌ها و نواقص", en: "Quality Gate Locks & Punch List" }, activity: { fa: "نقص دسته الف مانع تکمیل مکانیکی، دسته ب مانع تحویل موقت و دسته ج مانع تحویل قطعی است", en: "Category A blocks mechanical completion, B blocks provisional and C blocks final acceptance" }, source: "Punch Inspection", sql: ["PunchListItem", "GateRule"], output: "Gate Lock Status", connectsTo: "Quality", ai: "AI Gate Advisor" },
         ],
       },
       {
-        id: "d6-p5",
-        title: { fa: "پشتیبان تصمیم‌گیری", en: "Decision Support" },
+        id: "d15-p5",
+        title: { fa: "پرونده تحویل و اسناد بهره‌برداری", en: "Handover Dossier & O&M Documents" },
         subs: [
-          { id: "d6-p5-s1", title: { fa: "تصمیم‌یار مدیریتی", en: "Executive Decision Aid" }, activity: { fa: "تحلیل کل پروژه", en: "Whole-project analysis" }, source: "Data Warehouse", sql: ["AI_Model_Input", "Decision_Log"], output: "Decision Report", connectsTo: "CEO Dashboard", ai: "AI Executive Assistant" },
+          { id: "d15-p5-s1", title: { fa: "تجمیع پرونده تحویل دیجیتال", en: "Digital Handover Dossier Index" }, activity: { fa: "فهرست‌کردن نقشه‌های چون‌ساخت، برگه‌های بازرسی و کتابچه‌های بهره‌برداری بدون کپی فایل", en: "Index as-built drawings, inspection sheets and O&M manuals without copying files" }, source: "Documents, Deliverables", sql: ["HandoverDossier", "DossierItem"], output: "Dossier Index", connectsTo: "Documents, Engineering", ai: "AI Dossier Assembler" },
+          { id: "d15-p5-s2", title: { fa: "درصد آمادگی پرونده تحویل", en: "Dossier Readiness Percentage" }, activity: { fa: "محاسبه نسبت اقلام تأمین‌شده به اقلام الزامی و نمایش فهرست مدارک غایب", en: "Compute supplied versus required items and list the missing documents" }, source: "Engine Computation", sql: ["DossierItem"], output: "Readiness Report", connectsTo: "Documents", ai: "AI Gap Detector" },
+        ],
+      },
+      {
+        id: "d15-p6",
+        title: { fa: "دوران تضمین، رفع عیوب و اختتام نهایی", en: "Defects Liability & Final Closure" },
+        subs: [
+          { id: "d15-p6-s1", title: { fa: "پایش دوران تضمین و ادعای گارانتی", en: "DLP Tracking & Warranty Claims" }, activity: { fa: "ثبت عیوب دوران تضمین، تعیین مسئولیت پیمانکار یا سازنده و صدور دستور کار تعمیر", en: "Log defects, assign liability to contractor or vendor and raise repair work orders" }, source: "Warranty Log", sql: ["WarrantyClaim", "MaintenanceOrder"], output: "DLP Register", connectsTo: "Equipment, Contracts", ai: "AI Defect Classifier" },
+          { id: "d15-p6-s2", title: { fa: "آزادسازی سپرده و اختتام رسمی پروژه", en: "Retention Release & Project Closure" }, activity: { fa: "پیشنهاد آزادسازی پنجاه درصدی سپرده بر مبنای گواهی‌ها و ثبت درس‌آموخته‌های اختتام", en: "Propose staged retention release from certificates and capture closure lessons learned" }, source: "Certificates, Ledger", sql: ["ProjectClosureRecord", "RetainageLedger", "LessonLearned"], output: "Closure Record", connectsTo: "Finance, Knowledge", ai: "AI Closure Auditor" },
         ],
       },
     ],
@@ -897,6 +1371,7 @@ export const domainExportFormats: Record<string, FormatKind[]> = {
   d4: ["excel", "word", "pdf", "csv"],                     // Risk / Claims
   d5: ["excel", "pdf", "csv", "xml"],                      // Cost / Procurement
   d6: ["pdf", "word", "excel", "json"],                    // Governance
+  d8: ["excel", "pdf", "word", "csv"],                     // Quality & Inspection
 };
 
 /* Legacy module shape — derived from domains for backward compatibility */
