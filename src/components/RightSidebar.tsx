@@ -168,19 +168,21 @@ export default function RightSidebar({ lang, quickAction, onQuickAction, onNavig
     pc: ids.reduce((n, d) => n + d.processes.length, 0),
   });
 
+  /* سطر دامنه عمداً کارت نیست: فهرست فشرده با جداکنندهٔ مویی.
+   * حالت باز فقط با ته‌مایهٔ رنگ دامنه مشخص می‌شود. */
   const renderDomain = (d: Domain) => {
     const domainOpen = openDomain === d.id;
     return (
-      <div key={d.id}>
-        {/* Domain header (level 1) */}
+      <div key={d.id} className="border-b b-line-soft last:border-b-0">
+        {/* Domain row (level 1) */}
         <button
           type="button"
           onClick={() => toggleDomain(d.id)}
-          className={`glass-row flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-start transition ${domainOpen ? "row-on" : ""}`}
-          style={domainOpen ? { borderColor: d.accent } : undefined}
+          className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-start transition hover:bg-[var(--row-hover)]"
+          style={domainOpen ? { background: `${d.accent}14` } : undefined}
           aria-expanded={d.id === "d7" ? undefined : domainOpen}
         >
-          <span className="chip-bg grid h-8 w-8 shrink-0 place-items-center rounded-lg text-[14px]">{d.icon}</span>
+          <span className="grid h-6 w-6 shrink-0 place-items-center text-[15px]">{d.icon}</span>
           <h3 className="min-w-0 flex-1 truncate text-[11px] font-normal leading-4" style={{ color: d.accent }}>
             {t(d.title, lang)}
           </h3>
@@ -384,7 +386,7 @@ export default function RightSidebar({ lang, quickAction, onQuickAction, onNavig
                   </button>
 
                   {isOpen && (
-                    <div className="fade-rise mt-1.5 space-y-2 border-s-2 ps-2" style={{ borderColor: `${g.color}33` }}>
+                    <div className="fade-rise mt-1 border-s-2 ps-2" style={{ borderColor: `${g.color}33` }}>
                       {members.map(renderDomain)}
                     </div>
                   )}
