@@ -36,17 +36,45 @@ export type Process = {
   subs: SubProcess[];
 };
 
+export type SidebarGroupId = "pg1" | "pg2" | "pg3" | "pg4" | "pg5" | "support" | "field";
+
 export type Domain = {
   id: string;
   icon: string;
   accent: string;
   title: Bi;
+  /** گروه چرخهٔ حیات PMBOK در سایدبار؛ `field` یعنی میان‌بر اقدام سریع (بدون گروه). */
+  group: SidebarGroupId;
   processes: Process[];
 };
+
+/* ============================================================
+   SIDEBAR — گروه‌بندی دامنه‌ها بر چرخهٔ حیات PMBOK
+   رنگ و کد کوتاه هر گروه عمداً همان حلقهٔ PMBOK (`processGroups`)
+   است تا سایدبار و حلقه یک زبان داشته باشند.
+   ============================================================ */
+export type SidebarGroup = {
+  id: Exclude<SidebarGroupId, "field">;
+  title: Bi;
+  short: string;
+  color: string;
+  /** گروه سنجاق‌شدهٔ انتهای سایدبار (مستقل از آکاردئون فازها). */
+  pinned?: boolean;
+};
+
+export const sidebarGroups: SidebarGroup[] = [
+  { id: "pg1", title: { fa: "آغازین", en: "Initiating" }, short: "IN", color: "#7FB2FF" },
+  { id: "pg2", title: { fa: "برنامه‌ریزی", en: "Planning" }, short: "PL", color: "#8FE3C8" },
+  { id: "pg3", title: { fa: "اجرا", en: "Executing" }, short: "EX", color: "#FFD48A" },
+  { id: "pg4", title: { fa: "پایش و کنترل", en: "Monitoring & Controlling" }, short: "MC", color: "#FF9F9F" },
+  { id: "pg5", title: { fa: "اختتامیه", en: "Closing" }, short: "CL", color: "#C9A7FF" },
+  { id: "support", title: { fa: "پشتیبان", en: "Supporting" }, short: "SP", color: "#94A3B8", pinned: true },
+];
 
 export const domains: Domain[] = [
   {
     id: "d6",
+    group: "pg1",
     icon: "🏛",
     accent: "#B8D4FF",
     title: { fa: "مدیریت حاکمیت و فرآیندهای PMBOK", en: "Governance & PMBOK Processes" },
@@ -96,6 +124,7 @@ export const domains: Domain[] = [
      * شمارهٔ d13 عمداً خالی است و به کسی تخصیص نیافته.
      */
     id: "d14",
+    group: "pg3",
     icon: "📜",
     accent: "#D97706",
     title: { fa: "مدیریت پیمان و صورت‌وضعیت", en: "Contract & Payment Management" },
@@ -159,6 +188,7 @@ export const domains: Domain[] = [
   },
   {
     id: "d1",
+    group: "support",
     icon: "🗂",
     accent: "#7FB2FF",
     title: { fa: "مدیریت اطلاعات و مستندات پروژه", en: "Project Information & Document Management" },
@@ -202,6 +232,7 @@ export const domains: Domain[] = [
   },
   {
     id: "d2",
+    group: "pg2",
     icon: "🧭",
     accent: "#8FE3C8",
     title: { fa: "مدیریت برنامه‌ریزی و اجرای عملیات پروژه", en: "Planning & Execution" },
@@ -242,6 +273,7 @@ export const domains: Domain[] = [
   },
   {
     id: "d12",
+    group: "pg2",
     icon: "📐",
     accent: "#A78BFA",
     title: { fa: "مدیریت مهندسی و طراحی", en: "Engineering & Design Management" },
@@ -297,6 +329,7 @@ export const domains: Domain[] = [
   },
   {
     id: "d5",
+    group: "pg4",
     icon: "💠",
     accent: "#C9A7FF",
 
@@ -543,6 +576,7 @@ export const domains: Domain[] = [
     /* ماژول منابع انسانی — پس از HSE و پیش از مدیریت سامانه (ADR-13 بازنگری‌شده).
        کد دامنه در src/services/workforce.ts → HRM_DOMAIN_ID متمرکز است (ADR-15). */
     id: "d10",
+    group: "pg3",
     icon: "👷",
     accent: "#F59E0B",
     title: { fa: "مدیریت منابع انسانی و بهره‌وری نیروی کار", en: "Human Resources & Workforce Productivity" },
@@ -597,6 +631,7 @@ export const domains: Domain[] = [
     /* ماژول ماشین‌آلات و تجهیزات — ناوگان، ساعت کارکرد، اجاره، تعمیرات و بهره‌وری.
        کد دامنه در src/services/equipment.ts → EQM_DOMAIN_ID متمرکز است (ADR-02). */
     id: "d9",
+    group: "pg3",
     icon: "🚜",
     accent: "#38BDF8",
     title: { fa: "مدیریت ماشین‌آلات و تجهیزات", en: "Machinery & Equipment Management" },
@@ -666,6 +701,7 @@ export const domains: Domain[] = [
   },
   {
     id: "d8",
+    group: "pg4",
     icon: "🔬",
     accent: "#34D399",
     title: { fa: "مدیریت کیفیت و بازرسی", en: "Quality & Inspection Management" },
@@ -716,6 +752,7 @@ export const domains: Domain[] = [
   },
   {
     id: "d16",
+    group: "pg3",
     icon: "🦺",
     accent: "#DC2626",
     title: { fa: "مدیریت ایمنی، بهداشت و محیط‌زیست", en: "Health, Safety & Environment" },
@@ -778,6 +815,7 @@ export const domains: Domain[] = [
   },
   {
     id: "d3",
+    group: "pg4",
     icon: "📈",
     accent: "#FFD48A",
     title: { fa: "مدیریت پایش و کنترل عملکرد پروژه", en: "Performance Monitoring & Control" },
@@ -828,6 +866,7 @@ export const domains: Domain[] = [
   },
   {
     id: "d4",
+    group: "pg4",
     icon: "⚠️",
     accent: "#FF9F9F",
     title: { fa: "مدیریت ریسک، تغییرات و ادعاها", en: "Risk, Change & Claims" },
@@ -1158,6 +1197,7 @@ export const domains: Domain[] = [
     /* ماژول ارتباطات و دانش — مالک گردش مکاتبات، جلسات، ذی‌نفعان و درس‌آموخته.
        مالک فایل مدرک همچنان d1 است و ماتریس اختیار همچنان d6. */
     id: "d11",
+    group: "support",
     icon: "📡",
     accent: "#A78BFA",
     title: { fa: "مدیریت ارتباطات و دانش", en: "Communications & Knowledge Management" },
@@ -1210,6 +1250,7 @@ export const domains: Domain[] = [
   },
   {
     id: "d15",
+    group: "pg5",
     icon: "🏁",
     accent: "#F97316",
     title: { fa: "مدیریت راه‌اندازی، تحویل و اختتام نهایی", en: "Commissioning, Handover & Project Closure" },
@@ -1266,6 +1307,7 @@ export const domains: Domain[] = [
   },
   {
     id: "d17",
+    group: "field",
     icon: "⛑️",
     accent: "#A3E635",
     title: { fa: "ثبت سریع میدانی HSE", en: "HSE Quick Field Register" },
@@ -1316,6 +1358,7 @@ export const domains: Domain[] = [
   },
   {
     id: "d7",
+    group: "support",
     icon: "⚙️",
     accent: "#38BDF8",
     title: { fa: "مدیریت سامانه و پیکربندی پایه", en: "System Administration & Base Config" },

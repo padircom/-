@@ -2,12 +2,15 @@ import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import {
   domains,
+  sidebarGroups,
   ui,
   t,
   type Bi,
+  type Domain,
   type Lang,
 } from "../data/framework";
 import { useSystem } from "../context/SystemContext";
+import { useAuth } from "../context/AuthContext";
 
 export type ModuleNavTarget = {
   moduleId: string;
@@ -41,21 +44,61 @@ const quickActions: QuickAction[] = [
   { id: "calc", label: { fa: "محاسبات", en: "Calculations" }, icon: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className={iconClass}><rect x="4" y="3" width="16" height="18" rx="2" /><circle cx="9" cy="11" r="2" /><path d="M13 11h4M13 15h4M13 7h4" /></svg>) },
 ];
 
+/* میان‌بر حوزه‌ها — پرکاربردترین‌ها + ثبت میدانی که گروه ندارد.
+ * d17 عمداً در هیچ گروهی نیست؛ فقط از اینجا باز می‌شود. */
+const domainShortcuts = [
+  { id: "d1", icon: "🗂" },
+  { id: "d2", icon: "📅" },
+  { id: "d17", icon: "⚡" },
+];
+
 const selectClass =
   "w-full rounded-lg border b-line-soft bg-[var(--row)] px-2 py-1.5 text-[10.5px] font-light tx1 outline-none transition focus:border-[var(--accent)]";
+
+const GROUP_STORE_KEY = "arena.sidebar.groups";
+
+function loadGroupState(): { open: string | null; supportOpen: boolean } {
+  try {
+    const raw = localStorage.getItem(GROUP_STORE_KEY);
+    if (raw) {
+      const p = JSON.parse(raw) as { open?: unknown; supportOpen?: unknown };
+      return {
+        open: typeof p.open === "string" ? p.open : "pg2",
+        supportOpen: typeof p.supportOpen === "boolean" ? p.supportOpen : true,
+      };
+    }
+  } catch {
+    /* حافظه در دسترس نیست — پیش‌فرض */
+  }
+  return { open: "pg2", supportOpen: true };
+}
 
 export default function RightSidebar({ lang, quickAction, onQuickAction, onNavigate }: Props) {
   const rtl = lang === "fa";
   const { clusters, projectsByCluster, projectScope } = useSystem();
+  const { can } = useAuth();
   const [openDomain, setOpenDomain] = useState<string | null>(null);
   const [selCluster, setSelCluster] = useState<string>(() => projectScope?.clusterId ?? "");
   const [selProject, setSelProject] = useState<string>(() => projectScope?.projectId ?? "");
+  const [groupState, setGroupState] = useState(loadGroupState);
+  const [query, setQuery] = useState("");
+
+  const openGroup = groupState.open;
+  const supportOpen = groupState.supportOpen;
 
   useEffect(() => {
     if (!projectScope) return;
     setSelCluster(projectScope.clusterId);
     setSelProject(projectScope.projectId);
   }, [projectScope]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(GROUP_STORE_KEY, JSON.stringify(groupState));
+    } catch {
+      /* حافظه در دسترس نیست — نادیده */
+    }
+  }, [groupState]);
 
   const toggleDomain = (id: string) => {
     // System administration is global; it never requires an industry/project context.
@@ -68,16 +111,33 @@ export default function RightSidebar({ lang, quickAction, onQuickAction, onNavig
     setSelProject(projectScope?.projectId ?? "");
   };
 
+  /* پرش میان‌بر: گروه میزبان باز می‌شود و فرم ورود همان حوزه باز می‌ماند. */
+  const jumpToDomain = (id: string) => {
+    const d = domains.find((x) => x.id === id);
+    if (!d) return;
+    if (d.group === "support") {
+      setGroupState((s) => ({ ...s, supportOpen: true }));
+    } else if (d.group !== "field") {
+      setGroupState((s) => ({ ...s, open: d.group }));
+    }
+    setOpenDomain(id);
+    setSelCluster(projectScope?.clusterId ?? "");
+    setSelProject(projectScope?.projectId ?? "");
+  };
+
+  const toggleGroup = (id: string, pinned?: boolean) => {
+    if (pinned) {
+      setGroupState((s) => ({ ...s, supportOpen: !s.supportOpen }));
+    } else {
+      setGroupState((s) => ({ ...s, open: s.open === id ? null : id }));
+    }
+  };
+
   const noData = openDomain && selCluster ? (moduleDataGaps[openDomain] ?? []).includes(selCluster) : false;
   const clusterProjects = selCluster && !noData ? projectsByCluster[selCluster] ?? [] : [];
   const canEnter = Boolean(openDomain && selCluster && selProject && !noData);
 
-  /* شمارندهٔ چارچوب از خودِ داده مشتق می‌شود، نه متن ثابت.
-   *
-   * پیش از این «۸ حوزه · ۴۴ فرآیند» کدشده بود و با رشد سامانه به ۱۵
-   * حوزه و ۸۹ فرایند، آن عدد بی‌سروصدا دروغ شد — کسی هم متوجه نمی‌شد
-   * چون هیچ آزمونی متن ثابت را نمی‌سنجد. حالا هر ماژول تازه‌ای که به
-   * `framework.ts` اضافه شود، همین‌جا هم شمرده می‌شود. */
+  /* شمارندهٔ چارچوب از خودِ داده مشتق می‌شود، نه متن ثابت. */
   const domainCount = domains.length;
   const processCount = domains.reduce((n, d) => n + d.processes.length, 0);
   const subCount = domains.reduce(
@@ -85,6 +145,134 @@ export default function RightSidebar({ lang, quickAction, onQuickAction, onNavig
     0,
   );
   const faDigits = (n: number) => n.toLocaleString("fa-IR", { useGrouping: false });
+
+  /* مدیریت سامانه فقط برای نقش مجاز؛ گروه خالی‌شده خودبه‌خود پنهان می‌شود. */
+  const visibleDomains = domains.filter((d) => d.id !== "d7" || can("system.manage"));
+  const fieldDomain = visibleDomains.find((d) => d.group === "field") ?? null;
+
+  const q = query.trim().toLowerCase();
+  const matchesQuery = (d: Domain) => {
+    if (!q) return true;
+    const hay = [
+      d.id,
+      d.title.fa, d.title.en,
+      ...d.processes.flatMap((p) => [p.id, p.title.fa, p.title.en, ...p.subs.flatMap((s) => [s.id, s.title.fa, s.title.en])]),
+    ].join(" ").toLowerCase();
+    return q.split(/\s+/).every((part) => hay.includes(part));
+  };
+  const searching = q.length > 0;
+  const searchHits = searching ? visibleDomains.filter(matchesQuery) : [];
+
+  const groupCounts = (ids: Domain[]) => ({
+    dc: ids.length,
+    pc: ids.reduce((n, d) => n + d.processes.length, 0),
+  });
+
+  const renderDomain = (d: Domain) => {
+    const domainOpen = openDomain === d.id;
+    return (
+      <div key={d.id}>
+        {/* Domain header (level 1) */}
+        <button
+          type="button"
+          onClick={() => toggleDomain(d.id)}
+          className={`glass-row flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-start transition ${domainOpen ? "row-on" : ""}`}
+          style={domainOpen ? { borderColor: d.accent } : undefined}
+          aria-expanded={d.id === "d7" ? undefined : domainOpen}
+        >
+          <span className="chip-bg grid h-8 w-8 shrink-0 place-items-center rounded-lg text-[14px]">{d.icon}</span>
+          <h3 className="min-w-0 flex-1 truncate text-[11px] font-normal leading-4" style={{ color: d.accent }}>
+            {t(d.title, lang)}
+          </h3>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"
+               className={`h-3 w-3 shrink-0 tx4 transition-transform ${domainOpen ? "rotate-180" : ""}`}>
+            <path d="m6 9 6 6 6-6" />
+          </svg>
+        </button>
+
+        {domainOpen && (
+          <div className="fade-rise mt-1 space-y-1">
+            {/* Level 2 — processes */}
+            <div className="rounded-xl border b-line-soft bg-black/10 p-2 space-y-1">
+              {/* فرایندها فهرست می‌شوند ولی باز نمی‌شوند.
+                *
+                * زیرفرایندها در صفحهٔ بعد، در سایدبار فرعی
+                * `ModuleDetail` انتخاب می‌شوند؛ باز کردن دوبارهٔ
+                * همان درخت اینجا فقط یک کلیک اضافه بود. */}
+              {d.processes.map((p) => (
+                <div key={p.id}>
+                  <div className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-start">
+                    <span className="h-1 w-1 shrink-0 rounded-full" style={{ background: d.accent, opacity: 0.5 }} />
+                    <span className="min-w-0 flex-1 truncate text-[10px] font-light tx2">{t(p.title, lang)}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Mini navigation card */}
+            <div className="glass rounded-xl p-3" style={{ borderColor: `${d.accent}55` }}>
+              <div className="mb-2 flex items-center gap-1.5">
+                <i className="h-1.5 w-1.5 rounded-full" style={{ background: d.accent }} />
+                <span className="text-[9.5px] font-normal tx2">
+                  {rtl ? "ورود سریع به این حوزه" : "Quick enter this domain"}
+                </span>
+              </div>
+
+              <label className="mb-2 block">
+                <span className="mb-1 block text-[9px] font-extralight tx3">
+                  {rtl ? "۱) انتخاب صنعت" : "1) Industry"}
+                </span>
+                <select value={selCluster} onChange={(e) => { setSelCluster(e.target.value); setSelProject(""); }} className={selectClass} style={{ colorScheme: "dark" }}>
+                  <option value="">{rtl ? "— انتخاب کنید —" : "— choose —"}</option>
+                  {clusters.map((c) => (<option key={c.id} value={c.id}>{t(c.title, lang)}</option>))}
+                </select>
+              </label>
+
+              {noData && (
+                <div className="fade-rise mb-2 flex items-start gap-2 rounded-lg border border-amber-400/40 bg-amber-400/10 px-2.5 py-2">
+                  <span className="text-[12px] leading-none">⚠️</span>
+                  <span className="text-[9.5px] font-light leading-4 text-amber-400">
+                    {rtl ? "این صنعت برای این حوزه اطلاعاتی ثبت‌شده ندارد." : "No data registered for this industry in this domain."}
+                  </span>
+                </div>
+              )}
+
+              <label className="mb-2.5 block">
+                <span className="mb-1 block text-[9px] font-extralight tx3">
+                  {rtl ? "۲) انتخاب پروژه" : "2) Project"}
+                </span>
+                <select value={selProject} onChange={(e) => setSelProject(e.target.value)} disabled={!selCluster || noData}
+                        className={`${selectClass} disabled:cursor-not-allowed disabled:opacity-40`} style={{ colorScheme: "dark" }}>
+                  <option value="">
+                    {!selCluster ? (rtl ? "ابتدا صنعت را انتخاب کنید" : "Pick an industry first")
+                      : noData ? (rtl ? "اطلاعاتی موجود نیست" : "No data available")
+                        : (rtl ? "— انتخاب کنید —" : "— choose —")}
+                  </option>
+                  {clusterProjects.map((p) => (<option key={p.id} value={p.id}>{p.code} · {t(p.name, lang)}</option>))}
+                </select>
+              </label>
+
+              <button
+                type="button"
+                disabled={!canEnter}
+                onClick={() => canEnter && onNavigate({ moduleId: d.id, clusterId: selCluster, projectId: selProject })}
+                className="w-full rounded-lg px-3 py-2 text-[10.5px] font-normal transition disabled:cursor-not-allowed disabled:opacity-35"
+                style={{ background: canEnter ? `${d.accent}22` : "var(--row)", border: `1px solid ${canEnter ? d.accent : "var(--line-soft)"}`, color: canEnter ? d.accent : "var(--ink4)" }}
+              >
+                {rtl ? "ورود به صفحه حوزه ←" : "Enter domain page →"}
+              </button>
+
+              <div className="mt-2.5 flex items-center gap-1.5 rounded-lg border b-line-soft bg-black/10 px-2 py-1.5">
+                <span className="pulse-dot h-[6px] w-[6px] shrink-0 rounded-full bg-emerald-400" />
+                <span className="text-[8.5px] font-extralight tx3">{rtl ? "محل ذخیره‌سازی:" : "Storage:"}</span>
+                <span className="truncate text-[8.5px] font-light ok-dim-t" dir="ltr">SQL Server (.\SQL2008EXPRESS)</span>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <aside dir={rtl ? "rtl" : "ltr"} className="glass-dark flex h-full w-[320px] shrink-0 flex-col rounded-2xl">
@@ -100,114 +288,111 @@ export default function RightSidebar({ lang, quickAction, onQuickAction, onNavig
             </p>
           </div>
         </div>
+
+        {/* جست‌وجوی زندهٔ حوزه / فرآیند / زیرفرآیند */}
+        <div className="relative mt-2.5">
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={rtl ? "جست‌وجوی حوزه / فرآیند…" : "Search domains / processes…"}
+            className="w-full rounded-lg border b-line-soft bg-black/20 px-2.5 py-1.5 pe-7 text-[10.5px] font-light tx1 outline-none transition placeholder:tx4 focus:border-[var(--accent)]"
+          />
+          {query && (
+            <button
+              type="button"
+              onClick={() => setQuery("")}
+              aria-label={rtl ? "پاک کردن جست‌وجو" : "Clear search"}
+              className="absolute end-2 top-1/2 -translate-y-1/2 rounded px-1 text-[11px] tx4 transition hover:tx1"
+            >
+              ✕
+            </button>
+          )}
+        </div>
+
+        {/* میان‌بر حوزه‌ها */}
+        <div className="mt-2 grid grid-cols-3 gap-1.5">
+          {domainShortcuts.map((s) => {
+            const d = domains.find((x) => x.id === s.id);
+            if (!d) return null;
+            const active = openDomain === d.id;
+            return (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => jumpToDomain(s.id)}
+                title={t(d.title, lang)}
+                className={`flex min-w-0 items-center justify-center gap-1 rounded-lg border px-1.5 py-1.5 text-[9px] font-light transition ${active ? "row-on" : "b-line-soft bg-black/10 tx2 hover:tx1"}`}
+                style={active ? { borderColor: d.accent, color: d.accent } : undefined}
+              >
+                <span className="text-[12px] leading-none">{s.icon}</span>
+                <span className="truncate">{t(d.title, lang).split(" ").slice(0, 2).join(" ")}</span>
+              </button>
+            );
+          })}
+        </div>
       </header>
 
       <div className="thin-scroll flex-1 space-y-2 overflow-y-auto px-3 py-3">
-        {domains.map((d) => {
-          const domainOpen = openDomain === d.id;
-          return (
-            <div key={d.id}>
-              {/* Domain header (level 1) */}
-              <button
-                type="button"
-                onClick={() => toggleDomain(d.id)}
-                className={`glass-row flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-start transition ${domainOpen ? "row-on" : ""}`}
-                style={domainOpen ? { borderColor: d.accent } : undefined}
-                aria-expanded={d.id === "d7" ? undefined : domainOpen}
-              >
-                <span className="chip-bg grid h-8 w-8 shrink-0 place-items-center rounded-lg text-[14px]">{d.icon}</span>
-                <h3 className="min-w-0 flex-1 truncate text-[11px] font-normal leading-4" style={{ color: d.accent }}>
-                  {t(d.title, lang)}
-                </h3>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"
-                     className={`h-3 w-3 shrink-0 tx4 transition-transform ${domainOpen ? "rotate-180" : ""}`}>
-                  <path d="m6 9 6 6 6-6" />
-                </svg>
-              </button>
-
-              {domainOpen && (
-                <div className="fade-rise mt-1 space-y-1">
-                  {/* Level 2 — processes */}
-                  <div className="rounded-xl border b-line-soft bg-black/10 p-2 space-y-1">
-                    {/* فرایندها فهرست می‌شوند ولی باز نمی‌شوند.
-                      *
-                      * زیرفرایندها در صفحهٔ بعد، در سایدبار فرعی
-                      * `ModuleDetail` انتخاب می‌شوند؛ باز کردن دوبارهٔ
-                      * همان درخت اینجا فقط یک کلیک اضافه بود. */}
-                    {d.processes.map((p) => (
-                      <div key={p.id}>
-                        <div className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-start">
-                          <span className="h-1 w-1 shrink-0 rounded-full" style={{ background: d.accent, opacity: 0.5 }} />
-                          <span className="min-w-0 flex-1 truncate text-[10px] font-light tx2">{t(p.title, lang)}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Mini navigation card */}
-                  <div className="glass rounded-xl p-3" style={{ borderColor: `${d.accent}55` }}>
-                    <div className="mb-2 flex items-center gap-1.5">
-                      <i className="h-1.5 w-1.5 rounded-full" style={{ background: d.accent }} />
-                      <span className="text-[9.5px] font-normal tx2">
-                        {rtl ? "ورود سریع به این حوزه" : "Quick enter this domain"}
-                      </span>
-                    </div>
-
-                    <label className="mb-2 block">
-                      <span className="mb-1 block text-[9px] font-extralight tx3">
-                        {rtl ? "۱) انتخاب صنعت" : "1) Industry"}
-                      </span>
-                      <select value={selCluster} onChange={(e) => { setSelCluster(e.target.value); setSelProject(""); }} className={selectClass} style={{ colorScheme: "dark" }}>
-                        <option value="">{rtl ? "— انتخاب کنید —" : "— choose —"}</option>
-                        {clusters.map((c) => (<option key={c.id} value={c.id}>{t(c.title, lang)}</option>))}
-                      </select>
-                    </label>
-
-                    {noData && (
-                      <div className="fade-rise mb-2 flex items-start gap-2 rounded-lg border border-amber-400/40 bg-amber-400/10 px-2.5 py-2">
-                        <span className="text-[12px] leading-none">⚠️</span>
-                        <span className="text-[9.5px] font-light leading-4 text-amber-400">
-                          {rtl ? "این صنعت برای این حوزه اطلاعاتی ثبت‌شده ندارد." : "No data registered for this industry in this domain."}
-                        </span>
-                      </div>
-                    )}
-
-                    <label className="mb-2.5 block">
-                      <span className="mb-1 block text-[9px] font-extralight tx3">
-                        {rtl ? "۲) انتخاب پروژه" : "2) Project"}
-                      </span>
-                      <select value={selProject} onChange={(e) => setSelProject(e.target.value)} disabled={!selCluster || noData}
-                              className={`${selectClass} disabled:cursor-not-allowed disabled:opacity-40`} style={{ colorScheme: "dark" }}>
-                        <option value="">
-                          {!selCluster ? (rtl ? "ابتدا صنعت را انتخاب کنید" : "Pick an industry first")
-                            : noData ? (rtl ? "اطلاعاتی موجود نیست" : "No data available")
-                              : (rtl ? "— انتخاب کنید —" : "— choose —")}
-                        </option>
-                        {clusterProjects.map((p) => (<option key={p.id} value={p.id}>{p.code} · {t(p.name, lang)}</option>))}
-                      </select>
-                    </label>
-
-                    <button
-                      type="button"
-                      disabled={!canEnter}
-                      onClick={() => canEnter && onNavigate({ moduleId: d.id, clusterId: selCluster, projectId: selProject })}
-                      className="w-full rounded-lg px-3 py-2 text-[10.5px] font-normal transition disabled:cursor-not-allowed disabled:opacity-35"
-                      style={{ background: canEnter ? `${d.accent}22` : "var(--row)", border: `1px solid ${canEnter ? d.accent : "var(--line-soft)"}`, color: canEnter ? d.accent : "var(--ink4)" }}
-                    >
-                      {rtl ? "ورود به صفحه حوزه ←" : "Enter domain page →"}
-                    </button>
-
-                    <div className="mt-2.5 flex items-center gap-1.5 rounded-lg border b-line-soft bg-black/10 px-2 py-1.5">
-                      <span className="pulse-dot h-[6px] w-[6px] shrink-0 rounded-full bg-emerald-400" />
-                      <span className="text-[8.5px] font-extralight tx3">{rtl ? "محل ذخیره‌سازی:" : "Storage:"}</span>
-                      <span className="truncate text-[8.5px] font-light ok-dim-t" dir="ltr">SQL Server (.\SQL2008EXPRESS)</span>
-                    </div>
-                  </div>
-                </div>
-              )}
+        {searching ? (
+          searchHits.length ? (
+            searchHits.map(renderDomain)
+          ) : (
+            <div className="rounded-xl border b-line-soft bg-black/10 px-3 py-6 text-center text-[10.5px] font-light tx3">
+              {rtl ? "نتیجه‌ای برای این جست‌وجو نیست." : "No results for this search."}
             </div>
-          );
-        })}
+          )
+        ) : (
+          <>
+            {/* ثبت میدانی گروه ندارد؛ وقتی باز است بالای فهرست سنجاق می‌شود. */}
+            {fieldDomain && openDomain === fieldDomain.id && (
+              <div className="rounded-xl border p-1.5" style={{ borderColor: `${fieldDomain.accent}66`, background: `${fieldDomain.accent}0d` }}>
+                {renderDomain(fieldDomain)}
+              </div>
+            )}
+
+            {sidebarGroups.map((g) => {
+              const members = visibleDomains.filter((d) => d.group === g.id);
+              if (!members.length) return null;
+              const isOpen = g.pinned ? supportOpen : openGroup === g.id;
+              const { dc, pc } = groupCounts(members);
+              return (
+                <div key={g.id}>
+                  <button
+                    type="button"
+                    onClick={() => toggleGroup(g.id, g.pinned)}
+                    aria-expanded={isOpen}
+                    className="flex w-full items-center gap-2 rounded-xl border px-3 py-2 text-start transition hover:bg-[var(--row-hover)]"
+                    style={{ borderColor: `${g.color}44`, background: isOpen ? `${g.color}14` : `${g.color}08` }}
+                  >
+                    <span
+                      className="rounded px-1 py-0.5 font-mono text-[8px] font-medium tabular-nums"
+                      style={{ color: g.color, background: `${g.color}1a`, border: `1px solid ${g.color}44` }}
+                      dir="ltr"
+                    >
+                      {g.short}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate text-[11px] font-medium" style={{ color: g.color }}>
+                      {t(g.title, lang)}
+                    </span>
+                    <span className="shrink-0 text-[8.5px] font-extralight tabular-nums tx4">
+                      {rtl ? `${faDigits(dc)} حوزه · ${faDigits(pc)} فرآیند` : `${dc} · ${pc}`}
+                    </span>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"
+                         className={`h-3 w-3 shrink-0 tx4 transition-transform ${isOpen ? "rotate-180" : ""}`}>
+                      <path d="m6 9 6 6 6-6" />
+                    </svg>
+                  </button>
+
+                  {isOpen && (
+                    <div className="fade-rise mt-1.5 space-y-2 border-s-2 ps-2" style={{ borderColor: `${g.color}33` }}>
+                      {members.map(renderDomain)}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </>
+        )}
       </div>
 
       <nav aria-label={rtl ? "دسترسی سریع" : "Quick access"} className="b-line border-t px-3 pb-3 pt-2.5">
