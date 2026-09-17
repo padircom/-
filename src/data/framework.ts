@@ -791,6 +791,56 @@ export const domains: Domain[] = [
     ],
   },
   {
+    id: "d8",
+    icon: "\U0001F9BA",
+    accent: "#A3E635",
+    title: { fa: "\u0645\u062F\u06CC\u0631\u06CC\u062A \u0627\u06CC\u0645\u0646\u06CC\u060C \u0628\u0647\u062F\u0627\u0634\u062A \u0648 \u0645\u062D\u06CC\u0637\u200C\u0632\u06CC\u0633\u062A (HSE)", en: "Health, Safety & Environment (HSE)" },
+    processes: [
+      {
+        id: "d8-p1",
+        title: { fa: "داشبورد و پایش HSE", en: "HSE Dashboard & Monitoring" },
+        subs: [
+          { id: "d8-p1-s1", title: { fa: "شاخص‌های TRIR/LTIFR و امتیاز HSE", en: "TRIR/LTIFR & HSE score" }, activity: { fa: "پایش نرخ OSHA از من‌اور واقعی", en: "OSHA rates from real man-hours" }, source: "DPR, hse_manhour", sql: ["hse_incident", "hse_manhour"], output: "HSE Dashboard", connectsTo: "PMA / KPI", ai: "AI TRIR Forecast" },
+        ],
+      },
+      {
+        id: "d8-p2",
+        title: { fa: "مدیریت حوادث", en: "Incident Management" },
+        subs: [
+          { id: "d8-p2-s1", title: { fa: "ثبت و رجیستر حوادث", en: "Incident registry" }, activity: { fa: "طبقه‌بندی OSHA و ثبت حادثه", en: "OSHA classification & reporting" }, source: "Field Report, DPR", sql: ["hse_incident"], output: "Incident Register", connectsTo: "CAPA, Claims", ai: "AI Severity Triage" },
+        ],
+      },
+      {
+        id: "d8-p3",
+        title: { fa: "پروانه کار (PTW)", en: "Permit to Work (PTW)" },
+        subs: [
+          { id: "d8-p3-s1", title: { fa: "چرخه صدور و گیت WO", en: "Permit cycle & WO gate" }, activity: { fa: "صدور PTW و کنترل کار پرخطر", en: "PTW issue & high-risk control" }, source: "Work Order", sql: ["hse_permit"], output: "PTW Status", connectsTo: "Work Orders", ai: "AI Permit Risk Check" },
+        ],
+      },
+      {
+        id: "d8-p4",
+        title: { fa: "بازرسی‌ها", en: "Inspections" },
+        subs: [
+          { id: "d8-p4-s1", title: { fa: "چک‌لیست و نمره A–D", en: "Checklist & A-D score" }, activity: { fa: "ثبت بازرسی و سررسید بعدی", en: "Inspection log & next due" }, source: "HSE Walkdown", sql: ["hse_inspection"], output: "Inspection Score", connectsTo: "Actions", ai: "AI Finding Detector" },
+        ],
+      },
+      {
+        id: "d8-p5",
+        title: { fa: "بهداشت و محیط‌زیست", en: "Health & Environment" },
+        subs: [
+          { id: "d8-p5-s1", title: { fa: "TBT، معاینات، پسماند و نشت", en: "TBT, checkups, waste & spills" }, activity: { fa: "پایش بهداشت و محیط‌زیست", en: "Health & env monitoring" }, source: "Clinic, Waste Log", sql: ["hse_tbt"], output: "Health/Env Report", connectsTo: "Governance", ai: "AI Spill Tiering" },
+        ],
+      },
+      {
+        id: "d8-p6",
+        title: { fa: "اقدامات اصلاحی", en: "Corrective Actions" },
+        subs: [
+          { id: "d8-p6-s1", title: { fa: "SLA و ارجاع CAPA", en: "SLA & CAPA tracking" }, activity: { fa: "پیگیری اقدام و ارجاع CAPA", en: "Action follow-up & CAPA referral" }, source: "Inspection, Audit", sql: ["hse_action"], output: "Action Closure", connectsTo: "GOV CAPA", ai: "AI Escalation Watch" },
+        ],
+      },
+    ],
+  },
+  {
     id: "d7",
     icon: "⚙️",
     accent: "#38BDF8",
@@ -897,6 +947,7 @@ export const domainExportFormats: Record<string, FormatKind[]> = {
   d4: ["excel", "word", "pdf", "csv"],                     // Risk / Claims
   d5: ["excel", "pdf", "csv", "xml"],                      // Cost / Procurement
   d6: ["pdf", "word", "excel", "json"],                    // Governance
+  d8: ["excel", "pdf", "csv"],                               // HSE
 };
 
 /* Legacy module shape — derived from domains for backward compatibility */
