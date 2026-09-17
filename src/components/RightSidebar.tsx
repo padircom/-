@@ -29,7 +29,7 @@ type QuickAction = { id: string; label: Bi; alert?: string; icon: ReactNode };
 const iconClass = "h-4 w-4";
 
 const moduleDataGaps: Record<string, string[]> = {
-  d1: ["c3"], d2: [], d3: ["c5"], d4: ["c2", "c3"], d5: ["c4"], d6: [], d8: [], d7: [],
+  d1: ["c3"], d2: [], d3: ["c5"], d4: ["c2", "c3"], d5: ["c4"], d6: [], d8: [], d7: [], d17: [],
 };
 
 const quickActions: QuickAction[] = [
@@ -48,7 +48,6 @@ export default function RightSidebar({ lang, quickAction, onQuickAction, onNavig
   const rtl = lang === "fa";
   const { clusters, projectsByCluster, projectScope } = useSystem();
   const [openDomain, setOpenDomain] = useState<string | null>(null);
-  const [openProcess, setOpenProcess] = useState<string | null>(null);
   const [selCluster, setSelCluster] = useState<string>(() => projectScope?.clusterId ?? "");
   const [selProject, setSelProject] = useState<string>(() => projectScope?.projectId ?? "");
 
@@ -65,7 +64,6 @@ export default function RightSidebar({ lang, quickAction, onQuickAction, onNavig
       return;
     }
     setOpenDomain((prev) => (prev === id ? null : id));
-    setOpenProcess(null);
     setSelCluster(projectScope?.clusterId ?? "");
     setSelProject(projectScope?.projectId ?? "");
   };
@@ -73,7 +71,20 @@ export default function RightSidebar({ lang, quickAction, onQuickAction, onNavig
   const noData = openDomain && selCluster ? (moduleDataGaps[openDomain] ?? []).includes(selCluster) : false;
   const clusterProjects = selCluster && !noData ? projectsByCluster[selCluster] ?? [] : [];
   const canEnter = Boolean(openDomain && selCluster && selProject && !noData);
-  const totalSubs = (dId: string) => domains.find(d => d.id === dId)?.processes.reduce((n, p) => n + p.subs.length, 0) ?? 0;
+
+  /* شمارندهٔ چارچوب از خودِ داده مشتق می‌شود، نه متن ثابت.
+   *
+   * پیش از این «۸ حوزه · ۴۴ فرآیند» کدشده بود و با رشد سامانه به ۱۵
+   * حوزه و ۸۹ فرایند، آن عدد بی‌سروصدا دروغ شد — کسی هم متوجه نمی‌شد
+   * چون هیچ آزمونی متن ثابت را نمی‌سنجد. حالا هر ماژول تازه‌ای که به
+   * `framework.ts` اضافه شود، همین‌جا هم شمرده می‌شود. */
+  const domainCount = domains.length;
+  const processCount = domains.reduce((n, d) => n + d.processes.length, 0);
+  const subCount = domains.reduce(
+    (n, d) => n + d.processes.reduce((m, p) => m + p.subs.length, 0),
+    0,
+  );
+  const faDigits = (n: number) => n.toLocaleString("fa-IR", { useGrouping: false });
 
   return (
     <aside dir={rtl ? "rtl" : "ltr"} className="glass-dark flex h-full w-[320px] shrink-0 flex-col rounded-2xl">
@@ -83,7 +94,9 @@ export default function RightSidebar({ lang, quickAction, onQuickAction, onNavig
           <div className="min-w-0">
             <h2 className="truncate text-[12.5px] font-normal tx1">{t(ui.frameworkTitle, lang)}</h2>
             <p className="mt-0.5 text-[9.5px] font-extralight tx3">
-              {rtl ? "۸ حوزه · ۴۴ فرآیند · مدیریت سامانه" : "8 Domains · 44 Processes · System Admin"}
+{rtl
+                ? `${faDigits(domainCount)} حوزه · ${faDigits(processCount)} فرآیند · ${faDigits(subCount)} زیرفرآیند`
+                : `${domainCount} Domains · ${processCount} Processes · ${subCount} Sub-processes`}
             </p>
           </div>
         </div>
@@ -106,12 +119,6 @@ export default function RightSidebar({ lang, quickAction, onQuickAction, onNavig
                 <h3 className="min-w-0 flex-1 truncate text-[11px] font-normal leading-4" style={{ color: d.accent }}>
                   {t(d.title, lang)}
                 </h3>
-                <span
-                  className="rounded-md px-1.5 py-0.5 text-[9px] font-light tabular-nums"
-                  style={{ color: d.accent, background: `${d.accent}1a`, border: `1px solid ${d.accent}44` }}
-                >
-                  {totalSubs(d.id).toLocaleString(rtl ? "fa-IR" : "en")}
-                </span>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"
                      className={`h-3 w-3 shrink-0 tx4 transition-transform ${domainOpen ? "rotate-180" : ""}`}>
                   <path d="m6 9 6 6 6-6" />
@@ -122,68 +129,19 @@ export default function RightSidebar({ lang, quickAction, onQuickAction, onNavig
                 <div className="fade-rise mt-1 space-y-1">
                   {/* Level 2 — processes */}
                   <div className="rounded-xl border b-line-soft bg-black/10 p-2 space-y-1">
-                    {d.processes.map((p) => {
-                      const pOpen = openProcess === p.id;
-                      return (
-                        <div key={p.id}>
-                          <button
-                            type="button"
-                            onClick={() => setOpenProcess(pOpen ? null : p.id)}
-                            className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-start transition hover:bg-[var(--row-hover)]"
-                          >
-                            <span className="h-1 w-1 shrink-0 rounded-full" style={{ background: d.accent, opacity: pOpen ? 1 : 0.5 }} />
-                            <span className="min-w-0 flex-1 truncate text-[10px] font-light tx2">{t(p.title, lang)}</span>
-                            <span className="text-[8.5px] font-extralight tx4 tabular-nums">
-                              {p.subs.length.toLocaleString(rtl ? "fa-IR" : "en")}
-                            </span>
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
-                                 className={`h-2.5 w-2.5 shrink-0 tx4 transition-transform ${pOpen ? "rotate-180" : ""}`}>
-                              <path d="m6 9 6 6 6-6" />
-                            </svg>
-                          </button>
-
-                          {/* Level 3 — sub-processes with SQL + AI */}
-                          {pOpen && (
-                            <div className="fade-rise mt-1 ms-3 space-y-1 border-s b-line-soft ps-2">
-                              {p.subs.map((s) => (
-                                <button
-                                  key={s.id}
-                                  type="button"
-                                  onClick={() =>
-                                    canEnter
-                                      ? onNavigate({ moduleId: d.id, clusterId: selCluster, projectId: selProject, processId: p.id, subId: s.id })
-                                      : undefined
-                                  }
-                                  disabled={!canEnter}
-                                  title={canEnter ? (rtl ? "ورود به این زیرفرآیند" : "Open this sub-process") : (rtl ? "ابتدا صنعت و پروژه را انتخاب کنید" : "Pick industry & project first")}
-                                  className="w-full rounded-lg border b-line-soft bg-[var(--row)] px-2 py-1.5 text-start transition hover:border-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-70"
-                                >
-                                  <div className="flex items-start gap-1.5">
-                                    <span className="mt-0.5 h-1 w-1 shrink-0 rounded-full" style={{ background: d.accent }} />
-                                    <div className="min-w-0 flex-1">
-                                      <div className="truncate text-[9.5px] font-light tx1">{t(s.title, lang)}</div>
-                                      <div className="mt-1 flex flex-wrap items-center gap-1">
-                                        {s.sql.map((tbl) => (
-                                          <span key={tbl} className="rounded bg-sky-400/10 px-1 py-[1px] text-[7.5px] font-light text-sky-300" dir="ltr" title="SQL Server table">
-                                            🗄 {tbl}
-                                          </span>
-                                        ))}
-                                        <span className="rounded bg-fuchsia-400/10 px-1 py-[1px] text-[7.5px] font-light text-fuchsia-300" dir="ltr" title="AI function">
-                                          ✨ {s.ai}
-                                        </span>
-                                      </div>
-                                      <div className="mt-0.5 truncate text-[7.5px] font-extralight tx4" dir="ltr">
-                                        src: {s.source} · out: {s.output}
-                                      </div>
-                                    </div>
-                                  </div>
-                                </button>
-                              ))}
-                            </div>
-                          )}
+                    {/* فرایندها فهرست می‌شوند ولی باز نمی‌شوند.
+                      *
+                      * زیرفرایندها در صفحهٔ بعد، در سایدبار فرعی
+                      * `ModuleDetail` انتخاب می‌شوند؛ باز کردن دوبارهٔ
+                      * همان درخت اینجا فقط یک کلیک اضافه بود. */}
+                    {d.processes.map((p) => (
+                      <div key={p.id}>
+                        <div className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-start">
+                          <span className="h-1 w-1 shrink-0 rounded-full" style={{ background: d.accent, opacity: 0.5 }} />
+                          <span className="min-w-0 flex-1 truncate text-[10px] font-light tx2">{t(p.title, lang)}</span>
                         </div>
-                      );
-                    })}
+                      </div>
+                    ))}
                   </div>
 
                   {/* Mini navigation card */}

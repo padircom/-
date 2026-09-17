@@ -1,219 +1,498 @@
-import { test } from "node:test";
+import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  actionEscalation,
-  actionSla,
-  hseScore,
-  inspectionBand,
-  inspectionScore,
-  isLostTime,
-  isRecordable,
-  ltifr,
-  ptwCanTransition,
-  ptwMissing,
-  recycleRate,
-  severityWeight,
-  spillTier,
-  tbtCompliance,
-  trir,
+  PERMIT_TYPES, PERMIT_TYPE_FA, HIGH_RISK_PERMITS, PERMIT_STATUS_FA,
+  INCIDENT_TYPES, INCIDENT_TYPE_FA, RECORDABLE_TYPES, LOST_TIME_TYPES,
+  validatePermitInput, canApprovePermit, permitState, rfsuSafetyClearance,
+  validateIncidentInput, suggestSeverity, canCloseIncident, safetyMetrics,
+  trainingValidity, hseSummary, hseAlerts,
 } from "./hseLogic.js";
 
-const INC = [
-  { type: "near_miss" },
-  { type: "first_aid" },
-  { type: "medical" },
-  { type: "lost_time" },
-];
+const NOW = new Date("2026-09-09T12:00:00Z");
 
-test("recordable: فقط medical به بالا", () => {
-  assert.equal(isRecordable("near_miss"), false);
-  assert.equal(isRecordable("first_aid"), false);
-  assert.equal(isRecordable("medical"), true);
-  assert.equal(isRecordable("fatality"), true);
-  assert.equal(isLostTime("medical"), false);
-  assert.equal(isLostTime("lost_time"), true);
-});
+function permit(over = {}) {
+  return {
+    Id: "p1", ProjectId: "p", PermitNo: "PTW-001", PermitType: "cold",
+    TitleFa: "تعویض واشر", SystemId: "s1", RequestedBy: "u-site",
+    ValidFrom: "2026-09-09T06:00:00Z", ValidTo: "2026-09-09T18:00:00Z",
+    Status: "draft", ...over,
+  };
+}
 
-test("TRIR/LTIFR با ضریب ۲۰۰٬۰۰۰", () => {
-  assert.equal(trir(INC, 200000), 2); // medical + lost_time
-  assert.equal(ltifr(INC, 200000), 1);
-  assert.equal(trir(INC, 0), 0);
-  assert.equal(trir([], 200000), 0);
-});
+function incident(over = {}) {
+  return {
+    Id: "i1", ProjectId: "p", IncidentNo: "INC-001", TitleFa: "لغزش",
+    IncidentType: "near_miss", OccurredAt: "2026-09-01T08:00:00Z",
+    ReportedBy: "u-hse", Severity: "low", Status: "open", ...over,
+  };
+}
 
-test("وزن شدت صعودی است", () => {
-  assert.ok(severityWeight("fatality") > severityWeight("lost_time"));
-  assert.ok(severityWeight("lost_time") > severityWeight("medical"));
-  assert.ok(severityWeight("medical") > severityWeight("first_aid"));
-  assert.ok(severityWeight("first_aid") > severityWeight("near_miss"));
-});
+/* ══════════════ ثابت‌ها ══════════════ */
 
-test("PTW: چرخه کامل draft تا closed", () => {
-  assert.equal(ptwCanTransition("draft", "request", "requester").to, "requested");
-  assert.equal(ptwCanTransition("requested", "approve", "area_authority").to, "approved");
-  assert.equal(ptwCanTransition("approved", "activate", "performing_authority").to, "active");
-  assert.equal(ptwCanTransition("active", "close", "hse_officer").to, "closed");
-});
-
-test("PTW: نقش اشتباه و گذار نامعتبر", () => {
-  assert.equal(ptwCanTransition("requested", "approve", "requester").code, "ROLE_NOT_ALLOWED");
-  assert.equal(ptwCanTransition("draft", "activate", "performing_authority").code, "INVALID_TRANSITION");
-  assert.equal(ptwCanTransition("active", "bogus", "admin").code, "INVALID_ACTION");
-});
-
-test("PTW: تعلیق و بازگشت", () => {
-  assert.equal(ptwCanTransition("active", "suspend", "hse_officer").to, "suspended");
-  assert.equal(ptwCanTransition("suspended", "resume", "area_authority").to, "active");
-  assert.equal(ptwCanTransition("suspended", "close", "performing_authority").to, "closed");
-});
-
-test("PTW: پیش‌شرط نوع‌کار", () => {
-  assert.deepEqual(ptwMissing("cold", {}), []);
-  assert.deepEqual(ptwMissing("hot", { gasTest: true }), ["barricade"]);
-  assert.deepEqual(ptwMissing("confined", {}), ["gasTest", "rescuePlan"]);
-  assert.deepEqual(ptwMissing("electrical", { isolation: true }), []);
-});
-
-test("بازرسی: امتیاز و باند (N/A حذف می‌شود)", () => {
-  assert.equal(inspectionScore([{ ok: true }, { ok: false }, { ok: true, na: true }]), 50);
-  assert.equal(inspectionScore([]), 0);
-  assert.equal(inspectionBand(92), "A");
-  assert.equal(inspectionBand(80), "B");
-  assert.equal(inspectionBand(60), "C");
-  assert.equal(inspectionBand(59), "D");
-});
-
-test("اقدام: SLA سه‌حالته", () => {
-  assert.equal(actionSla({ dueISO: "2026-09-04", closedAt: "2026-09-03" }, "2026-09-08"), "closed");
-  assert.equal(actionSla({ dueISO: "2026-09-04", closedAt: null }, "2026-09-08"), "overdue");
-  assert.equal(actionSla({ dueISO: "2026-09-10", closedAt: null }, "2026-09-08"), "due_soon");
-  assert.equal(actionSla({ dueISO: "2026-09-20", closedAt: null }, "2026-09-08"), "ok");
-});
-
-test("اقدام: تشدید تا L3 برای critical معوق", () => {
-  const now = "2026-09-08";
-  assert.equal(actionEscalation({ dueISO: "2026-08-28", closedAt: null, severity: "critical" }, now), "L3");
-  assert.equal(actionEscalation({ dueISO: "2026-09-01", closedAt: null, severity: "high" }, now), "L2");
-  assert.equal(actionEscalation({ dueISO: "2026-09-07", closedAt: null, severity: "low" }, now), "L1");
-  assert.equal(actionEscalation({ dueISO: "2026-09-20", closedAt: null, severity: "low" }, now), "L0");
-});
-
-test("TBT و پسماند در بازه ۰..۱", () => {
-  assert.equal(tbtCompliance(24, 21), 0.875);
-  assert.equal(tbtCompliance(0, 5), 0);
-  assert.equal(recycleRate(1840, 5200), 0.354);
-  assert.equal(recycleRate(10, 0), 0);
-});
-
-test("رده نشت T1..T3", () => {
-  assert.equal(spillTier(12), "T1");
-  assert.equal(spillTier(20), "T2");
-  assert.equal(spillTier(250), "T3");
-});
-
-test("امتیاز HSE: TRIR صفر سبز کامل نیست مگر بقیه کامل", () => {
-  const full = hseScore({ trir: 0, ptwCompliance: 1, inspectionAvg: 100, actionClosure: 1 });
-  assert.deepEqual(full, { total: 100, band: "Green" });
-  const bad = hseScore({ trir: 4, ptwCompliance: 0.5, inspectionAvg: 60, actionClosure: 0.4 });
-  assert.equal(bad.band, "Red"); // 0 + 12.5 + 12 + 8 = 32.5 → 33
-  assert.equal(bad.total, 33);
-});
-
-test("امتیاز HSE: میانه زرد", () => {
-  const mid = hseScore({ trir: 1, ptwCompliance: 0.8, inspectionAvg: 78, actionClosure: 0.6 });
-  assert.equal(mid.band, "Yellow"); // 26.25 + 20 + 15.6 + 12 = 73.85 → 74
-  assert.equal(mid.total, 74);
-});
-
-// ── D3: ثبت و گیت ──
-import {
-  nextInspectionDue,
-  validateIncident,
-  validateInspection,
-  validatePermit,
-  woPermitGate,
-} from "./hseLogic.js";
-
-test("D3 validateIncident: نمونه معتبر بدون خطا", () => {
-  assert.deepEqual(
-    validateIncident({ dateISO: "2026-09-08", type: "medical", lostDays: 0, area: "FND", descFa: "تست", status: "open" }),
-    []
-  );
-  assert.deepEqual(
-    validateIncident({ dateISO: "2026-09-08", type: "spill", area: "Laydown", descFa: "نشت", volumeL: 12 }),
-    []
-  );
-});
-
-test("D3 validateIncident: خطاها", () => {
-  const e = validateIncident({ dateISO: "bad", type: "alien", lostDays: -1, area: "", descFa: "" });
-  for (const c of ["DATE_INVALID", "TYPE_UNKNOWN", "LOSTDAYS_INVALID", "AREA_REQUIRED", "DESC_REQUIRED"]) {
-    assert.ok(e.includes(c), c);
-  }
-  assert.ok(validateIncident({ dateISO: "2026-09-08", type: "spill", area: "A", descFa: "x" }).includes("VOLUME_REQUIRED"));
-  assert.ok(validateIncident({ dateISO: "2026-09-08", type: "medical", area: "A", descFa: "x", status: "weird" }).includes("STATUS_UNKNOWN"));
-});
-
-test("D3 validatePermit: معتبر و نامعتبر", () => {
-  assert.deepEqual(
-    validatePermit({ type: "hot", workDate: "2026-09-09", area: "Yard", riskLevel: "high" }),
-    []
-  );
-  const e = validatePermit({ type: "steam", workDate: "09-09", area: "", riskLevel: "extreme" });
-  for (const c of ["TYPE_UNKNOWN", "DATE_INVALID", "AREA_REQUIRED", "RISK_UNKNOWN"]) {
-    assert.ok(e.includes(c), c);
+test("هر نوع پروانه برچسب فارسی دارد", () => {
+  for (const t of PERMIT_TYPES) {
+    assert.ok(PERMIT_TYPE_FA[t], `برچسب ${t} نیست`);
   }
 });
 
-test("D3 validateInspection: معتبر و نامعتبر", () => {
-  assert.deepEqual(
-    validateInspection({ area: "Yard", dateISO: "2026-09-08", items: [{ item: "کپسول", ok: true }] }),
-    []
-  );
-  assert.ok(validateInspection({ area: "Yard", dateISO: "2026-09-08", items: [] }).includes("ITEMS_REQUIRED"));
-  const e = validateInspection({ area: "", dateISO: "bad", items: [{ ok: true }] });
-  assert.ok(e.includes("AREA_REQUIRED") && e.includes("DATE_INVALID") && e.includes("I1:ITEM_TEXT_REQUIRED"));
+test("هر نوع رویداد برچسب فارسی دارد", () => {
+  for (const t of INCIDENT_TYPES) {
+    assert.ok(INCIDENT_TYPE_FA[t], `برچسب ${t} نیست`);
+  }
 });
 
-test("D3 gate: کار سرد/عمومی نیاز به PTW ندارد", () => {
-  assert.equal(woPermitGate({ workType: "cold", workDate: "2026-09-09" }, []).verdict, "allow");
-  assert.equal(woPermitGate({ workType: "general", workDate: "2026-09-09" }, []).reason, "NO_PERMIT_NEEDED");
+test("شبه‌حادثه و کمک اولیه ثبت‌شدنی نیستند", () => {
+  assert.ok(!RECORDABLE_TYPES.includes("near_miss"), "شمردن شبه‌حادثه تیم را از گزارش آن بازمی‌دارد");
+  assert.ok(!RECORDABLE_TYPES.includes("first_aid"));
+  assert.ok(RECORDABLE_TYPES.includes("lost_time"));
+  assert.ok(RECORDABLE_TYPES.includes("fatality"));
 });
 
-test("D3 gate: PTW فعالِ هم‌نوع/هم‌روز/هم‌ناحیه allow", () => {
-  const r = woPermitGate(
-    { workType: "hot", area: "Yard", workDate: "2026-09-09" },
-    [{ no: "PTW-1", type: "hot", status: "active", workDate: "2026-09-09", area: "Yard" }]
-  );
-  assert.equal(r.verdict, "allow");
-  assert.equal(r.permitNo, "PTW-1");
+test("حوادث از کارافتادگی زیرمجموعهٔ ثبت‌شدنی‌اند", () => {
+  for (const t of LOST_TIME_TYPES) {
+    assert.ok(RECORDABLE_TYPES.includes(t), `${t} باید ثبت‌شدنی باشد`);
+  }
 });
 
-test("D3 gate: بدون PTW فعال — warn در advisory و block در hard", () => {
-  const permits = [{ no: "PTW-9", type: "hot", status: "approved", workDate: "2026-09-09", area: "Yard" }];
-  const soft = woPermitGate({ workType: "hot", workDate: "2026-09-09" }, permits, "advisory");
-  assert.equal(soft.verdict, "warn");
-  assert.equal(soft.ok, true);
-  assert.deepEqual(soft.pending, ["PTW-9"]);
-  const hard = woPermitGate({ workType: "hot", workDate: "2026-09-09" }, permits, "hard");
-  assert.equal(hard.verdict, "block");
-  assert.equal(hard.ok, false);
+test("کار گرم و فضای بسته و گودبرداری پرخطرند", () => {
+  assert.ok(HIGH_RISK_PERMITS.includes("hot"));
+  assert.ok(HIGH_RISK_PERMITS.includes("confined"));
+  assert.ok(!HIGH_RISK_PERMITS.includes("cold"));
 });
 
-test("D3 gate: ناهماهنگی ناحیه/تاریخ/وضعیت یعنی تطبیق نیست", () => {
-  const permits = [
-    { no: "PTW-A", type: "hot", status: "active", workDate: "2026-09-09", area: "Tank" },
-    { no: "PTW-B", type: "hot", status: "closed", workDate: "2026-09-09", area: "Yard" },
-    { no: "PTW-C", type: "hot", status: "active", workDate: "2026-09-08", area: "Yard" },
+/* ══════════════ اعتبارسنجی پروانه ══════════════ */
+
+test("پروانهٔ درست خطا ندارد", () => {
+  assert.deepEqual(validatePermitInput(permit()), []);
+});
+
+test("شمارهٔ پروانه الزامی است", () => {
+  const e = validatePermitInput(permit({ PermitNo: "  " }));
+  assert.ok(e.some((x) => x.code === "E-HSE-PERMIT-NO-REQUIRED"));
+});
+
+test("نوع پروانهٔ نامعتبر رد می‌شود", () => {
+  const e = validatePermitInput(permit({ PermitType: "flying" }));
+  assert.ok(e.some((x) => x.code === "E-HSE-PERMIT-TYPE"));
+});
+
+test("پایان اعتبار پیش از شروع رد می‌شود", () => {
+  const e = validatePermitInput(permit({
+    ValidFrom: "2026-09-09T18:00:00Z", ValidTo: "2026-09-09T06:00:00Z",
+  }));
+  assert.ok(e.some((x) => x.code === "E-HSE-VALIDITY-RANGE"));
+});
+
+test("بازهٔ اعتبار غایب رد می‌شود", () => {
+  const e = validatePermitInput(permit({ ValidFrom: "", ValidTo: "" }));
+  assert.ok(e.some((x) => x.code === "E-HSE-VALIDITY-REQUIRED"));
+});
+
+/* ══════════════ تأیید پروانه ══════════════ */
+
+test("کار سرد ساده تأیید می‌شود", () => {
+  const r = canApprovePermit(permit(), "u-hse");
+  assert.equal(r.ok, true, JSON.stringify(r.blockersFa));
+});
+
+test("کار گرم بدون SIMOPS تأیید نمی‌شود", () => {
+  const r = canApprovePermit(permit({ PermitType: "hot", GasTestResultFa: "0% LEL" }), "u-hse");
+  assert.equal(r.ok, false);
+  assert.ok(r.blockersFa.some((b) => b.includes("SIMOPS")));
+});
+
+test("کار گرم بدون آزمون گاز تأیید نمی‌شود", () => {
+  const r = canApprovePermit(permit({
+    PermitType: "hot", SimopsApprovedBy: "u-hse",
+  }), "u-hse");
+  assert.equal(r.ok, false);
+  assert.ok(r.blockersFa.some((b) => b.includes("آزمون گاز")));
+});
+
+test("کار گرم با هر دو تأییدیه مجاز است", () => {
+  const r = canApprovePermit(permit({
+    PermitType: "hot", SimopsApprovedBy: "u-hse", GasTestResultFa: "0% LEL",
+  }), "u-safety");
+  assert.equal(r.ok, true, JSON.stringify(r.blockersFa));
+});
+
+test("درخواست‌کننده نمی‌تواند پروانهٔ خودش را تأیید کند", () => {
+  const r = canApprovePermit(permit(), "u-site");
+  assert.equal(r.ok, false);
+  assert.ok(r.blockersFa.some((b) => b.includes("درخواست‌کننده")));
+});
+
+test("پروانهٔ بسته دوباره تأیید نمی‌شود", () => {
+  const r = canApprovePermit(permit({ Status: "closed" }), "u-hse");
+  assert.equal(r.ok, false);
+});
+
+test("پروانهٔ معتبر دوباره تأیید نمی‌شود", () => {
+  const r = canApprovePermit(permit({ Status: "active" }), "u-hse");
+  assert.equal(r.ok, false);
+  assert.ok(r.blockersFa.some((b) => b.includes("قبلاً تأیید")));
+});
+
+test("SimopsRequired صریح، کار سرد را هم مشمول می‌کند", () => {
+  const r = canApprovePermit(permit({ SimopsRequired: true }), "u-hse");
+  assert.equal(r.ok, false);
+  assert.ok(r.blockersFa.some((b) => b.includes("SIMOPS")));
+});
+
+test("همهٔ موانع یک‌جا برمی‌گردند", () => {
+  const r = canApprovePermit(permit({ PermitType: "hot", RequestedBy: "u-hse" }), "u-hse");
+  assert.ok(r.blockersFa.length >= 3, `انتظار چند مانع، دریافت ${r.blockersFa.length}`);
+});
+
+/* ══════════════ وضعیت پروانه ══════════════ */
+
+test("پروانهٔ داخل بازه معتبر است", () => {
+  const s = permitState(permit({ Status: "active" }), NOW);
+  assert.equal(s.effectiveStatus, "active");
+  assert.equal(s.isValidNow, true);
+  assert.equal(s.expiresInHours, 6);
+});
+
+test("انقضا از تاریخ محاسبه می‌شود نه از ستون وضعیت", () => {
+  const s = permitState(permit({ Status: "active" }), new Date("2026-09-10T00:00:00Z"));
+  assert.equal(s.effectiveStatus, "expired", "پروانهٔ بسته‌نشده نباید تا ابد معتبر بماند");
+  assert.equal(s.isValidNow, false);
+  assert.equal(s.statusFa, PERMIT_STATUS_FA.expired);
+});
+
+test("پروانهٔ پیش از شروع بازه معتبر نیست", () => {
+  const s = permitState(permit({ Status: "active" }), new Date("2026-09-09T05:00:00Z"));
+  assert.equal(s.isValidNow, false);
+});
+
+test("پروانهٔ پیش‌نویس معتبر نیست", () => {
+  const s = permitState(permit(), NOW);
+  assert.equal(s.isValidNow, false);
+  assert.equal(s.expiresInHours, null);
+});
+
+/* ══════════════ دروازهٔ ایمنی RFSU ══════════════ */
+
+test("سیستم بدون پروانهٔ باز دروازه‌اش باز است", () => {
+  const r = rfsuSafetyClearance({
+    systemId: "s1",
+    permits: [permit({ Status: "closed" })],
+    now: NOW,
+  });
+  assert.equal(r.ok, true, JSON.stringify(r.blockersFa));
+});
+
+test("پروانهٔ باز مانع سخت RFSU است", () => {
+  const r = rfsuSafetyClearance({
+    systemId: "s1",
+    permits: [permit({ Status: "active" })],
+    now: NOW,
+  });
+  assert.equal(r.ok, false);
+  assert.equal(r.openPermits, 1);
+  assert.ok(r.blockersFa[0].includes("پروانهٔ کار باز"));
+});
+
+test("پروانهٔ منقضی هشدار است نه مانع", () => {
+  const r = rfsuSafetyClearance({
+    systemId: "s1",
+    permits: [permit({ Status: "active" })],
+    now: new Date("2026-09-11T00:00:00Z"),
+  });
+  assert.equal(r.ok, true, "فراموشی اداری نباید دروازه را ببندد");
+  assert.equal(r.expiredPermits, 1);
+  assert.ok(r.warningsFa[0].includes("منقضی"));
+});
+
+test("رویداد بحرانی باز مانع سخت است", () => {
+  const r = rfsuSafetyClearance({
+    systemId: "s1",
+    permits: [],
+    incidents: [incident({ SystemId: "s1", Severity: "critical" })],
+    now: NOW,
+  });
+  assert.equal(r.ok, false);
+  assert.equal(r.openHighSeverityIncidents, 1);
+});
+
+test("رویداد بستهٔ بحرانی مانع نیست", () => {
+  const r = rfsuSafetyClearance({
+    systemId: "s1",
+    permits: [],
+    incidents: [incident({ SystemId: "s1", Severity: "critical", Status: "closed" })],
+    now: NOW,
+  });
+  assert.equal(r.ok, true);
+});
+
+test("رویداد کم‌شدت باز فقط هشدار است", () => {
+  const r = rfsuSafetyClearance({
+    systemId: "s1",
+    permits: [],
+    incidents: [incident({ SystemId: "s1", Severity: "low" })],
+    now: NOW,
+  });
+  assert.equal(r.ok, true);
+  assert.ok(r.warningsFa.length >= 1);
+});
+
+test("پروانهٔ سیستم دیگر شمرده نمی‌شود", () => {
+  const r = rfsuSafetyClearance({
+    systemId: "s1",
+    permits: [permit({ SystemId: "s2", Status: "active" })],
+    now: NOW,
+  });
+  assert.equal(r.ok, true);
+  assert.equal(r.openPermits, 0);
+});
+
+test("سیستم بدون هیچ داده دروازه‌اش باز است", () => {
+  const r = rfsuSafetyClearance({ systemId: "s9", permits: [], now: NOW });
+  assert.equal(r.ok, true);
+  assert.deepEqual(r.blockersFa, []);
+});
+
+/* ══════════════ رویداد ایمنی ══════════════ */
+
+test("رویداد درست خطا ندارد", () => {
+  assert.deepEqual(validateIncidentInput(incident()), []);
+});
+
+test("نوع رویداد نامعتبر رد می‌شود", () => {
+  const e = validateIncidentInput(incident({ IncidentType: "alien" }));
+  assert.ok(e.some((x) => x.code === "E-HSE-INCIDENT-TYPE"));
+});
+
+test("حادثهٔ از کارافتادگی بدون روز رد می‌شود", () => {
+  const e = validateIncidentInput(incident({ IncidentType: "lost_time", Severity: "high" }));
+  assert.ok(e.some((x) => x.code === "E-HSE-LOST-DAYS"), "بدون روز، LTIFR بی‌معناست");
+});
+
+test("فوت نیازی به روز از دست رفته ندارد", () => {
+  const e = validateIncidentInput(incident({ IncidentType: "fatality", Severity: "critical" }));
+  assert.ok(!e.some((x) => x.code === "E-HSE-LOST-DAYS"));
+});
+
+test("شدت پیشنهادی با نوع رویداد می‌خواند", () => {
+  assert.equal(suggestSeverity("fatality"), "critical");
+  assert.equal(suggestSeverity("lost_time", 3), "high");
+  assert.equal(suggestSeverity("lost_time", 30), "critical");
+  assert.equal(suggestSeverity("near_miss"), "low");
+  assert.equal(suggestSeverity("environmental"), "high");
+});
+
+test("بستن رویداد بدون ریشه‌یابی رد می‌شود", () => {
+  const r = canCloseIncident(incident({ CorrectiveActionFa: "نصب حفاظ" }));
+  assert.equal(r.ok, false);
+  assert.ok(r.blockersFa.some((b) => b.includes("ریشه‌یابی")));
+});
+
+test("بستن رویداد بدون اقدام اصلاحی رد می‌شود", () => {
+  const r = canCloseIncident(incident({ RootCauseFa: "کف لغزنده" }));
+  assert.equal(r.ok, false);
+  assert.ok(r.blockersFa.some((b) => b.includes("اقدام اصلاحی")));
+});
+
+test("رویداد با ریشه‌یابی و اقدام بسته می‌شود", () => {
+  const r = canCloseIncident(incident({
+    RootCauseFa: "کف لغزنده", CorrectiveActionFa: "نصب کفپوش",
+  }));
+  assert.equal(r.ok, true);
+});
+
+test("رویداد بسته دوباره بسته نمی‌شود", () => {
+  const r = canCloseIncident(incident({
+    Status: "closed", RootCauseFa: "x", CorrectiveActionFa: "y",
+  }));
+  assert.equal(r.ok, false);
+});
+
+/* ══════════════ شاخص‌ها ══════════════ */
+
+test("LTIFR و TRIR با فرمول استاندارد محاسبه می‌شوند", () => {
+  const inc = [
+    incident({ IncidentType: "lost_time", LostDays: 5 }),
+    incident({ Id: "i2", IncidentType: "medical_treatment" }),
+    incident({ Id: "i3", IncidentType: "near_miss" }),
   ];
-  const r = woPermitGate({ workType: "hot", area: "Yard", workDate: "2026-09-09" }, permits);
-  assert.equal(r.verdict, "warn");
-  assert.equal(r.permitNo, undefined);
+  const m = safetyMetrics(inc, 100_000);
+  assert.equal(m.lostTime, 1);
+  assert.equal(m.recordable, 2, "شبه‌حادثه ثبت‌شدنی نیست");
+  assert.equal(m.ltifr, 10, "(1 × 1000000) ÷ 100000");
+  assert.equal(m.trir, 4, "(2 × 200000) ÷ 100000");
+  assert.equal(m.lostDays, 5);
+  assert.equal(m.nearMiss, 1);
 });
 
-test("D3 nextInspectionDue: قاعده باند", () => {
-  assert.equal(nextInspectionDue("2026-09-04", "B"), "2026-10-04");
-  assert.equal(nextInspectionDue("2026-09-06", "D"), "2026-09-13");
-  assert.equal(nextInspectionDue("2026-09-05", "A"), "2026-12-04");
-  assert.equal(nextInspectionDue("2026-09-05", "C"), "2026-09-19");
+test("بدون نفر-ساعت شاخص null است نه صفر", () => {
+  const m = safetyMetrics([incident({ IncidentType: "lost_time", LostDays: 2 })], null);
+  assert.equal(m.ltifr, null, "صفر یعنی ایمن؛ null یعنی نمی‌دانیم");
+  assert.equal(m.trir, null);
+  assert.equal(m.manHours, null);
+});
+
+test("نفر-ساعت صفر یا منفی نادیده گرفته می‌شود", () => {
+  assert.equal(safetyMetrics([], 0).ltifr, null);
+  assert.equal(safetyMetrics([], -5).trir, null);
+});
+
+test("خلاصهٔ خالی صفر می‌دهد نه خطا", () => {
+  const m = safetyMetrics([], 1000);
+  assert.equal(m.total, 0);
+  assert.equal(m.ltifr, 0);
+  assert.equal(m.byType.near_miss, 0, "همهٔ کلیدها باید باشند");
+});
+
+test("byType همهٔ انواع را حتی با صفر دارد", () => {
+  const m = safetyMetrics([incident()], 1000);
+  for (const t of INCIDENT_TYPES) {
+    assert.ok(t in m.byType, `کلید ${t} غایب است`);
+  }
+});
+
+/* ══════════════ آموزش ══════════════ */
+
+function training(over = {}) {
+  return {
+    Id: "t1", ProjectId: "p", PersonRef: "w1", CourseCode: "HSE-101",
+    CourseTitleFa: "ایمنی عمومی", CompletedAt: "2026-01-01",
+    ExpiresAt: "2027-01-01", Status: "valid", ...over,
+  };
+}
+
+test("آموزش معتبر شناسایی می‌شود", () => {
+  const v = trainingValidity([training()], "w1", NOW);
+  assert.equal(v.hasValid, true);
+  assert.deepEqual(v.validCourses, ["HSE-101"]);
+});
+
+test("آموزش منقضی شناسایی می‌شود", () => {
+  const v = trainingValidity([training({ ExpiresAt: "2026-01-01" })], "w1", NOW);
+  assert.equal(v.hasValid, false);
+  assert.deepEqual(v.expiredCourses, ["HSE-101"]);
+});
+
+test("آموزش بدون انقضا همیشه معتبر است", () => {
+  const v = trainingValidity([training({ ExpiresAt: null })], "w1", NOW);
+  assert.equal(v.hasValid, true);
+});
+
+test("آموزش باطل‌شده معتبر نیست", () => {
+  const v = trainingValidity([training({ Status: "revoked" })], "w1", NOW);
+  assert.equal(v.hasValid, false);
+});
+
+test("آموزش نزدیک انقضا هشدار می‌دهد", () => {
+  const v = trainingValidity([training({ ExpiresAt: "2026-09-20" })], "w1", NOW);
+  assert.equal(v.hasValid, true);
+  assert.deepEqual(v.expiringSoonCourses, ["HSE-101"]);
+});
+
+test("فرد بدون سابقه معتبر نیست", () => {
+  const v = trainingValidity([training()], "w9", NOW);
+  assert.equal(v.hasValid, false);
+});
+
+/* ══════════════ خلاصه و هشدار ══════════════ */
+
+test("خلاصهٔ کلی درست جمع می‌زند", () => {
+  const s = hseSummary({
+    permits: [permit({ Status: "active" }), permit({ Id: "p2", PermitType: "hot", Status: "closed" })],
+    incidents: [incident({ IncidentType: "lost_time", LostDays: 3 })],
+    inspections: [{
+      Id: "s1", ProjectId: "p", InspectionNo: "SI-1", TitleFa: "بازدید",
+      InspectionType: "walkthrough", InspectedAt: "2026-09-01", InspectedBy: "u",
+      FindingsCount: 5, ClosedFindings: 2, ScorePct: 80, Status: "completed",
+    }],
+    manHours: 50_000,
+    now: NOW,
+  });
+  assert.equal(s.permits.total, 2);
+  assert.equal(s.permits.active, 1);
+  assert.equal(s.permits.byType.hot, 1);
+  assert.equal(s.permits.byType.lifting, 0, "همهٔ کلیدها باید باشند");
+  assert.equal(s.incidents.lostTime, 1);
+  assert.equal(s.inspections.openFindings, 3);
+  assert.equal(s.inspections.avgScorePct, 80);
+});
+
+test("خلاصهٔ بدون بازرسی میانگین null می‌دهد", () => {
+  const s = hseSummary({ permits: [], incidents: [], now: NOW });
+  assert.equal(s.inspections.avgScorePct, null);
+  assert.equal(s.inspections.openFindings, 0);
+});
+
+test("هشدار پروانهٔ نزدیک انقضا", () => {
+  const a = hseAlerts({
+    permits: [permit({ Status: "active", ValidTo: "2026-09-09T14:00:00Z" })],
+    incidents: [],
+    now: NOW,
+  });
+  assert.ok(a.some((x) => x.code === "EWS-HSE-01"));
+});
+
+test("هشدار پروانهٔ منقضی بسته‌نشده", () => {
+  const a = hseAlerts({
+    permits: [permit({ Status: "active" })],
+    incidents: [],
+    now: new Date("2026-09-11T00:00:00Z"),
+  });
+  const e = a.find((x) => x.code === "EWS-HSE-02");
+  assert.ok(e);
+  assert.equal(e.severity, "high");
+});
+
+test("هشدار رویداد بحرانی باز", () => {
+  const a = hseAlerts({
+    permits: [],
+    incidents: [incident({ Severity: "critical" })],
+    now: NOW,
+  });
+  const e = a.find((x) => x.code === "EWS-HSE-03");
+  assert.ok(e);
+  assert.equal(e.severity, "critical");
+});
+
+test("سه رویداد هم‌نوع هشدار سیستمی می‌دهد", () => {
+  const a = hseAlerts({
+    permits: [],
+    incidents: [
+      incident({ Id: "a", IncidentType: "first_aid" }),
+      incident({ Id: "b", IncidentType: "first_aid" }),
+      incident({ Id: "c", IncidentType: "first_aid" }),
+    ],
+    now: NOW,
+  });
+  assert.ok(a.some((x) => x.code === "EWS-HSE-04"));
+});
+
+test("تکرار شبه‌حادثه هشدار سیستمی نمی‌دهد", () => {
+  const a = hseAlerts({
+    permits: [],
+    incidents: [
+      incident({ Id: "a" }), incident({ Id: "b" }), incident({ Id: "c" }),
+    ],
+    now: NOW,
+  });
+  assert.ok(!a.some((x) => x.code === "EWS-HSE-04"), "گزارش شبه‌حادثه باید تشویق شود نه جریمه");
+});
+
+test("هشدار آموزش منقضی", () => {
+  const a = hseAlerts({
+    permits: [],
+    incidents: [],
+    training: [training({ ExpiresAt: "2026-01-01" })],
+    now: NOW,
+  });
+  assert.ok(a.some((x) => x.code === "EWS-HSE-05"));
+});
+
+test("وضعیت پاک هیچ هشداری ندارد", () => {
+  const a = hseAlerts({
+    permits: [permit({ Status: "closed" })],
+    incidents: [incident({ Status: "closed" })],
+    training: [training()],
+    now: NOW,
+  });
+  assert.deepEqual(a, []);
 });

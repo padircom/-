@@ -3,3 +3,48 @@ dist/
 test-results/
 playwright-report/
 .env
+server/data/
+# دادهٔ اجرای محلی (از server/seed.mjs) — جدا از server/data تا آزمون‌ها آلوده نشوند
+server/rundata/
+
+# باندل‌های تولیدی esbuild برای تست‌های Node (بازتولید: npm test)
+server/finLogic.js
+server/qmsLogic.js
+server/pexLogic.js
+server/pexModelBundle.js
+server/hrmLogic.js
+server/ckmLogic.js
+server/rptLogic.js
+server/rbacLogic.js
+server/sqlLogic.js
+server/itgLogic.js
+
+# پیکربندی موقت پیش‌نمایش (خارج از تحویلی)
+vite.preview.config.mts
+
+# ── بقایای git-dir در ریشه ────────────────────────────────────
+#
+# یک `.git` روزی در ریشه رها شده بود و فایل‌های داخلی‌اش اشتباهاً
+# کامیت شدند: `HEAD`, `index`, `COMMIT_EDITMSG`, `description`,
+# `hooks/`, `refs/`, `logs/`, `info/` و پوشه‌های آبجکت دوحرفی.
+#
+# در کامیت تمیزکاری حذف شدند. این بندها جلوی بازگشتشان را می‌گیرند —
+# چون هر بار که کسی `git init` را جای اشتباه بزند، دوباره ظاهر
+# می‌شوند و کسی متوجه نمی‌شود.
+/HEAD
+/index
+/COMMIT_EDITMSG
+/description
+/hooks/
+/refs/
+/logs/
+/info/
+/objects/
+/branches/
+/packed-refs
+/ORIG_HEAD
+/FETCH_HEAD
+# پوشه‌های آبجکت گیت: دقیقاً دو نویسهٔ هگز در ریشه
+/[0-9a-f][0-9a-f]/
+
+# سرویس ساختگی AI فقط برای عیب‌یابی محلی است و در تولید اجرا نمی‌شود.

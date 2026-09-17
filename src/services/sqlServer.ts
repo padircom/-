@@ -15,7 +15,7 @@
 export type ConnectionStatus = "connected" | "connecting" | "offline" | "error";
 
 export type SqlConfig = {
-  apiBaseUrl: string;      // e.g. http://localhost:4000/api
+  apiBaseUrl: string;      // نسبی مثل "/api" یا مطلق برای بک‌اند جدا
   server: string;          // e.g. .\SQL2008EXPRESS
   database: string;        // e.g. PMIS_MASTER_DB
   user: string;
@@ -27,7 +27,16 @@ export type SqlConfig = {
 };
 
 export const defaultSqlConfig: SqlConfig = {
-  apiBaseUrl: "http://localhost:4000/api",
+  /* نشانی نسبی، نه localhost.
+   *
+   * مرورگر کاربر روی ماشین خودش اجرا می‌شود، پس `http://localhost:4000`
+   * را روی همان کامپیوتر می‌جوید نه روی سرور — و اگر چیزی آنجا نباشد،
+   * «ارتباط با سرور برقرار نشد» می‌گیرد حتی وقتی سرور سالم است.
+   *
+   * با `/api` درخواست به همان میزبانی می‌رود که صفحه را داده و
+   * پروکسی سرور آن را به بک‌اند می‌رساند. این هم در پیش‌نمایش کار
+   * می‌کند و هم روی سرور واقعی. */
+  apiBaseUrl: "/api",
   server: ".\\SQL2008EXPRESS",
   database: "PMIS_MASTER_DB",
   user: "sa",
@@ -40,10 +49,23 @@ export const defaultSqlConfig: SqlConfig = {
 
 export const SQL_CONFIG_STORE = "pmis:sql-config:v1";
 
+/**
+ * نشانی‌های ذخیره‌شده‌ای که فقط روی ماشین خود کاربر معنا دارند.
+ *
+ * کسی که پیش از این تنظیمات را ذخیره کرده، `http://localhost:4000/api`
+ * در حافظه‌اش نشسته و با تغییر پیش‌فرض هم اصلاح نمی‌شود؛ برنامه برای
+ * او همچنان خراب می‌ماند بدون آنکه بداند چرا.
+ */
+const isStaleLoopback = (url: unknown): boolean =>
+  typeof url === "string" && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/i.test(url);
+
 export const loadSqlConfig = (): SqlConfig => {
   try {
     const raw = localStorage.getItem(SQL_CONFIG_STORE);
-    return raw ? { ...defaultSqlConfig, ...JSON.parse(raw) } : defaultSqlConfig;
+    if (!raw) return defaultSqlConfig;
+    const saved = JSON.parse(raw) as Partial<SqlConfig>;
+    if (isStaleLoopback(saved.apiBaseUrl)) saved.apiBaseUrl = defaultSqlConfig.apiBaseUrl;
+    return { ...defaultSqlConfig, ...saved };
   } catch {
     return defaultSqlConfig;
   }

@@ -1,0 +1,32 @@
+ERMHDR	19.12	2026-09-08	Project	admin	Arena Engineering	Admin	USD	OG-2401 Gas Processing
+%T	CURRTYPE
+%F	curr_id	curr_short_name
+%R	1	IRR
+%T	CALENDAR
+%F	clndr_id	clndr_name	day_hr_cnt	default_flag
+%R	C1	Standard 8h	8	Y
+%R	C2	Shift 12h	12	N
+%T	PROJECT
+%F	proj_id	proj_short_name	last_recalc_date	plan_start_date
+%R	P1	OG-2401	2026-09-04 08:00	2026-08-01 08:00
+%T	PROJWBS
+%F	wbs_id	proj_id	wbs_short_name	wbs_name	parent_wbs_id
+%R	W1	P1	OG	کل پروژه	
+%R	W2	P1	OG.CIV	عملیات عمرانی	W1
+%R	W3	P1	OG.MEC	عملیات مکانیکال	W1
+%T	TASK
+%F	task_id	proj_id	wbs_id	clndr_id	task_code	task_name	status_code	target_start_date	target_end_date	act_start_date	act_end_date	target_drtn_hr_cnt	total_float_hr_cnt	free_float_hr_cnt	phys_complete_pct	cstr_type	driving_path_flag
+%R	T1	P1	W2	C1	CIV-1010	خاکبرداری محوطه	TK_Complete	2026-08-01 08:00	2026-08-15 17:00	2026-08-02 08:00	2026-08-16 17:00	80	0	0	100	CS_MSOA	Y
+%R	T2	P1	W2	C1	CIV-1020	بتن مگر فونداسیون	TK_Active	2026-08-16 08:00	2026-08-30 17:00	2026-08-17 08:00		80	0	0	60		Y
+%R	T3	P1	W2	C1	CIV-1030	آرماتوربندی و قالب‌بندی	TK_NotStart	2026-08-31 08:00	2026-09-20 17:00			120	40	16	0	CS_MEOB	N
+%R	T4	P1	W3	C2	MEC-2010	نصب اسکید تفکیک‌گر	TK_NotStart	2026-09-21 08:00	2026-10-30 17:00			360	96	0	0		N
+%R	T5	P1	W3	C1	MEC-2020	تست هیدرواستاتیک	TK_NotStart	2026-11-01 08:00	2026-11-10 17:00			64	-16	0	0		Y
+%T	TASKPRED
+%F	task_pred_id	task_id	pred_task_id	pred_type	lag_hr_cnt	clndr_id
+%R	R1	T2	T1	PR_FS	0	C1
+%R	R2	T3	T2	PR_FS	16	C1
+%R	R3	T4	T3	PR_SS	40	C1
+%R	R4	T5	T4	PR_FS	0	C1
+%R	R5	T5	T9	PR_FS	0	C1
+%R	R6	T4	T2	PR_XX	8	C1
+%E

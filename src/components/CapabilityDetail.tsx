@@ -423,7 +423,7 @@ export default function CapabilityDetail({
               <div className="flex items-center gap-2">
                 <span className="text-[13px]">⏱</span>
                 <span className="text-[12px] font-medium tx1">
-                  {rtl ? "کارگاه کنترل پروژه" : "Project Control Workshop"}
+                  {rtl ? "کارگاه برنامه‌ریزی" : "Planning Workshop"}
                 </span>
               </div>
               

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Lang } from "../data/framework";
-import type { PexActivity } from "../data/pexProject";
+import type { PexActivity } from "../data/pexSnapshot";
 import {
   createDpr,
   dprAction,

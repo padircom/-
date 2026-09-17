@@ -4,7 +4,7 @@
  * خطاهای ثبت (create/action) به فراخواننده برمی‌گردد.
  */
 import { loadSqlConfig } from "./sqlServer";
-import type { HseIncidentStatus, HseIncidentType, PtwStatus, PtwType } from "./hse";
+import type { HseIncidentStatus, HseIncidentType, PtwStatus, PtwType } from "./hseField";
 
 export interface HseIncidentDto {
   id: string;

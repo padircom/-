@@ -1,7 +1,16 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { DEMO_SUBJECTS, ROLE_CATALOG, effectivePermissions } from "../services/accessControl";
 import { type Lang } from "../data/framework";
 
-export type RoleCode = "admin" | "project_manager" | "planner" | "site_engineer" | "consultant" | "client" | "executive";
+/* کدهای نقش با `ROLE_CATALOG` موتور RBAC یکی‌اند. پیش از این، این فهرست
+ * دستی و کوتاه‌تر بود و کاربرانی مثل مدیر پیمان اصلاً در رابط کاربری وجود
+ * نداشتند — یعنی سرور مجوزشان را می‌شناخت ولی کاربر نمی‌توانست وارد شود و
+ * ۴۰۳ می‌گرفت. حالا فهرست از خود موتور مشتق می‌شود. */
+export type RoleCode =
+  | "admin" | "project_manager" | "planner" | "site_engineer" | "consultant"
+  | "client" | "executive" | "contracts_manager" | "cost_controller"
+  | "qc_inspector" | "qa_manager" | "hr_manager" | "doc_controller"
+  | "pmo" | "engineering_manager" | "design_lead" | "subcontractor" | "auditor";
 
 export type PermissionCode =
   | "system.manage"
@@ -52,35 +61,70 @@ type AuthContextType = {
 const AUTH_USER_STORE = "pmis:auth-user:v1";
 const AUDIT_STORE = "pmis:audit-log:v1";
 
-export const roleLabels: Record<RoleCode, { fa: string; en: string }> = {
-  admin: { fa: "مدیر سامانه", en: "System Admin" },
-  project_manager: { fa: "مدیر پروژه", en: "Project Manager" },
-  planner: { fa: "کارشناس برنامه‌ریزی", en: "Planner" },
-  site_engineer: { fa: "کارگاه / اجرا", en: "Site Engineer" },
-  consultant: { fa: "مشاور", en: "Consultant" },
-  client: { fa: "کارفرما", en: "Client" },
-  executive: { fa: "مدیر ارشد", en: "Executive" },
+export const roleLabels: Record<string, { fa: string; en: string }> = Object.fromEntries(
+  ROLE_CATALOG.map((r) => [r.code, { fa: r.title.fa, en: r.title.en }]),
+);
+
+/* نگاشت نقش‌های ریز موتور به مجوزهای درشت رابط کاربری.
+ *
+ * دو فهرست مجوز عمداً یکی نمی‌شوند: موتور ۷۶ مجوز ریز برای تصمیم سمت سرور
+ * دارد و رابط کاربری ۱۱ مجوز درشت برای نمایش و غیرفعال کردن دکمه. یکی کردنشان
+ * یعنی هر بار افزودن مجوز به سرور، رابط کاربری هم باید عوض شود. آنچه واقعاً
+ * باگ می‌ساخت واگرایی فهرست کاربران و نقش‌ها بود، نه ریزدانگی متفاوت مجوزها. */
+const ENGINE_TO_UI: Record<string, PermissionCode[]> = {
+  "sys.config.manage": ["system.manage"],
+  "sys.user.manage": ["system.manage"],
+  "core.portfolio.view": ["portfolio.view"],
+  "core.project.view": ["project.view"],
+  "core.project.edit": ["project.edit"],
+  "core.ai.run": ["ai.run"],
+  "plan.progress.report": ["report.daily.edit"],
+  "plan.schedule.edit": ["schedule.edit"],
+  "plan.baseline.set": ["schedule.edit"],
+  "report.official.publish": ["report.approve"],
+  "report.internal.generate": ["report.approve"],
+  "doc.document.approve": ["report.approve"],
+  "rcc.risk.edit": ["risk.edit"],
+  "rcc.claim.edit": ["claim.edit"],
+  "rcc.claim.submit": ["claim.edit"],
+  "fin.cost.view": ["cost.view"],
+  "cnt.contract.view": ["cost.view"],
 };
 
-export const rolePermissions: Record<RoleCode, PermissionCode[]> = {
-  admin: ["system.manage", "portfolio.view", "project.view", "project.edit", "report.daily.edit", "report.approve", "schedule.edit", "risk.edit", "claim.edit", "cost.view", "ai.run"],
-  project_manager: ["portfolio.view", "project.view", "project.edit", "report.daily.edit", "report.approve", "schedule.edit", "risk.edit", "claim.edit", "cost.view", "ai.run"],
-  planner: ["portfolio.view", "project.view", "schedule.edit", "report.daily.edit", "ai.run"],
-  site_engineer: ["project.view", "report.daily.edit"],
-  consultant: ["portfolio.view", "project.view", "report.approve", "risk.edit", "claim.edit"],
-  client: ["portfolio.view", "project.view", "report.approve", "cost.view"],
-  executive: ["portfolio.view", "project.view", "cost.view", "ai.run"],
-};
+export const rolePermissions: Record<string, PermissionCode[]> = Object.fromEntries(
+  ROLE_CATALOG.map((r) => {
+    const ui = new Set<PermissionCode>();
+    for (const grant of effectivePermissions(r.code)) {
+      for (const p of ENGINE_TO_UI[grant] ?? []) ui.add(p);
+    }
+    return [r.code, [...ui]];
+  }),
+);
 
-const demoUsers: AuthUser[] = [
-  { id: "u-admin", username: "admin", displayName: "محمدرضا هاشمی‌پور", role: "admin", email: "admin@pmis.local", projectIds: ["*"], active: true },
-  { id: "u-pm", username: "pm.azadegan", displayName: "مدیر پروژه آزادگان", role: "project_manager", email: "pm@pmis.local", projectIds: ["c1-p1", "c1-p2"], active: true },
-  { id: "u-planner", username: "planner", displayName: "کارشناس برنامه‌ریزی", role: "planner", email: "planner@pmis.local", projectIds: ["*"], active: true },
-  { id: "u-site", username: "site.engineer", displayName: "سرپرست کارگاه", role: "site_engineer", email: "site@pmis.local", projectIds: ["c1-p1"], active: true },
-  { id: "u-consultant", username: "consultant", displayName: "نماینده مشاور", role: "consultant", email: "consultant@pmis.local", projectIds: ["c1-p1", "c5-p1"], active: true },
-  { id: "u-client", username: "client", displayName: "نماینده کارفرما", role: "client", email: "client@pmis.local", projectIds: ["c1-p1", "c3-p1"], active: true },
-  { id: "u-ceo", username: "ceo", displayName: "مدیر ارشد", role: "executive", email: "ceo@pmis.local", projectIds: ["*"], active: true },
-];
+/* کاربران نمونه از همان فهرستی می‌آیند که سرور برای ارزیابی مجوز استفاده
+ * می‌کند. پیش از این دو فهرست دستی جدا بودند و کاربرانی مثل `u-contracts`
+ * (مدیر پیمان) فقط سمت سرور وجود داشتند؛ نتیجه این بود که سرور مجوزشان را
+ * می‌شناخت ولی هیچ‌کس در رابط کاربری نمی‌توانست به آن هویت وارد شود و هر
+ * ثبت پیمان ۴۰۳ می‌گرفت.
+ *
+ * کاربران عمداً معیوب کنار گذاشته می‌شوند: `u-over` دو نقش متضاد دارد و برای
+ * آزمون تفکیک وظیفه ساخته شده، `u-left` غیرفعال است. */
+const EXCLUDED_FROM_LOGIN = new Set(["u-over", "u-left"]);
+
+const demoUsers: AuthUser[] = DEMO_SUBJECTS.filter(
+  (sub) => sub.active && !EXCLUDED_FROM_LOGIN.has(sub.id),
+).map((sub) => {
+  const username = sub.id.replace(/^u-/, "");
+  return {
+    id: sub.id,
+    username,
+    displayName: sub.displayName,
+    role: (sub.roles[0] ?? "viewer") as RoleCode,
+    email: `${username}@pmis.local`,
+    projectIds: sub.projectIds,
+    active: sub.active,
+  };
+});
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
