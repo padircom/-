@@ -358,21 +358,15 @@ export default function RightSidebar({ lang, quickAction, onQuickAction, onNavig
               const isOpen = g.pinned ? supportOpen : openGroup === g.id;
               const { dc, pc } = groupCounts(members);
               return (
-                <div key={g.id}>
+                <div key={g.id} className="border-b b-line-soft pb-1.5 last:border-b-0 last:pb-0">
                   <button
                     type="button"
                     onClick={() => toggleGroup(g.id, g.pinned)}
                     aria-expanded={isOpen}
-                    className="flex w-full items-center gap-2 rounded-xl border px-3 py-2 text-start transition hover:bg-[var(--row-hover)]"
-                    style={{ borderColor: `${g.color}44`, background: isOpen ? `${g.color}14` : `${g.color}08` }}
+                    className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-start transition hover:bg-[var(--row-hover)]"
+                    style={isOpen ? { background: `${g.color}14` } : undefined}
                   >
-                    <span
-                      className="rounded px-1 py-0.5 font-mono text-[8px] font-medium tabular-nums"
-                      style={{ color: g.color, background: `${g.color}1a`, border: `1px solid ${g.color}44` }}
-                      dir="ltr"
-                    >
-                      {g.short}
-                    </span>
+                    <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: g.color }} />
                     <span className="min-w-0 flex-1 truncate text-[11px] font-medium" style={{ color: g.color }}>
                       {t(g.title, lang)}
                     </span>
