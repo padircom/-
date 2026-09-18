@@ -138,6 +138,7 @@ export default function App() {
   const [cluster, setCluster] = useState<string | null>("c1");
   const [source, setSource] = useState<string | null>("p6");
   const [moduleNav, setModuleNav] = useState<ModuleNavTarget | null>(null);
+  const [drawer, setDrawer] = useState<"left" | "right" | null>(null);
 
   useEffect(() => {
     document.documentElement.lang = lang;
@@ -175,20 +176,43 @@ export default function App() {
     if (projectId) changeScope(clusterId, projectId);
   };
 
+  /* زیر `lg` دو پانل کناری به صورت کشوی روی هم باز می‌شوند؛ از `lg` به بالا
+     دقیقاً مثل قبل سر جایشان docking می‌شوند (static، عرض ثابت، بدون درآور). */
+  const drawerClass = (side: "left" | "right") => {
+    const dock = "lg:static lg:block lg:shrink-0 lg:z-auto lg:w-auto lg:max-w-none lg:p-0";
+    if (drawer !== side) return `hidden ${dock}`;
+    return side === "left"
+      ? `fixed inset-y-0 start-0 z-50 w-[88vw] max-w-[300px] p-2 ${dock}`
+      : `fixed inset-y-0 end-0 z-50 w-[90vw] max-w-[340px] p-2 ${dock}`;
+  };
+
   return (
-    <div className="flex h-screen w-screen flex-col overflow-hidden">
+    <div className="flex h-[100dvh] w-screen flex-col overflow-hidden">
       {/* ═══ Expanded corporate command bar ═══ */}
       <header
         dir="ltr"
-        className="glass-dark relative z-20 flex min-h-[76px] shrink-0 items-center gap-3 border-x-0 border-t-0 px-4 py-3"
+        className="glass-dark relative z-20 flex min-h-[64px] shrink-0 flex-wrap items-center gap-2 border-x-0 border-t-0 px-3 py-2 lg:min-h-[76px] lg:gap-3 lg:px-4 lg:py-3"
       >
         {/* ── fixed left corner: live dock + switchers (never moves) ── */}
         <div className="order-first flex shrink-0 items-center gap-2">
+          {/* موبایل: باز کردن پانل منابع داده */}
+          {!moduleNav && (
+            <button
+              type="button"
+              onClick={() => setDrawer("left")}
+              aria-label={rtl ? "منابع داده" : "Data sources"}
+              title={rtl ? "منابع داده" : "Data sources"}
+              className="chip-bg b-line grid h-9 w-9 shrink-0 place-items-center rounded-xl text-[14px] lg:hidden"
+            >
+              🔌
+            </button>
+          )}
+
           <div className="hidden md:block">
             <EnvWidgets lang={lang} />
           </div>
 
-          <span className="hline h-6 w-px" />
+          <span className="hline hidden h-6 w-px md:block" />
 
           {/* FA / EN language switcher */}
           <div className="toggle-shell flex items-center gap-1 rounded-xl p-[3px]" dir="ltr">
@@ -233,7 +257,7 @@ export default function App() {
           <span className="chip-bg b-line grid h-11 w-11 shrink-0 place-items-center rounded-2xl text-[20px] ring-1">◈</span>
           <div className="min-w-0">
             <h1 className="truncate text-[15px] font-light tx1">{t(ui.hubTitle, lang)}</h1>
-            <p className="mt-0.5 flex items-center gap-1.5 truncate text-[10px] font-normal">
+            <p className="mt-0.5 hidden items-center gap-1.5 truncate text-[10px] font-normal sm:flex">
               <span className="font-medium tx2">
                 {rtl
                   ? "سازنده: محمدرضا هاشمی‌پور"
@@ -249,24 +273,51 @@ export default function App() {
               <span className="font-extralight tx4">Beta 1.1.0</span>
             </p>
           </div>
+          {/* موبایل: باز کردن پانل ماژول‌ها / چارچوب */}
+          {!moduleNav && (
+            <button
+              type="button"
+              onClick={() => setDrawer("right")}
+              aria-label={rtl ? "ماژول‌ها" : "Modules"}
+              title={rtl ? "ماژول‌ها" : "Modules"}
+              className="chip-bg b-line grid h-9 w-9 shrink-0 place-items-center rounded-xl text-[14px] lg:hidden"
+            >
+              🧩
+            </button>
+          )}
         </div>
 
       </header>
 
       {/* ═══ Three co-existing pillars (physical order locked, LTR flex) ═══ */}
-      <main dir="ltr" className="flex min-h-0 flex-1 gap-3 p-3">
+      <main dir="ltr" className="relative flex min-h-0 flex-1 gap-2 p-2 lg:gap-3 lg:p-3">
+        {drawer && (
+          <button
+            type="button"
+            aria-label="close"
+            onClick={() => setDrawer(null)}
+            className="fixed inset-0 z-40 bg-black/55 backdrop-blur-[2px] lg:hidden"
+          />
+        )}
+
         {/* سایدبار منابع داده هم مثل سایدبار چارچوب فقط در صفحهٔ اصلی
           * می‌ماند. در صفحهٔ حوزه، فضای کاری به پنل تخصصی می‌رسد و
           * ۲۴۸ پیکسل دیگر آزاد می‌شود. */}
         {!moduleNav && (
-          <LeftSidebar
-            lang={lang}
-            activeSource={source}
-            onPick={(id) => setSource(id === source ? null : id)}
-          />
+          <div className={drawerClass("left")}>
+            <LeftSidebar
+              lang={lang}
+              activeSource={source}
+              onPick={(id) => {
+                setSource(id === source ? null : id);
+                setDrawer(null);
+              }}
+              className="w-full lg:w-[248px]"
+            />
+          </div>
         )}
 
-        <section className="flex min-w-0 flex-1 flex-col gap-3 overflow-hidden">
+        <section className="flex min-w-0 flex-1 flex-col gap-2 overflow-hidden lg:gap-3">
           {moduleNav ? (
             <Suspense fallback={<div className="glass flex flex-1 items-center justify-center rounded-2xl text-[11px] tx3">…</div>}>
               <ModuleDetail
@@ -316,21 +367,26 @@ export default function App() {
           * بازگشت از راه دکمهٔ «بازگشت» درون خودِ صفحهٔ حوزه انجام
           * می‌شود (`onBack`)، پس هیچ مسیری بن‌بست نمی‌شود. */}
         {!moduleNav && (
-          <RightSidebar
-            lang={lang}
-            quickAction={quickAction}
-            onQuickAction={(id) => {
-              setQuickAction(id);
-              setModuleNav(null);
-            }}
-            onNavigate={(target) => {
-              if (target.moduleId !== "d7" && target.clusterId && target.projectId) {
-                changeScope(target.clusterId, target.projectId);
-              }
-              setModuleNav(target);
-              setQuickAction("home");
-            }}
-          />
+          <div className={drawerClass("right")}>
+            <RightSidebar
+              lang={lang}
+              quickAction={quickAction}
+              onQuickAction={(id) => {
+                setQuickAction(id);
+                setModuleNav(null);
+                setDrawer(null);
+              }}
+              onNavigate={(target) => {
+                if (target.moduleId !== "d7" && target.clusterId && target.projectId) {
+                  changeScope(target.clusterId, target.projectId);
+                }
+                setModuleNav(target);
+                setQuickAction("home");
+                setDrawer(null);
+              }}
+              className="w-full lg:w-[320px]"
+            />
+          </div>
         )}
       </main>
     </div>

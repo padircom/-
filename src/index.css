@@ -302,3 +302,31 @@ html[data-theme="light"] ::placeholder {
   border-radius: 99px;
 }
 .thin-scroll::-webkit-scrollbar-track { background: transparent; }
+
+/* ══════════════════════════════════════════════════════════════
+   MOBILE / TABLET ADAPTATION
+   The shell is a desktop command centre; on phones the two side
+   panels turn into overlay drawers (see App.tsx) and the dense
+   card grids collapse to a single readable column.
+   Unlayered rules win over Tailwind's layered utilities.
+   ══════════════════════════════════════════════════════════════ */
+@media (max-width: 1023px) {
+  /* wide tables / charts may scroll sideways instead of being clipped */
+  .thin-scroll { overflow-x: auto; }
+}
+
+@media (max-width: 640px) {
+  .grid-cols-2,
+  .grid-cols-3,
+  .grid-cols-4,
+  .grid-cols-5,
+  .grid-cols-6 {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  /* let long labels & codes wrap instead of overflowing their card */
+  .truncate { overflow: visible; text-overflow: clip; white-space: normal; }
+
+  /* roomier tap targets inside lists */
+  .glass-row { min-height: 38px; }
+}
