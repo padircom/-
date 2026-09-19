@@ -187,11 +187,11 @@ export default function App() {
   };
 
   return (
-    <div className="flex h-[100dvh] w-screen flex-col overflow-hidden">
+    <div className="app-shell flex w-screen flex-col overflow-hidden">
       {/* ═══ Expanded corporate command bar ═══ */}
       <header
         dir="ltr"
-        className="glass-dark relative z-20 flex min-h-[64px] shrink-0 flex-wrap items-center gap-2 border-x-0 border-t-0 px-3 py-2 lg:min-h-[76px] lg:gap-3 lg:px-4 lg:py-3"
+        className="glass-dark relative z-20 flex min-h-[64px] shrink-0 flex-wrap items-center gap-2 border-x-0 border-t-0 px-3 py-2 lg:min-h-[76px] lg:flex-nowrap lg:gap-3 lg:px-4 lg:py-3"
       >
         {/* ── fixed left corner: live dock + switchers (never moves) ── */}
         <div className="order-first flex shrink-0 items-center gap-2">

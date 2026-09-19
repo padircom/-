@@ -330,3 +330,11 @@ html[data-theme="light"] ::placeholder {
   /* roomier tap targets inside lists */
   .glass-row { min-height: 38px; }
 }
+
+/* پوستهٔ اصلی: dvh برای مرورگر موبایل (نوار آدرس)، با fallback روی vh
+   برای مرورگرهای قدیمی‌تر — اگر dvh پشتیبانی نشود، قانون دوم نادیده
+   گرفته می‌شود و همان 100vh می‌ماند. */
+.app-shell {
+  height: 100vh;
+  height: 100dvh;
+}
