@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { t, type Bi, type Lang } from "../data/framework";
 import { useSystem } from "../context/SystemContext";
-import { createRow, docToRow, listRows, rowToDoc, type UiDoc } from "../services/edmsApi";
+import { useAuth } from "../context/AuthContext";
+import { createRow, deleteRow, docToRow, listRows, rowToDoc, type UiDoc } from "../services/edmsApi";
 
 export type EdmsTab =
   | "overview"
@@ -125,6 +126,8 @@ export default function DocumentWorkspace({
   const [docs, setDocs] = useState<DocumentRow[]>(sampleDocs);
   const [live, setLive] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [newDocCode, setNewDocCode] = useState("");
   const [newDocTitle, setNewDocTitle] = useState("");
@@ -133,7 +136,12 @@ export default function DocumentWorkspace({
 
   /* دادهٔ واقعی از سرور؛ اگر سرور یا پایگاه در دسترس نباشد، همان دادهٔ
      نمونه می‌ماند و نشانهٔ «نمایشی» بالای پنل روشن می‌شود. */
-  const projectId = useSystem().projectScope?.projectId ?? "";
+  const { projectScope } = useSystem();
+  const { can } = useAuth();
+  const projectId = projectScope?.projectId ?? "";
+  /* مدیرِ سیستم در کنارِ نقش‌های صاحبِ مجوزِ مدرک (همان الگویِ پنلِ اعلان‌ها) —
+     وگرنه کاربرِ پیش‌فرض که نقشِ admin دارد پنل را فقط-نمایش می‌دید. */
+  const canEdit = can("system.manage") || can("document.edit", projectScope?.projectId ?? null);
 
   useEffect(() => {
     let alive = true;
@@ -176,6 +184,23 @@ export default function DocumentWorkspace({
     const cycle = Math.round(docs.reduce((a, d) => a + d.slaHours, 0) / Math.max(total, 1));
     return { total, approved, rejected, cycle, rejectRate: total ? Math.round((rejected / total) * 100) : 0, slaBreach: docs.filter((d) => d.slaHours > 48).length };
   }, [docs]);
+
+  /* حذف: ابتدا از پایگاه (اگر ردیف آنجاست)، بعد از نمای محلی.
+     ردیف‌های نمونه در پایگاه نیستند، پس پاسخِ ناموفقِ سرور به معنای
+     حذفِ محلی است — نه اینکه کاربر فکر کند نشد. */
+  const deleteDocument = async (doc: DocumentRow) => {
+    setDeleting(doc.id);
+    let removed = false;
+    if (live) removed = await deleteRow("Document", doc.id);
+    if (removed) {
+      const res = await listRows("Document", projectId || undefined);
+      setDocs(res ? ((res.items ?? []).map(rowToDoc).filter((d) => d.code) as DocumentRow[]) : []);
+    } else {
+      setDocs((prev) => prev.filter((d) => d.id !== doc.id));
+    }
+    setDeleting(null);
+    setPendingDelete(null);
+  };
 
   const addDocument = async () => {
     if (!newDocCode.trim()) return;
@@ -285,17 +310,23 @@ export default function DocumentWorkspace({
         {tab === "mdr" && (
           <div className="fade-rise space-y-3">
             <div className="glass-dark flex flex-wrap items-center gap-2 rounded-xl p-2.5">
-              <span className="text-[10px] font-normal tx1">{rtl ? "ثبت مدرک در MDR:" : "Register in MDR:"}</span>
-              <input value={newDocCode} onChange={(e) => setNewDocCode(e.target.value)} placeholder="OG-2401-ELE-DS-002" dir="ltr" className="w-48 rounded-lg border b-line-soft bg-black/20 px-2 py-1 text-[10px] tx1 outline-none" />
-              <input value={newDocTitle} onChange={(e) => setNewDocTitle(e.target.value)} placeholder={rtl ? "عنوان مدرک…" : "Title…"} className="w-56 rounded-lg border b-line-soft bg-black/20 px-2 py-1 text-[10px] tx1 outline-none" />
-              <select value={newDocDiscipline} onChange={(e) => setNewDocDiscipline(e.target.value)} className="rounded-lg border b-line-soft bg-black/20 px-2 py-1 text-[10px] tx1 outline-none" style={{ colorScheme: "dark" }}>
+              {canEdit ? (
+                <span className="text-[10px] font-normal tx1">{rtl ? "ثبت مدرک در MDR:" : "Register in MDR:"}</span>
+              ) : (
+                <span className="text-[10px] font-light text-amber-300/80">
+                  {rtl ? "فقط نمایش — شما مجوزِ ثبت و حذفِ مدرک ندارید" : "Read-only — no document edit permission"}
+                </span>
+              )}
+              <input value={newDocCode} onChange={(e) => setNewDocCode(e.target.value)} disabled={!canEdit} placeholder="OG-2401-ELE-DS-002" dir="ltr" className="w-48 rounded-lg border b-line-soft bg-black/20 px-2 py-1 text-[10px] tx1 outline-none" />
+              <input value={newDocTitle} onChange={(e) => setNewDocTitle(e.target.value)} disabled={!canEdit} placeholder={rtl ? "عنوان مدرک…" : "Title…"} className="w-56 rounded-lg border b-line-soft bg-black/20 px-2 py-1 text-[10px] tx1 outline-none" />
+              <select value={newDocDiscipline} onChange={(e) => setNewDocDiscipline(e.target.value)} disabled={!canEdit} className="rounded-lg border b-line-soft bg-black/20 px-2 py-1 text-[10px] tx1 outline-none" style={{ colorScheme: "dark" }}>
                 {["Civil", "Mechanical", "Piping", "Electrical", "Instrumentation", "Process"].map((d) => (
                   <option key={d} value={d}>{d}</option>
                 ))}
               </select>
               <button
                 onClick={() => void addDocument()}
-                disabled={saving}
+                disabled={saving || !canEdit}
                 className="rounded-lg border border-sky-400/50 bg-sky-400/15 px-3 py-1 text-[10px] font-light text-sky-200 hover:bg-sky-400/25 disabled:opacity-50"
               >
                 {saving ? (rtl ? "در حال ذخیره…" : "Saving…") : `+ ${rtl ? "ثبت" : "Add"}`}
@@ -319,7 +350,17 @@ export default function DocumentWorkspace({
                 {live ? (rtl ? "ذخیره در پایگاه" : "Persisted") : rtl ? "حالت نمایشی" : "Demo mode"}
               </span>
             </div>
-            <DocTable lang={lang} rtl={rtl} rows={filtered} />
+            <DocTable
+              lang={lang}
+              rtl={rtl}
+              rows={filtered}
+              canDelete={canEdit}
+              pendingId={pendingDelete}
+              busyId={deleting}
+              onRequestDelete={(id) => setPendingDelete(id)}
+              onCancelDelete={() => setPendingDelete(null)}
+              onConfirmDelete={(row) => void deleteDocument(row)}
+            />
           </div>
         )}
 
@@ -483,7 +524,27 @@ export default function DocumentWorkspace({
   );
 }
 
-function DocTable({ lang, rtl, rows }: { lang: Lang; rtl: boolean; rows: DocumentRow[] }) {
+function DocTable({
+  lang,
+  rtl,
+  rows,
+  canDelete,
+  pendingId,
+  busyId,
+  onRequestDelete,
+  onCancelDelete,
+  onConfirmDelete,
+}: {
+  lang: Lang;
+  rtl: boolean;
+  rows: DocumentRow[];
+  canDelete: boolean;
+  pendingId: string | null;
+  busyId: string | null;
+  onRequestDelete: (id: string) => void;
+  onCancelDelete: () => void;
+  onConfirmDelete: (row: DocumentRow) => void;
+}) {
   return (
     <div className="glass-dark overflow-x-auto rounded-2xl p-3">
       <table className="w-full min-w-[780px] border-collapse text-[10px]">
@@ -495,6 +556,9 @@ function DocTable({ lang, rtl, rows }: { lang: Lang; rtl: boolean; rows: Documen
             <th className="px-2 py-2 text-center">{rtl ? "نسخه" : "Rev"}</th>
             <th className="px-2 py-2 text-center">Code</th>
             <th className="px-2 py-2 text-center">{rtl ? "وضعیت" : "Status"}</th>
+            {canDelete && (
+              <th className="px-2 py-2 text-center">{rtl ? "عملیات" : "Action"}</th>
+            )}
           </tr>
         </thead>
         <tbody className="divide-y b-line-soft">
@@ -512,6 +576,35 @@ function DocTable({ lang, rtl, rows }: { lang: Lang; rtl: boolean; rows: Documen
                     {t({ fa: st.fa, en: st.en }, lang)}
                   </span>
                 </td>
+                {canDelete && (
+                  <td className="px-2 py-1.5 text-center">
+                    {pendingId === doc.id ? (
+                      <span className="inline-flex items-center gap-1">
+                        <button
+                          onClick={() => onConfirmDelete(doc)}
+                          disabled={busyId === doc.id}
+                          className="rounded border border-rose-400/50 bg-rose-400/15 px-2 py-0.5 text-[8.5px] font-light text-rose-200 hover:bg-rose-400/25 disabled:opacity-50"
+                        >
+                          {busyId === doc.id ? (rtl ? "…" : "…") : rtl ? "تأیید حذف" : "Confirm"}
+                        </button>
+                        <button
+                          onClick={onCancelDelete}
+                          className="rounded border b-line-soft px-2 py-0.5 text-[8.5px] font-light tx3 hover:bg-white/[0.04]"
+                        >
+                          {rtl ? "انصراف" : "Cancel"}
+                        </button>
+                      </span>
+                    ) : (
+                      <button
+                        onClick={() => onRequestDelete(doc.id)}
+                        title={rtl ? "حذف این مدرک" : "Delete this document"}
+                        className="rounded border border-rose-400/30 px-2 py-0.5 text-[8.5px] font-light text-rose-300/80 hover:border-rose-400/60 hover:bg-rose-400/10"
+                      >
+                        {rtl ? "حذف" : "Delete"}
+                      </button>
+                    )}
+                  </td>
+                )}
               </tr>
             );
           })}

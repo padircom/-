@@ -17,6 +17,7 @@ export type PermissionCode =
   | "portfolio.view"
   | "project.view"
   | "project.edit"
+  | "document.edit"
   | "report.daily.edit"
   | "report.approve"
   | "schedule.edit"
@@ -84,6 +85,8 @@ const ENGINE_TO_UI: Record<string, PermissionCode[]> = {
   "report.official.publish": ["report.approve"],
   "report.internal.generate": ["report.approve"],
   "doc.document.approve": ["report.approve"],
+  "doc.document.upload": ["document.edit"],
+  "eng.mdr.edit": ["document.edit"],
   "rcc.risk.edit": ["risk.edit"],
   "rcc.claim.edit": ["claim.edit"],
   "rcc.claim.submit": ["claim.edit"],
