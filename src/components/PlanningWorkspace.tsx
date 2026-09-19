@@ -9,9 +9,11 @@ import ContractWorkshop from "./ContractWorkshop";
 import InteractiveGantt, { type GanttActivity } from "./InteractiveGantt";
 import PexDprPanel from "./PexDprPanel";
 import { PEX_ACTIVITIES as PEX_SNAPSHOT_ACTIVITIES, PEX_PROJECT as PEX_SNAPSHOT_PROJECT } from "../data/pexSnapshot";
+import MspAnalysisPanel from "./MspAnalysisPanel";
 
 export type PexTab =
   | "dashboard"
+  | "insight"
   | "workshop"
   | "wbs"
   | "gantt"
@@ -30,6 +32,7 @@ export type PexTab =
 
 const TABS: { id: PexTab; fa: string; en: string }[] = [
   { id: "dashboard", fa: "داشبورد", en: "Dashboard" },
+  { id: "insight", fa: "تحلیل MSP/P6", en: "MSP/P6 Insight" },
   { id: "workshop", fa: "کارگاه برنامه‌ریزی", en: "Planning Workshop" },
   { id: "baseline", fa: "برنامه پایه", en: "Baseline" },
   { id: "dpr", fa: "گزارش روزانه", en: "DPR" },
@@ -1208,6 +1211,8 @@ export default function PlanningWorkspace({
             })}
           </div>
         )}
+
+        {tab === "insight" && <MspAnalysisPanel lang={lang} />}
 
         {tab === "template" && (
           <div className="fade-rise grid gap-2 md:grid-cols-3">

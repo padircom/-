@@ -1,6 +1,7 @@
 import ReportCenter from "./ReportCenter";
 import { useEffect, useMemo, useState } from "react";
 import type { Lang } from "../data/framework";
+import ProgressSCurvePanel from "./ProgressSCurvePanel";
 import {
   ACTIVITIES,
   computeEvm,
@@ -23,6 +24,7 @@ export type PmaTab =
   | "action"
   | "forecast"
   | "reports"
+  | "scurve"
   | "exec";
 
 const TABS: { id: PmaTab; fa: string; en: string }[] = [
@@ -37,6 +39,7 @@ const TABS: { id: PmaTab; fa: string; en: string }[] = [
   { id: "forecast", fa: "پیش‌بینی", en: "Forecast" },
   { id: "reports", fa: "گزارش‌ها", en: "Reports" },
   { id: "exec", fa: "یک‌صفحه", en: "EXEC" },
+  { id: "scurve", fa: "نمودار S", en: "S-Curve" },
 ];
 
 export default function PmaWorkspace({
@@ -209,6 +212,8 @@ export default function PmaWorkspace({
         {tab === "reports" && (
           <ReportCenter lang={lang} blockers={{ openMajorNcr: blocked ? 1 : 0, timeBarBreach: 2 }} />
         )}
+
+        {tab === "scurve" && <ProgressSCurvePanel lang={lang} />}
 
         {tab === "exec" && (
           <div className="fade-rise glass-dark grid gap-2 rounded-2xl p-3 sm:grid-cols-3 text-[10px]">
