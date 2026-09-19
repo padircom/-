@@ -45,7 +45,7 @@ export type Process = {
   subs: SubProcess[];
 };
 
-export type SidebarGroupId = "pg1" | "pg2" | "pg3" | "pg4" | "pg5" | "support" | "field";
+export type SidebarGroupId = "pg1" | "pg2" | "pg3" | "pg4" | "pg5" | "support";
 
 export type Domain = {
   id: string;
@@ -63,7 +63,7 @@ export type Domain = {
    است تا سایدبار و حلقه یک زبان داشته باشند.
    ============================================================ */
 export type SidebarGroup = {
-  id: Exclude<SidebarGroupId, "field">;
+  id: SidebarGroupId;
   title: Bi;
   short: string;
   color: string;
@@ -1392,7 +1392,7 @@ export const domains: Domain[] = [
   },
   {
     id: "d17",
-    group: "field",
+    group: "pg3",
     icon: "⛑️",
     accent: "#A3E635",
     title: { fa: "ثبت سریع میدانی HSE", en: "HSE Quick Field Register" },

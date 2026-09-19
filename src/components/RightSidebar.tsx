@@ -44,8 +44,8 @@ const quickActions: QuickAction[] = [
   { id: "calc", label: { fa: "محاسبات", en: "Calculations" }, icon: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className={iconClass}><rect x="4" y="3" width="16" height="18" rx="2" /><circle cx="9" cy="11" r="2" /><path d="M13 11h4M13 15h4M13 7h4" /></svg>) },
 ];
 
-/* میان‌بر حوزه‌ها — پرکاربردترین‌ها + ثبت میدانی که گروه ندارد.
- * d17 عمداً در هیچ گروهی نیست؛ فقط از اینجا باز می‌شود. */
+/* میان‌بر حوزه‌ها — پرکاربردترین‌ها. این‌ها جایگزینِ فهرست نیستند؛
+ * همان حوزه‌ها در گروهِ خودشان هم پیدا می‌شوند. */
 const domainShortcuts = [
   { id: "d1", icon: "🗂" },
   { id: "d2", icon: "📅" },
@@ -117,7 +117,7 @@ export default function RightSidebar({ lang, quickAction, onQuickAction, onNavig
     if (!d) return;
     if (d.group === "support") {
       setGroupState((s) => ({ ...s, supportOpen: true }));
-    } else if (d.group !== "field") {
+    } else {
       setGroupState((s) => ({ ...s, open: d.group }));
     }
     setOpenDomain(id);
@@ -139,7 +139,6 @@ export default function RightSidebar({ lang, quickAction, onQuickAction, onNavig
 
   /* مدیریت سامانه فقط برای نقش مجاز؛ گروه خالی‌شده خودبه‌خود پنهان می‌شود. */
   const visibleDomains = domains.filter((d) => d.id !== "d7" || can("system.manage"));
-  const fieldDomain = visibleDomains.find((d) => d.group === "field") ?? null;
 
   /* شمارندهٔ چارچوب از خودِ داده مشتق می‌شود، نه متن ثابت — و فقط همانی را
    * می‌شمارد که کاربر اجازهٔ دیدنش را دارد تا عدد با فهرست یکی باشد. */
@@ -347,20 +346,6 @@ export default function RightSidebar({ lang, quickAction, onQuickAction, onNavig
           )
         ) : (
           <>
-            {/* ثبت میدانی گروه ندارد؛ همیشه بالای فهرست می‌ماند تا با شمارندهٔ
-                بالای سایدبار یکی باشد (پیش‌تر فقط هنگامِ باز بودن دیده می‌شد). */}
-            {fieldDomain && (
-              <div
-                className="rounded-xl border p-1.5"
-                style={{
-                  borderColor: openDomain === fieldDomain.id ? `${fieldDomain.accent}66` : "var(--line-soft)",
-                  background: openDomain === fieldDomain.id ? `${fieldDomain.accent}0d` : "transparent",
-                }}
-              >
-                {renderDomain(fieldDomain)}
-              </div>
-            )}
-
             {sidebarGroups.map((g) => {
               const members = visibleDomains.filter((d) => d.group === g.id);
               if (!members.length) return null;
