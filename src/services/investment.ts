@@ -34,6 +34,8 @@ export type InvestmentInput = {
   riskDrivers: RiskDriver[];
   /** حداکثر صرفِ ریسکِ قابل اعمال (مثلاً ۰.۰۶ یعنی ۶ واحد درصد). */
   maxRiskPremium: number;
+  /** سقفِ کاهشِ قطعیتِ دریافتی‌ها (۰ تا ۱)؛ اگر داده نشود از مقدارِ پیش‌فرض استفاده می‌شود. */
+  maxRiskHaircut?: number;
 };
 
 /** NPV با دادهٔ جریان نقدی و نرخ تنزیل. */
@@ -104,6 +106,11 @@ export type InvestmentResult = {
   baseNpv: number;
   riskPremium: number;
   adjustedRate: number;
+  /** NPV با نرخِ تنزیلِ تعدیل‌شده (روشِ نرخ). */
+  rateAdjustedNpv: number;
+  /** سهمِ کاهشِ قطعیتِ دریافتی‌ها بر اثر ریسک (۰ تا ۱). */
+  riskHaircut: number;
+  /** NPVِ تعدیل‌شده با ریسک به روشِ «معادلِ قطعی» — همواره ≤ NPV پایه. */
   riskAdjustedNpv: number;
   /** سهم هر ریسک در کاهشِ ارزش (برای نمودارِ تورنادوی ریسک). */
   riskContribution: { id: string; name: { fa: string; en: string }; value: number }[];
@@ -125,21 +132,31 @@ export function analyseInvestment(input: InvestmentInput): InvestmentResult {
   const weightedRisk = input.riskDrivers.reduce((s, r) => s + (r.score / 100) * (r.share / totalShare), 0);
   const riskPremium = weightedRisk * input.maxRiskPremium;
   const adjustedRate = input.discountRate + riskPremium;
-  const riskAdjustedNpv = npv(adjustedRate, flows);
+  const rateAdjustedNpv = npv(adjustedRate, flows);
 
-  /* سهمِ هر ریسک در افتِ ارزش — با تنزیلِ جداگانهٔ هر صرف */
+  /* معادلِ قطعی: ریسک مستقیماً روی دریافتی‌ها اعمال می‌شود.
+     چرا این روش؟ جریان نقدیِ پیمانکار چندعلامتی است (پیش‌پرداخت مثبت،
+     هزینه‌ها منفی، وصولی‌ها مثبت) و در چنین جریانی بالا بردنِ نرخِ تنزیل
+     لزوماً ارزش را کم نمی‌کند. کاهشِ قطعیتِ دریافتی‌ها همیشه کم می‌کند و
+     معنایش هم روشن است: «این بخش از وصولی‌ها ممکن است محقق نشود». */
+  const maxHaircut = input.maxRiskHaircut ?? MAX_RISK_HAIRCUT_SEED;
+  const riskHaircut = weightedRisk * maxHaircut;
+  const haircutFlows = (h: number) => flows.map((f) => (f > 0 ? f * (1 - h) : f));
+  const riskAdjustedNpv = npv(input.discountRate, haircutFlows(riskHaircut));
+
+  /* سهمِ هر ریسک در افتِ ارزش — با اعمالِ جداگانهٔ کاهشِ قطعیتِ همان ریسک */
   const riskContribution = input.riskDrivers.map((r) => {
-    const sharePremium = (r.score / 100) * (r.share / totalShare) * input.maxRiskPremium;
+    const shareHaircut = (r.score / 100) * (r.share / totalShare) * maxHaircut;
     return {
       id: r.id,
       name: r.name,
-      value: npv(input.discountRate + sharePremium, flows) - baseNpv,
+      value: npv(input.discountRate, haircutFlows(shareHaircut)) - baseNpv,
     };
   });
 
   const scenarios = SCENARIOS.map((s) => {
     const f = flows.map((c) => (c >= 0 ? c * s.revenueFactor : c * s.costFactor));
-    const v = npv(adjustedRate, f);
+    const v = npv(input.discountRate, f.map((c) => (c > 0 ? c * (1 - riskHaircut) : c)));
     return { name: s.name, label: s.label, probability: s.probability, npv: v, weighted: v * s.probability };
   });
   const expectedNpv = scenarios.reduce((sum, s) => sum + s.weighted, 0);
@@ -171,6 +188,8 @@ export function analyseInvestment(input: InvestmentInput): InvestmentResult {
     baseNpv,
     riskPremium,
     adjustedRate,
+    rateAdjustedNpv,
+    riskHaircut,
     riskAdjustedNpv,
     riskContribution,
     internalRate: irr(flows),
@@ -208,3 +227,78 @@ export const RISK_DRIVERS_SEED: RiskDriver[] = [
 
 export const DISCOUNT_RATE_SEED = 0.18;
 export const MAX_RISK_PREMIUM_SEED = 0.06;
+/** سقفِ کاهشِ قطعیتِ دریافتی‌ها (معادلِ قطعی) — ریسک را روی جریان اعمال می‌کند. */
+export const MAX_RISK_HAIRCUT_SEED = 0.1;
+
+/* ══════════════════════════════════════════════════════════════════════
+   ساختِ جریان نقدی از دادهٔ واقعیِ پروژه (به‌جایِ عددِ ثابت)
+
+   ورودی‌ها همان فرض‌هایِ قراردادی‌اند که در صورت‌وضعیت هم به کار می‌روند:
+   ارزشِ قرارداد، حاشیهٔ سود، پیش‌پرداخت، حسن‌انجام، دورهٔ ساخت و تأخیر.
+   خروجی آرایه‌ای از خالصِ جریان نقدیِ هر دوره است که مستقیماً به NPV/IRR
+   می‌رود — پس با عوض شدنِ پروژه، تحلیل هم عوض می‌شود.
+   ══════════════════════════════════════════════════════════════════════ */
+
+export type ProjectCashflowInput = {
+  contractValue: number;
+  /** حاشیهٔ سودِ ناخالصِ هدف (۰ تا ۱). */
+  margin: number;
+  /** پیش‌پرداخت به عنوان سهمی از ارزش قرارداد (۰ تا ۱). */
+  advancePct: number;
+  /** کسورِ حسن‌انجام (۰ تا ۱) که در پایان آزاد می‌شود. */
+  retentionPct: number;
+  /** دورهٔ ساخت به ماه. */
+  durationMonths: number;
+  /** تأخیرِ پیش‌بینی‌شده به ماه — هزینه را جلوتر از درآمد می‌برد. */
+  delayMonths: number;
+  /** تأخیرِ وصولِ صورت‌وضعیت به ماه. */
+  collectionLagMonths: number;
+};
+
+/** «$4.2B» / «$780M» / «IRR 12,000 B» → عدد (ریال). */
+export function parseBudgetToNumber(raw: string, usdToRial = 500_000): number {
+  const s = String(raw ?? "").trim();
+  if (!s) return 0;
+  const m = s.replace(/[,\s]/g, "").match(/([\d.]+)\s*([KMBT])?/i);
+  if (!m) return 0;
+  const value = Number(m[1]);
+  if (!Number.isFinite(value)) return 0;
+  const mult = (m[2]?.toUpperCase() ?? "") === "T" ? 1e12
+    : (m[2]?.toUpperCase() ?? "") === "B" ? 1e9
+      : (m[2]?.toUpperCase() ?? "") === "M" ? 1e6
+        : (m[2]?.toUpperCase() ?? "") === "K" ? 1e3
+          : 1;
+  const usd = /\$|USD/i.test(s);
+  return Math.round(value * mult * (usd ? usdToRial : 1));
+}
+
+export function buildProjectCashflow(input: ProjectCashflowInput): Cashflow[] {
+  const {
+    contractValue, margin, advancePct, retentionPct,
+    durationMonths, delayMonths, collectionLagMonths,
+  } = input;
+
+  const months = Math.max(1, Math.round(durationMonths));
+  const costBase = contractValue * (1 - margin);
+  const advance = contractValue * advancePct;
+  const retention = contractValue * retentionPct;
+  const mobilisation = costBase * 0.06; // تجهیزِ کارگاه پیش از شروعِ درآمد
+  const billable = contractValue - advance - retention;
+  const monthlyCost = costBase / months;
+  const receiptMonths = months + Math.max(0, Math.round(delayMonths));
+  const monthlyBill = billable / Math.max(1, receiptMonths);
+  const lag = Math.max(0, Math.round(collectionLagMonths));
+
+  const flows = new Array<number>(Math.max(months, receiptMonths) + lag + 2).fill(0);
+  flows[0] += advance - mobilisation;
+
+  for (let m = 1; m <= months; m += 1) flows[m] -= monthlyCost;
+  for (let m = 1; m <= receiptMonths; m += 1) {
+    const idx = Math.min(flows.length - 1, m + lag);
+    flows[idx] += monthlyBill;
+  }
+  const releaseIdx = Math.min(flows.length - 1, Math.max(months, receiptMonths) + lag + 1);
+  flows[releaseIdx] += retention;
+
+  return flows.map((net, period) => ({ period, net: Math.round(net) }));
+}

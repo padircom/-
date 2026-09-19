@@ -1,5 +1,5 @@
-import { useCallback, useMemo, useState } from "react";
-import GeoMap from "./GeoMap";
+import { useCallback, useMemo, useRef, useState } from "react";
+import GeoMap, { type TileConfig, loadTileConfig, saveTileConfig } from "./GeoMap";
 import { clusters, projectsByCluster, type Lang, t } from "../data/framework";
 import { useSystem } from "../context/SystemContext";
 import {
@@ -8,8 +8,13 @@ import {
   type Site,
   boundingBox,
   clusterByProximity,
+  exportCoordCsv,
   geoSummary,
+  loadOverrides,
+  parseCoordCsv,
   plotSites,
+  saveOverrides,
+  setOverride,
 } from "../services/geo";
 
 /* ══════════════════════════════════════════════════════════════════════
@@ -38,6 +43,10 @@ export default function GeoProjectsPanel({ lang }: { lang: Lang }) {
   const [filter, setFilter] = useState<"all" | Site["status"]>("all");
   const [view, setView] = useState<"map" | "vector">("map");
   const [tilesDown, setTilesDown] = useState(false);
+  const [overrides, setOverrides] = useState<Record<string, { lat: number; lon: number }>>(() => loadOverrides());
+  const [editing, setEditing] = useState(false);
+  const [tileCfg, setTileCfg] = useState<TileConfig>(() => loadTileConfig());
+  const csvRef = useRef<HTMLInputElement | null>(null);
 
   const handleTileFailure = useCallback(() => {
     setTilesDown(true);
@@ -50,6 +59,7 @@ export default function GeoProjectsPanel({ lang }: { lang: Lang }) {
       for (const p of projectsByCluster[c.id] ?? []) {
         out.push({
           id: p.id,
+          code: p.code,
           name: t(p.name, lang),
           location: t(p.location, lang),
           cluster: t(c.title, lang),
@@ -62,7 +72,7 @@ export default function GeoProjectsPanel({ lang }: { lang: Lang }) {
     return out;
   }, [lang]);
 
-  const plotted = useMemo(() => plotSites(sites, DEFAULT_ORIGIN), [sites]);
+  const plotted = useMemo(() => plotSites(sites, DEFAULT_ORIGIN, overrides), [sites, overrides]);
   const sum = useMemo(() => geoSummary(plotted, threshold), [plotted, threshold]);
   const groups = useMemo(() => clusterByProximity(plotted, threshold), [plotted, threshold]);
   const box = useMemo(() => boundingBox(plotted), [plotted]);
@@ -98,6 +108,61 @@ export default function GeoProjectsPanel({ lang }: { lang: Lang }) {
             </button>
           ))}
         </div>
+        <button
+          type="button"
+          onClick={() => setEditing((v) => !v)}
+          className={`rounded-lg border b-line-soft px-2.5 py-1 text-[10px] font-light transition ${editing ? "bg-sky-500/20 tx1" : "tx3 hover:tx2"}`}
+        >
+          {rtl ? "مختصاتِ واقعی پروژه‌ها" : "Real coordinates"}
+        </button>
+        <input
+          ref={csvRef}
+          type="file"
+          accept=".csv,.txt"
+          className="hidden"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) void f.text().then((txt) => {
+              const codeToId: Record<string, string> = {};
+              for (const c of clusters) for (const p of projectsByCluster[c.id] ?? []) codeToId[p.code] = p.id;
+              const parsed = parseCoordCsv(txt, codeToId);
+              setOverrides((prev) => {
+                const next = { ...prev, ...parsed };
+                saveOverrides(next);
+                return next;
+              });
+            });
+            e.target.value = "";
+          }}
+        />
+        <div className="flex flex-wrap items-center gap-1.5">
+          <select
+            value={tileCfg.mode}
+            onChange={(e) => {
+              const next = { ...tileCfg, mode: e.target.value as TileConfig["mode"] };
+              setTileCfg(next);
+              saveTileConfig(next);
+            }}
+            className="rounded-lg border b-line-soft bg-transparent px-1.5 py-1 text-[10px] font-light tx2"
+          >
+            <option value="direct">{rtl ? "کاشی: مستقیم" : "Tiles: direct"}</option>
+            <option value="proxy">{rtl ? "کاشی: از سرور" : "Tiles: via server"}</option>
+            <option value="internal">{rtl ? "کاشی: سرور داخلی" : "Tiles: internal server"}</option>
+          </select>
+          {tileCfg.mode === "internal" && (
+            <input
+              dir="ltr"
+              defaultValue={tileCfg.internalBase ?? ""}
+              placeholder="https://tiles.company.local/{z}/{x}/{y}.png"
+              onBlur={(e) => {
+                const next = { ...tileCfg, internalBase: e.target.value.trim() };
+                setTileCfg(next);
+                saveTileConfig(next);
+              }}
+              className="w-[260px] rounded-lg border b-line-soft bg-transparent px-1.5 py-1 text-[10px] tx1"
+            />
+          )}
+        </div>
         {tilesDown && (
           <span className="text-[9.5px] text-amber-300">
             {rtl
@@ -107,9 +172,100 @@ export default function GeoProjectsPanel({ lang }: { lang: Lang }) {
         )}
       </div>
 
+
+      {editing && (
+        <div className="shrink-0 rounded-xl border b-line-soft bg-[var(--row)] p-2.5">
+          <div className="mb-2 flex flex-wrap items-center gap-2 text-[10px]">
+            <span className="tx1">{rtl ? "مختصاتِ دقیقِ سایت (برتری بر مرکز استان/شهر)" : "Exact site coordinates (override centroids)"}</span>
+            <button
+              type="button"
+              onClick={() => csvRef.current?.click()}
+              className="rounded-lg border b-line-soft px-2 py-0.5 text-[9.5px] font-light tx3 transition hover:tx2"
+            >
+              {rtl ? "درون‌ریزی CSV (code,lat,lon)" : "Import CSV (code,lat,lon)"}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const blob = new Blob([exportCoordCsv(overrides)], { type: "text/csv;charset=utf-8" });
+                const a = document.createElement("a");
+                a.href = URL.createObjectURL(blob);
+                a.download = "project-sites.csv";
+                a.click();
+                URL.revokeObjectURL(a.href);
+              }}
+              className="rounded-lg border b-line-soft px-2 py-0.5 text-[9.5px] font-light tx3 transition hover:tx2"
+            >
+              {rtl ? "برون‌ریزی CSV" : "Export CSV"}
+            </button>
+          </div>
+          <div className="thin-scroll max-h-[220px] overflow-auto">
+            <table className="w-full border-collapse text-[10px]">
+              <thead className="sticky top-0 bg-[var(--panel2)]">
+                <tr className="tx4">
+                  <th className="px-2 py-1 text-start font-light">{rtl ? "پروژه" : "Project"}</th>
+                  <th className="px-2 py-1 text-start font-light">{rtl ? "عرض (lat)" : "Latitude"}</th>
+                  <th className="px-2 py-1 text-start font-light">{rtl ? "طول (lon)" : "Longitude"}</th>
+                  <th className="px-2 py-1 text-start font-light">{rtl ? "منبع" : "Source"}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {plotted.map((p) => {
+                  const ov = overrides[p.id];
+                  return (
+                    <tr key={p.id} className="border-t border-[var(--line-soft)]">
+                      <td className="px-2 py-1 tx2">
+                        <span className="tx4 me-1" dir="ltr">{p.code}</span>
+                        <span className="truncate">{p.name}</span>
+                      </td>
+                      <td className="px-2 py-1">
+                        <input
+                          dir="ltr"
+                          defaultValue={ov ? String(ov.lat) : p.coord ? p.coord.lat.toFixed(4) : ""}
+                          placeholder="—"
+                          onBlur={(e) => {
+                            const lat = Number(e.target.value);
+                            const lon = Number(overrides[p.id]?.lon ?? p.coord?.lon);
+                            if (Number.isFinite(lat) && Number.isFinite(lon) && e.target.value.trim()) {
+                              setOverrides((prev) => setOverride(prev, p.id, { lat, lon }));
+                            }
+                          }}
+                          className="w-[90px] rounded border border-[var(--line-soft)] bg-transparent px-1 py-0.5 text-[10px] tx1"
+                        />
+                      </td>
+                      <td className="px-2 py-1">
+                        <input
+                          dir="ltr"
+                          defaultValue={ov ? String(ov.lon) : p.coord ? p.coord.lon.toFixed(4) : ""}
+                          placeholder="—"
+                          onBlur={(e) => {
+                            const lon = Number(e.target.value);
+                            const lat = Number(overrides[p.id]?.lat ?? p.coord?.lat);
+                            if (Number.isFinite(lat) && Number.isFinite(lon) && e.target.value.trim()) {
+                              setOverrides((prev) => setOverride(prev, p.id, { lat, lon }));
+                            }
+                          }}
+                          className="w-[90px] rounded border border-[var(--line-soft)] bg-transparent px-1 py-0.5 text-[10px] tx1"
+                        />
+                      </td>
+                      <td className="px-2 py-1 tx4">
+                        {ov
+                          ? rtl ? "ثبت‌شده (دقیق)" : "Manual (exact)"
+                          : p.coord
+                            ? rtl ? `گَزِتیر (${p.accuracy === "city" ? "شهر" : p.accuracy === "province" ? "استان" : "منطقه"})` : `gazetteer (${p.accuracy})`
+                            : rtl ? "ندارد" : "missing"}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
       {view === "map" && (
         <div className="min-h-[320px] flex-1">
-          <GeoMap lang={lang} points={withCoord} onTileFailure={handleTileFailure} />
+          <GeoMap lang={lang} points={withCoord} onTileFailure={handleTileFailure} config={tileCfg} />
         </div>
       )}
 

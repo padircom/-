@@ -39,6 +39,43 @@ const TILES = {
 
 export type TileKey = keyof typeof TILES;
 
+export type TileMode = "direct" | "proxy" | "internal";
+export type TileConfig = { mode: TileMode; internalBase?: string };
+
+const TILE_CFG_KEY = "geo.tile.config.v1";
+
+export function loadTileConfig(): TileConfig {
+  try {
+    const raw = localStorage.getItem(TILE_CFG_KEY);
+    if (raw) {
+      const c = JSON.parse(raw) as TileConfig;
+      if (c.mode === "direct" || c.mode === "proxy" || c.mode === "internal") return c;
+    }
+  } catch {
+    /* نادیده */
+  }
+  return { mode: "direct" };
+}
+
+export function saveTileConfig(c: TileConfig): void {
+  try {
+    localStorage.setItem(TILE_CFG_KEY, JSON.stringify(c));
+  } catch {
+    /* نادیده */
+  }
+}
+
+/** URL کاشی بر اساس حالت: مستقیم (مرورگر)، پروکسیِ سرور برنامه، یا سرورِ داخلی. */
+function tileUrlFor(k: TileKey, cfg: TileConfig): string {
+  if (cfg.mode === "proxy") return `/tiles/${k}/{z}/{x}/{y}.png`;
+  if (cfg.mode === "internal") {
+    const base = (cfg.internalBase || "").trim();
+    if (!base) return `/tiles/${k}/{z}/{x}/{y}.png`;
+    return base.replace(/\{s\}/g, "a").replace(/\{r\}/g, "");
+  }
+  return TILES[k].url;
+}
+
 const statusColor: Record<PlottedSite["status"], string> = {
   active: "#34D399",
   tender: "#7FB2FF",
@@ -60,10 +97,12 @@ export default function GeoMap({
   lang,
   points,
   onTileFailure,
+  config,
 }: {
   lang: Lang;
   points: PlottedSite[];
   onTileFailure?: () => void;
+  config: TileConfig;
 }) {
   const rtl = lang === "fa";
   const hostRef = useRef<HTMLDivElement | null>(null);
@@ -89,7 +128,7 @@ export default function GeoMap({
 
     (Object.keys(TILES) as TileKey[]).forEach((k, i) => {
       const t = TILES[k];
-      const layer = L.tileLayer(t.url, { attribution: t.attribution, maxZoom: 18 });
+      const layer = L.tileLayer(tileUrlFor(k, config), { attribution: t.attribution, maxZoom: 18 });
       baseRef.current[k] = layer;
       if (i === 0) layer.addTo(map);
     });
@@ -128,7 +167,7 @@ export default function GeoMap({
       markerLayer.current = null;
       measureLayer.current = null;
     };
-  }, [onTileFailure, rtl]);
+  }, [onTileFailure, rtl, config]);
 
   /* ── نشانه‌ها ── */
   useEffect(() => {
