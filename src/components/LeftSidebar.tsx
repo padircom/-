@@ -1,24 +1,19 @@
 import { useState } from "react";
 import { dataSources, ui, t, type Lang } from "../data/framework";
-import { cn } from "../utils/cn";
 
 type Props = {
   lang: Lang;
   activeSource: string | null;
   onPick: (id: string) => void;
-  className?: string;
 };
 
-export default function LeftSidebar({ lang, activeSource, onPick, className }: Props) {
+export default function LeftSidebar({ lang, activeSource, onPick }: Props) {
   const rtl = lang === "fa";
   const [connectNotice, setConnectNotice] = useState(false);
   return (
     <aside
       dir={rtl ? "rtl" : "ltr"}
-      className={cn(
-        "glass-dark flex h-full w-[248px] shrink-0 flex-col rounded-2xl",
-        className,
-      )}
+      className="glass-dark flex h-full w-[248px] shrink-0 flex-col rounded-2xl"
     >
       <header className="b-line border-b px-4 py-3.5">
         <div className="flex items-center gap-2">

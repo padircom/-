@@ -10,7 +10,6 @@ import {
   type Lang,
 } from "../data/framework";
 import { useSystem } from "../context/SystemContext";
-import { cn } from "../utils/cn";
 import { useAuth } from "../context/AuthContext";
 
 export type ModuleNavTarget = {
@@ -26,7 +25,6 @@ type Props = {
   quickAction: string;
   onQuickAction: (id: string) => void;
   onNavigate: (target: ModuleNavTarget) => void;
-  className?: string;
 };
 
 type QuickAction = { id: string; label: Bi; alert?: string; icon: ReactNode };
@@ -75,7 +73,7 @@ function loadGroupState(): { open: string | null; supportOpen: boolean } {
   return { open: "pg2", supportOpen: true };
 }
 
-export default function RightSidebar({ lang, quickAction, onQuickAction, onNavigate, className }: Props) {
+export default function RightSidebar({ lang, quickAction, onQuickAction, onNavigate }: Props) {
   const rtl = lang === "fa";
   const { clusters, projectsByCluster, projectScope } = useSystem();
   const { can } = useAuth();
@@ -279,13 +277,7 @@ export default function RightSidebar({ lang, quickAction, onQuickAction, onNavig
   };
 
   return (
-    <aside
-      dir={rtl ? "rtl" : "ltr"}
-      className={cn(
-        "glass-dark flex h-full w-[320px] shrink-0 flex-col rounded-2xl",
-        className,
-      )}
-    >
+    <aside dir={rtl ? "rtl" : "ltr"} className="glass-dark flex h-full w-[320px] shrink-0 flex-col rounded-2xl">
       <header className="b-line border-b px-4 py-3.5">
         <div className="flex items-center gap-2">
           <span className="chip-bg grid h-7 w-7 place-items-center rounded-lg text-[13px]">🧩</span>
