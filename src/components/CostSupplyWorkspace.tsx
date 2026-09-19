@@ -38,6 +38,7 @@ import {
   type EvmSnapshot,
 } from "../services/finance";
 import QuantityBalancePanel from "./QuantityBalancePanel";
+import ProfitLossPanel from "./ProfitLossPanel";
 
 /* شش تب = دقیقاً همان شش زیرماژول d5؛ نام‌ها تغییرناپذیرند (BC). */
 export type FinTab = "cost" | "control" | "cash" | "pr" | "po" | "inventory" | "quantities" | "balance" | "pnl";
@@ -806,6 +807,9 @@ export default function CostSupplyWorkspace({
 
         {/* ═══ تب ۸: بالانس مصالح و کنترل ضایعات (d5-p8) ═══ */}
         {tab === "balance" && <QuantityBalancePanel lang={lang} mode="balance" />}
+
+        {/* ═══ تب ۹: سود و زیان پروژه (d5-p9) ═══ */}
+        {tab === "pnl" && <ProfitLossPanel lang={lang} />}
       </div>
     </div>
   );

@@ -616,6 +616,14 @@ export const domains: Domain[] = [
           { id: "d5-p8-s2", title: { fa: "نرم مصرف و تحلیل ضایعات", en: "Consumption Norm & Waste" }, activity: { fa: "مقایسه مصرف واقعی با نرم×تولید و تفکیک ضایعات قابل‌قبول از انحراف غیرعادی", en: "Compare actual use with norm × production and separate acceptable waste from abnormal variance" }, source: "Norms Library, Production Log", sql: ["Material_Norm", "Production_Log"], output: "Waste & Variance Report", connectsTo: "Quality, Cost", ai: "AI Waste Root-Cause" },
         ],
       },
+      {
+        id: "d5-p9",
+        title: { fa: "سود و زیان پروژه", en: "Project Profit & Loss" },
+        subs: [
+          { id: "d5-p9-s1", title: { fa: "صورت سود و زیان", en: "P&L Statement" }, activity: { fa: "درآمدِ شناسایی‌شده در برابر بهای تمام‌شده، با تفکیک سودِ تا امروز از سودِ انتهای کار", en: "Recognised revenue against cost of sales, separating to-date profit from at-complete profit" }, source: "Contracts IPC, Cost Ledger", sql: ["Ipc_Certificate", "Cost_Transaction"], output: "Project P&L", connectsTo: "Contracts, Governance", ai: "AI Margin Forecaster" },
+          { id: "d5-p9-s2", title: { fa: "حاشیه، پیش‌دریافت و وصولی", en: "Margin, Advance & Receivable" }, activity: { fa: "محاسبهٔ حاشیهٔ تحقق‌یافته، قابلِ وصول پس از کسورات و پیش‌پرداخت، و هشدارِ پیش‌صورت‌وضعیت‌گیری", en: "Compute earned margin, net receivable after retention and advance, and over-billing warning" }, source: "Finance, Contract", sql: ["Ipc_Certificate", "Advance_Ledger", "Retention_Ledger"], output: "Margin & Receivable Report", connectsTo: "Cash, Governance", ai: "AI Overbilling Detector" },
+        ],
+      },
     ],
   },
   {
