@@ -19,6 +19,13 @@ export type Module = {
    Detailed process taxonomy — 6 domains / 30+ processes
    Each sub-process carries: SQL table, data source, AI function
    ============================================================ */
+/** پیوندِ ناوبری به یک زیرفرآیندِ دیگر (ارجاع میان‌دامنه‌ای). */
+export type SubLink = {
+  /** شناسهٔ زیرفرآیند مقصد، مثل `"d1-p2-s1"`. */
+  to: string;
+  label: Bi;
+};
+
 export type SubProcess = {
   id: string;
   title: Bi;
@@ -28,6 +35,8 @@ export type SubProcess = {
   output: string;
   connectsTo: string;
   ai: string;
+  /** پیوندهای ناوبری مرتبط (اختیاری) — در صفحهٔ قابلیت به صورت چیپ دیده می‌شود. */
+  links?: SubLink[];
 };
 
 export type Process = {
@@ -202,7 +211,7 @@ export const domains: Domain[] = [
       },
       {
         id: "d1-p2",
-        title: { fa: "مدارک مهندسی", en: "Engineering Documents" },
+        title: { fa: "کنترل نسخه و گردش", en: "Revision & Circulation" },
         subs: [
           { id: "d1-p2-s1", title: { fa: "کنترل نسخه (Revision)", en: "Revision Control" }, activity: { fa: "کنترل نسخه‌ها", en: "Version control" }, source: "EDMS", sql: ["Document_Revision"], output: "Revision History", connectsTo: "Change Management", ai: "AI Compare Revision" },
         ],
@@ -282,7 +291,10 @@ export const domains: Domain[] = [
         id: "d12-p1",
         title: { fa: "فهرست و برنامه‌ریزی مدارک", en: "MDR Planning" },
         subs: [
-          { id: "d12-p1-s1", title: { fa: "تدوین فهرست اصلی مدارک", en: "Master Document Register" }, activity: { fa: "ثبت مدارک به تفکیک دیسیپلین و نوع، با وزن برنامه‌ای و نفرساعت برآوردی", en: "Register deliverables by discipline and type with planned weight and manhours" }, source: "Contract Scope, Discipline Leads", sql: ["MdrDeliverable"], output: "MDR Status Matrix", connectsTo: "Planning, Documents", ai: "AI Weight Advisor" },
+          { id: "d12-p1-s1", title: { fa: "تدوین فهرست اصلی مدارک", en: "Master Document Register" }, activity: { fa: "ثبت مدارک به تفکیک دیسیپلین و نوع، با وزن برنامه‌ای و نفرساعت برآوردی", en: "Register deliverables by discipline and type with planned weight and manhours" }, source: "Contract Scope, Discipline Leads", sql: ["MdrDeliverable"], output: "MDR Status Matrix", connectsTo: "Planning, Documents", ai: "AI Weight Advisor",
+            links: [
+              { to: "d1-p1-s1", label: { fa: "ثبت مدرک در EDMS (d1)", en: "Register document in EDMS (d1)" } }
+            ] },
           { id: "d12-p1-s2", title: { fa: "تاریخ‌های هدف IFA و IFC", en: "Target IFA & IFC Dates" }, activity: { fa: "تعیین سررسید ارسال برای تأیید و صدور برای ساخت، هم‌راستا با گره WBS", en: "Set approval and construction issue targets aligned with WBS nodes" }, source: "Master Schedule", sql: ["MdrDeliverable", "WbsNode"], output: "Engineering Schedule", connectsTo: "Planning", ai: "AI Date Conflict Detector" },
         ],
       },
@@ -290,7 +302,10 @@ export const domains: Domain[] = [
         id: "d12-p2",
         title: { fa: "بررسی، کدگذاری و پاسخ نظرات", en: "Review & CRS" },
         subs: [
-          { id: "d12-p2-s1", title: { fa: "چرخه کدهای بررسی ۱ تا ۴", en: "Review Codes 1-4" }, activity: { fa: "ثبت کد بررسی کارفرما و پایش مهلت قراردادی با محاسبه تأخیر", en: "Record client review code and track contractual deadline with aging" }, source: "Client, Consultant", sql: ["EngineeringRevision"], output: "Review Aging Report", connectsTo: "Claims, Documents", ai: "AI Review Delay Predictor" },
+          { id: "d12-p2-s1", title: { fa: "چرخه کدهای بررسی ۱ تا ۴", en: "Review Codes 1-4" }, activity: { fa: "ثبت کد بررسی کارفرما و پایش مهلت قراردادی با محاسبه تأخیر", en: "Record client review code and track contractual deadline with aging" }, source: "Client, Consultant", sql: ["EngineeringRevision"], output: "Review Aging Report", connectsTo: "Claims, Documents", ai: "AI Review Delay Predictor",
+            links: [
+              { to: "d1-p2-s1", label: { fa: "پس از کد ۴ → صدور نسخه در d1", en: "After Code 4 → Issue revision in d1" } }
+            ] },
           { id: "d12-p2-s2", title: { fa: "شیت ثبت و پاسخ نظرات", en: "Comment Resolution Sheet" }, activity: { fa: "ثبت نظر بازبین، پاسخ طراح و صحه‌گذاری ناظر در یک برگه یکپارچه", en: "Capture reviewer comment, designer response and supervisor verification" }, source: "Review Meetings", sql: ["CrsComment"], output: "CRS Report", connectsTo: "Quality, Documents", ai: "AI Comment Clusterer" },
         ],
       },

@@ -23,6 +23,8 @@ type Props = {
   processId: string;
   subId: string;
   onBack: () => void;
+  /** پرش به یک زیرفرآیندِ دیگر (پیوندهای میان‌دامنه‌ای). */
+  onNavigate?: (target: { domainId: string; processId: string; subId: string }) => void;
 };
 
 type Template = {
@@ -64,7 +66,7 @@ const seedClient = (subId: string): Template[] => [
 ];
 
 export default function CapabilityDetail({
-  lang, domainId, clusterId, projectId, processId, subId, onBack,
+  lang, domainId, clusterId, projectId, processId, subId, onBack, onNavigate,
 }: Props) {
   const rtl = lang === "fa";
   const { clusters, projectsByCluster } = useSystem();
@@ -73,6 +75,17 @@ export default function CapabilityDetail({
   const project = (projectsByCluster[clusterId] ?? []).find((p) => p.id === projectId);
   const proc = dom?.processes.find((p) => p.id === processId);
   const sub = proc?.subs.find((s) => s.id === subId);
+
+  /* مقصدِ پیوندها: از شناسه به دامنه، فرآیند و زیرفرآیند. */
+  const resolveLink = (targetSubId: string) => {
+    for (const d of domains) {
+      for (const pr of d.processes) {
+        const sb = pr.subs.find((x) => x.id === targetSubId);
+        if (sb) return { domain: d, processId: pr.id, sub: sb };
+      }
+    }
+    return null;
+  };
 
   const [internal, setInternal] = useState<Template[]>(() => seedInternal(subId));
   const [client, setClient] = useState<Template[]>(() => seedClient(subId));
@@ -369,6 +382,30 @@ export default function CapabilityDetail({
           </button>
         </div>
       </div>
+
+      {/* ══ پیوندهای میان‌دامنه‌ای (مثل «کد ۴ → صدور نسخه در d1») ══ */}
+      {sub?.links && sub.links.length > 0 && (
+        <div className="mt-2 flex flex-wrap items-center gap-2 rounded-xl border b-line-soft bg-[var(--row)] px-3 py-2">
+          <span className="text-[9.5px] font-light tx3">{rtl ? "پیوندهای مرتبط:" : "Related links:"}</span>
+          {sub.links.map((link) => {
+            const target = resolveLink(link.to);
+            if (!target) return null;
+            return (
+              <button
+                key={link.to}
+                type="button"
+                onClick={() => onNavigate?.({ domainId: target.domain.id, processId: target.processId, subId: link.to })}
+                className="glass-row flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[9.5px] font-light tx2 transition hover:tx1"
+                title={`${t(target.domain.title, lang)} · ${t(target.sub.title, lang)}`}
+              >
+                <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: target.domain.accent }} />
+                <span>{t(link.label, lang)}</span>
+                <span className="tx4">· {t(target.sub.title, lang)}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {domainId === "d2" && subId !== "d2-p4-s1" && subId !== "d2-p5-s1" && subId !== "d2-p6-s1" ? (
         /* SPECIAL GANTT & SCHEDULING STUDIO WITH INTEGRATED TRANSLATION & UPLOAD */

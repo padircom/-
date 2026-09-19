@@ -361,9 +361,11 @@ type Props = {
   target: ModuleNavTarget;
   onBack: () => void;
   onOpenFlowNet?: () => void;
+  /** پرش به دامنه/زیرفرآیند دیگر (برای پیوندهای میان‌دامنه‌ای). */
+  onNavigate?: (target: ModuleNavTarget) => void;
 };
 
-export default function ModuleDetail({ lang, target, onBack, onOpenFlowNet }: Props) {
+export default function ModuleDetail({ lang, target, onBack, onOpenFlowNet, onNavigate }: Props) {
   const rtl = lang === "fa";
   const { clusters, projectsByCluster } = useSystem();
   const { user, can, audit } = useAuth();
@@ -1558,6 +1560,19 @@ export default function ModuleDetail({ lang, target, onBack, onOpenFlowNet }: Pr
         processId={selected.pId}
         subId={selected.sId}
         onBack={() => setSelected(null)}
+        onNavigate={({ domainId, processId, subId }) => {
+          if (!onNavigate) return;
+          /* دامنهٔ یکسان → فقط انتخابِ داخلی عوض می‌شود؛
+             دامنهٔ دیگر → کل صفحهٔ حوزه عوض می‌شود. */
+          if (domainId === dom.id) setSelected({ pId: processId, sId: subId });
+          else onNavigate({
+            moduleId: domainId,
+            clusterId: target.clusterId,
+            projectId: target.projectId,
+            processId,
+            subId,
+          });
+        }}
       />
     );
   }

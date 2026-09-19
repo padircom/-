@@ -278,6 +278,7 @@ export default function App() {
                   setModuleNav(null);
                   setQuickAction("flownet");
                 }}
+                onNavigate={(next) => setModuleNav(next)}
               />
             </Suspense>
           ) : quickAction === "calendar" ? (
