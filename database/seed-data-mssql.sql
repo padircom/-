@@ -1,6 +1,12 @@
 -- 27 پروژه
 -- داده‌ی اولیه (تولید خودکار از src/data/framework.ts)
 
+INSERT INTO dbo.Industry_Master (Code, TitleFa, TitleEn, Icon, Color, IsActive) VALUES ('c1', 'نفت و گاز', 'Oil & Gas', '🛢', '#7FB2FF', 1);
+INSERT INTO dbo.Industry_Master (Code, TitleFa, TitleEn, Icon, Color, IsActive) VALUES ('c2', 'پتروشیمی', 'Petrochemical', '⚗️', '#8FE3C8', 1);
+INSERT INTO dbo.Industry_Master (Code, TitleFa, TitleEn, Icon, Color, IsActive) VALUES ('c3', 'نیرو و انرژی', 'Power & Energy', '⚡', '#FFD48A', 1);
+INSERT INTO dbo.Industry_Master (Code, TitleFa, TitleEn, Icon, Color, IsActive) VALUES ('c4', 'حفاری و اکتشاف', 'Drilling & Exploration', '🪨', '#FF9F9F', 1);
+INSERT INTO dbo.Industry_Master (Code, TitleFa, TitleEn, Icon, Color, IsActive) VALUES ('c5', 'زیرساخت و ساختمان', 'Infrastructure & Construction', '🏗', '#C9A7FF', 1);
+-- 5 صنعت
 
 INSERT INTO dbo.Project_Master (ProjectCode, NameFa, NameEn, ClientFa, ClientEn, Status, Progress, Budget, LocationFa, LocationEn, IndustryCode, IsActive) VALUES ('OG-2401', 'توسعه میدان نفتی آزادگان جنوبی', 'South Azadegan Oilfield Development', 'شرکت ملی نفت', 'NIOC', 'active', 62, '$4.2B', 'خوزستان', 'Khuzestan', 'OG', 1);
 INSERT INTO dbo.Project_Master (ProjectCode, NameFa, NameEn, ClientFa, ClientEn, Status, Progress, Budget, LocationFa, LocationEn, IndustryCode, IsActive) VALUES ('OG-2402', 'طرح جمع‌آوری گازهای همراه', 'Associated Gas Gathering Plan', 'شرکت نفت مناطق مرکزی', 'ICOFC', 'active', 41, '$1.1B', 'اصفهان', 'Isfahan', 'OG', 1);

@@ -189,13 +189,16 @@ function buildSeed(dialect) {
   out.push(`-- داده‌ی اولیه (تولید خودکار از src/data/framework.ts)`);
   out.push("");
 
-  const clusterRe = /id:\s*"(c\d+)",\s*\n\s*code:\s*"([^"]*)",\s*\n\s*title:\s*\{\s*fa:\s*"([^"]*)",\s*en:\s*"([^"]*)"/g;
+  const clusterRe = /\{\s*id:\s*"(c\d+)",\s*icon:\s*"([^"]*)",\s*color:\s*"([^"]*)",\s*title:\s*\{\s*fa:\s*"([^"]*)",\s*en:\s*"([^"]*)"/g;
+  let industries = 0;
   for (const m of framework.matchAll(clusterRe)) {
-    const [, id, code, fa, en] = m;
+    const [, id, icon, color, fa, en] = m;
     out.push(
-      `INSERT INTO ${mssql ? "dbo." : ""}Industry_Master (Code, TitleFa, TitleEn, IsActive) VALUES (${q(code)}, ${q(fa)}, ${q(en)}, 1);`,
+      `INSERT INTO ${mssql ? "dbo." : ""}Industry_Master (Code, TitleFa, TitleEn, Icon, Color, IsActive) VALUES (${q(id)}, ${q(fa)}, ${q(en)}, ${q(icon)}, ${q(color)}, 1);`,
     );
+    industries += 1;
   }
+  out.push(`-- ${industries} صنعت`);
   out.push("");
 
   const projRe = /\{\s*id:\s*"([\w-]+)",\s*code:\s*"([^"]*)",\s*name:\s*\{\s*fa:\s*"([^"]*)",\s*en:\s*"([^"]*)"\s*\},\s*client:\s*\{\s*fa:\s*"([^"]*)",\s*en:\s*"([^"]*)"\s*\},\s*status:\s*"(\w+)",\s*progress:\s*(\d+),\s*budget:\s*"([^"]*)",\s*location:\s*\{\s*fa:\s*"([^"]*)",\s*en:\s*"([^"]*)"/g;

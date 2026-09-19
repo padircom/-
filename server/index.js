@@ -13,6 +13,7 @@ import * as aiLogic from "./aiLogic.js";
 import * as ogwLogic from "./ogwLogic.js";
 import { PDFParse } from "pdf-parse";
 import mammoth from "mammoth";
+import * as fallbackStore from "./fallbackStore.mjs";
 import * as jalaaliNs from "jalaali-js";
 import nodemailer from "nodemailer";
 import { createWorker } from "tesseract.js";
@@ -639,6 +640,89 @@ app.use(rateLimit({
   legacyHeaders: false,
 }));
 app.use(express.json({ limit: "15mb" }));
+/* ─────────────────────────────────────────────────────────────────────
+   تنزّلِ آرام به فروشگاهِ JSON هنگامِ نبودِ SQL Server
+
+   حدود ۵۰ مسیر مستقیماً mssql صدا می‌زنند. تا پیش از این، نبودِ پایگاه
+   یعنی ۵۰۰ و بازگشتِ کلاینت به داده‌ی نمونه — یعنی هیچ چیز ذخیره نمی‌شد.
+   این میان‌افزار فقط خطاهایِ «اتصال» را می‌گیرد (نه خطایِ دستورِ SQL را تا
+   اشتباهِ واقعی پنهان نماند) و پاسخ را از فروشگاهِ JSON می‌سازد، با نشانهٔ
+   degraded در meta تا بعداً معلوم باشد داده از پایگاه نیامده است.
+   ───────────────────────────────────────────────────────────────────── */
+const SQL_CONNECTION_ERROR = /(ENOTFOUND|ECONNREFUSED|ECONNRESET|ETIMEDOUT|EHOSTUNREACH|ESOCKET|getaddrinfo|Login failed|Cannot open database|ConnectionError|socket hang up|Failed to connect|connect E)/i;
+
+app.use((req, res, next) => {
+  const originalJson = res.json.bind(res);
+  res.json = (body) => {
+    try {
+      const message = String(body?.error?.message ?? "");
+      const isConn = res.statusCode >= 500 && body && body.ok === false && SQL_CONNECTION_ERROR.test(message);
+      if (!isConn) return originalJson(body);
+      const degraded = buildDegradedResponse(req, message);
+      if (!degraded) return originalJson(body);
+      res.status(200);
+      return originalJson(degraded);
+    } catch {
+      return originalJson(body);
+    }
+  };
+  next();
+});
+
+function buildDegradedResponse(req, reason) {
+  const routePath = req.route?.path || req.baseUrl + (req.route?.path ?? "") || req.path;
+  const table = fallbackStore.tableForRoute(routePath, req.method);
+  const projectCode = req.params?.projectId || req.query?.projectCode || req.body?.ProjectCode || null;
+  const meta = {
+    traceId: req.requestId,
+    timestamp: new Date().toISOString(),
+    degraded: true,
+    driver: "json",
+    reason,
+  };
+
+  /* این دو مسیر شکلِ پاسخِ اختصاصی دارند */
+  if (req.method === "GET" && (routePath === "/api/health" || routePath === "/api/diagnostics/readiness")) {
+    return {
+      ok: true,
+      data: {
+        status: "degraded",
+        api: true,
+        sql: false,
+        driver: "json",
+        persistence: "json",
+        reason,
+      },
+      meta,
+    };
+  }
+
+  if (req.method === "GET") {
+    const items = fallbackStore.select(table, { projectCode });
+    return {
+      ok: true,
+      data: { items, page: 1, pageSize: items.length, total: items.length, table: table ?? null },
+      meta,
+    };
+  }
+
+  /* نوشتن: در صورت امکان واقعاً در فروشگاهِ JSON ذخیره می‌شود */
+  let data = req.body ?? {};
+  if (table && req.method === "POST") {
+    const saved = fallbackStore.insert(table, req.body ?? {});
+    if (saved) data = saved;
+  } else if (table && (req.method === "PATCH" || req.method === "PUT")) {
+    const id = req.params?.id ?? req.params?.projectId ?? (req.body ?? {}).Id;
+    const saved = fallbackStore.patch(table, id, req.body ?? {});
+    if (saved) data = saved;
+  } else if (table && req.method === "DELETE") {
+    const id = req.params?.id ?? req.params?.projectId;
+    data = { deleted: fallbackStore.remove(table, id) };
+  }
+  return { ok: true, data, meta };
+}
+
+
 app.use((req, res, next) => {
   const requestId = req.headers["x-request-id"] || `req-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   req.requestId = requestId;

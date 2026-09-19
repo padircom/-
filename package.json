@@ -33,7 +33,8 @@
     "build:com": "esbuild src/services/commissioning.ts --bundle --format=esm --platform=node --outfile=server/comLogic.js",
     "build:hse": "esbuild src/services/hse.ts --bundle --format=esm --platform=node --outfile=server/hseLogic.js",
     "db:schema": "node scripts/generate-schema.mjs",
-    "db:seed": "node scripts/generate-schema.mjs"
+    "db:seed": "node scripts/generate-schema.mjs",
+    "build:routemap": "node scripts/generate-sql-route-map.mjs"
   },
   "dependencies": {
     "@types/leaflet": "^1.9.12",
