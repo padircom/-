@@ -7,14 +7,6 @@ export const t = (v: Bi, lang: Lang) => v[lang];
    RIGHT SIDEBAR — Comprehensive Project Management Framework
    Flat rows, ZERO dropdowns, ZERO numeric prefixes.
    ============================================================ */
-export type Module = {
-  id: string;
-  icon: string;
-  accent: string;
-  title: Bi;
-  items: Bi[];
-};
-
 /* ============================================================
    Detailed process taxonomy — 6 domains / 30+ processes
    Each sub-process carries: SQL table, data source, AI function
@@ -1611,106 +1603,6 @@ export const domainExportFormats: Record<string, FormatKind[]> = {
   d8: ["excel", "pdf", "word", "csv"],                     // Quality & Inspection
   d17: ["excel", "pdf", "csv"],                              // HSE field register
 };
-
-/* Legacy module shape — derived from domains for backward compatibility */
-export const modules: Module[] = [
-  {
-    id: "m1",
-    icon: "🗂",
-    accent: "#7FB2FF",
-    title: {
-      fa: "مدیریت اطلاعات و مستندات",
-      en: "Information & Document Management",
-    },
-    items: [
-      { fa: "سیستم مدیریت الکترونیکی مستندات (EDMS)", en: "Electronic Document Management System (EDMS)" },
-      { fa: "مدیریت مدارک مهندسی", en: "Engineering Document Management" },
-      { fa: "گردش مکاتبات و نامه‌ها", en: "Correspondence & Letter Workflow" },
-      { fa: "کنترل نسخه‌ها و Revision Control", en: "Version & Revision Control" },
-      { fa: "فرآیند بررسی و تأیید مدارک", en: "Document Review & Approval Process" },
-      { fa: "ثبت و مدیریت Transmittalها", en: "Transmittal Registration & Management" },
-      { fa: "مدیریت تغییرات مدارک", en: "Document Change Management" },
-      { fa: "آرشیو و بایگانی دیجیتال پروژه", en: "Digital Project Archive & Filing" },
-      { fa: "مدیریت دانش پروژه (Lessons Learned)", en: "Project Knowledge Management (Lessons Learned)" },
-      { fa: "مدیریت گزارش‌ها و سوابق پروژه", en: "Project Reports & Records Management" },
-    ],
-  },
-  {
-    id: "m2",
-    icon: "🧭",
-    accent: "#8FE3C8",
-    title: { fa: "برنامه‌ریزی و اجرا", en: "Planning & Execution" },
-    items: [
-      { fa: "تعریف ساختار شکست کار (WBS)", en: "Work Breakdown Structure (WBS) Definition" },
-      { fa: "ساختار شکست سازمانی (OBS)", en: "Organizational Breakdown Structure (OBS)" },
-      { fa: "برنامه زمان‌بندی پایه (Baseline)", en: "Baseline Schedule" },
-      { fa: "برنامه اجرایی پروژه (PEP)", en: "Project Execution Plan (PEP)" },
-      { fa: "برنامه تفصیلی فعالیت‌ها", en: "Detailed Activity Schedule" },
-      { fa: "برنامه‌های روزانه، هفتگی و ماهانه", en: "Daily, Weekly & Monthly Plans" },
-      { fa: "کنترل پیشرفت فیزیکی پروژه", en: "Physical Progress Control" },
-      { fa: "مدیریت Milestoneها", en: "Milestone Management" },
-      { fa: "مدیریت منابع پروژه", en: "Project Resource Management" },
-      { fa: "مدیریت فعالیت‌های مهندسی، خرید، ساخت و راه‌اندازی (E/P/C/C)", en: "Engineering, Procurement, Construction & Commissioning (E/P/C/C)" },
-    ],
-  },
-  {
-    id: "m3",
-    icon: "📈",
-    accent: "#FFD48A",
-    title: { fa: "پایش و عملکرد", en: "Monitoring & Performance" },
-    items: [
-      { fa: "داشبورد مدیریتی پروژه", en: "Executive Project Dashboard" },
-      { fa: "شاخص‌های کلیدی عملکرد (KPI Management)", en: "Key Performance Indicators (KPI Management)" },
-      { fa: "مدیریت ارزش کسب‌شده (EVM)", en: "Earned Value Management (EVM)" },
-      { fa: "تحلیل PV / EV / AC", en: "PV / EV / AC Analysis" },
-      { fa: "شاخص عملکرد زمان (SPI)", en: "Schedule Performance Index (SPI)" },
-      { fa: "شاخص عملکرد هزینه (CPI)", en: "Cost Performance Index (CPI)" },
-      { fa: "منحنی S-Curve پیشرفت", en: "Progress S-Curve" },
-      { fa: "گزارش وضعیت پروژه", en: "Project Status Reporting" },
-      { fa: "تحلیل انحرافات برنامه و هزینه", en: "Schedule & Cost Variance Analysis" },
-      { fa: "سیستم هشدار زودهنگام", en: "Early Warning System" },
-    ],
-  },
-  {
-    id: "m4",
-    icon: "⚠️",
-    accent: "#FF9F9F",
-    title: { fa: "ریسک و ادعاها", en: "Risk & Claims" },
-    items: [
-      { fa: "ثبت ریسک‌ها (Risk Register)", en: "Risk Register" },
-      { fa: "شناسایی و تحلیل ریسک", en: "Risk Identification & Analysis" },
-      { fa: "ارزیابی احتمال و اثر ریسک", en: "Probability & Impact Assessment" },
-      { fa: "برنامه پاسخ به ریسک", en: "Risk Response Planning" },
-      { fa: "پایش ریسک‌های بحرانی", en: "Critical Risk Monitoring" },
-      { fa: "مدیریت تغییرات پروژه", en: "Project Change Management" },
-      { fa: "کنترل درخواست‌های تغییر (Change Request)", en: "Change Request Control" },
-      { fa: "مدیریت تأخیرات پروژه", en: "Project Delay Management" },
-      { fa: "تحلیل تأخیرات (Delay Analysis)", en: "Delay Analysis" },
-      { fa: "مدیریت ادعاهای قراردادی", en: "Contractual Claims Management" },
-      { fa: "مدیریت تمدید مدت پیمان (EOT Management)", en: "Extension of Time (EOT Management)" },
-    ],
-  },
-  {
-    id: "m5",
-    icon: "💠",
-    accent: "#C9A7FF",
-    title: { fa: "هزینه و زنجیره تأمین", en: "Cost & Supply Chain" },
-    items: [
-      { fa: "مدیریت بودجه پروژه", en: "Project Budget Management" },
-      { fa: "ساختار شکست هزینه (CBS)", en: "Cost Breakdown Structure (CBS)" },
-      { fa: "کنترل هزینه واقعی", en: "Actual Cost Control" },
-      { fa: "پیش‌بینی هزینه نهایی", en: "Estimate at Completion Forecasting" },
-      { fa: "جریان نقدینگی پروژه", en: "Project Cash Flow" },
-      { fa: "مدیریت درخواست‌های خرید", en: "Purchase Requisition Management" },
-      { fa: "مدیریت سفارشات خرید", en: "Purchase Order Management" },
-      { fa: "کنترل اقلام Long Lead", en: "Long Lead Item Control" },
-      { fa: "ارزیابی عملکرد تأمین‌کنندگان", en: "Supplier Performance Evaluation" },
-      { fa: "مدیریت قراردادهای خرید", en: "Procurement Contract Management" },
-      { fa: "مدیریت حمل‌ونقل و لجستیک", en: "Transportation & Logistics Management" },
-      { fa: "کنترل موجودی و انبار پروژه", en: "Project Inventory & Warehouse Control" },
-    ],
-  },
-];
 
 /* ============================================================
    LEFT SIDEBAR — 8 data integration sources
