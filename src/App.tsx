@@ -65,6 +65,9 @@ function useWeather() {
   useEffect(() => {
     let alive = true;
     const apply = (lat: number, lon: number) => {
+      // هیچ ویجتی حق ندارد با خطای همگام کلِ برنامه را پایین بیاورد.
+      if (typeof fetch !== "function") return;
+      try {
       fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true`)
         .then((r) => (r.ok ? r.json() : Promise.reject()))
         .then((d) => {
@@ -76,6 +79,9 @@ function useWeather() {
           }
         })
         .catch(() => {});
+      } catch {
+        /* آب‌وهوا اختیاری است — بی‌توجه عبور می‌کنیم */
+      }
     };
     if (typeof navigator !== "undefined" && navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
