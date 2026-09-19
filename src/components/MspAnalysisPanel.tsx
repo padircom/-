@@ -1,6 +1,7 @@
-import { useMemo } from "react";
+import { useMemo, useRef, useState } from "react";
 import { type Lang } from "../data/framework";
-import { MSP_TASKS_SEED, mspAnalysis } from "../services/scheduleInsights";
+import { type ImportedTask, MSP_TASKS_SEED, mspAnalysis } from "../services/scheduleInsights";
+import { parseScheduleFile } from "../services/mspImport";
 
 /* ══════════════════════════════════════════════════════════════════════
    داشبورد «تحلیل برنامهٔ وارداتی (MSP / P6)» — دامنهٔ d2
@@ -13,7 +14,29 @@ const gradeColor: Record<string, string> = { A: "#34D399", B: "#7FB2FF", C: "#FB
 
 export default function MspAnalysisPanel({ lang }: { lang: Lang }) {
   const rtl = lang === "fa";
-  const res = useMemo(() => mspAnalysis(MSP_TASKS_SEED), []);
+  const [tasks, setTasks] = useState<ImportedTask[] | null>(null);
+  const [sourceLabel, setSourceLabel] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement | null>(null);
+
+  const res = useMemo(() => mspAnalysis(tasks ?? MSP_TASKS_SEED), [tasks]);
+
+  const onFile = async (file: File) => {
+    setError(null);
+    try {
+      const text = await file.text();
+      const parsed = parseScheduleFile(file.name, text);
+      if (!parsed.length) throw new Error("EMPTY");
+      setTasks(parsed);
+      setSourceLabel(file.name);
+    } catch {
+      setError(
+        rtl
+          ? "فایل خوانده نشد. قالبِ پشتیبانی‌شده: XML یا CSVِ صادرشده از MSP/P6 (خروجیِ .mpp باینری است و در مرورگر خوانده نمی‌شود)."
+          : "Could not read the file. Supported: MS Project/P6 XML or CSV export (the .mpp binary cannot be read in the browser).",
+      );
+    }
+  };
   const num = (n: number) => Math.round(n).toLocaleString(rtl ? "fa-IR" : "en-US");
   const pct = (n: number) => `${(n * 100).toLocaleString(rtl ? "fa-IR" : "en-US", { maximumFractionDigits: 1 })}%`;
 
@@ -23,6 +46,9 @@ export default function MspAnalysisPanel({ lang }: { lang: Lang }) {
         <div className="rounded-xl border b-line-soft bg-[var(--row)] p-3">
           <div className="text-[8.5px] font-extralight tx4">{rtl ? "تعداد فعالیت‌ها" : "Activity count"}</div>
           <div className="mt-1 text-[13px] font-light tx1">{num(res.taskCount)}</div>
+          <div className="mt-0.5 text-[9px] font-extralight tx3">
+            {sourceLabel ? (rtl ? `منبع: ${sourceLabel}` : `source: ${sourceLabel}`) : (rtl ? "دادهٔ نمونه" : "seed data")}
+          </div>
         </div>
         <div className="rounded-xl border b-line-soft bg-[var(--row)] p-3">
           <div className="text-[8.5px] font-extralight tx4">{rtl ? "نمرهٔ سلامت شبکه" : "Network health"}</div>
@@ -40,6 +66,40 @@ export default function MspAnalysisPanel({ lang }: { lang: Lang }) {
             {num(res.findings.filter((f) => f.severity !== "ok").length)}
           </div>
         </div>
+      </div>
+
+      <div className="flex shrink-0 flex-wrap items-center gap-2">
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".xml,.csv,.json,.txt,text/xml,text/csv,application/json"
+          className="hidden"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) void onFile(f);
+            e.target.value = "";
+          }}
+        />
+        <button
+          type="button"
+          onClick={() => fileRef.current?.click()}
+          className="rounded-lg border b-line-soft bg-[var(--row)] px-2.5 py-1 text-[10px] font-light tx2 transition hover:tx1"
+        >
+          {rtl ? "بارگذاری فایل (XML/CSV/JSON)" : "Load file (XML/CSV/JSON)"}
+        </button>
+        {tasks && (
+          <button
+            type="button"
+            onClick={() => {
+              setTasks(null);
+              setSourceLabel(null);
+            }}
+            className="rounded-lg border b-line-soft px-2.5 py-1 text-[10px] font-light tx3 transition hover:tx2"
+          >
+            {rtl ? "بازگشت به دادهٔ نمونه" : "Back to seed data"}
+          </button>
+        )}
+        {error && <span className="text-[9.5px] text-rose-300">{error}</span>}
       </div>
 
       <div className="thin-scroll min-h-0 flex-1 overflow-auto rounded-xl border b-line-soft">

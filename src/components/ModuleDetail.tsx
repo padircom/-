@@ -22,6 +22,7 @@ import HSEWorkspace, { type HseTab } from "./HSEWorkspace";
 import VendorRatingPanel from "./VendorRatingPanel";
 import GeoProjectsPanel from "./GeoProjectsPanel";
 import EfqmPanel from "./EfqmPanel";
+import StrategyWorkspace from "./StrategyWorkspace";
 
 /** Extra submodules only on the d1 inner page — not in the main right sidebar. */
 const D1_PAGE_SUBS: Record<string, { id: string; title: Bi; tab: EdmsTab; sql: string[] }[]> = {
@@ -169,6 +170,8 @@ const D4_TAB_BY_SUB: Record<string, D4Tab> = {
   "d4-p5-ntc": "notice",
   "d4-p5-dsp": "dispute",
   "d4-p5-exe": "exec",
+  "d4-p6-s1": "invest",
+  "d4-p6-s2": "invest",
 };
 
 /* حوزهٔ d6 زیرماژول اضافی ندارد.
@@ -1486,6 +1489,51 @@ export default function ModuleDetail({ lang, target, onBack, onOpenFlowNet, onNa
     if (sid && D17_TAB_BY_SUB[sid]) return D17_TAB_BY_SUB[sid];
     return "dashboard";
   })();
+
+  /* ═══════════ d20 — مدیریت استراتژیک: نقشه، درخت هدف/شاخص، ابتکارات ═══════════ */
+  if (dom.id === "d20") {
+    return (
+      <div className="flex h-full min-h-0 flex-col gap-3 overflow-hidden" dir={rtl ? "rtl" : "ltr"}>
+        <div className="glass flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl px-3 py-2.5">
+          <button onClick={onBack} className="glass-row flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-[10.5px] font-light tx2 transition hover:tx1">
+            <span className={rtl ? "" : "rotate-180"}>→</span>
+            {rtl ? "بازگشت به داشبورد" : "Back to dashboard"}
+          </button>
+          <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl text-[20px]"
+                style={{ background: `${dom.accent}1f`, border: `1px solid ${dom.accent}55` }}>
+            {dom.icon}
+          </span>
+          <div className="min-w-0 flex-1">
+            <h1 className="truncate text-[20px] font-semibold leading-tight" style={{ color: dom.accent }}>
+              {t(dom.title, lang)}
+            </h1>
+            <p className="mt-1 truncate text-[10px] font-extralight tx3">
+              {rtl ? "BSC — چهار منظر؛ تحقق از شاخص تا کلِ استراتژی بالا می‌رود" : "BSC — four perspectives; attainment rolls up from KPI to strategy"}
+            </p>
+          </div>
+          <div className="shrink-0 text-end">
+            <div className="text-[9px] font-extralight tx3">{rtl ? "مالک: دفتر استراتژی" : "Owner: Strategy Office"}</div>
+            <div className="text-[11px] font-light tx1">{rtl ? "هدف ← شاخص ← ابتکار" : "Objective ← KPI ← Initiative"}</div>
+          </div>
+        </div>
+        <div className="glass flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl p-3">
+          {selected ? (
+            <CapabilityDetail
+              lang={lang}
+              domainId={dom.id}
+              clusterId={target.clusterId}
+              projectId={target.projectId}
+              processId={selected.pId}
+              subId={selected.sId}
+              onBack={() => setSelected(null)}
+            />
+          ) : (
+            <StrategyWorkspace lang={lang} />
+          )}
+        </div>
+      </div>
+    );
+  }
 
   /* ═══════════ d18 — GIS: نمودارِ برداری است و کاشیِ نقشه نمی‌خواهد ═══════════ */
   if (dom.id === "d18") {

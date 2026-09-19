@@ -150,7 +150,10 @@ export const domains: Domain[] = [
         id: "d14-p2",
         title: { fa: "ریزمتره و صورت‌وضعیت موقت", en: "Measurement & Interim Payment" },
         subs: [
-          { id: "d14-p2-s1", title: { fa: "برگه ریزمتره و تأیید مقدار", en: "Measurement Sheet & Quantity Approval" }, activity: { fa: "ثبت متره کارکرد دوره با ارجاع به ردیف فهرست بها و تأیید ناظر", en: "Record period measurement against BOQ lines with supervisor verification" }, source: "Site Measurement, As-Built", sql: ["MeasurementSheet"], output: "Approved Measurement", connectsTo: "Quality, Planning", ai: "AI Quantity Anomaly" },
+          { id: "d14-p2-s1", title: { fa: "برگه ریزمتره و تأیید مقدار", en: "Measurement Sheet & Quantity Approval" }, activity: { fa: "ثبت متره کارکرد دوره با ارجاع به ردیف فهرست بها و تأیید ناظر", en: "Record period measurement against BOQ lines with supervisor verification" }, source: "Site Measurement, As-Built", sql: ["MeasurementSheet"], output: "Approved Measurement", connectsTo: "Quality, Planning", ai: "AI Quantity Anomaly",
+            links: [
+              { to: "d5-p7-s2", label: { fa: "مبنای مقداری: برداشتِ احجام در d5", en: "Quantity basis: measurement in d5" } }
+            ] },
           { id: "d14-p2-s2", title: { fa: "تهیه و گردش صورت‌وضعیت", en: "IPC Preparation & Workflow" }, activity: { fa: "تولید صورت‌وضعیت از متره تأییدشده و گذر از گام‌های تأیید تا ابلاغ", en: "Generate IPC from approved measurement and route through approval steps" }, source: "Measurement, Contract", sql: ["InterimPaymentCertificate", "IPC_LineItem", "IPC_WorkflowStep"], output: "Certified IPC", connectsTo: "Cost, Governance", ai: "AI Workflow Bottleneck" },
         ],
       },
@@ -251,7 +254,10 @@ export const domains: Domain[] = [
         id: "d1-p5",
         title: { fa: "مدیریت دانش", en: "Knowledge Management" },
         subs: [
-          { id: "d1-p5-s1", title: { fa: "درس‌آموخته‌ها", en: "Lessons Learned" }, activity: { fa: "ثبت تجربه", en: "Experience capture" }, source: "User Entry", sql: ["Knowledge_Base"], output: "Knowledge Report", connectsTo: "PMO Database", ai: "AI Knowledge Search" },
+          { id: "d1-p5-s1", title: { fa: "درس‌آموخته‌ها", en: "Lessons Learned" }, activity: { fa: "ثبت تجربه", en: "Experience capture" }, source: "User Entry", sql: ["Knowledge_Base"], output: "Knowledge Report", connectsTo: "PMO Database", ai: "AI Knowledge Search",
+            links: [
+              { to: "d11-p5-s1", label: { fa: "ثبت در بانکِ دانش و درس‌آموخته (d11)", en: "Register in the lessons-learned bank (d11)" } }
+            ] },
         ],
       },
     ],
@@ -612,8 +618,14 @@ export const domains: Domain[] = [
         id: "d5-p7",
         title: { fa: "مدیریت احجام و مقادیر فیزیکی", en: "Quantity & Physical Progress" },
         subs: [
-          { id: "d5-p7-s1", title: { fa: "فهرست بها و اقلام احجامی", en: "BOQ & Measured Items" }, activity: { fa: "نگهداری ردیف‌های فهرست بها با مقدار کل، مقدار برنامه‌ای تجمعی و نرخ واحد برای ارزش‌گذاری پیشرفت فیزیکی", en: "Maintain BOQ rows with total qty, cumulative planned qty and unit rate for physical progress valuation" }, source: "Contract BOQ, Engineering MTO", sql: ["Boq_Item", "Boq_Measurement"], output: "Quantity Variance Report", connectsTo: "Planning, Contracts", ai: "AI Quantity Forecaster" },
-          { id: "d5-p7-s2", title: { fa: "برداشت و صورت‌برداری دوره‌ای", en: "Periodic Measurement" }, activity: { fa: "ثبت برداشت ماهانه به تفکیک دوره و ردیف و مقایسه با برنامه تا تاریخ داده", en: "Record periodic measurements per row and compare with plan to data date" }, source: "Site Survey, DPR", sql: ["Boq_Measurement", "Measurement_Approval"], output: "Measurement Certificate", connectsTo: "Contracts, Monitoring", ai: "AI Measurement Auditor" },
+          { id: "d5-p7-s1", title: { fa: "فهرست بها و اقلام احجامی", en: "BOQ & Measured Items" }, activity: { fa: "نگهداری ردیف‌های فهرست بها با مقدار کل، مقدار برنامه‌ای تجمعی و نرخ واحد برای ارزش‌گذاری پیشرفت فیزیکی", en: "Maintain BOQ rows with total qty, cumulative planned qty and unit rate for physical progress valuation" }, source: "Contract BOQ, Engineering MTO", sql: ["Boq_Item", "Boq_Measurement"], output: "Quantity Variance Report", connectsTo: "Planning, Contracts", ai: "AI Quantity Forecaster",
+            links: [
+              { to: "d14-p1-s1", label: { fa: "فهرست بها و نرخ‌های قرارداد در d14", en: "Contract BOQ and rates in d14" } }
+            ] },
+          { id: "d5-p7-s2", title: { fa: "برداشت و صورت‌برداری دوره‌ای", en: "Periodic Measurement" }, activity: { fa: "ثبت برداشت ماهانه به تفکیک دوره و ردیف و مقایسه با برنامه تا تاریخ داده", en: "Record periodic measurements per row and compare with plan to data date" }, source: "Site Survey, DPR", sql: ["Boq_Measurement", "Measurement_Approval"], output: "Measurement Certificate", connectsTo: "Contracts, Monitoring", ai: "AI Measurement Auditor",
+            links: [
+              { to: "d14-p2-s1", label: { fa: "تبدیلِ برداشت به ریزمتره و صورت‌وضعیت (d14)", en: "Convert measurement to IPC in d14" } }
+            ] },
         ],
       },
       {
@@ -1253,6 +1265,14 @@ export const domains: Domain[] = [
 
 
 
+      {
+        id: "d4-p6",
+        title: { fa: "تحلیل سرمایه‌گذاری و ریسک مالی", en: "Investment & Financial Risk" },
+        subs: [
+          { id: "d4-p6-s1", title: { fa: "NPV/IRR و صرفِ ریسک", en: "NPV/IRR & Risk Premium" }, activity: { fa: "محاسبهٔ NPV و IRR و اعمالِ صرفِ ریسکِ برآمده از ثبت ریسک برای رسیدن به NPVِ تعدیل‌شده", en: "Compute NPV and IRR, then apply a risk premium derived from the risk register to reach risk-adjusted NPV" }, source: "Risk Register, Finance", sql: ["Risk_Register", "Cashflow_Plan"], output: "Risk-Adjusted NPV", connectsTo: "Cost, Governance", ai: "AI Risk Premium Calibrator" },
+          { id: "d4-p6-s2", title: { fa: "سناریو، حساسیت و گیتِ تصمیم", en: "Scenarios, Sensitivity & Gate" }, activity: { fa: "تحلیلِ سه سناریو با احتمال، نمودارِ تورنادو روی محرک‌ها و صدورِ تصمیمِ گیت (تأیید/مشروط/عدم تأیید)", en: "Analyse three probability-weighted scenarios, tornado sensitivity on drivers and issue a gate decision" }, source: "Finance, PMO", sql: ["Scenario_Model", "Sensitivity_Run"], output: "Investment Gate Decision", connectsTo: "Governance, Portfolio", ai: "AI Decision Advisor" },
+        ],
+      },
     ],
   },
   {
@@ -1298,7 +1318,10 @@ export const domains: Domain[] = [
         id: "d11-p5",
         title: { fa: "دانش و درس‌آموخته", en: "Knowledge & Lessons Learned" },
         subs: [
-          { id: "d11-p5-s1", title: { fa: "بانک درس‌آموخته و استفاده مجدد", en: "Lessons Register & Reuse Tracking" }, activity: { fa: "ثبت درس با منشأ الزامی، تأیید شورای دانش و ردیابی استفاده مجدد", en: "Capture lessons with mandatory source, validate and track reuse" }, source: "NCR, Claim, Incident, Meeting", sql: ["ckm_lesson", "ckm_lesson_reuse"], output: "Knowledge Value Report", connectsTo: "Quality, Risk, HSE", ai: "AI Knowledge Recommender" },
+          { id: "d11-p5-s1", title: { fa: "بانک درس‌آموخته و استفاده مجدد", en: "Lessons Register & Reuse Tracking" }, activity: { fa: "ثبت درس با منشأ الزامی، تأیید شورای دانش و ردیابی استفاده مجدد", en: "Capture lessons with mandatory source, validate and track reuse" }, source: "NCR, Claim, Incident, Meeting", sql: ["ckm_lesson", "ckm_lesson_reuse"], output: "Knowledge Value Report", connectsTo: "Quality, Risk, HSE", ai: "AI Knowledge Recommender",
+            links: [
+              { to: "d1-p5-s1", label: { fa: "بایگانی و نسخه در EDMS (d1)", en: "Archive and revision in EDMS (d1)" } }
+            ] },
         ],
       },
       {
@@ -1513,6 +1536,31 @@ export const domains: Domain[] = [
         subs: [
           { id: "d19-p1-s1", title: { fa: "نُه معیار و منطق RADAR", en: "Nine Criteria & RADAR" }, activity: { fa: "امتیازدهیِ پنج معیارِ توانمندساز و چهار معیارِ نتایج با دو بُعدِ RADAR و محاسبهٔ امتیاز تا ۱۰۰۰", en: "Score five enabler and four result criteria on two RADAR axes and compute a 0–1000 total" }, source: "Self-Assessment Workshops", sql: ["Efqm_Assessment", "Efqm_Score"], output: "EFQM Scorecard", connectsTo: "Governance, Quality", ai: "AI Evidence Mapper" },
           { id: "d19-p1-s2", title: { fa: "برنامهٔ بهبود و سطح‌بندی", en: "Improvement Plan & Levels" }, activity: { fa: "تعیین ضعیف‌ترین معیار، تدوین برنامهٔ بهبود و پایشِ پیشرفتِ سطح از «در مسیر» تا «پنج ستاره»", en: "Identify the weakest criterion, build an improvement plan and track level progression" }, source: "Excellence Office", sql: ["Efqm_Improvement"], output: "Improvement Roadmap", connectsTo: "Governance, Audit", ai: "AI Improvement Prioritiser" },
+        ],
+      },
+    ],
+  },
+  {
+    id: "d20",
+    group: "pg1",
+    icon: "🎯",
+    accent: "#F472B6",
+    title: { fa: "مدیریت استراتژیک", en: "Strategic Management" },
+    processes: [
+      {
+        id: "d20-p1",
+        title: { fa: "نقشه‌ی استراتژی و اهداف", en: "Strategy Map & Objectives" },
+        subs: [
+          { id: "d20-p1-s1", title: { fa: "چشم‌انداز و محورهای استراتژیک", en: "Vision & Strategic Themes" }, activity: { fa: "تدوین چشم‌انداز، محورهای استراتژیک و منظرهای کارت امتیازی متوازن", en: "Define vision, strategic themes and balanced scorecard perspectives" }, source: "Board, Strategy Office", sql: ["Strategy_Theme", "Bsc_Perspective"], output: "Strategy Map", connectsTo: "Governance, Portfolio", ai: "AI Theme Synthesizer" },
+          { id: "d20-p1-s2", title: { fa: "درخت هدف و شاخص", en: "Objective & KPI Tree" }, activity: { fa: "تعریف هدف به تفکیک منظر، با شاخص‌های وزن‌دار، مبنا، هدف کمّی و جهتِ مطلوب", en: "Define objectives per perspective with weighted KPIs, baselines, quantitative targets and direction" }, source: "BSC Workshops", sql: ["Strategy_Objective", "Strategy_Kpi"], output: "Objective & KPI Tree", connectsTo: "Monitoring, Governance", ai: "AI KPI Designer" },
+        ],
+      },
+      {
+        id: "d20-p2",
+        title: { fa: "ابتکارات و پایش عملکرد استراتژیک", en: "Initiatives & Strategic Performance" },
+        subs: [
+          { id: "d20-p2-s1", title: { fa: "سبد ابتکارات و تخصیص منابع", en: "Initiative Portfolio" }, activity: { fa: "ثبت ابتکارات، پیوند به اهداف، بودجه و پیشرفت، و اولویت‌بندی بر پایهٔ اثرِ وزنی", en: "Register initiatives, link to objectives, budget and progress, and prioritise by weighted impact" }, source: "PMO, Finance", sql: ["Strategy_Initiative", "Initiative_Link"], output: "Initiative Portfolio", connectsTo: "Portfolio, Cost", ai: "AI Portfolio Optimiser" },
+          { id: "d20-p2-s2", title: { fa: "پایش تحقق و هشدار انحراف", en: "Attainment Monitoring & Alerts" }, activity: { fa: "محاسبهٔ تحققِ شاخص، هدف، منظر و کلِ استراتژی با هشدارِ انحراف و پیشنهادِ مداخله", en: "Compute attainment for KPI, objective, perspective and overall strategy with deviation alerts" }, source: "KPI Feeds", sql: ["Strategy_Kpi_Value"], output: "Strategy Scorecard", connectsTo: "Monitoring, Governance", ai: "AI Intervention Advisor" },
         ],
       },
     ],
