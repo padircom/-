@@ -184,9 +184,10 @@ export default function App() {
       >
         {/* ── fixed left corner: live dock + switchers (never moves) ── */}
         <div className="order-first flex shrink-0 items-center gap-2">
-          <div className="hidden md:block">
-            <EnvWidgets lang={lang} />
-          </div>
+          {/* ساعت · تاریخ · آب‌وهوا: همیشه نمایش داده می‌شود.
+            پیش از این فقط از ۷۶۸px به بالا دیده می‌شد (`hidden md:block`)
+            و در پنجره‌های باریک هدر بی‌دلیل خالی به نظر می‌رسید. */}
+          <EnvWidgets lang={lang} />
 
           <span className="hline h-6 w-px" />
 
