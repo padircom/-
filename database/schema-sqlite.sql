@@ -1,5 +1,5 @@
 -- ═══════════════════════════════════════════════════════════════
--- شِمای تولیدشده برای SQLite — 223 جدول
+-- شِمای تولیدشده برای SQLite — 224 جدول
 -- تولید خودکار از روی کد (scripts/generate-schema.mjs) — دستی ویرایش نکنید.
 -- اگر شِمای واقعی دارید، database/schema.custom.sql را جایگزین کنید.
 -- ═══════════════════════════════════════════════════════════════
@@ -1304,6 +1304,20 @@ CREATE TABLE IF NOT EXISTS PriceAdjustmentCalculation (
     Payload TEXT NULL -- فیلدهای اختصاصی تا زمانِ تعریفِ شِمای واقعی
 );
 CREATE INDEX IF NOT EXISTS IX_PriceAdjustmentCalculation_ProjectCode ON PriceAdjustmentCalculation(ProjectCode);
+
+CREATE TABLE IF NOT EXISTS ProcessTree (
+    Id TEXT PRIMARY KEY,
+    ProjectId TEXT NOT NULL,
+    DomainId TEXT NOT NULL,
+    Payload TEXT NOT NULL,
+    IsActive INTEGER NOT NULL DEFAULT 1,
+    CreatedAt TEXT NOT NULL,
+    CreatedBy TEXT,
+    UpdatedAt TEXT,
+    UpdatedBy TEXT,
+    RowVersion INTEGER NOT NULL DEFAULT 1
+);
+CREATE UNIQUE INDEX IF NOT EXISTS UX_ProcessTree_ProjectDomain ON ProcessTree(ProjectId, DomainId);
 
 CREATE TABLE IF NOT EXISTS Process_Master (
     Id INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -266,6 +266,25 @@ export const SCHEMA: TableDef[] = [
     foreignKeys: [{ column: "IndustryId", refTable: "Industry", refColumn: "Id", onDelete: "NO ACTION" }],
   },
   {
+    /* بازنویسیِ پروژه‌ایِ درختِ فرایندهای دو حوزهٔ آغازین (d6 و d20).
+     * Payload عمداً JSON است تا خودِ ساختارِ متغیرِ زیرفرایندها در یک ردیف
+     * ذخیره شود؛ نسخهٔ پایه همچنان در framework.ts باقی می‌ماند. */
+    name: "ProcessTree",
+    module: "core",
+    title: { fa: "درخت فرایند پروژه", en: "Project process taxonomy" },
+    pk: "Id",
+    columns: [
+      id(),
+      req("ProjectId", "text", { len: 60 }),
+      req("DomainId", "text", { len: 20 }),
+      req("Payload", "json"),
+      req("IsActive", "bool", { default: "1" }),
+    ],
+    indexes: [
+      { name: "UX_ProcessTree_ProjectDomain", columns: ["ProjectId", "DomainId"], unique: true },
+    ],
+  },
+  {
     name: "AppUser",
     module: "d7",
     title: { fa: "کاربر", en: "Application user" },

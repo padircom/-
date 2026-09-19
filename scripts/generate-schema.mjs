@@ -31,6 +31,10 @@ const tables = new Set();
 for (const m of framework.matchAll(/sql:\s*\[([^\]]*)\]/g)) {
   for (const t of m[1].matchAll(/"([A-Za-z_]\w*)"/g)) tables.add(t[1]);
 }
+/* ساختارِ قابل ویرایشِ d6/d20 در یک جدولِ واقعیِ پروژه‌ای ذخیره می‌شود؛
+   چون نام آن در metadata نمایشیِ زیرفرآیندها تکرار نمی‌شود، صریح اضافه‌اش
+   می‌کنیم تا خروجیِ DDL با لایهٔ persistence همگام بماند. */
+tables.add("ProcessTree");
 
 /* ── ۲) ستون‌ها از رشته‌های SQLِ کد ─────────────────────────────────── */
 const SQL_JUNK = new Set([
@@ -116,6 +120,41 @@ function buildDdl(dialect) {
   lines.push("");
 
   for (const table of [...tables].sort()) {
+    if (table === "ProcessTree") {
+      if (mssql) {
+        lines.push(`IF OBJECT_ID(N'dbo.ProcessTree', N'U') IS NULL`);
+        lines.push(`CREATE TABLE dbo.ProcessTree (`);
+        lines.push(`    Id NVARCHAR(60) NOT NULL CONSTRAINT PK_ProcessTree PRIMARY KEY,`);
+        lines.push(`    ProjectId NVARCHAR(60) NOT NULL,`);
+        lines.push(`    DomainId NVARCHAR(20) NOT NULL,`);
+        lines.push(`    Payload NVARCHAR(MAX) NOT NULL,`);
+        lines.push(`    IsActive BIT NOT NULL CONSTRAINT DF_ProcessTree_IsActive DEFAULT 1,`);
+        lines.push(`    CreatedAt DATETIME2(0) NOT NULL CONSTRAINT DF_ProcessTree_CreatedAt DEFAULT SYSUTCDATETIME(),`);
+        lines.push(`    CreatedBy NVARCHAR(60) NULL,`);
+        lines.push(`    UpdatedAt DATETIME2(0) NULL,`);
+        lines.push(`    UpdatedBy NVARCHAR(60) NULL,`);
+        lines.push(`    RowVersion INT NOT NULL CONSTRAINT DF_ProcessTree_RowVersion DEFAULT 1`);
+        lines.push(`);`);
+        lines.push(`IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_ProcessTree_ProjectDomain' AND object_id = OBJECT_ID(N'dbo.ProcessTree'))`);
+        lines.push(`  CREATE UNIQUE INDEX UX_ProcessTree_ProjectDomain ON dbo.ProcessTree(ProjectId, DomainId);`);
+      } else {
+        lines.push(`CREATE TABLE IF NOT EXISTS ProcessTree (`);
+        lines.push(`    Id TEXT PRIMARY KEY,`);
+        lines.push(`    ProjectId TEXT NOT NULL,`);
+        lines.push(`    DomainId TEXT NOT NULL,`);
+        lines.push(`    Payload TEXT NOT NULL,`);
+        lines.push(`    IsActive INTEGER NOT NULL DEFAULT 1,`);
+        lines.push(`    CreatedAt TEXT NOT NULL,`);
+        lines.push(`    CreatedBy TEXT,`);
+        lines.push(`    UpdatedAt TEXT,`);
+        lines.push(`    UpdatedBy TEXT,`);
+        lines.push(`    RowVersion INTEGER NOT NULL DEFAULT 1`);
+        lines.push(`);`);
+        lines.push(`CREATE UNIQUE INDEX IF NOT EXISTS UX_ProcessTree_ProjectDomain ON ProcessTree(ProjectId, DomainId);`);
+      }
+      lines.push("");
+      continue;
+    }
     const known = [...(columns.get(table) ?? [])].filter((c) => c !== "Id" && !COMMON.includes(c));
     const defs = [];
     if (mssql) {

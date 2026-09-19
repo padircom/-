@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { domains, t, type Bi, type Lang } from "../data/framework";
+import { useEffect, useState } from "react";
+import { domains, t, type Bi, type Lang, type Process } from "../data/framework";
 import { useSystem } from "../context/SystemContext";
 import { roleLabel, useAuth } from "../context/AuthContext";
 import type { ModuleNavTarget } from "./RightSidebar";
@@ -23,6 +23,8 @@ import VendorRatingPanel from "./VendorRatingPanel";
 import GeoProjectsPanel from "./GeoProjectsPanel";
 import EfqmPanel from "./EfqmPanel";
 import StrategyWorkspace from "./StrategyWorkspace";
+import TaxonomyEditor from "./TaxonomyEditor";
+import { EDITABLE_TAXONOMY_DOMAINS, loadProcessTree } from "../services/taxonomyApi";
 
 /** Extra submodules only on the d1 inner page — not in the main right sidebar. */
 const D1_PAGE_SUBS: Record<string, { id: string; title: Bi; tab: EdmsTab; sql: string[] }[]> = {
@@ -387,6 +389,21 @@ export default function ModuleDetail({ lang, target, onBack, onOpenFlowNet, onNa
   const [selected, setSelected] = useState<{ pId: string; sId: string } | null>(
     target.processId && target.subId ? { pId: target.processId, sId: target.subId } : null
   );
+  const [taxonomyProcesses, setTaxonomyProcesses] = useState<Process[] | null>(null);
+  const [taxonomyEditorOpen, setTaxonomyEditorOpen] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    if (!dom || !EDITABLE_TAXONOMY_DOMAINS.includes(dom.id as (typeof EDITABLE_TAXONOMY_DOMAINS)[number]) || !target.projectId) {
+      setTaxonomyProcesses(null);
+      return () => { alive = false; };
+    }
+    (async () => {
+      const saved = await loadProcessTree(target.projectId, dom.id);
+      if (alive) setTaxonomyProcesses(saved);
+    })();
+    return () => { alive = false; };
+  }, [dom?.id, target.projectId]);
 
   if (!dom) return null;
 
@@ -408,6 +425,17 @@ export default function ModuleDetail({ lang, target, onBack, onOpenFlowNet, onNa
       </div>
     );
   }
+
+  const activeProcesses = taxonomyProcesses ?? dom.processes;
+  const canEditTaxonomy = EDITABLE_TAXONOMY_DOMAINS.includes(dom.id as (typeof EDITABLE_TAXONOMY_DOMAINS)[number])
+    && (can("system.manage") || can("project.edit", target.projectId));
+  const handleTaxonomySaved = (next: Process[]) => {
+    setTaxonomyProcesses(next);
+    setTaxonomyEditorOpen(false);
+    if (selected && !next.some((p) => p.id === selected.pId && p.subs.some((s) => s.id === selected.sId))) setSelected(null);
+    audit("UPDATE_PROCESS_TREE", { projectId: target.projectId, entity: dom.id, entityId: dom.id });
+    window.dispatchEvent(new CustomEvent("pmis:taxonomy-updated", { detail: { projectId: target.projectId, domainId: dom.id, processes: next } }));
+  };
 
   // Direct render for System Administration if reached
   if (dom.id === "d7" && !selected) {
@@ -1428,6 +1456,11 @@ export default function ModuleDetail({ lang, target, onBack, onOpenFlowNet, onNa
               </p>
             )}
           </div>
+          {canEditTaxonomy && (
+            <button type="button" onClick={() => setTaxonomyEditorOpen(true)} className="rounded-lg border border-sky-400/45 bg-sky-400/10 px-3 py-2 text-[10px] text-sky-200 hover:bg-sky-400/20">
+              ✎ {rtl ? "ویرایش فرایندها" : "Edit processes"}
+            </button>
+          )}
           <div className="shrink-0 text-end">
             <div className="text-[9px] font-extralight tx3">{t(dom.title, lang)}</div>
             <div className="text-[11px] font-light tx1">
@@ -1450,7 +1483,7 @@ export default function ModuleDetail({ lang, target, onBack, onOpenFlowNet, onNa
               </div>
             </div>
             <div className="thin-scroll flex-1 overflow-y-auto p-2 space-y-2">
-              {dom.processes.map((p, i) => (
+              {activeProcesses.map((p, i) => (
                 <div key={p.id} className="rounded-xl border b-line-soft bg-black/10 p-1.5">
                   <div className="flex items-center gap-1.5 px-1 py-1">
                     <span className="text-[8px] font-light tabular-nums tx4">
@@ -1480,6 +1513,19 @@ export default function ModuleDetail({ lang, target, onBack, onOpenFlowNet, onNa
             </div>
           </aside>
         </div>
+        {taxonomyEditorOpen && (
+          <TaxonomyEditor
+            lang={lang}
+            domainTitle={dom.title}
+            domainId={dom.id}
+            projectId={target.projectId}
+            processes={activeProcesses}
+            defaultProcesses={dom.processes}
+            actor={user?.id}
+            onClose={() => setTaxonomyEditorOpen(false)}
+            onSaved={handleTaxonomySaved}
+          />
+        )}
       </div>
     );
   }
@@ -1511,26 +1557,86 @@ export default function ModuleDetail({ lang, target, onBack, onOpenFlowNet, onNa
               {rtl ? "BSC — چهار منظر؛ تحقق از شاخص تا کلِ استراتژی بالا می‌رود" : "BSC — four perspectives; attainment rolls up from KPI to strategy"}
             </p>
           </div>
+          {canEditTaxonomy && (
+            <button type="button" onClick={() => setTaxonomyEditorOpen(true)} className="rounded-lg border border-sky-400/45 bg-sky-400/10 px-3 py-2 text-[10px] text-sky-200 hover:bg-sky-400/20">
+              ✎ {rtl ? "ویرایش فرایندها" : "Edit processes"}
+            </button>
+          )}
           <div className="shrink-0 text-end">
             <div className="text-[9px] font-extralight tx3">{rtl ? "مالک: دفتر استراتژی" : "Owner: Strategy Office"}</div>
             <div className="text-[11px] font-light tx1">{rtl ? "هدف ← شاخص ← ابتکار" : "Objective ← KPI ← Initiative"}</div>
           </div>
         </div>
-        <div className="glass flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl p-3">
-          {selected ? (
-            <CapabilityDetail
-              lang={lang}
-              domainId={dom.id}
-              clusterId={target.clusterId}
-              projectId={target.projectId}
-              processId={selected.pId}
-              subId={selected.sId}
-              onBack={() => setSelected(null)}
-            />
-          ) : (
-            <StrategyWorkspace lang={lang} />
-          )}
+        <div dir="ltr" className="flex min-h-0 flex-1 gap-3 overflow-hidden">
+          <div dir={rtl ? "rtl" : "ltr"} className="glass flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl p-3">
+            {selected ? (
+              <CapabilityDetail
+                lang={lang}
+                domainId={dom.id}
+                clusterId={target.clusterId}
+                projectId={target.projectId}
+                processId={selected.pId}
+                subId={selected.sId}
+                processes={activeProcesses}
+                onBack={() => setSelected(null)}
+              />
+            ) : (
+              <StrategyWorkspace lang={lang} />
+            )}
+          </div>
+          <aside dir={rtl ? "rtl" : "ltr"} className="glass-dark flex w-[300px] shrink-0 flex-col overflow-hidden rounded-2xl">
+            <div className="b-line border-b px-3 py-2.5">
+              <div className="flex items-center gap-2">
+                <span className="grid h-6 w-6 place-items-center rounded-md text-[12px]" style={{ background: `${dom.accent}1a`, border: `1px solid ${dom.accent}55`, color: dom.accent }}>
+                  {dom.icon}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="text-[10.5px] font-normal tx1">{rtl ? "فرایندها و زیرفرایندها" : "Processes & sub-processes"}</div>
+                  <div className="text-[8.5px] tx4">{activeProcesses.length.toLocaleString(rtl ? "fa-IR" : "en-US")} · {activeProcesses.reduce((n, p) => n + p.subs.length, 0).toLocaleString(rtl ? "fa-IR" : "en-US")}</div>
+                </div>
+              </div>
+            </div>
+            <div className="thin-scroll flex-1 overflow-y-auto p-2 space-y-2">
+              {activeProcesses.map((p, i) => (
+                <div key={p.id} className="rounded-xl border b-line-soft bg-black/10 p-1.5">
+                  <div className="flex items-center gap-1.5 px-1 py-1">
+                    <span className="text-[8px] font-light tabular-nums tx4">{(i + 1).toLocaleString(rtl ? "fa-IR" : "en-US")}</span>
+                    <span className="text-[10.5px] font-normal" style={{ color: dom.accent }}>{t(p.title, lang)}</span>
+                  </div>
+                  <div className="mt-1 space-y-1">
+                    {p.subs.map((s) => (
+                      <button
+                        key={s.id}
+                        type="button"
+                        onClick={() => {
+                          audit("OPEN_SUBPROCESS", { projectId: target.projectId, entity: dom.id, entityId: s.id });
+                          setSelected({ pId: p.id, sId: s.id });
+                        }}
+                        className={`group flex w-full items-start gap-2 rounded-lg px-2 py-2 text-start transition hover:-translate-y-px glass-row ${selected?.sId === s.id ? "row-on" : ""}`}
+                      >
+                        <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: dom.accent }} />
+                        <span className="min-w-0 flex-1 truncate text-[10px] font-light tx1">{t(s.title, lang)}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </aside>
         </div>
+        {taxonomyEditorOpen && (
+          <TaxonomyEditor
+            lang={lang}
+            domainTitle={dom.title}
+            domainId={dom.id}
+            projectId={target.projectId}
+            processes={activeProcesses}
+            defaultProcesses={dom.processes}
+            actor={user?.id}
+            onClose={() => setTaxonomyEditorOpen(false)}
+            onSaved={handleTaxonomySaved}
+          />
+        )}
       </div>
     );
   }

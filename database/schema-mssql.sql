@@ -1,5 +1,5 @@
 -- ═══════════════════════════════════════════════════════════════
--- شِمای تولیدشده برای SQL Server — 223 جدول
+-- شِمای تولیدشده برای SQL Server — 224 جدول
 -- تولید خودکار از روی کد (scripts/generate-schema.mjs) — دستی ویرایش نکنید.
 -- اگر شِمای واقعی دارید، database/schema.custom.sql را جایگزین کنید.
 -- ═══════════════════════════════════════════════════════════════
@@ -1558,6 +1558,22 @@ CREATE TABLE dbo.PriceAdjustmentCalculation (
 );
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_PriceAdjustmentCalculation_ProjectCode' AND object_id = OBJECT_ID(N'dbo.PriceAdjustmentCalculation'))
   CREATE INDEX IX_PriceAdjustmentCalculation_ProjectCode ON dbo.PriceAdjustmentCalculation(ProjectCode);
+
+IF OBJECT_ID(N'dbo.ProcessTree', N'U') IS NULL
+CREATE TABLE dbo.ProcessTree (
+    Id NVARCHAR(60) NOT NULL CONSTRAINT PK_ProcessTree PRIMARY KEY,
+    ProjectId NVARCHAR(60) NOT NULL,
+    DomainId NVARCHAR(20) NOT NULL,
+    Payload NVARCHAR(MAX) NOT NULL,
+    IsActive BIT NOT NULL CONSTRAINT DF_ProcessTree_IsActive DEFAULT 1,
+    CreatedAt DATETIME2(0) NOT NULL CONSTRAINT DF_ProcessTree_CreatedAt DEFAULT SYSUTCDATETIME(),
+    CreatedBy NVARCHAR(60) NULL,
+    UpdatedAt DATETIME2(0) NULL,
+    UpdatedBy NVARCHAR(60) NULL,
+    RowVersion INT NOT NULL CONSTRAINT DF_ProcessTree_RowVersion DEFAULT 1
+);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_ProcessTree_ProjectDomain' AND object_id = OBJECT_ID(N'dbo.ProcessTree'))
+  CREATE UNIQUE INDEX UX_ProcessTree_ProjectDomain ON dbo.ProcessTree(ProjectId, DomainId);
 
 IF OBJECT_ID(N'dbo.Process_Master', N'U') IS NULL
 CREATE TABLE dbo.Process_Master (

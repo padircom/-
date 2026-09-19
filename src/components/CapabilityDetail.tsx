@@ -6,6 +6,7 @@ import {
   t,
   type FormatKind,
   type Lang,
+  type Process,
 } from "../data/framework";
 import { useSystem } from "../context/SystemContext";
 import { pmisApiClient } from "../services/pmisApiClient";
@@ -22,6 +23,8 @@ type Props = {
   projectId: string;
   processId: string;
   subId: string;
+  /** override پروژه‌ایِ ساختار d6/d20؛ نبودش یعنی framework.ts */
+  processes?: Process[];
   onBack: () => void;
   /** پرش به یک زیرفرآیندِ دیگر (پیوندهای میان‌دامنه‌ای). */
   onNavigate?: (target: { domainId: string; processId: string; subId: string }) => void;
@@ -66,14 +69,15 @@ const seedClient = (subId: string): Template[] => [
 ];
 
 export default function CapabilityDetail({
-  lang, domainId, clusterId, projectId, processId, subId, onBack, onNavigate,
+  lang, domainId, clusterId, projectId, processId, subId, processes, onBack, onNavigate,
 }: Props) {
   const rtl = lang === "fa";
   const { clusters, projectsByCluster } = useSystem();
   const dom = domains.find((d) => d.id === domainId);
   const cluster = clusters.find((c) => c.id === clusterId);
   const project = (projectsByCluster[clusterId] ?? []).find((p) => p.id === projectId);
-  const proc = dom?.processes.find((p) => p.id === processId);
+  const processSet = processes ?? dom?.processes ?? [];
+  const proc = processSet.find((p) => p.id === processId);
   const sub = proc?.subs.find((s) => s.id === subId);
 
   /* مقصدِ پیوندها: از شناسه به دامنه، فرآیند و زیرفرآیند. */

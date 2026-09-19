@@ -577,7 +577,59 @@ const PUBLIC_TABLES = new Set([
   "Timesheet", "Correspondence", "MeetingMinute", "LessonLearned", "ReportIssue",
   "Equipment", "EquipmentMeter", "EquipmentRental", "MaintenanceOrder",
   "EquipmentDispatch", "EquipmentFuelLog", "PmSchedule", "SparePart", "PartTransaction",
+  "ProcessTree",
 ]);
+
+const EDITABLE_TAXONOMY_DOMAINS = new Set(["d6", "d20"]);
+
+const taxonomyText = (value, max = 1200) => String(value ?? "").trim().slice(0, max);
+const taxonomyBi = (value, fallback = "") => ({
+  fa: taxonomyText(value?.fa ?? fallback),
+  en: taxonomyText(value?.en ?? value?.fa ?? fallback),
+});
+
+/**
+ * ورودیِ ویرایش ساختار را محدود می‌کنیم تا Payload پایگاه محلِ اجرای کد
+ * یا رکوردهای بی‌نهایت بزرگ نشود. این endpoint فقط برای d6/d20 است.
+ */
+function normalizeTaxonomyProcesses(input) {
+  if (!Array.isArray(input) || input.length > 60) throw Object.assign(new Error("فهرست فرآیندها نامعتبر است"), { code: "INVALID_TAXONOMY" });
+  return input.map((raw, processIndex) => {
+    const id = taxonomyText(raw?.id, 80);
+    if (!/^[A-Za-z0-9_-]+$/.test(id)) throw Object.assign(new Error(`شناسه فرآیند ${processIndex + 1} نامعتبر است`), { code: "INVALID_TAXONOMY" });
+    const subs = Array.isArray(raw?.subs) ? raw.subs : [];
+    if (subs.length > 120) throw Object.assign(new Error("تعداد زیرفرآیندها بیش از حد مجاز است"), { code: "INVALID_TAXONOMY" });
+    return {
+      id,
+      title: taxonomyBi(raw?.title, `Process ${processIndex + 1}`),
+      subs: subs.map((sub, subIndex) => {
+        const subId = taxonomyText(sub?.id, 100);
+        if (!/^[A-Za-z0-9_-]+$/.test(subId)) throw Object.assign(new Error(`شناسه زیرفرآیند ${processIndex + 1}.${subIndex + 1} نامعتبر است`), { code: "INVALID_TAXONOMY" });
+        const links = Array.isArray(sub?.links)
+          ? sub.links.slice(0, 20).map((link) => ({ to: taxonomyText(link?.to, 100), label: taxonomyBi(link?.label) }))
+          : undefined;
+        return {
+          id: subId,
+          title: taxonomyBi(sub?.title, `Sub-process ${processIndex + 1}.${subIndex + 1}`),
+          activity: taxonomyBi(sub?.activity),
+          source: taxonomyText(sub?.source, 200),
+          sql: Array.isArray(sub?.sql) ? sub.sql.slice(0, 30).map((x) => taxonomyText(x, 100)).filter(Boolean) : [],
+          output: taxonomyText(sub?.output, 200),
+          connectsTo: taxonomyText(sub?.connectsTo, 200),
+          ai: taxonomyText(sub?.ai, 200),
+          ...(links?.length ? { links } : {}),
+        };
+      }),
+    };
+  });
+}
+
+function taxonomyResponse(req, data, status = 200) {
+  return {
+    status,
+    body: { ok: true, data, meta: { traceId: req.requestId, timestamp: new Date().toISOString(), driver: persistence?.driver?.kind ?? "pending" } },
+  };
+}
 
 /** ?where=Col:op:value&order=Col:desc&limit=&offset= → SelectSpec امن */
 function parseSelectSpec(table, query) {
@@ -3173,6 +3225,76 @@ app.post("/api/data/migrate", async (req, res, next) => {
     res.json({ ok: true, data: { executed, driver: persistence?.driver?.kind }, meta: { traceId: req.requestId, timestamp: new Date().toISOString() } });
   } catch (err) {
     next(err);
+  }
+});
+
+/* ═══════════════ ویرایشِ ساختارِ d6/d20 ═══════════════
+ * یک ردیف برای هر پروژه/حوزه؛ در SQL و JSON هر دو از همان repository
+ * استفاده می‌شود. نبودِ ردیف یعنی استفاده از framework.ts در کلاینت.
+ */
+app.get("/api/framework/process-tree", async (req, res, next) => {
+  try {
+    const projectId = taxonomyText(req.query.projectId, 60);
+    const domainId = taxonomyText(req.query.domainId, 20);
+    if (!projectId || !EDITABLE_TAXONOMY_DOMAINS.has(domainId)) {
+      return res.status(400).json({ ok: false, error: { code: "INVALID_TAXONOMY_SCOPE", message: "پروژه یا حوزهٔ قابل ویرایش نامعتبر است", traceId: req.requestId } });
+    }
+    const r = await repo();
+    const row = await r.findOne("ProcessTree", [
+      { column: "ProjectId", op: "eq", value: projectId },
+      { column: "DomainId", op: "eq", value: domainId },
+    ]);
+    let processes = null;
+    if (row?.Payload) {
+      try {
+        const payload = typeof row.Payload === "string" ? JSON.parse(row.Payload) : row.Payload;
+        if (Array.isArray(payload?.processes)) processes = normalizeTaxonomyProcesses(payload.processes);
+      } catch {
+        processes = null;
+      }
+    }
+    const result = taxonomyResponse(req, { projectId, domainId, processes, source: processes ? "database" : "framework" });
+    return res.status(result.status).json(result.body);
+  } catch (err) {
+    return next(err);
+  }
+});
+
+app.post("/api/framework/process-tree", async (req, res, next) => {
+  try {
+    const projectId = taxonomyText(req.body?.projectId, 60);
+    const domainId = taxonomyText(req.body?.domainId, 20);
+    if (!projectId || !EDITABLE_TAXONOMY_DOMAINS.has(domainId)) {
+      return res.status(400).json({ ok: false, error: { code: "INVALID_TAXONOMY_SCOPE", message: "پروژه یا حوزهٔ قابل ویرایش نامعتبر است", traceId: req.requestId } });
+    }
+    const processes = normalizeTaxonomyProcesses(req.body?.processes);
+    const payload = JSON.stringify({ version: 1, processes });
+    const r = await repo();
+    const actor = String(req.headers["x-user-id"] ?? "anonymous");
+    await r.upsert("ProcessTree", { ProjectId: projectId, DomainId: domainId }, { Payload: payload, IsActive: true }, actor);
+    const result = taxonomyResponse(req, { projectId, domainId, processes, source: "database" }, 200);
+    return res.status(result.status).json(result.body);
+  } catch (err) {
+    return next(err);
+  }
+});
+
+app.delete("/api/framework/process-tree", async (req, res, next) => {
+  try {
+    const projectId = taxonomyText(req.query.projectId, 60);
+    const domainId = taxonomyText(req.query.domainId, 20);
+    if (!projectId || !EDITABLE_TAXONOMY_DOMAINS.has(domainId)) {
+      return res.status(400).json({ ok: false, error: { code: "INVALID_TAXONOMY_SCOPE", message: "پروژه یا حوزهٔ قابل ویرایش نامعتبر است", traceId: req.requestId } });
+    }
+    const r = await repo();
+    const row = await r.findOne("ProcessTree", [
+      { column: "ProjectId", op: "eq", value: projectId },
+      { column: "DomainId", op: "eq", value: domainId },
+    ]);
+    if (row) await r.remove("ProcessTree", row.Id);
+    return res.json({ ok: true, data: { projectId, domainId, reset: true }, meta: { traceId: req.requestId, timestamp: new Date().toISOString(), driver: persistence?.driver?.kind ?? "pending" } });
+  } catch (err) {
+    return next(err);
   }
 });
 

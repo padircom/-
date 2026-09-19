@@ -8,9 +8,11 @@ import {
   type Bi,
   type Domain,
   type Lang,
+  type Process,
 } from "../data/framework";
 import { useSystem } from "../context/SystemContext";
 import { useAuth } from "../context/AuthContext";
+import { EDITABLE_TAXONOMY_DOMAINS, loadProcessTree } from "../services/taxonomyApi";
 
 export type ModuleNavTarget = {
   moduleId: string;
@@ -82,6 +84,7 @@ export default function RightSidebar({ lang, quickAction, onQuickAction, onNavig
   const [selProject, setSelProject] = useState<string>(() => projectScope?.projectId ?? "");
   const [groupState, setGroupState] = useState(loadGroupState);
   const [query, setQuery] = useState("");
+  const [taxonomyOverrides, setTaxonomyOverrides] = useState<Record<string, Process[]>>({});
 
   const openGroup = groupState.open;
   const supportOpen = groupState.supportOpen;
@@ -91,6 +94,35 @@ export default function RightSidebar({ lang, quickAction, onQuickAction, onNavig
     setSelCluster(projectScope.clusterId);
     setSelProject(projectScope.projectId);
   }, [projectScope]);
+
+  useEffect(() => {
+    let alive = true;
+    const projectId = projectScope?.projectId;
+    if (!projectId) {
+      setTaxonomyOverrides({});
+      return () => { alive = false; };
+    }
+    (async () => {
+      const entries = await Promise.all(
+        EDITABLE_TAXONOMY_DOMAINS.map(async (domainId) => [domainId, await loadProcessTree(projectId, domainId)] as const),
+      );
+      if (!alive) return;
+      const next: Record<string, Process[]> = {};
+      for (const [domainId, processes] of entries) if (processes) next[domainId] = processes;
+      setTaxonomyOverrides(next);
+    })();
+    return () => { alive = false; };
+  }, [projectScope?.projectId]);
+
+  useEffect(() => {
+    const onTaxonomyUpdated = (event: Event) => {
+      const detail = (event as CustomEvent<{ projectId?: string; domainId?: string; processes?: Process[] }>).detail;
+      if (!detail?.projectId || detail.projectId !== projectScope?.projectId || !detail.domainId || !Array.isArray(detail.processes)) return;
+      setTaxonomyOverrides((prev) => ({ ...prev, [detail.domainId!]: detail.processes! }));
+    };
+    window.addEventListener("pmis:taxonomy-updated", onTaxonomyUpdated);
+    return () => window.removeEventListener("pmis:taxonomy-updated", onTaxonomyUpdated);
+  }, [projectScope?.projectId]);
 
   useEffect(() => {
     try {
@@ -138,7 +170,9 @@ export default function RightSidebar({ lang, quickAction, onQuickAction, onNavig
   const canEnter = Boolean(openDomain && selCluster && selProject && !noData);
 
   /* مدیریت سامانه فقط برای نقش مجاز؛ گروه خالی‌شده خودبه‌خود پنهان می‌شود. */
-  const visibleDomains = domains.filter((d) => d.id !== "d7" || can("system.manage"));
+  const visibleDomains = domains
+    .filter((d) => d.id !== "d7" || can("system.manage"))
+    .map((d) => taxonomyOverrides[d.id] ? { ...d, processes: taxonomyOverrides[d.id] } : d);
 
   /* شمارندهٔ چارچوب از خودِ داده مشتق می‌شود، نه متن ثابت — و فقط همانی را
    * می‌شمارد که کاربر اجازهٔ دیدنش را دارد تا عدد با فهرست یکی باشد. */
