@@ -193,6 +193,14 @@ export const domains: Domain[] = [
           { id: "d14-p7-s2", title: { fa: "انطباق صورت‌وضعیت با دفتر مالی", en: "IPC to Finance Reconciliation" }, activity: { fa: "ثبت صورت‌وضعیت ابلاغی در دفتر مالی و آشتی دو دفتر برای کشف شکاف", en: "Post certified IPC to the finance ledger and reconcile both books to surface gaps" }, source: "Certified IPC", sql: ["ContractFinPosting"], output: "Reconciliation Report", connectsTo: "Finance", ai: "AI Gap Detection" },
         ],
       },
+      {
+        id: "d14-p8",
+        title: { fa: "ارزیابی پیمانکاران و تأمین‌کنندگان", en: "Contractor & Supplier Rating" },
+        subs: [
+          { id: "d14-p8-s1", title: { fa: "امتیازدهی وزنی", en: "Weighted Scoring" }, activity: { fa: "امتیازِ شش‌محوره (ایمنی، کیفیت، زمان، قیمت، مستندات، همکاری) با وزن‌های متمرکز و رتبهٔ A تا D", en: "Six-axis scoring (HSE, quality, schedule, price, documentation, cooperation) with central weights and A–D grading" }, source: "Inspection, Site Reports, Procurement", sql: ["Contractor_Performance", "Vendor_Score"], output: "Rating Card", connectsTo: "Procurement, Quality, HSE", ai: "AI Performance Predictor" },
+          { id: "d14-p8-s2", title: { fa: "روند، پایش و فهرستِ بهبود", en: "Trend, Watchlist & Improvement" }, activity: { fa: "مقایسه با دورهٔ قبل، نشان‌دار کردنِ رتبه‌های C و D و تعیین ضعیف‌ترین محور به‌عنوان هدفِ بهبود", en: "Compare with previous period, flag C/D grades and pick the weakest axis as improvement target" }, source: "Rating History", sql: ["Vendor_Score_History"], output: "Watchlist & Improvement Plan", connectsTo: "Governance, Procurement", ai: "AI Improvement Coach" },
+        ],
+      },
     ],
   },
   {

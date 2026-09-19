@@ -19,6 +19,7 @@ import CommunicationWorkspace, { type CkmTab } from "./CommunicationWorkspace";
 import MachineryWorkspace, { type EqmTab } from "./MachineryWorkspace";
 import EngineeringWorkspace from "./EngineeringWorkspace";
 import HSEWorkspace, { type HseTab } from "./HSEWorkspace";
+import VendorRatingPanel from "./VendorRatingPanel";
 
 /** Extra submodules only on the d1 inner page — not in the main right sidebar. */
 const D1_PAGE_SUBS: Record<string, { id: string; title: Bi; tab: EdmsTab; sql: string[] }[]> = {
@@ -817,6 +818,10 @@ export default function ModuleDetail({ lang, target, onBack, onOpenFlowNet, onNa
     return "workflow";
   })();
 
+  const [d14View, setD14View] = useState<"contract" | "rating">(
+    target.processId === "d14-p8" ? "rating" : "contract",
+  );
+
   const d5Tab = ((): FinTab => {
     const sid = selected?.sId ?? target.subId;
     if (sid && D5_TAB_BY_SUB[sid]) return D5_TAB_BY_SUB[sid];
@@ -993,9 +998,26 @@ export default function ModuleDetail({ lang, target, onBack, onOpenFlowNet, onNa
             </div>
           </div>
         </div>
+        <div className="flex shrink-0 items-center gap-1.5">
+          {([
+            ["contract", rtl ? "پیمان و صورت‌وضعیت" : "Contract & IPC"],
+            ["rating", rtl ? "ارزیابی پیمانکاران و تأمین‌کنندگان" : "Contractor & Supplier Rating"],
+          ] as const).map(([k, label]) => (
+            <button
+              key={k}
+              type="button"
+              onClick={() => setD14View(k)}
+              className={`rounded-lg px-2.5 py-1 text-[10px] font-light transition ${
+                d14View === k ? "toggle-on tx1" : "tx3 hover:tx2"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
         <div className="glass flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl p-3">
           <div className="thin-scroll min-h-0 flex-1 overflow-y-auto">
-            <ContractsPanel lang={lang} />
+            {d14View === "rating" ? <VendorRatingPanel lang={lang} /> : <ContractsPanel lang={lang} />}
           </div>
         </div>
       </div>
