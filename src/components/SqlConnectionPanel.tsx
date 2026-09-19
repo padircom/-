@@ -14,6 +14,7 @@ import {
   type TableKey,
 } from "../services/sqlServer";
 import { PMIS_CORE_SCHEMA_SCRIPT } from "../services/pmisSchema";
+import { PMIS_FULL_SCHEMA_SCRIPT, PMIS_FULL_SCHEMA_TABLE_COUNT } from "../services/pmisFullSchema";
 import { PMIS_ENDPOINTS } from "../services/pmisContract";
 
 export default function SqlConnectionPanel({ lang }: { lang: Lang }) {
@@ -23,6 +24,8 @@ export default function SqlConnectionPanel({ lang }: { lang: Lang }) {
   const [ping, setPing] = useState<PingResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [tab, setTab] = useState<"connection" | "contract" | "schema" | "query" | "backend">("connection");
+  const [schemaScope, setSchemaScope] = useState<"core" | "full">("core");
+  const schemaScript = schemaScope === "core" ? PMIS_CORE_SCHEMA_SCRIPT : PMIS_FULL_SCHEMA_SCRIPT;
   const [sqlText, setSqlText] = useState("SELECT TOP 20 * FROM dbo.Project_Master");
   const [rows, setRows] = useState<Record<string, unknown>[]>([]);
   const [queryError, setQueryError] = useState<string | null>(null);
@@ -266,19 +269,37 @@ export default function SqlConnectionPanel({ lang }: { lang: Lang }) {
           <div className="fade-rise glass-dark rounded-2xl p-4">
             <div className="mb-2 flex flex-wrap items-center gap-2">
               <h4 className="text-[11.5px] font-medium text-sky-300">{rtl ? "اسکریپت ساخت دیتابیس و جداول" : "Database & Tables Bootstrap Script"}</h4>
+              <div className="flex overflow-hidden rounded-lg border b-line-soft">
+                {(["core", "full"] as const).map((v) => (
+                  <button
+                    key={v}
+                    type="button"
+                    onClick={() => setSchemaScope(v)}
+                    className={`px-2 py-1 text-[9.5px] font-light transition ${schemaScope === v ? "bg-sky-500/20 tx1" : "tx3 hover:tx2"}`}
+                  >
+                    {v === "core" ? (rtl ? "هسته" : "Core") : rtl ? `کامل (${PMIS_FULL_SCHEMA_TABLE_COUNT} جدول)` : `Full (${PMIS_FULL_SCHEMA_TABLE_COUNT} tables)`}
+                  </button>
+                ))}
+              </div>
               <div className="ms-auto flex gap-1.5">
-                <button onClick={() => copy(PMIS_CORE_SCHEMA_SCRIPT, "schema")} className="rounded-lg border b-line-soft px-2.5 py-1 text-[9.5px] tx2 hover:tx1">
+                <button onClick={() => copy(schemaScript, "schema")} className="rounded-lg border b-line-soft px-2.5 py-1 text-[9.5px] tx2 hover:tx1">
                   {copied === "schema" ? "✓ " : "⧉ "}{rtl ? "کپی" : "Copy"}
                 </button>
-                <button onClick={() => download(PMIS_CORE_SCHEMA_SCRIPT, "PMIS_Core_Schema.sql")} className="rounded-lg border border-sky-400/40 bg-sky-400/10 px-2.5 py-1 text-[9.5px] text-sky-200">
+                <button onClick={() => download(schemaScript, schemaScope === "core" ? "PMIS_Core_Schema.sql" : "PMIS_Full_Schema.sql")} className="rounded-lg border border-sky-400/40 bg-sky-400/10 px-2.5 py-1 text-[9.5px] text-sky-200">
                   ⬇ {rtl ? "دانلود .sql" : "Download .sql"}
                 </button>
               </div>
             </div>
             <p className="mb-2 text-[9.5px] font-extralight tx3">
-              {rtl ? "این اسکریپت را در SQL Server Management Studio اجرا کنید تا دیتابیس و جداول ساخته شوند." : "Run this in SQL Server Management Studio to create the database and tables."}
+              {schemaScope === "core"
+                ? rtl
+                  ? "این اسکریپت را در SQL Server Management Studio اجرا کنید تا دیتابیس و جداولِ هسته ساخته شوند."
+                  : "Run this in SQL Server Management Studio to create the database and core tables."
+                : rtl
+                  ? `شِمای کاملِ ${PMIS_FULL_SCHEMA_TABLE_COUNT} جدولِ ارجاع‌شده در فریم‌ورک؛ تولیدِ خودکار از کد (npm run db:schema). جدول‌هایی که ستونِ شناخته‌شده ندارند با ستونِ JSONِ Payload ساخته می‌شوند تا بعداً با شِمای واقعی جایگزین شود.`
+                  : `Full schema for all ${PMIS_FULL_SCHEMA_TABLE_COUNT} tables referenced by the framework; generated from code (npm run db:schema). Tables without known columns get a JSON Payload column until a real schema replaces them.`}
             </p>
-            <pre className="thin-scroll max-h-[52vh] overflow-auto rounded-xl bg-black/40 p-3 text-[10px] leading-5 text-emerald-200" dir="ltr">{PMIS_CORE_SCHEMA_SCRIPT}</pre>
+            <pre className="thin-scroll max-h-[52vh] overflow-auto rounded-xl bg-black/40 p-3 text-[10px] leading-5 text-emerald-200" dir="ltr">{schemaScript}</pre>
           </div>
         )}
 
