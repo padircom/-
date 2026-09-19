@@ -1,4 +1,4 @@
-import { executeCommand, loadSqlConfig, testConnection } from "./sqlServer";
+import { runQuery, loadSqlConfig, testConnection } from "./sqlServer";
 import { logAudit } from "./auditLogger";
 
 export type SyncStatus = "pending" | "synced" | "failed";
@@ -90,7 +90,7 @@ export const flushSyncQueue = async () => {
       continue;
     }
     try {
-      await executeCommand(cfg, item.sql, item.params);
+      await runQuery(cfg, item.sql, item.params ?? {});
       flushed += 1;
       next.push({ ...item, status: "synced", attempts: item.attempts + 1, updatedAt: new Date().toISOString(), error: undefined });
     } catch (err) {
