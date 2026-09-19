@@ -37,9 +37,10 @@ import {
   type CurveType,
   type EvmSnapshot,
 } from "../services/finance";
+import QuantityBalancePanel from "./QuantityBalancePanel";
 
 /* شش تب = دقیقاً همان شش زیرماژول d5؛ نام‌ها تغییرناپذیرند (BC). */
-export type FinTab = "cost" | "control" | "cash" | "pr" | "po" | "inventory";
+export type FinTab = "cost" | "control" | "cash" | "pr" | "po" | "inventory" | "quantities" | "balance" | "pnl";
 
 const TABS: { id: FinTab; fa: string; en: string; icon: string; proc: string }[] = [
   { id: "cost", fa: "مدیریت هزینه", en: "Cost Management", icon: "💰", proc: "d5-p1" },
@@ -48,6 +49,9 @@ const TABS: { id: FinTab; fa: string; en: string; icon: string; proc: string }[]
   { id: "pr", fa: "درخواست خرید", en: "Purchase Request", icon: "📝", proc: "d5-p4" },
   { id: "po", fa: "سفارش خرید", en: "Purchase Order", icon: "📦", proc: "d5-p5" },
   { id: "inventory", fa: "مدیریت کالا و انبار", en: "Material & Warehouse", icon: "🏗", proc: "d5-p6" },
+  { id: "quantities", fa: "احجام و مقادیر فیزیکی", en: "Quantities", icon: "📐", proc: "d5-p7" },
+  { id: "balance", fa: "بالانس مصالح", en: "Material Balance", icon: "⚖️", proc: "d5-p8" },
+  { id: "pnl", fa: "سود و زیان پروژه", en: "Project P&L", icon: "📈", proc: "d5-p9" },
 ];
 
 const RATES: Record<string, number> = { IRR: 1, USD: 620_000, EUR: 680_000, CNY: 86_000 };
@@ -796,6 +800,12 @@ export default function CostSupplyWorkspace({
             </Section>
           </>
         )}
+
+        {/* ═══ تب ۷: احجام و مقادیر فیزیکی (d5-p7) ═══ */}
+        {tab === "quantities" && <QuantityBalancePanel lang={lang} mode="quantities" />}
+
+        {/* ═══ تب ۸: بالانس مصالح و کنترل ضایعات (d5-p8) ═══ */}
+        {tab === "balance" && <QuantityBalancePanel lang={lang} mode="balance" />}
       </div>
     </div>
   );

@@ -333,6 +333,12 @@ const D5_TAB_BY_SUB: Record<string, FinTab> = {
   "d5-p6-s1": "inventory",
   "d5-p6-rop": "inventory",
   "d5-p6-trc": "inventory",
+  "d5-p7-s1": "quantities",
+  "d5-p7-s2": "quantities",
+  "d5-p8-s1": "balance",
+  "d5-p8-s2": "balance",
+  "d5-p9-s1": "pnl",
+  "d5-p9-s2": "pnl",
 };
 
 const D17_TAB_BY_SUB: Record<string, HseFieldTab> = {

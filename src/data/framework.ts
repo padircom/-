@@ -600,6 +600,22 @@ export const domains: Domain[] = [
           { id: "d5-p6-s1", title: { fa: "کنترل موجودی", en: "Inventory Control" }, activity: { fa: "کنترل موجودی", en: "Stock control" }, source: "Warehouse", sql: ["Material_Register"], output: "Material Status", connectsTo: "Logistics", ai: "AI Shortage Prediction" },
         ],
       },
+      {
+        id: "d5-p7",
+        title: { fa: "مدیریت احجام و مقادیر فیزیکی", en: "Quantity & Physical Progress" },
+        subs: [
+          { id: "d5-p7-s1", title: { fa: "فهرست بها و اقلام احجامی", en: "BOQ & Measured Items" }, activity: { fa: "نگهداری ردیف‌های فهرست بها با مقدار کل، مقدار برنامه‌ای تجمعی و نرخ واحد برای ارزش‌گذاری پیشرفت فیزیکی", en: "Maintain BOQ rows with total qty, cumulative planned qty and unit rate for physical progress valuation" }, source: "Contract BOQ, Engineering MTO", sql: ["Boq_Item", "Boq_Measurement"], output: "Quantity Variance Report", connectsTo: "Planning, Contracts", ai: "AI Quantity Forecaster" },
+          { id: "d5-p7-s2", title: { fa: "برداشت و صورت‌برداری دوره‌ای", en: "Periodic Measurement" }, activity: { fa: "ثبت برداشت ماهانه به تفکیک دوره و ردیف و مقایسه با برنامه تا تاریخ داده", en: "Record periodic measurements per row and compare with plan to data date" }, source: "Site Survey, DPR", sql: ["Boq_Measurement", "Measurement_Approval"], output: "Measurement Certificate", connectsTo: "Contracts, Monitoring", ai: "AI Measurement Auditor" },
+        ],
+      },
+      {
+        id: "d5-p8",
+        title: { fa: "بالانس مصالح و کنترل ضایعات", en: "Material Balance & Waste" },
+        subs: [
+          { id: "d5-p8-s1", title: { fa: "تراز مقداری مصالح", en: "Material Balance" }, activity: { fa: "محاسبه ماندهٔ هر قلم: ابتدای دوره + دریافت − مصرف + برگشتی، با ردیابی انحراف از نرم", en: "Compute closing per item: opening + receipts − issues + returns, tracking variance vs norm" }, source: "Warehouse Ledger, GRN", sql: ["Material_Ledger", "Material_Issue"], output: "Material Balance Sheet", connectsTo: "Warehouse, Cost", ai: "AI Balance Anomaly Detector" },
+          { id: "d5-p8-s2", title: { fa: "نرم مصرف و تحلیل ضایعات", en: "Consumption Norm & Waste" }, activity: { fa: "مقایسه مصرف واقعی با نرم×تولید و تفکیک ضایعات قابل‌قبول از انحراف غیرعادی", en: "Compare actual use with norm × production and separate acceptable waste from abnormal variance" }, source: "Norms Library, Production Log", sql: ["Material_Norm", "Production_Log"], output: "Waste & Variance Report", connectsTo: "Quality, Cost", ai: "AI Waste Root-Cause" },
+        ],
+      },
     ],
   },
   {
