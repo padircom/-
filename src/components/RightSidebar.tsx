@@ -137,18 +137,20 @@ export default function RightSidebar({ lang, quickAction, onQuickAction, onNavig
   const clusterProjects = selCluster && !noData ? projectsByCluster[selCluster] ?? [] : [];
   const canEnter = Boolean(openDomain && selCluster && selProject && !noData);
 
-  /* شمارندهٔ چارچوب از خودِ داده مشتق می‌شود، نه متن ثابت. */
-  const domainCount = domains.length;
-  const processCount = domains.reduce((n, d) => n + d.processes.length, 0);
-  const subCount = domains.reduce(
+  /* مدیریت سامانه فقط برای نقش مجاز؛ گروه خالی‌شده خودبه‌خود پنهان می‌شود. */
+  const visibleDomains = domains.filter((d) => d.id !== "d7" || can("system.manage"));
+  const fieldDomain = visibleDomains.find((d) => d.group === "field") ?? null;
+
+  /* شمارندهٔ چارچوب از خودِ داده مشتق می‌شود، نه متن ثابت — و فقط همانی را
+   * می‌شمارد که کاربر اجازهٔ دیدنش را دارد تا عدد با فهرست یکی باشد. */
+  const domainCount = visibleDomains.length;
+  const processCount = visibleDomains.reduce((n, d) => n + d.processes.length, 0);
+  const subCount = visibleDomains.reduce(
     (n, d) => n + d.processes.reduce((m, p) => m + p.subs.length, 0),
     0,
   );
   const faDigits = (n: number) => n.toLocaleString("fa-IR", { useGrouping: false });
 
-  /* مدیریت سامانه فقط برای نقش مجاز؛ گروه خالی‌شده خودبه‌خود پنهان می‌شود. */
-  const visibleDomains = domains.filter((d) => d.id !== "d7" || can("system.manage"));
-  const fieldDomain = visibleDomains.find((d) => d.group === "field") ?? null;
 
   const q = query.trim().toLowerCase();
   const matchesQuery = (d: Domain) => {
@@ -345,9 +347,16 @@ export default function RightSidebar({ lang, quickAction, onQuickAction, onNavig
           )
         ) : (
           <>
-            {/* ثبت میدانی گروه ندارد؛ وقتی باز است بالای فهرست سنجاق می‌شود. */}
-            {fieldDomain && openDomain === fieldDomain.id && (
-              <div className="rounded-xl border p-1.5" style={{ borderColor: `${fieldDomain.accent}66`, background: `${fieldDomain.accent}0d` }}>
+            {/* ثبت میدانی گروه ندارد؛ همیشه بالای فهرست می‌ماند تا با شمارندهٔ
+                بالای سایدبار یکی باشد (پیش‌تر فقط هنگامِ باز بودن دیده می‌شد). */}
+            {fieldDomain && (
+              <div
+                className="rounded-xl border p-1.5"
+                style={{
+                  borderColor: openDomain === fieldDomain.id ? `${fieldDomain.accent}66` : "var(--line-soft)",
+                  background: openDomain === fieldDomain.id ? `${fieldDomain.accent}0d` : "transparent",
+                }}
+              >
                 {renderDomain(fieldDomain)}
               </div>
             )}
