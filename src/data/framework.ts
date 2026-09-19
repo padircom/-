@@ -1483,6 +1483,40 @@ export const domains: Domain[] = [
       },
     ],
   },
+  {
+    id: "d18",
+    group: "pg3",
+    icon: "🛰",
+    accent: "#22D3EE",
+    title: { fa: "مدیریت موقعیت مکانی پروژه‌ها (GIS)", en: "Project Geo-Location (GIS)" },
+    processes: [
+      {
+        id: "d18-p1",
+        title: { fa: "نقشه و پراکندگی پروژه‌ها", en: "Project Map & Spread" },
+        subs: [
+          { id: "d18-p1-s1", title: { fa: "مختصات و مرکزِ ثقل پروژه", en: "Site Coordinates" }, activity: { fa: "نگهداری مختصاتِ هر سایت و نمایشِ پراکندگی پروژه‌ها روی نمودارِ برداری با فاصله از مرجع", en: "Maintain site coordinates and show project spread on a vector plot with distance from origin" }, source: "Project Charter, Survey", sql: ["Project_Site", "Project_Master"], output: "Project Geo Map", connectsTo: "Portfolio, Planning", ai: "AI Site Cluster Advisor" },
+          { id: "d18-p1-s2", title: { fa: "خوشه‌بندی و تحلیلِ فاصله", en: "Clustering & Distance" }, activity: { fa: "خوشه‌بندیِ سایت‌ها بر پایهٔ آستانهٔ فاصله و برآوردِ پوششِ لجستیکی و استقرار نیرو", en: "Cluster sites by distance threshold and assess logistical coverage and crew deployment" }, source: "Logistics, HRM", sql: ["Project_Site", "Logistics_Route"], output: "Cluster & Coverage Report", connectsTo: "Logistics, Workforce", ai: "AI Route Optimizer" },
+        ],
+      },
+    ],
+  },
+  {
+    id: "d19",
+    group: "support",
+    icon: "🏅",
+    accent: "#FBBF24",
+    title: { fa: "مدیریت تعالی سازمانی (EFQM)", en: "Organisational Excellence (EFQM)" },
+    processes: [
+      {
+        id: "d19-p1",
+        title: { fa: "خودارزیابی مدل EFQM", en: "EFQM Self-Assessment" },
+        subs: [
+          { id: "d19-p1-s1", title: { fa: "نُه معیار و منطق RADAR", en: "Nine Criteria & RADAR" }, activity: { fa: "امتیازدهیِ پنج معیارِ توانمندساز و چهار معیارِ نتایج با دو بُعدِ RADAR و محاسبهٔ امتیاز تا ۱۰۰۰", en: "Score five enabler and four result criteria on two RADAR axes and compute a 0–1000 total" }, source: "Self-Assessment Workshops", sql: ["Efqm_Assessment", "Efqm_Score"], output: "EFQM Scorecard", connectsTo: "Governance, Quality", ai: "AI Evidence Mapper" },
+          { id: "d19-p1-s2", title: { fa: "برنامهٔ بهبود و سطح‌بندی", en: "Improvement Plan & Levels" }, activity: { fa: "تعیین ضعیف‌ترین معیار، تدوین برنامهٔ بهبود و پایشِ پیشرفتِ سطح از «در مسیر» تا «پنج ستاره»", en: "Identify the weakest criterion, build an improvement plan and track level progression" }, source: "Excellence Office", sql: ["Efqm_Improvement"], output: "Improvement Roadmap", connectsTo: "Governance, Audit", ai: "AI Improvement Prioritiser" },
+        ],
+      },
+    ],
+  },
 ];
 /* ============================================================
 
