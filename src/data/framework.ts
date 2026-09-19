@@ -206,14 +206,20 @@ export const domains: Domain[] = [
         id: "d1-p1",
         title: { fa: "EDMS", en: "EDMS" },
         subs: [
-          { id: "d1-p1-s1", title: { fa: "کنترل مدارک", en: "Document Control" }, activity: { fa: "ثبت و گردش مدارک", en: "Register & workflow" }, source: "EDMS, Excel, Upload", sql: ["Document_Master", "Document_Transaction", "Document_Status"], output: "Document Status Report", connectsTo: "Engineering, Dashboard", ai: "AI Document Review" },
+          { id: "d1-p1-s1", title: { fa: "کنترل مدارک", en: "Document Control" }, activity: { fa: "ثبت و گردش مدارک", en: "Register & workflow" }, source: "EDMS, Excel, Upload", sql: ["Document_Master", "Document_Transaction", "Document_Status"], output: "Document Status Report", connectsTo: "Engineering, Dashboard", ai: "AI Document Review",
+            links: [
+              { to: "d12-p1-s1", label: { fa: "منشأ مدرک: فهرست اصلی (MDR) در d12", en: "Source: Master Document Register in d12" } }
+            ] },
         ],
       },
       {
         id: "d1-p2",
         title: { fa: "کنترل نسخه و گردش", en: "Revision & Circulation" },
         subs: [
-          { id: "d1-p2-s1", title: { fa: "کنترل نسخه (Revision)", en: "Revision Control" }, activity: { fa: "کنترل نسخه‌ها", en: "Version control" }, source: "EDMS", sql: ["Document_Revision"], output: "Revision History", connectsTo: "Change Management", ai: "AI Compare Revision" },
+          { id: "d1-p2-s1", title: { fa: "کنترل نسخه (Revision)", en: "Revision Control" }, activity: { fa: "کنترل نسخه‌ها", en: "Version control" }, source: "EDMS", sql: ["Document_Revision"], output: "Revision History", connectsTo: "Change Management", ai: "AI Compare Revision",
+            links: [
+              { to: "d12-p2-s1", label: { fa: "منشأ نسخه: تأیید کد ۴ در d12", en: "Source: Code 4 approval in d12" } }
+            ] },
         ],
       },
       {
@@ -227,7 +233,10 @@ export const domains: Domain[] = [
         id: "d1-p4",
         title: { fa: "Transmittal", en: "Transmittal" },
         subs: [
-          { id: "d1-p4-s1", title: { fa: "ارسال مدارک", en: "Document Transmit" }, activity: { fa: "کنترل ارسال و دریافت", en: "In/out control" }, source: "EDMS", sql: ["Transmittal_Register"], output: "Transmittal Status", connectsTo: "EDMS", ai: "AI Delay Detection" },
+          { id: "d1-p4-s1", title: { fa: "ارسال مدارک", en: "Document Transmit" }, activity: { fa: "کنترل ارسال و دریافت", en: "In/out control" }, source: "EDMS", sql: ["Transmittal_Register"], output: "Transmittal Status", connectsTo: "EDMS", ai: "AI Delay Detection",
+            links: [
+              { to: "d12-p5-s1", label: { fa: "منشأ ارسال: کدگذاری مدرک سازنده در d12", en: "Source: vendor document coding in d12" } }
+            ] },
         ],
       },
       {
@@ -322,14 +331,20 @@ export const domains: Domain[] = [
         title: { fa: "تغییرات کارگاهی و چون‌ساخت", en: "Field Changes & As-Built" },
         subs: [
           { id: "d12-p4-s1", title: { fa: "استعلام فنی و تغییر کارگاهی", en: "TQ & Field Change Request" }, activity: { fa: "ثبت استعلام کارگاه و درخواست تغییر با تشخیص خودکار اثر مالی و زمانی", en: "Log site query and change request with automatic cost and time impact detection" }, source: "Site Engineering", sql: ["TechnicalQuery"], output: "TQ/FCR Register", connectsTo: "Claims, Cost", ai: "AI Impact Estimator" },
-          { id: "d12-p4-s2", title: { fa: "نقشه قرمز و چون‌ساخت", en: "Red-Line & As-Built" }, activity: { fa: "ثبت اصلاحات قرمز کارگاه و پیگیری تبدیل به نقشه چون‌ساخت تأییدشده", en: "Record site red-line markups and track conversion to approved as-built" }, source: "Site, Resident Engineer", sql: ["TechnicalQuery", "EngineeringRevision"], output: "As-Built Status", connectsTo: "Documents, Commissioning", ai: "AI As-Built Gap Finder" },
+          { id: "d12-p4-s2", title: { fa: "نقشه قرمز و چون‌ساخت", en: "Red-Line & As-Built" }, activity: { fa: "ثبت اصلاحات قرمز کارگاه و پیگیری تبدیل به نقشه چون‌ساخت تأییدشده", en: "Record site red-line markups and track conversion to approved as-built" }, source: "Site, Resident Engineer", sql: ["TechnicalQuery", "EngineeringRevision"], output: "As-Built Status", connectsTo: "Documents, Commissioning", ai: "AI As-Built Gap Finder",
+            links: [
+              { to: "d1-p1-s1", label: { fa: "بایگانی نسخهٔ چون‌ساخت در EDMS (d1)", en: "Archive as-built revision in EDMS (d1)" } }
+            ] },
         ],
       },
       {
         id: "d12-p5",
         title: { fa: "مدارک سازندگان", en: "Vendor Print Review" },
         subs: [
-          { id: "d12-p5-s1", title: { fa: "بررسی و کدگذاری مدرک سازنده", en: "Vendor Document Review" }, activity: { fa: "دریافت مدرک فنی سازنده، نگاشت به سفارش خرید و صدور کد بررسی", en: "Receive vendor document, map to purchase order and issue review code" }, source: "Vendors, Procurement", sql: ["VendorPrintReview"], output: "VPR Register", connectsTo: "Cost, Quality", ai: "AI Vendor Doc Classifier" },
+          { id: "d12-p5-s1", title: { fa: "بررسی و کدگذاری مدرک سازنده", en: "Vendor Document Review" }, activity: { fa: "دریافت مدرک فنی سازنده، نگاشت به سفارش خرید و صدور کد بررسی", en: "Receive vendor document, map to purchase order and issue review code" }, source: "Vendors, Procurement", sql: ["VendorPrintReview"], output: "VPR Register", connectsTo: "Cost, Quality", ai: "AI Vendor Doc Classifier",
+            links: [
+              { to: "d1-p4-s1", label: { fa: "گردش مدرک سازنده با ترانسمیتال (d1)", en: "Circulate vendor document via transmittal (d1)" } }
+            ] },
         ],
       },
       {
