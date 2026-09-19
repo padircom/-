@@ -187,7 +187,7 @@ export default function App() {
   };
 
   return (
-    <div className="app-shell flex w-screen flex-col overflow-hidden">
+    <div className="app-shell flex w-full flex-col overflow-hidden">
       {/* ═══ Expanded corporate command bar ═══ */}
       <header
         dir="ltr"

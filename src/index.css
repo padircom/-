@@ -338,3 +338,24 @@ html[data-theme="light"] ::placeholder {
   height: 100vh;
   height: 100dvh;
 }
+
+/* ══ دسکتاپ (ویندوز/مک): اسکرول‌بارهای نازک هم‌رنگ با تم ══
+   پیش‌فرض ویندوز اسکرول‌بار پهن و خاکستری می‌گذارد که در پنل‌های
+   پرتراکم این داشبورد فضا می‌گیرد و از تم جدا می‌زند. */
+@media (min-width: 1024px) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scroll-thumb) transparent;
+  }
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: var(--scroll-thumb);
+    border-radius: 99px;
+  }
+  ::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+  ::-webkit-scrollbar-corner { background: transparent; }
+}
+
+/* جلوگیری از «کشیده شدن» صفحه و پرش نوار آدرس در مرورگر دسکتاپ */
+html, body { overscroll-behavior: none; }
