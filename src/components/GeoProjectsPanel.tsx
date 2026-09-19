@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
+import GeoMap from "./GeoMap";
 import { clusters, projectsByCluster, type Lang, t } from "../data/framework";
 import { useSystem } from "../context/SystemContext";
 import {
@@ -14,7 +15,9 @@ import {
 /* ══════════════════════════════════════════════════════════════════════
    «مدیریت موقعیت مکانی پروژه‌ها (GIS)» — دامنهٔ d18
 
-   نمودارِ پراکندگی روی مختصاتِ واقعی؛ بدون کاشیِ نقشه و بدون اینترنت.
+   دو نمایِ مکمّل:
+     · نقشه — Leaflet با کاشیِ OSM/ماهواره (نیاز به دسترسیِ مرورگر به اینترنت)
+     · برداری — نمودارِ پراکندگیِ آفلاین برای شبکه‌های بسته
    ══════════════════════════════════════════════════════════════════════ */
 
 const W = 760;
@@ -33,6 +36,13 @@ export default function GeoProjectsPanel({ lang }: { lang: Lang }) {
   const { projectScope } = useSystem();
   const [threshold, setThreshold] = useState(150);
   const [filter, setFilter] = useState<"all" | Site["status"]>("all");
+  const [view, setView] = useState<"map" | "vector">("map");
+  const [tilesDown, setTilesDown] = useState(false);
+
+  const handleTileFailure = useCallback(() => {
+    setTilesDown(true);
+    setView("vector");
+  }, []);
 
   const sites: Site[] = useMemo(() => {
     const out: Site[] = [];
@@ -75,6 +85,36 @@ export default function GeoProjectsPanel({ lang }: { lang: Lang }) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden" dir={rtl ? "rtl" : "ltr"}>
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex overflow-hidden rounded-lg border b-line-soft">
+          {(["map", "vector"] as const).map((v) => (
+            <button
+              key={v}
+              type="button"
+              onClick={() => setView(v)}
+              className={`px-2.5 py-1 text-[10px] font-light transition ${view === v ? "bg-sky-500/20 tx1" : "tx3 hover:tx2"}`}
+            >
+              {v === "map" ? (rtl ? "نقشه" : "Map") : (rtl ? "برداری" : "Vector")}
+            </button>
+          ))}
+        </div>
+        {tilesDown && (
+          <span className="text-[9.5px] text-amber-300">
+            {rtl
+              ? "کاشی‌های نقشه در دسترس نبود — نمایِ برداریِ آفلاین نمایش داده می‌شود."
+              : "Map tiles were unreachable — showing the offline vector view."}
+          </span>
+        )}
+      </div>
+
+      {view === "map" && (
+        <div className="min-h-[320px] flex-1">
+          <GeoMap lang={lang} points={withCoord} onTileFailure={handleTileFailure} />
+        </div>
+      )}
+
+      {view === "vector" && (
+        <>
       <div className="grid grid-cols-2 gap-2 xl:grid-cols-4">
         <Cell label={rtl ? "پروژه‌ها" : "Projects"} value={num(sum.total)} hint={rtl ? `${num(sum.located)} دارای مختصات` : `${num(sum.located)} geolocated`} />
         <Cell
@@ -201,9 +241,11 @@ export default function GeoProjectsPanel({ lang }: { lang: Lang }) {
 
       <p className="text-[9px] font-extralight tx4">
         {rtl
-          ? "مختصات مرکز استان/شهر و تقریبی است؛ فاصله با فرمولِ Haversine تا مرجع (تهران) محاسبه می‌شود. نگاشت روی نمودارِ برداری است و کاشیِ نقشه نمی‌خواهد."
-          : "Coordinates are province/city centroids (approximate); distance uses the Haversine formula to the origin (Tehran). The plot is vector-based and needs no map tiles."}
+          ? "مختصات مرکز استان/شهر و تقریبی است؛ فاصله با فرمولِ Haversine تا مرجع (تهران) محاسبه می‌شود. نمایِ نقشه از کاشی‌های عمومیِ OSM/Esri استفاده می‌کند و در شبکه‌ی بسته به‌طور خودکار به نمایِ برداری برمی‌گردد."
+          : "Coordinates are province/city centroids (approximate); distance uses the Haversine formula to the origin (Tehran). The map view uses public OSM/Esri tiles and falls back to the vector view on a closed network."}
       </p>
+        </>
+      )}
     </div>
   );
 }
