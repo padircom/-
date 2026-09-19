@@ -317,7 +317,15 @@ export const SCHEMA: TableDef[] = [
     module: "d1",
     title: { fa: "مدرک", en: "Document" },
     pk: "Id",
-    columns: [id(), req("ProjectId", "text", { len: 60 }), req("DocNo", "text", { len: 80 }), req("TitleFa", "text", { len: 400 }), req("Revision", "text", { len: 10 }), req("Status", "text", { len: 30 }), c("Discipline", "text", { len: 40 }), c("Classification", "text", { len: 20 }), c("FilePath", "text", { len: 400 }), c("IssuedAt", "date")],
+    columns: [
+      id(), req("ProjectId", "text", { len: 60 }), req("DocNo", "text", { len: 80 }),
+      req("TitleFa", "text", { len: 400 }), c("TitleEn", "text", { len: 400 }),
+      req("Revision", "text", { len: 10 }), req("Status", "text", { len: 30 }),
+      c("Discipline", "text", { len: 40 }), c("Classification", "text", { len: 20 }),
+      c("FilePath", "text", { len: 400 }), c("IssuedAt", "date"),
+      /* کدِ بررسی (C1..C4) و زمانِ باقیماندهٔ SLA — همان‌هایی که پنلِ d1 نشان می‌دهد */
+      c("ReviewCode", "text", { len: 10 }), c("SlaHours", "int"),
+    ],
     indexes: [{ name: "UX_Document_DocNoRev", columns: ["ProjectId", "DocNo", "Revision"], unique: true }],
     foreignKeys: [{ column: "ProjectId", refTable: "Project", refColumn: "Id", onDelete: "CASCADE" }],
   },

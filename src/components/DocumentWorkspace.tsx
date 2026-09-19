@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { t, type Bi, type Lang } from "../data/framework";
+import { useSystem } from "../context/SystemContext";
+import { createRow, docToRow, listRows, rowToDoc, type UiDoc } from "../services/edmsApi";
 
 export type EdmsTab =
   | "overview"
@@ -120,12 +122,37 @@ export default function DocumentWorkspace({
 }) {
   const rtl = lang === "fa";
   const [tab, setTab] = useState<EdmsTab>(initialTab);
-  const [docs, setDocs] = useState(sampleDocs);
+  const [docs, setDocs] = useState<DocumentRow[]>(sampleDocs);
+  const [live, setLive] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [query, setQuery] = useState("");
   const [newDocCode, setNewDocCode] = useState("");
   const [newDocTitle, setNewDocTitle] = useState("");
   const [newDocDiscipline, setNewDocDiscipline] = useState("Civil");
   const [reserved, setReserved] = useState("OG-2401-CIV-DR-005");
+
+  /* دادهٔ واقعی از سرور؛ اگر سرور یا پایگاه در دسترس نباشد، همان دادهٔ
+     نمونه می‌ماند و نشانهٔ «نمایشی» بالای پنل روشن می‌شود. */
+  const projectId = useSystem().projectScope?.projectId ?? "";
+
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      const res = await listRows("Document", projectId || undefined);
+      if (!alive || !res) return;
+      const rows = (res.items ?? []).map(rowToDoc).filter((d) => d.code);
+      if (!rows.length) {
+        /* جدول خالی است: با دادهٔ نمونه بذرپاشی نمی‌کنیم — کاربر خودش ثبت می‌کند */
+        setLive(true);
+        return;
+      }
+      setDocs(rows as DocumentRow[]);
+      setLive(true);
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [projectId]);
 
   useEffect(() => {
     setTab(initialTab);
@@ -150,24 +177,41 @@ export default function DocumentWorkspace({
     return { total, approved, rejected, cycle, rejectRate: total ? Math.round((rejected / total) * 100) : 0, slaBreach: docs.filter((d) => d.slaHours > 48).length };
   }, [docs]);
 
-  const addDocument = () => {
+  const addDocument = async () => {
     if (!newDocCode.trim()) return;
-    setDocs((prev) => [
-      {
-        id: `doc-${Date.now()}`,
-        code: newDocCode,
-        title: { fa: newDocTitle || "مدرک جدید", en: newDocTitle || "New Document" },
-        revision: "Rev-00",
-        discipline: newDocDiscipline,
-        status: "under_review",
-        reviewCode: "C4",
-        slaHours: 24,
-        updatedAt: new Date().toLocaleDateString(rtl ? "fa-IR" : "en-GB"),
-      },
-      ...prev,
-    ]);
+    const candidate: UiDoc = {
+      id: `doc-${Date.now()}`,
+      code: newDocCode.trim(),
+      title: { fa: newDocTitle || "مدرک جدید", en: newDocTitle || "New Document" },
+      revision: "Rev-00",
+      discipline: newDocDiscipline,
+      status: "under_review",
+      reviewCode: "C4",
+      slaHours: 24,
+      updatedAt: new Date().toLocaleDateString(rtl ? "fa-IR" : "en-GB"),
+    };
     setNewDocCode("");
     setNewDocTitle("");
+
+    if (live) {
+      setSaving(true);
+      const saved = await createRow("Document", docToRow(candidate, projectId || "OG-2401"));
+      setSaving(false);
+      if (saved) {
+        const res = await listRows("Document", projectId || undefined);
+        if (res) {
+          const rows = (res.items ?? []).map(rowToDoc).filter((d) => d.code);
+          setDocs(rows.length ? (rows as DocumentRow[]) : []);
+          return;
+        }
+      }
+      /* نشد: به حالتِ محلی برمی‌گردیم تا ورودِ کاربر از دست نرود */
+    }
+
+    setDocs((prev) => [
+      candidate as DocumentRow,
+      ...prev,
+    ]);
   };
 
   return (
@@ -249,7 +293,31 @@ export default function DocumentWorkspace({
                   <option key={d} value={d}>{d}</option>
                 ))}
               </select>
-              <button onClick={addDocument} className="rounded-lg border border-sky-400/50 bg-sky-400/15 px-3 py-1 text-[10px] font-light text-sky-200 hover:bg-sky-400/25">+ {rtl ? "ثبت" : "Add"}</button>
+              <button
+                onClick={() => void addDocument()}
+                disabled={saving}
+                className="rounded-lg border border-sky-400/50 bg-sky-400/15 px-3 py-1 text-[10px] font-light text-sky-200 hover:bg-sky-400/25 disabled:opacity-50"
+              >
+                {saving ? (rtl ? "در حال ذخیره…" : "Saving…") : `+ ${rtl ? "ثبت" : "Add"}`}
+              </button>
+              <span
+                className="ms-auto rounded-full border px-2 py-0.5 text-[9px] font-light"
+                style={{
+                  borderColor: live ? "#34D39966" : "#FBBF2466",
+                  color: live ? "#34D399" : "#FBBF24",
+                }}
+                title={
+                  live
+                    ? rtl
+                      ? "مدارک از پایگاه داده خوانده و در آن ذخیره می‌شوند"
+                      : "Documents are read from and written to the database"
+                    : rtl
+                      ? "سرور در دسترس نیست — ورودی‌ها فقط در همین نشست می‌مانند"
+                      : "Server unreachable — entries stay in this session only"
+                }
+              >
+                {live ? (rtl ? "ذخیره در پایگاه" : "Persisted") : rtl ? "حالت نمایشی" : "Demo mode"}
+              </span>
             </div>
             <DocTable lang={lang} rtl={rtl} rows={filtered} />
           </div>
