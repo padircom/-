@@ -359,3 +359,12 @@ html[data-theme="light"] ::placeholder {
 
 /* جلوگیری از «کشیده شدن» صفحه و پرش نوار آدرس در مرورگر دسکتاپ */
 html, body { overscroll-behavior: none; }
+
+/* مانیتورهای خیلی عریض (۱۸۰۰px به بالا): پوسته وسط چیده می‌شود تا ستون
+   مرکزی بیش از حد کشیده نشود و چشم روی صفحه‌های عریض ویندوز راحت باشد. */
+@media (min-width: 1800px) {
+  .app-main {
+    max-width: 1760px;
+    margin-inline: auto;
+  }
+}

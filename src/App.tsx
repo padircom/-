@@ -179,7 +179,11 @@ export default function App() {
   /* زیر `lg` دو پانل کناری به صورت کشوی روی هم باز می‌شوند؛ از `lg` به بالا
      دقیقاً مثل قبل سر جایشان docking می‌شوند (static، عرض ثابت، بدون درآور). */
   const drawerClass = (side: "left" | "right") => {
-    const dock = "lg:static lg:block lg:shrink-0 lg:z-auto lg:w-auto lg:max-w-none lg:p-0";
+    /* پانل ناوبری (راست) از ۷۶۸px داک می‌شود چون کار اصلی با آن است؛
+       پانل منابع داده (چپ) فقط از ۱۰۲۴px جا می‌گیرد تا ستون مرکزی
+       در پنجره‌های باریکِ دسکتاپ له نشود. */
+    const bp = side === "left" ? "lg" : "md";
+    const dock = `${bp}:static ${bp}:block ${bp}:shrink-0 ${bp}:z-auto ${bp}:w-auto ${bp}:max-w-none ${bp}:p-0`;
     if (drawer !== side) return `hidden ${dock}`;
     return side === "left"
       ? `fixed inset-y-0 start-0 z-50 w-[88vw] max-w-[300px] p-2 ${dock}`
@@ -280,7 +284,7 @@ export default function App() {
               onClick={() => setDrawer("right")}
               aria-label={rtl ? "ماژول‌ها" : "Modules"}
               title={rtl ? "ماژول‌ها" : "Modules"}
-              className="chip-bg b-line grid h-9 w-9 shrink-0 place-items-center rounded-xl text-[14px] lg:hidden"
+              className="chip-bg b-line grid h-9 w-9 shrink-0 place-items-center rounded-xl text-[14px] md:hidden"
             >
               🧩
             </button>
@@ -290,7 +294,7 @@ export default function App() {
       </header>
 
       {/* ═══ Three co-existing pillars (physical order locked, LTR flex) ═══ */}
-      <main dir="ltr" className="relative flex min-h-0 flex-1 gap-2 p-2 lg:gap-3 lg:p-3">
+      <main dir="ltr" className="app-main relative flex min-h-0 flex-1 gap-2 p-2 lg:gap-3 lg:p-3">
         {drawer && (
           <button
             type="button"
@@ -384,7 +388,7 @@ export default function App() {
                 setQuickAction("home");
                 setDrawer(null);
               }}
-              className="w-full lg:w-[320px]"
+              className="w-full md:w-[300px] lg:w-[320px]"
             />
           </div>
         )}
