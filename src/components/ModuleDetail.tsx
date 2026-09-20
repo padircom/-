@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { domains, t, type Bi, type Lang } from "../data/framework";
+import { useEffect, useState } from "react";
+import { domains, t, type Bi, type Lang, type Process } from "../data/framework";
 import { useSystem } from "../context/SystemContext";
 import { roleLabel, useAuth } from "../context/AuthContext";
 import type { ModuleNavTarget } from "./RightSidebar";
@@ -10,7 +10,21 @@ import PlanningWorkspace, { type PexTab } from "./PlanningWorkspace";
 import PmaWorkspace, { type PmaTab } from "./PmaWorkspace";
 import RiskClaimsWorkspace, { type D4Tab } from "./RiskClaimsWorkspace";
 import GovernanceWorkspace, { type GovTab } from "./GovernanceWorkspace";
-import HseWorkspace, { type HseTab } from "./HseWorkspace";
+import HseWorkspace, { type HseTab as HseFieldTab } from "./HseFieldWorkspace";
+import ContractsPanel from "./ContractsPanel";
+import CostSupplyWorkspace, { type FinTab } from "./CostSupplyWorkspace";
+import QualityWorkspace, { type QmsTab } from "./QualityWorkspace";
+import WorkforceWorkspace, { type HrmTab } from "./WorkforceWorkspace";
+import CommunicationWorkspace, { type CkmTab } from "./CommunicationWorkspace";
+import MachineryWorkspace, { type EqmTab } from "./MachineryWorkspace";
+import EngineeringWorkspace from "./EngineeringWorkspace";
+import HSEWorkspace, { type HseTab } from "./HSEWorkspace";
+import VendorRatingPanel from "./VendorRatingPanel";
+import GeoProjectsPanel from "./GeoProjectsPanel";
+import EfqmPanel from "./EfqmPanel";
+import StrategyWorkspace from "./StrategyWorkspace";
+import TaxonomyEditor from "./TaxonomyEditor";
+import { EDITABLE_TAXONOMY_DOMAINS, loadProcessTree } from "../services/taxonomyApi";
 
 /** Extra submodules only on the d1 inner page — not in the main right sidebar. */
 const D1_PAGE_SUBS: Record<string, { id: string; title: Bi; tab: EdmsTab; sql: string[] }[]> = {
@@ -27,14 +41,16 @@ const D1_PAGE_SUBS: Record<string, { id: string; title: Bi; tab: EdmsTab; sql: s
 /** Extra submodules only on the d2 inner page — not in the main right sidebar. */
 const D2_PAGE_SUBS: Record<string, { id: string; title: Bi; tab: PexTab; sql: string[] }[]> = {
   "d2-p2": [
-    { id: "d2-p2-dash", title: { fa: "داشبورد مدیر پروژه", en: "PM Dashboard" }, tab: "dashboard", sql: ["pex_evm_snapshot"] },
-    { id: "d2-p2-gantt", title: { fa: "گانت تعاملی", en: "Interactive Gantt" }, tab: "gantt", sql: ["pex_activity"] },
-    { id: "d2-p2-ms", title: { fa: "ردیابی مایلستون", en: "Milestone Tracking" }, tab: "milestone", sql: ["pex_milestone"] },
-    { id: "d2-p2-cp", title: { fa: "تحلیل مسیر بحرانی", en: "Critical Path" }, tab: "cp", sql: ["pex_cp_snapshot"] },
-    { id: "d2-p2-la", title: { fa: "نگاه‌به‌جلو", en: "Look-ahead" }, tab: "lookahead", sql: ["pex_lookahead"] },
+    /* گانت تعاملی، ردیابی مایلستون، تحلیل مسیر بحرانی و نگاه‌به‌جلو
+     * از اینجا حذف شدند و به تب‌های موازی داخل «برنامه پایه» رفتند.
+     *
+     * دلیل: هر چهار نما روی همان یک برنامهٔ زمان‌بندی کار می‌کنند.
+     * وقتی چهار ورودی جدا در سایدبار بودند، کاربر برای مقایسهٔ مسیر
+     * بحرانی با مایلستون باید دو بار از صفحه بیرون و تو می‌رفت و
+     * زمینهٔ کارش را از دست می‌داد. */
   ],
   "d2-p4": [
-    { id: "d2-p4-roc", title: { fa: "کتابخانه Rule of Credit", en: "RoC Library" }, tab: "roc", sql: ["pex_rule_of_credit"] },
+    { id: "d2-p4-reg", title: { fa: "ثبت DPR (گردش تأیید)", en: "DPR Register" }, tab: "dprReg", sql: ["pex_dpr"] },
   ],
   "d2-p6": [
     { id: "d2-p6-rep", title: { fa: "تولید گزارش", en: "Report Generator" }, tab: "reports", sql: ["pex_report_template"] },
@@ -44,15 +60,13 @@ const D2_PAGE_SUBS: Record<string, { id: string; title: Bi; tab: PexTab; sql: st
 };
 
 const D2_TAB_BY_SUB: Record<string, PexTab> = {
+  "d2-p2-ws": "workshop",
+  /* ساختار شکست از سایدبار حذف شد و تبی داخل کارگاه است. نگاشت
+   * می‌ماند تا پیوندهای قدیمی به تب درست هدایت شوند، نه صفحهٔ سفید. */
   "d2-p2-s0": "wbs",
   "d2-p2-s1": "baseline",
-  "d2-p2-dash": "dashboard",
-  "d2-p2-gantt": "gantt",
-  "d2-p2-ms": "milestone",
-  "d2-p2-cp": "cp",
-  "d2-p2-la": "lookahead",
   "d2-p4-s1": "dpr",
-  "d2-p4-roc": "roc",
+  "d2-p4-reg": "dprReg",
   "d2-p5-s1": "weekly",
   "d2-p6-s1": "mpr",
   "d2-p6-rep": "reports",
@@ -61,7 +75,7 @@ const D2_TAB_BY_SUB: Record<string, PexTab> = {
 };
 
 /** Extra HSE submodules only on the d2 inner page — not in the main right sidebar. */
-const HSE_PAGE_SUBS: Record<string, { id: string; title: Bi; tab: HseTab; sql: string[] }[]> = {
+const HSE_PAGE_SUBS: Record<string, { id: string; title: Bi; tab: HseFieldTab; sql: string[] }[]> = {
   "d2-p4": [
     { id: "d2-p4-hse", title: { fa: "ایمنی، بهداشت و محیط‌زیست (HSE)", en: "HSE" }, tab: "dashboard", sql: ["hse_incident", "hse_permit", "hse_inspection"] },
     { id: "d2-p4-hse-inc", title: { fa: "HSE — رجیستر حوادث", en: "HSE Incidents" }, tab: "incidents", sql: ["hse_incident"] },
@@ -71,7 +85,7 @@ const HSE_PAGE_SUBS: Record<string, { id: string; title: Bi; tab: HseTab; sql: s
     { id: "d2-p4-hse-act", title: { fa: "HSE — اقدامات اصلاحی", en: "HSE Actions" }, tab: "actions", sql: ["hse_action"] },
   ],
 };
-const HSE_TAB_BY_SUB: Record<string, HseTab> = {
+const HSE_TAB_BY_SUB: Record<string, HseFieldTab> = {
   "d2-p4-hse": "dashboard",
   "d2-p4-hse-inc": "incidents",
   "d2-p4-hse-ptw": "ptw",
@@ -92,9 +106,15 @@ const D3_PAGE_SUBS: Record<string, { id: string; title: Bi; tab: PmaTab; sql: st
     { id: "d3-p4-ews", title: { fa: "EWS سه لایه", en: "EWS 3-layer" }, tab: "ews", sql: ["pma_alert_rule"] },
   ],
   "d3-p6": [
+    /* داشبورد مدیر پروژه از حوزهٔ برنامه‌ریزی به اینجا منتقل شد.
+     *
+     * آنجا میان ابزارهای ساخت برنامه نشسته بود، در حالی که کاری که
+     * می‌کند گزارش وضعیت است نه ساختن زمان‌بندی. حوزهٔ پایش از قبل
+     * همان تب `dash` را داشت، پس این انتقال جای ورودی را عوض می‌کند
+     * نه اینکه نمای تازه‌ای بسازد. */
+    { id: "d3-p6-dash", title: { fa: "داشبورد مدیر پروژه", en: "PM Dashboard" }, tab: "dash", sql: ["pma_dash_config"] },
     { id: "d3-p6-14", title: { fa: "۱۴ نوع گزارش", en: "14 report types" }, tab: "reports", sql: ["pma_report_def"] },
     { id: "d3-p6-exec", title: { fa: "گزارش یک‌صفحه EXEC", en: "RPT-EXEC" }, tab: "exec", sql: ["pma_report_instance"] },
-    { id: "d3-p6-dash", title: { fa: "داشبورد نقش‌محور", en: "Role dashboard" }, tab: "dash", sql: ["pma_dash_config"] },
   ],
 };
 
@@ -152,43 +172,190 @@ const D4_TAB_BY_SUB: Record<string, D4Tab> = {
   "d4-p5-ntc": "notice",
   "d4-p5-dsp": "dispute",
   "d4-p5-exe": "exec",
+  "d4-p6-s1": "invest",
+  "d4-p6-s2": "invest",
 };
 
-/** Extra submodules only on the d6 inner page — not in the main right sidebar. */
-const D6_PAGE_SUBS: Record<string, { id: string; title: Bi; tab: GovTab; sql: string[] }[]> = {
-  "d6-p1": [
-    { id: "d6-p1-sla", title: { fa: "پایش SLA و گام‌های معوق", en: "SLA & overdue steps" }, tab: "workflow", sql: ["Workflow_Instance"] },
-  ],
-  "d6-p2": [
-    { id: "d6-p2-health", title: { fa: "سلامت اتصال و آخرین همگام‌سازی", en: "Connector health & last sync" }, tab: "integration", sql: ["Integration_Log"] },
-  ],
-  "d6-p4": [
-    { id: "d6-p4-capa", title: { fa: "یافته‌ها و اقدام اصلاحی", en: "Findings & CAPA" }, tab: "audit", sql: ["Audit_Register"] },
-  ],
-  "d6-p5": [
-    { id: "d6-p5-log", title: { fa: "دفتر تصمیم و مرجع اختیار", en: "Decision log & authority" }, tab: "decision", sql: ["Decision_Log"] },
-  ],
-};
+/* حوزهٔ d6 زیرماژول اضافی ندارد.
+ *
+ * پیش از این چهار ردیف اضافه در این صفحه نشان داده می‌شد:
+ *   «پایش SLA و گام‌های معوق»      کنار «گردش فرآیند»
+ *   «سلامت اتصال و آخرین همگام‌سازی» کنار «تجمیع داده‌ها»
+ *   «یافته‌ها و اقدام اصلاحی»        کنار «کنترل انطباق»
+ *   «دفتر تصمیم و مرجع اختیار»       کنار «تصمیم‌یار مدیریتی»
+ *
+ * هر چهار جفت به یک تب یکسان می‌رفتند (`workflow`، `integration`،
+ * `audit`، `decision`) و هیچ پارامتر دیگری همراه نداشتند — یعنی دو
+ * ردیف مختلف دقیقاً یک صفحه را باز می‌کردند.
+ *
+ * دلیلش این است که هر تب از ابتدا هر دو موضوع را با هم نشان می‌دهد:
+ * تب گردش فرآیند ستون «مهلت / SLA» و شمارندهٔ «نقض SLA» دارد؛ تب
+ * یکپارچگی ستون سلامت اتصال و آخرین همگام‌سازی؛ تب ممیزی ستون CAPA
+ * و یافته‌ها؛ تب پشتیبان تصمیم، دفتر تصمیم و مرجع اختیار. پس ردیف
+ * دوم چیزی اضافه نمی‌کرد و فقط کاربر را به تردید می‌انداخت.
+ */
 
 const D6_TAB_BY_SUB: Record<string, GovTab> = {
   "d6-p1-s1": "workflow",
-  "d6-p1-sla": "workflow",
   "d6-p2-s1": "integration",
-  "d6-p2-health": "integration",
   "d6-p3-s1": "stakeholders",
   "d6-p4-s1": "audit",
-  "d6-p4-capa": "audit",
   "d6-p5-s1": "decision",
-  "d6-p5-log": "decision",
 };
 
-const D8_TAB_BY_SUB: Record<string, HseTab> = {
-  "d8-p1-s1": "dashboard",
-  "d8-p2-s1": "incidents",
-  "d8-p3-s1": "ptw",
-  "d8-p4-s1": "inspections",
-  "d8-p5-s1": "healthenv",
-  "d8-p6-s1": "actions",
+/** Extra submodules only on the d8 inner page — main sidebar keeps one row per domain. */
+const D8_PAGE_SUBS: Record<string, { id: string; title: Bi; tab: QmsTab; sql: string[] }[]> = {
+  "d8-p1": [
+    { id: "d8-p1-hold", title: { fa: "نقاط توقف و شاهد", en: "Hold & witness points" }, tab: "plan", sql: ["ITP_Point"] },
+  ],
+  "d8-p2": [
+    { id: "d8-p2-ir", title: { fa: "درخواست بازرسی و اعلان ۴۸ ساعته", en: "IR & 48h notice" }, tab: "inspection", sql: ["Inspection_Request"] },
+    { id: "d8-p2-spc", title: { fa: "نمودار پایش و شش‌سیگما", en: "Control chart & six sigma" }, tab: "inspection", sql: ["Test_Report"] },
+  ],
+  "d8-p3": [
+    { id: "d8-p3-capa", title: { fa: "اقدام اصلاحی و پارتو علل", en: "CAPA & Pareto" }, tab: "ncr", sql: ["CAPA_Action"] },
+    { id: "d8-p3-coq", title: { fa: "هزینه کیفیت و COPQ", en: "Cost of quality" }, tab: "ncr", sql: ["NCR_Register"] },
+  ],
+  "d8-p4": [
+    { id: "d8-p4-trace", title: { fa: "ردیابی شماره ذوب", en: "Heat traceability" }, tab: "material", sql: ["Heat_Trace_Link"] },
+  ],
+  "d8-p5": [
+    { id: "d8-p5-iso", title: { fa: "امتیاز انطباق و ریسک گواهینامه", en: "Compliance score & cert risk" }, tab: "audit", sql: ["Audit_Finding"] },
+  ],
+  "d8-p6": [
+    { id: "d8-p6-mc", title: { fa: "دروازه تحویل مکانیکی", en: "Mechanical completion gate" }, tab: "handover", sql: ["Completion_Certificate"] },
+    { id: "d8-p6-dos", title: { fa: "داکیومنت کیفیت تحویل", en: "Quality dossier" }, tab: "handover", sql: ["Quality_Dossier"] },
+  ],
+};
+
+const D8_TAB_BY_SUB: Record<string, QmsTab> = {
+  "d8-p1-s1": "plan",
+  "d8-p1-hold": "plan",
+  "d8-p2-s1": "inspection",
+  "d8-p2-ir": "inspection",
+  "d8-p2-spc": "inspection",
+  "d8-p3-s1": "ncr",
+  "d8-p3-capa": "ncr",
+  "d8-p3-coq": "ncr",
+  "d8-p4-s1": "material",
+  "d8-p4-trace": "material",
+  "d8-p5-s1": "audit",
+  "d8-p5-iso": "audit",
+  "d8-p6-s1": "handover",
+  "d8-p6-mc": "handover",
+  "d8-p6-dos": "handover",
+};
+
+const D10_TAB_BY_SUB: Record<string, HrmTab> = {
+  "d10-p1-s1": "planning",
+  "d10-p1-s2": "planning",
+  "d10-p1-s3": "planning",
+  "d10-p2-s1": "timesheet",
+  "d10-p3-s1": "productivity",
+  "d10-p4-s1": "crew",
+  "d10-p5-s1": "onboarding",
+  "d10-p6-s1": "analytics",
+};
+
+/* هر فرایند d16 دقیقاً یک تب دارد؛ زیرمرحله‌ها همان تب را باز می‌کنند. */
+const D16_TAB_BY_PROCESS: Record<string, HseTab> = {
+  "d16-p1": "jsa",
+  "d16-p2": "permit",
+  "d16-p3": "incident",
+  "d16-p4": "violation",
+  "d16-p5": "training",
+  "d16-p6": "dashboard",
+};
+
+const D9_TAB_BY_SUB: Record<string, EqmTab> = {
+  "d9-p1-s1": "fleet",
+  "d9-p1-s2": "fleet",
+  "d9-p2-s1": "meter",
+  "d9-p3-s1": "rental",
+  "d9-p4-s1": "maintenance",
+  "d9-p4-s2": "maintenance",
+  "d9-p4-s3": "maintenance",
+  "d9-p5-s1": "productivity",
+  "d9-p5-s2": "productivity",
+  "d9-p5-s3": "rental",
+  "d9-p6-s1": "dispatch",
+  "d9-p7-s1": "fuel",
+  "d9-p8-s1": "parts",
+};
+
+const D11_TAB_BY_SUB: Record<string, CkmTab> = {
+  "d11-p1-s1": "correspondence",
+  "d11-p1-s2": "correspondence",
+  "d11-p2-s1": "meetings",
+  "d11-p3-s1": "stakeholders",
+  "d11-p3-s2": "stakeholders",
+  "d11-p4-s1": "notifications",
+  "d11-p5-s1": "knowledge",
+  "d11-p6-s1": "analytics",
+};
+
+/** Extra submodules only on the d5 inner page — main sidebar untouched. */
+const D5_PAGE_SUBS: Record<string, { id: string; title: Bi; tab: FinTab; sql: string[] }[]> = {
+  "d5-p1": [
+    { id: "d5-p1-cbs", title: { fa: "ساختار شکست هزینه و PMB", en: "CBS & PMB" }, tab: "cost", sql: ["fin_cbs_node", "fin_pmb_period"] },
+    { id: "d5-p1-res", title: { fa: "ذخیره احتیاطی و اختیار برداشت", en: "Reserve & DoA" }, tab: "cost", sql: ["fin_reserve_ledger"] },
+  ],
+  "d5-p2": [
+    { id: "d5-p2-evm", title: { fa: "EVM و پنج روش EAC", en: "EVM & five EACs" }, tab: "control", sql: ["fin_evm_snapshot"] },
+    { id: "d5-p2-snap", title: { fa: "Snapshot تغییرناپذیر و نسخه فرمول", en: "Immutable snapshots" }, tab: "control", sql: ["fin_evm_snapshot"] },
+  ],
+  "d5-p3": [
+    { id: "d5-p3-age", title: { fa: "سن مطالبات و سرمایه در گردش", en: "AR aging & working capital" }, tab: "cash", sql: ["fin_receivable", "fin_payable"] },
+    { id: "d5-p3-ipc", title: { fa: "صورت‌وضعیت و کسورات", en: "Progress invoice" }, tab: "cash", sql: ["fin_progress_invoice"] },
+  ],
+  "d5-p4": [
+    { id: "d5-p4-mrp", title: { fa: "اجرای MRP و تاریخ نیاز کالا", en: "MRP & material need date" }, tab: "pr", sql: ["fin_mrp_run"] },
+    { id: "d5-p4-bud", title: { fa: "کنترل بودجه و مسیر تأیید", en: "Budget check & approval route" }, tab: "pr", sql: ["fin_pr_line"] },
+  ],
+  "d5-p5": [
+    { id: "d5-p5-com", title: { fa: "زنجیره تعهد و عملکرد تأمین‌کننده", en: "Commitment & vendor scoring" }, tab: "po", sql: ["fin_commitment", "fin_vendor_score"] },
+    { id: "d5-p5-3wm", title: { fa: "تطابق سه‌جانبه پیش از پرداخت", en: "3-way match gate" }, tab: "po", sql: ["fin_invoice_match"] },
+  ],
+  "d5-p6": [
+    { id: "d5-p6-rop", title: { fa: "نقطه سفارش، EOQ و طبقه‌بندی ABC", en: "ROP, EOQ & ABC" }, tab: "inventory", sql: ["fin_stock_balance"] },
+    { id: "d5-p6-trc", title: { fa: "ردیابی بچ و گردش انبار", en: "Batch traceability & flow" }, tab: "inventory", sql: ["fin_grn", "fin_issuance"] },
+  ],
+};
+
+const D5_TAB_BY_SUB: Record<string, FinTab> = {
+  "d5-p1-s1": "cost",
+  "d5-p1-cbs": "cost",
+  "d5-p1-res": "cost",
+  "d5-p2-s1": "control",
+  "d5-p2-evm": "control",
+  "d5-p2-snap": "control",
+  "d5-p3-s1": "cash",
+  "d5-p3-age": "cash",
+  "d5-p3-ipc": "cash",
+  "d5-p4-s1": "pr",
+  "d5-p4-mrp": "pr",
+  "d5-p4-bud": "pr",
+  "d5-p5-s1": "po",
+  "d5-p5-com": "po",
+  "d5-p5-3wm": "po",
+  "d5-p6-s1": "inventory",
+  "d5-p6-rop": "inventory",
+  "d5-p6-trc": "inventory",
+  "d5-p7-s1": "quantities",
+  "d5-p7-s2": "quantities",
+  "d5-p8-s1": "balance",
+  "d5-p8-s2": "balance",
+  "d5-p9-s1": "pnl",
+  "d5-p9-s2": "pnl",
+};
+
+const D17_TAB_BY_SUB: Record<string, HseFieldTab> = {
+  "d17-p1-s1": "dashboard",
+  "d17-p2-s1": "incidents",
+  "d17-p3-s1": "ptw",
+  "d17-p4-s1": "inspections",
+  "d17-p5-s1": "healthenv",
+  "d17-p6-s1": "actions",
 };
 
 const D1_TAB_BY_SUB: Record<string, EdmsTab> = {
@@ -208,9 +375,11 @@ type Props = {
   target: ModuleNavTarget;
   onBack: () => void;
   onOpenFlowNet?: () => void;
+  /** پرش به دامنه/زیرفرآیند دیگر (برای پیوندهای میان‌دامنه‌ای). */
+  onNavigate?: (target: ModuleNavTarget) => void;
 };
 
-export default function ModuleDetail({ lang, target, onBack, onOpenFlowNet }: Props) {
+export default function ModuleDetail({ lang, target, onBack, onOpenFlowNet, onNavigate }: Props) {
   const rtl = lang === "fa";
   const { clusters, projectsByCluster } = useSystem();
   const { user, can, audit } = useAuth();
@@ -220,6 +389,21 @@ export default function ModuleDetail({ lang, target, onBack, onOpenFlowNet }: Pr
   const [selected, setSelected] = useState<{ pId: string; sId: string } | null>(
     target.processId && target.subId ? { pId: target.processId, sId: target.subId } : null
   );
+  const [taxonomyProcesses, setTaxonomyProcesses] = useState<Process[] | null>(null);
+  const [taxonomyEditorOpen, setTaxonomyEditorOpen] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    if (!dom || !EDITABLE_TAXONOMY_DOMAINS.includes(dom.id as (typeof EDITABLE_TAXONOMY_DOMAINS)[number]) || !target.projectId) {
+      setTaxonomyProcesses(null);
+      return () => { alive = false; };
+    }
+    (async () => {
+      const saved = await loadProcessTree(target.projectId, dom.id);
+      if (alive) setTaxonomyProcesses(saved);
+    })();
+    return () => { alive = false; };
+  }, [dom?.id, target.projectId]);
 
   if (!dom) return null;
 
@@ -241,6 +425,17 @@ export default function ModuleDetail({ lang, target, onBack, onOpenFlowNet }: Pr
       </div>
     );
   }
+
+  const activeProcesses = taxonomyProcesses ?? dom.processes;
+  const canEditTaxonomy = EDITABLE_TAXONOMY_DOMAINS.includes(dom.id as (typeof EDITABLE_TAXONOMY_DOMAINS)[number])
+    && (can("system.manage") || can("project.edit", target.projectId));
+  const handleTaxonomySaved = (next: Process[]) => {
+    setTaxonomyProcesses(next);
+    setTaxonomyEditorOpen(false);
+    if (selected && !next.some((p) => p.id === selected.pId && p.subs.some((s) => s.id === selected.sId))) setSelected(null);
+    audit("UPDATE_PROCESS_TREE", { projectId: target.projectId, entity: dom.id, entityId: dom.id });
+    window.dispatchEvent(new CustomEvent("pmis:taxonomy-updated", { detail: { projectId: target.projectId, domainId: dom.id, processes: next } }));
+  };
 
   // Direct render for System Administration if reached
   if (dom.id === "d7" && !selected) {
@@ -293,11 +488,11 @@ export default function ModuleDetail({ lang, target, onBack, onOpenFlowNet }: Pr
           </div>
         </div>
 
-        <div className="flex min-h-0 flex-1 gap-3 overflow-hidden">
-          <div className="glass flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl p-3">
+        <div dir="ltr" className="flex min-h-0 flex-1 gap-3 overflow-hidden">
+          <div dir={rtl ? "rtl" : "ltr"} className="glass flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl p-3">
             <DocumentWorkspace lang={lang} initialTab={d1Tab} hideTabs />
           </div>
-          <aside className="glass-dark flex w-[300px] shrink-0 flex-col overflow-hidden rounded-2xl">
+          <aside dir={rtl ? "rtl" : "ltr"} className="glass-dark flex w-[300px] shrink-0 flex-col overflow-hidden rounded-2xl">
             <div className="b-line border-b px-3 py-2.5">
               <div className="flex items-center gap-2">
                 <span className="grid h-6 w-6 place-items-center rounded-md text-[12px]"
@@ -332,11 +527,6 @@ export default function ModuleDetail({ lang, target, onBack, onOpenFlowNet }: Pr
                         <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: dom.accent }} />
                         <div className="min-w-0 flex-1">
                           <div className="truncate text-[10px] font-light tx1">{t(s.title, lang)}</div>
-                          <div className="mt-0.5 flex flex-wrap gap-1">
-                            {s.sql.map((tbl) => (
-                              <span key={tbl} className="rounded bg-sky-400/10 px-1 py-[1px] text-[7.5px] font-light text-sky-300" dir="ltr">🗄 {tbl}</span>
-                            ))}
-                          </div>
                         </div>
                       </button>
                     ))}
@@ -353,10 +543,12 @@ export default function ModuleDetail({ lang, target, onBack, onOpenFlowNet }: Pr
   const d2Tab = ((): PexTab => {
     const sid = selected?.sId ?? target.subId;
     if (sid && D2_TAB_BY_SUB[sid]) return D2_TAB_BY_SUB[sid];
-    return "dashboard";
+    /* داشبورد مدیر پروژه به حوزهٔ پایش رفت، پس دیگر نقطهٔ ورود معقولی
+     * برای این حوزه نیست. کارگاه سرِ زنجیره است و پیش‌فرض درست همان. */
+    return "workshop";
   })();
 
-  const hseTab = ((): HseTab | null => {
+  const hseTab = ((): HseFieldTab | null => {
     const sid = selected?.sId ?? target.subId;
     if (sid && HSE_TAB_BY_SUB[sid]) return HSE_TAB_BY_SUB[sid];
     return null;
@@ -402,15 +594,15 @@ export default function ModuleDetail({ lang, target, onBack, onOpenFlowNet }: Pr
           </div>
         </div>
 
-        <div className="flex min-h-0 flex-1 gap-3 overflow-hidden">
-          <div className="glass flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl p-3">
+        <div dir="ltr" className="flex min-h-0 flex-1 gap-3 overflow-hidden">
+          <div dir={rtl ? "rtl" : "ltr"} className="glass flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl p-3">
             {hseTab ? (
               <HseWorkspace lang={lang} initialTab={hseTab} hideTabs />
             ) : (
               <PlanningWorkspace lang={lang} initialTab={d2Tab} hideTabs />
             )}
           </div>
-          <aside className="glass-dark flex w-[300px] shrink-0 flex-col overflow-hidden rounded-2xl">
+          <aside dir={rtl ? "rtl" : "ltr"} className="glass-dark flex w-[300px] shrink-0 flex-col overflow-hidden rounded-2xl">
             <div className="b-line border-b px-3 py-2.5">
               <div className="flex items-center gap-2">
                 <span className="grid h-6 w-6 place-items-center rounded-md text-[12px]"
@@ -446,11 +638,6 @@ export default function ModuleDetail({ lang, target, onBack, onOpenFlowNet }: Pr
                         <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: dom.accent }} />
                         <div className="min-w-0 flex-1">
                           <div className="truncate text-[10px] font-light tx1">{t(s.title, lang)}</div>
-                          <div className="mt-0.5 flex flex-wrap gap-1">
-                            {s.sql.map((tbl) => (
-                              <span key={tbl} className="rounded bg-sky-400/10 px-1 py-[1px] text-[7.5px] font-light text-sky-300" dir="ltr">🗄 {tbl}</span>
-                            ))}
-                          </div>
                         </div>
                       </button>
                     ))}
@@ -509,11 +696,11 @@ export default function ModuleDetail({ lang, target, onBack, onOpenFlowNet }: Pr
             </div>
           </div>
         </div>
-        <div className="flex min-h-0 flex-1 gap-3 overflow-hidden">
-          <div className="glass flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl p-3">
+        <div dir="ltr" className="flex min-h-0 flex-1 gap-3 overflow-hidden">
+          <div dir={rtl ? "rtl" : "ltr"} className="glass flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl p-3">
             <PmaWorkspace lang={lang} initialTab={d3Tab} hideTabs />
           </div>
-          <aside className="glass-dark flex w-[300px] shrink-0 flex-col overflow-hidden rounded-2xl">
+          <aside dir={rtl ? "rtl" : "ltr"} className="glass-dark flex w-[300px] shrink-0 flex-col overflow-hidden rounded-2xl">
             <div className="b-line border-b px-3 py-2.5">
               <div className="flex items-center gap-2">
                 <span className="grid h-6 w-6 place-items-center rounded-md text-[12px]"
@@ -548,11 +735,6 @@ export default function ModuleDetail({ lang, target, onBack, onOpenFlowNet }: Pr
                         <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: dom.accent }} />
                         <div className="min-w-0 flex-1">
                           <div className="truncate text-[10px] font-light tx1">{t(s.title, lang)}</div>
-                          <div className="mt-0.5 flex flex-wrap gap-1">
-                            {s.sql.map((tbl) => (
-                              <span key={tbl} className="rounded bg-sky-400/10 px-1 py-[1px] text-[7.5px] font-light text-sky-300" dir="ltr">🗄 {tbl}</span>
-                            ))}
-                          </div>
                         </div>
                       </button>
                     ))}
@@ -611,11 +793,11 @@ export default function ModuleDetail({ lang, target, onBack, onOpenFlowNet }: Pr
             </div>
           </div>
         </div>
-        <div className="flex min-h-0 flex-1 gap-3 overflow-hidden">
-          <div className="glass flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl p-3">
+        <div dir="ltr" className="flex min-h-0 flex-1 gap-3 overflow-hidden">
+          <div dir={rtl ? "rtl" : "ltr"} className="glass flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl p-3">
             <RiskClaimsWorkspace lang={lang} initialTab={d4Tab} hideTabs />
           </div>
-          <aside className="glass-dark flex w-[300px] shrink-0 flex-col overflow-hidden rounded-2xl">
+          <aside dir={rtl ? "rtl" : "ltr"} className="glass-dark flex w-[300px] shrink-0 flex-col overflow-hidden rounded-2xl">
             <div className="b-line border-b px-3 py-2.5">
               <div className="flex items-center gap-2">
                 <span className="grid h-6 w-6 place-items-center rounded-md text-[12px]"
@@ -650,11 +832,6 @@ export default function ModuleDetail({ lang, target, onBack, onOpenFlowNet }: Pr
                         <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: dom.accent }} />
                         <div className="min-w-0 flex-1">
                           <div className="truncate text-[10px] font-light tx1">{t(s.title, lang)}</div>
-                          <div className="mt-0.5 flex flex-wrap gap-1">
-                            {s.sql.map((tbl) => (
-                              <span key={tbl} className="rounded bg-sky-400/10 px-1 py-[1px] text-[7.5px] font-light text-sky-300" dir="ltr">🗄 {tbl}</span>
-                            ))}
-                          </div>
                         </div>
                       </button>
                     ))}
@@ -674,7 +851,23 @@ export default function ModuleDetail({ lang, target, onBack, onOpenFlowNet }: Pr
     return "workflow";
   })();
 
-  if (dom.id === "d6") {
+  const [d14View, setD14View] = useState<"contract" | "rating">(
+    target.processId === "d14-p8" ? "rating" : "contract",
+  );
+
+  const d5Tab = ((): FinTab => {
+    const sid = selected?.sId ?? target.subId;
+    if (sid && D5_TAB_BY_SUB[sid]) return D5_TAB_BY_SUB[sid];
+    return "cost";
+  })();
+
+  const d8Tab = ((): QmsTab => {
+    const sid = selected?.sId ?? target.subId;
+    if (sid && D8_TAB_BY_SUB[sid]) return D8_TAB_BY_SUB[sid];
+    return "plan";
+  })();
+
+  if (dom.id === "d8") {
     return (
       <div className="flex h-full min-h-0 flex-col gap-3 overflow-hidden" dir={rtl ? "rtl" : "ltr"}>
         <div className="glass flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl px-3 py-2.5">
@@ -709,15 +902,15 @@ export default function ModuleDetail({ lang, target, onBack, onOpenFlowNet }: Pr
           <div className="shrink-0 text-end">
             <div className="text-[9px] font-extralight tx3">{t(dom.title, lang)}</div>
             <div className="text-[11px] font-light tx1">
-              {rtl ? "GOV — حاکمیت؛ ارجاع بدون بازنویسی" : "GOV — governance; reference, no rewrite"}
+              {rtl ? "QMS — نقطه توقف مسدودکننده؛ تحویل بدون پانچ کلاس A" : "QMS — hold points block; no MC with open class-A punch"}
             </div>
           </div>
         </div>
-        <div className="flex min-h-0 flex-1 gap-3 overflow-hidden">
-          <div className="glass flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl p-3">
-            <GovernanceWorkspace lang={lang} initialTab={d6Tab} hideTabs />
+        <div dir="ltr" className="flex min-h-0 flex-1 gap-3 overflow-hidden">
+          <div dir={rtl ? "rtl" : "ltr"} className="glass flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl p-3">
+            <QualityWorkspace lang={lang} initialTab={d8Tab} hideTabs />
           </div>
-          <aside className="glass-dark flex w-[300px] shrink-0 flex-col overflow-hidden rounded-2xl">
+          <aside dir={rtl ? "rtl" : "ltr"} className="glass-dark flex w-[300px] shrink-0 flex-col overflow-hidden rounded-2xl">
             <div className="b-line border-b px-3 py-2.5">
               <div className="flex items-center gap-2">
                 <span className="grid h-6 w-6 place-items-center rounded-md text-[12px]"
@@ -739,7 +932,7 @@ export default function ModuleDetail({ lang, target, onBack, onOpenFlowNet }: Pr
                   <div className="mt-1 space-y-1">
                     {[
                       ...p.subs.map((s) => ({ id: s.id, title: s.title, sql: s.sql })),
-                      ...(D6_PAGE_SUBS[p.id] ?? []),
+                      ...(D8_PAGE_SUBS[p.id] ?? []),
                     ].map((s) => (
                       <button
                         key={s.id}
@@ -752,11 +945,6 @@ export default function ModuleDetail({ lang, target, onBack, onOpenFlowNet }: Pr
                         <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: dom.accent }} />
                         <div className="min-w-0 flex-1">
                           <div className="truncate text-[10px] font-light tx1">{t(s.title, lang)}</div>
-                          <div className="mt-0.5 flex flex-wrap gap-1">
-                            {s.sql.map((tbl) => (
-                              <span key={tbl} className="rounded bg-sky-400/10 px-1 py-[1px] text-[7.5px] font-light text-sky-300" dir="ltr">🗄 {tbl}</span>
-                            ))}
-                          </div>
                         </div>
                       </button>
                     ))}
@@ -770,13 +958,785 @@ export default function ModuleDetail({ lang, target, onBack, onOpenFlowNet }: Pr
     );
   }
 
-  const d8Tab = ((): HseTab => {
+  const d10Tab = ((): HrmTab => {
     const sid = selected?.sId ?? target.subId;
-    if (sid && D8_TAB_BY_SUB[sid]) return D8_TAB_BY_SUB[sid];
+    if (sid && D10_TAB_BY_SUB[sid]) return D10_TAB_BY_SUB[sid];
+    return "planning";
+  })();
+
+  const d9Tab = ((): EqmTab => {
+    const sid = selected?.sId ?? target.subId;
+    if (sid && D9_TAB_BY_SUB[sid]) return D9_TAB_BY_SUB[sid];
+    return "fleet";
+  })();
+
+  /* ماژول مهندسی و طراحی — کامپوننت خودش نوار بازگشت و تب‌ها را دارد. */
+  if (dom.id === "d12") {
+    return <EngineeringWorkspace lang={lang} onBack={onBack} />;
+  }
+
+  /* ماژول ایمنی، بهداشت و محیط‌زیست — شش تب برابر شش فرایند d16-p1..p6،
+   * پس نگاشت روی سطح فرایند است نه زیرمرحله. */
+  if (dom.id === "d16") {
+    const sid = selected?.sId ?? target.subId ?? "";
+    const pid = sid.split("-").slice(0, 2).join("-");
+    return <HSEWorkspace lang={lang} onBack={onBack} initialTab={D16_TAB_BY_PROCESS[pid]} />;
+  }
+
+  /* مدیریت پیمان و صورت‌وضعیت (d14).
+   *
+   * `ContractsPanel` از قبل ساخته شده بود و داخل تب «مدیریت هزینه»
+   * مونت می‌شد — یعنی ۲۴ جدول، ۵۷ مسیر و ۷۴۰ آزمون پشت یک تب فرعی
+   * پنهان بود و کاربر راه مستقیمی به آن نداشت.
+   *
+   * پنل خودش نوار بازگشت ندارد (برای مونت درون تب ساخته شده بود)، پس
+   * قاب اینجا ساخته می‌شود. جای قبلی‌اش در تب هزینه دست‌نخورده ماند:
+   * کسی که از مسیر مالی می‌آمد نباید مسیرش بشکند. */
+  if (dom.id === "d14") {
+    return (
+      <div className="flex h-full min-h-0 flex-col gap-3 overflow-hidden" dir={rtl ? "rtl" : "ltr"}>
+        <div className="glass flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl px-3 py-2.5">
+          <button onClick={onBack} className="glass-row flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-[10.5px] font-light tx2 transition hover:tx1">
+            <span className={rtl ? "" : "rotate-180"}>→</span>
+            {rtl ? "بازگشت به داشبورد" : "Back to dashboard"}
+          </button>
+          {cluster && (
+            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl text-[20px]"
+                  style={{ background: `${cluster.color}1f`, border: `1px solid ${cluster.color}55` }}>
+              {cluster.icon}
+            </span>
+          )}
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
+              {cluster && (
+                <h1 className="truncate text-[20px] font-semibold leading-tight" style={{ color: cluster.color }}>
+                  {t(cluster.title, lang)}
+                </h1>
+              )}
+              <span className="text-[16px] font-light tx4">/</span>
+              {project && (
+                <h2 className="truncate text-[19px] font-semibold leading-tight tx1">{t(project.name, lang)}</h2>
+              )}
+            </div>
+            {project && (
+              <p className="mt-1 truncate text-[10px] font-extralight tx3">
+                <span dir="ltr">{project.code}</span> · {t(project.client, lang)} · {t(project.location, lang)}
+              </p>
+            )}
+          </div>
+          <div className="shrink-0 text-end">
+            <div className="text-[9px] font-extralight tx3">{t(dom.title, lang)}</div>
+            <div className="text-[11px] font-light tx1">
+              {rtl ? "CNT — مالک پیمان و صورت‌وضعیت؛ ثبت مالی در FIN" : "CNT — owns contract & IPC; posting lives in FIN"}
+            </div>
+          </div>
+        </div>
+        <div className="flex shrink-0 items-center gap-1.5">
+          {([
+            ["contract", rtl ? "پیمان و صورت‌وضعیت" : "Contract & IPC"],
+            ["rating", rtl ? "ارزیابی پیمانکاران و تأمین‌کنندگان" : "Contractor & Supplier Rating"],
+          ] as const).map(([k, label]) => (
+            <button
+              key={k}
+              type="button"
+              onClick={() => setD14View(k)}
+              className={`rounded-lg px-2.5 py-1 text-[10px] font-light transition ${
+                d14View === k ? "toggle-on tx1" : "tx3 hover:tx2"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <div className="glass flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl p-3">
+          <div className="thin-scroll min-h-0 flex-1 overflow-y-auto">
+            {d14View === "rating" ? <VendorRatingPanel lang={lang} /> : <ContractsPanel lang={lang} />}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (dom.id === "d9") {
+    return (
+      <div className="flex h-full min-h-0 flex-col gap-3 overflow-hidden" dir={rtl ? "rtl" : "ltr"}>
+        <div className="glass flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl px-3 py-2.5">
+          <button onClick={onBack} className="glass-row flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-[10.5px] font-light tx2 transition hover:tx1">
+            <span className={rtl ? "" : "rotate-180"}>→</span>
+            {rtl ? "بازگشت به داشبورد" : "Back to dashboard"}
+          </button>
+          {cluster && (
+            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl text-[20px]"
+                  style={{ background: `${cluster.color}1f`, border: `1px solid ${cluster.color}55` }}>
+              {cluster.icon}
+            </span>
+          )}
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
+              {cluster && (
+                <h1 className="truncate text-[20px] font-semibold leading-tight" style={{ color: cluster.color }}>
+                  {t(cluster.title, lang)}
+                </h1>
+              )}
+              <span className="text-[16px] font-light tx4">/</span>
+              {project && (
+                <h2 className="truncate text-[19px] font-semibold leading-tight tx1">{t(project.name, lang)}</h2>
+              )}
+            </div>
+            {project && (
+              <p className="mt-1 truncate text-[10px] font-extralight tx3">
+                <span dir="ltr">{project.code}</span> · {t(project.client, lang)} · {t(project.location, lang)}
+              </p>
+            )}
+          </div>
+          <div className="shrink-0 text-end">
+            <div className="text-[9px] font-extralight tx3">{t(dom.title, lang)}</div>
+            <div className="text-[11px] font-light tx1">
+              {rtl ? "EQM — مالک ساعت ماشین؛ نرخ و هزینه در FIN" : "EQM — owns machine hours; rates & cost live in FIN"}
+            </div>
+          </div>
+        </div>
+        <div dir="ltr" className="flex min-h-0 flex-1 gap-3 overflow-hidden">
+          <div dir={rtl ? "rtl" : "ltr"} className="glass flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl p-3">
+            <MachineryWorkspace lang={lang} initialTab={d9Tab} hideTabs />
+          </div>
+          <aside dir={rtl ? "rtl" : "ltr"} className="glass-dark flex w-[300px] shrink-0 flex-col overflow-hidden rounded-2xl">
+            <div className="b-line border-b px-3 py-2.5">
+              <div className="flex items-center gap-2">
+                <span className="grid h-6 w-6 place-items-center rounded-md text-[12px]"
+                      style={{ background: `${dom.accent}1a`, border: `1px solid ${dom.accent}55`, color: dom.accent }}>
+                  {dom.icon}
+                </span>
+                <div className="text-[10.5px] font-normal tx1">{t(dom.title, lang)}</div>
+              </div>
+            </div>
+            <div className="thin-scroll flex-1 overflow-y-auto p-2 space-y-2">
+              {dom.processes.map((p, i) => (
+                <div key={p.id} className="rounded-xl border b-line-soft bg-black/10 p-1.5">
+                  <div className="flex items-center gap-1.5 px-1 py-1">
+                    <span className="text-[8px] font-light tabular-nums tx4">
+                      {(i + 1).toLocaleString(rtl ? "fa-IR" : "en-US")}
+                    </span>
+                    <span className="text-[10.5px] font-normal" style={{ color: dom.accent }}>{t(p.title, lang)}</span>
+                  </div>
+                  <div className="mt-1 space-y-1">
+                    {p.subs.map((s) => (
+                      <button
+                        key={s.id}
+                        onClick={() => {
+                          audit("OPEN_SUBPROCESS", { projectId: target.projectId, entity: dom.id, entityId: s.id });
+                          setSelected({ pId: p.id, sId: s.id });
+                        }}
+                        className={`group flex w-full items-start gap-2 rounded-lg px-2 py-2 text-start transition hover:-translate-y-px glass-row ${selected?.sId === s.id ? "row-on" : ""}`}
+                      >
+                        <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: dom.accent }} />
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-[10px] font-light tx1">{t(s.title, lang)}</div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </aside>
+        </div>
+      </div>
+    );
+  }
+
+  if (dom.id === "d10") {
+    return (
+      <div className="flex h-full min-h-0 flex-col gap-3 overflow-hidden" dir={rtl ? "rtl" : "ltr"}>
+        <div className="glass flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl px-3 py-2.5">
+          <button onClick={onBack} className="glass-row flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-[10.5px] font-light tx2 transition hover:tx1">
+            <span className={rtl ? "" : "rotate-180"}>→</span>
+            {rtl ? "بازگشت به داشبورد" : "Back to dashboard"}
+          </button>
+          {cluster && (
+            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl text-[20px]"
+                  style={{ background: `${cluster.color}1f`, border: `1px solid ${cluster.color}55` }}>
+              {cluster.icon}
+            </span>
+          )}
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
+              {cluster && (
+                <h1 className="truncate text-[20px] font-semibold leading-tight" style={{ color: cluster.color }}>
+                  {t(cluster.title, lang)}
+                </h1>
+              )}
+              <span className="text-[16px] font-light tx4">/</span>
+              {project && (
+                <h2 className="truncate text-[19px] font-semibold leading-tight tx1">{t(project.name, lang)}</h2>
+              )}
+            </div>
+            {project && (
+              <p className="mt-1 truncate text-[10px] font-extralight tx3">
+                <span dir="ltr">{project.code}</span> · {t(project.client, lang)} · {t(project.location, lang)}
+              </p>
+            )}
+          </div>
+          <div className="shrink-0 text-end">
+            <div className="text-[9px] font-extralight tx3">{t(dom.title, lang)}</div>
+            <div className="text-[11px] font-light tx1">
+              {rtl ? "HRM — هر ساعت به یک فعالیت شارژ می‌شود؛ بهره‌وری از پیشرفت تأییدشده" : "HRM — every hour charged to an activity; productivity from approved progress"}
+            </div>
+          </div>
+        </div>
+        <div dir="ltr" className="flex min-h-0 flex-1 gap-3 overflow-hidden">
+          <div dir={rtl ? "rtl" : "ltr"} className="glass flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl p-3">
+            <WorkforceWorkspace lang={lang} initialTab={d10Tab} hideTabs />
+          </div>
+          <aside dir={rtl ? "rtl" : "ltr"} className="glass-dark flex w-[300px] shrink-0 flex-col overflow-hidden rounded-2xl">
+            <div className="b-line border-b px-3 py-2.5">
+              <div className="flex items-center gap-2">
+                <span className="grid h-6 w-6 place-items-center rounded-md text-[12px]"
+                      style={{ background: `${dom.accent}1a`, border: `1px solid ${dom.accent}55`, color: dom.accent }}>
+                  {dom.icon}
+                </span>
+                <div className="text-[10.5px] font-normal tx1">{t(dom.title, lang)}</div>
+              </div>
+            </div>
+            <div className="thin-scroll flex-1 overflow-y-auto p-2 space-y-2">
+              {dom.processes.map((p, i) => (
+                <div key={p.id} className="rounded-xl border b-line-soft bg-black/10 p-1.5">
+                  <div className="flex items-center gap-1.5 px-1 py-1">
+                    <span className="text-[8px] font-light tabular-nums tx4">
+                      {(i + 1).toLocaleString(rtl ? "fa-IR" : "en-US")}
+                    </span>
+                    <span className="text-[10.5px] font-normal" style={{ color: dom.accent }}>{t(p.title, lang)}</span>
+                  </div>
+                  <div className="mt-1 space-y-1">
+                    {[
+                      ...p.subs.map((s) => ({ id: s.id, title: s.title, sql: s.sql })),
+                      
+                    ].map((s) => (
+                      <button
+                        key={s.id}
+                        onClick={() => {
+                          audit("OPEN_SUBPROCESS", { projectId: target.projectId, entity: dom.id, entityId: s.id });
+                          setSelected({ pId: p.id, sId: s.id });
+                        }}
+                        className={`group flex w-full items-start gap-2 rounded-lg px-2 py-2 text-start transition hover:-translate-y-px glass-row ${selected?.sId === s.id ? "row-on" : ""}`}
+                      >
+                        <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: dom.accent }} />
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-[10px] font-light tx1">{t(s.title, lang)}</div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </aside>
+        </div>
+      </div>
+    );
+  }
+
+  const d11Tab = ((): CkmTab => {
+    const sid = selected?.sId ?? target.subId;
+    if (sid && D11_TAB_BY_SUB[sid]) return D11_TAB_BY_SUB[sid];
+    return "correspondence";
+  })();
+
+  if (dom.id === "d11") {
+    return (
+      <div className="flex h-full min-h-0 flex-col gap-3 overflow-hidden" dir={rtl ? "rtl" : "ltr"}>
+        <div className="glass flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl px-3 py-2.5">
+          <button onClick={onBack} className="glass-row flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-[10.5px] font-light tx2 transition hover:tx1">
+            <span className={rtl ? "" : "rotate-180"}>→</span>
+            {rtl ? "بازگشت به داشبورد" : "Back to dashboard"}
+          </button>
+          {cluster && (
+            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl text-[20px]"
+                  style={{ background: `${cluster.color}1f`, border: `1px solid ${cluster.color}55` }}>
+              {cluster.icon}
+            </span>
+          )}
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
+              {cluster && (
+                <h1 className="truncate text-[20px] font-semibold leading-tight" style={{ color: cluster.color }}>
+                  {t(cluster.title, lang)}
+                </h1>
+              )}
+              <span className="text-[16px] font-light tx4">/</span>
+              {project && (
+                <h2 className="truncate text-[19px] font-semibold leading-tight tx1">{t(project.name, lang)}</h2>
+              )}
+            </div>
+            {project && (
+              <p className="mt-1 truncate text-[10px] font-extralight tx3">
+                <span dir="ltr">{project.code}</span> · {t(project.client, lang)} · {t(project.location, lang)}
+              </p>
+            )}
+          </div>
+          <div className="shrink-0 text-end">
+            <div className="text-[9px] font-extralight tx3">{t(dom.title, lang)}</div>
+            <div className="text-[11px] font-light tx1">
+              {rtl ? "CKM — اعلان قراردادی مهلت‌دار است؛ مصوبه بدون مالک و موعد پذیرفته نمی‌شود" : "CKM — notices are time-barred; no action without an owner and a due date"}
+            </div>
+          </div>
+        </div>
+        <div dir="ltr" className="flex min-h-0 flex-1 gap-3 overflow-hidden">
+          <div dir={rtl ? "rtl" : "ltr"} className="glass flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl p-3">
+            <CommunicationWorkspace lang={lang} initialTab={d11Tab} hideTabs />
+          </div>
+          <aside dir={rtl ? "rtl" : "ltr"} className="glass-dark flex w-[300px] shrink-0 flex-col overflow-hidden rounded-2xl">
+            <div className="b-line border-b px-3 py-2.5">
+              <div className="flex items-center gap-2">
+                <span className="grid h-6 w-6 place-items-center rounded-md text-[12px]"
+                      style={{ background: `${dom.accent}1a`, border: `1px solid ${dom.accent}55`, color: dom.accent }}>
+                  {dom.icon}
+                </span>
+                <div className="text-[10.5px] font-normal tx1">{t(dom.title, lang)}</div>
+              </div>
+            </div>
+            <div className="thin-scroll flex-1 overflow-y-auto p-2 space-y-2">
+              {dom.processes.map((p, i) => (
+                <div key={p.id} className="rounded-xl border b-line-soft bg-black/10 p-1.5">
+                  <div className="flex items-center gap-1.5 px-1 py-1">
+                    <span className="text-[8px] font-light tabular-nums tx4">
+                      {(i + 1).toLocaleString(rtl ? "fa-IR" : "en-US")}
+                    </span>
+                    <span className="text-[10.5px] font-normal" style={{ color: dom.accent }}>{t(p.title, lang)}</span>
+                  </div>
+                  <div className="mt-1 space-y-1">
+                    {[
+                      ...p.subs.map((s) => ({ id: s.id, title: s.title, sql: s.sql })),
+                      
+                    ].map((s) => (
+                      <button
+                        key={s.id}
+                        onClick={() => {
+                          audit("OPEN_SUBPROCESS", { projectId: target.projectId, entity: dom.id, entityId: s.id });
+                          setSelected({ pId: p.id, sId: s.id });
+                        }}
+                        className={`group flex w-full items-start gap-2 rounded-lg px-2 py-2 text-start transition hover:-translate-y-px glass-row ${selected?.sId === s.id ? "row-on" : ""}`}
+                      >
+                        <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: dom.accent }} />
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-[10px] font-light tx1">{t(s.title, lang)}</div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </aside>
+        </div>
+      </div>
+    );
+  }
+
+  if (dom.id === "d5") {
+    return (
+      <div className="flex h-full min-h-0 flex-col gap-3 overflow-hidden" dir={rtl ? "rtl" : "ltr"}>
+        <div className="glass flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl px-3 py-2.5">
+          <button onClick={onBack} className="glass-row flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-[10.5px] font-light tx2 transition hover:tx1">
+            <span className={rtl ? "" : "rotate-180"}>→</span>
+            {rtl ? "بازگشت به داشبورد" : "Back to dashboard"}
+          </button>
+          {cluster && (
+            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl text-[20px]"
+                  style={{ background: `${cluster.color}1f`, border: `1px solid ${cluster.color}55` }}>
+              {cluster.icon}
+            </span>
+          )}
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
+              {cluster && (
+                <h1 className="truncate text-[20px] font-semibold leading-tight" style={{ color: cluster.color }}>
+                  {t(cluster.title, lang)}
+                </h1>
+              )}
+              <span className="text-[16px] font-light tx4">/</span>
+              {project && (
+                <h2 className="truncate text-[19px] font-semibold leading-tight tx1">{t(project.name, lang)}</h2>
+              )}
+            </div>
+            {project && (
+              <p className="mt-1 truncate text-[10px] font-extralight tx3">
+                <span dir="ltr">{project.code}</span> · {t(project.client, lang)} · {t(project.location, lang)}
+              </p>
+            )}
+          </div>
+          <div className="shrink-0 text-end">
+            <div className="text-[9px] font-extralight tx3">{t(dom.title, lang)}</div>
+            <div className="text-[11px] font-light tx1">
+              {rtl ? "FIN — تعهد پیش از هزینه؛ Snapshot تغییرناپذیر" : "FIN — commitment first; immutable snapshots"}
+            </div>
+          </div>
+        </div>
+        <div dir="ltr" className="flex min-h-0 flex-1 gap-3 overflow-hidden">
+          <div dir={rtl ? "rtl" : "ltr"} className="glass flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl p-3">
+            <CostSupplyWorkspace lang={lang} initialTab={d5Tab} hideTabs />
+          </div>
+          <aside dir={rtl ? "rtl" : "ltr"} className="glass-dark flex w-[300px] shrink-0 flex-col overflow-hidden rounded-2xl">
+            <div className="b-line border-b px-3 py-2.5">
+              <div className="flex items-center gap-2">
+                <span className="grid h-6 w-6 place-items-center rounded-md text-[12px]"
+                      style={{ background: `${dom.accent}1a`, border: `1px solid ${dom.accent}55`, color: dom.accent }}>
+                  {dom.icon}
+                </span>
+                <div className="text-[10.5px] font-normal tx1">{t(dom.title, lang)}</div>
+              </div>
+            </div>
+            <div className="thin-scroll flex-1 overflow-y-auto p-2 space-y-2">
+              {dom.processes.map((p, i) => (
+                <div key={p.id} className="rounded-xl border b-line-soft bg-black/10 p-1.5">
+                  <div className="flex items-center gap-1.5 px-1 py-1">
+                    <span className="text-[8px] font-light tabular-nums tx4">
+                      {(i + 1).toLocaleString(rtl ? "fa-IR" : "en-US")}
+                    </span>
+                    <span className="text-[10.5px] font-normal" style={{ color: dom.accent }}>{t(p.title, lang)}</span>
+                  </div>
+                  <div className="mt-1 space-y-1">
+                    {[
+                      ...p.subs.map((s) => ({ id: s.id, title: s.title, sql: s.sql })),
+                      ...(D5_PAGE_SUBS[p.id] ?? []),
+                    ].map((s) => (
+                      <button
+                        key={s.id}
+                        onClick={() => {
+                          audit("OPEN_SUBPROCESS", { projectId: target.projectId, entity: dom.id, entityId: s.id });
+                          setSelected({ pId: p.id, sId: s.id });
+                        }}
+                        className={`group flex w-full items-start gap-2 rounded-lg px-2 py-2 text-start transition hover:-translate-y-px glass-row ${selected?.sId === s.id ? "row-on" : ""}`}
+                      >
+                        <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: dom.accent }} />
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-[10px] font-light tx1">{t(s.title, lang)}</div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </aside>
+        </div>
+      </div>
+    );
+  }
+
+  if (dom.id === "d6") {
+    return (
+      <div className="flex h-full min-h-0 flex-col gap-3 overflow-hidden" dir={rtl ? "rtl" : "ltr"}>
+        <div className="glass flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl px-3 py-2.5">
+          <button onClick={onBack} className="glass-row flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-[10.5px] font-light tx2 transition hover:tx1">
+            <span className={rtl ? "" : "rotate-180"}>→</span>
+            {rtl ? "بازگشت به داشبورد" : "Back to dashboard"}
+          </button>
+          {cluster && (
+            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl text-[20px]"
+                  style={{ background: `${cluster.color}1f`, border: `1px solid ${cluster.color}55` }}>
+              {cluster.icon}
+            </span>
+          )}
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
+              {cluster && (
+                <h1 className="truncate text-[20px] font-semibold leading-tight" style={{ color: cluster.color }}>
+                  {t(cluster.title, lang)}
+                </h1>
+              )}
+              <span className="text-[16px] font-light tx4">/</span>
+              {project && (
+                <h2 className="truncate text-[19px] font-semibold leading-tight tx1">{t(project.name, lang)}</h2>
+              )}
+            </div>
+            {project && (
+              <p className="mt-1 truncate text-[10px] font-extralight tx3">
+                <span dir="ltr">{project.code}</span> · {t(project.client, lang)} · {t(project.location, lang)}
+              </p>
+            )}
+          </div>
+          {canEditTaxonomy && (
+            <button type="button" onClick={() => setTaxonomyEditorOpen(true)} className="rounded-lg border border-sky-400/45 bg-sky-400/10 px-3 py-2 text-[10px] text-sky-200 hover:bg-sky-400/20">
+              ✎ {rtl ? "ویرایش فرایندها" : "Edit processes"}
+            </button>
+          )}
+          <div className="shrink-0 text-end">
+            <div className="text-[9px] font-extralight tx3">{t(dom.title, lang)}</div>
+            <div className="text-[11px] font-light tx1">
+              {rtl ? "GOV — حاکمیت؛ ارجاع بدون بازنویسی" : "GOV — governance; reference, no rewrite"}
+            </div>
+          </div>
+        </div>
+        <div dir="ltr" className="flex min-h-0 flex-1 gap-3 overflow-hidden">
+          <div dir={rtl ? "rtl" : "ltr"} className="glass flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl p-3">
+            <GovernanceWorkspace lang={lang} initialTab={d6Tab} hideTabs />
+          </div>
+          <aside dir={rtl ? "rtl" : "ltr"} className="glass-dark flex w-[300px] shrink-0 flex-col overflow-hidden rounded-2xl">
+            <div className="b-line border-b px-3 py-2.5">
+              <div className="flex items-center gap-2">
+                <span className="grid h-6 w-6 place-items-center rounded-md text-[12px]"
+                      style={{ background: `${dom.accent}1a`, border: `1px solid ${dom.accent}55`, color: dom.accent }}>
+                  {dom.icon}
+                </span>
+                <div className="text-[10.5px] font-normal tx1">{t(dom.title, lang)}</div>
+              </div>
+            </div>
+            <div className="thin-scroll flex-1 overflow-y-auto p-2 space-y-2">
+              {activeProcesses.map((p, i) => (
+                <div key={p.id} className="rounded-xl border b-line-soft bg-black/10 p-1.5">
+                  <div className="flex items-center gap-1.5 px-1 py-1">
+                    <span className="text-[8px] font-light tabular-nums tx4">
+                      {(i + 1).toLocaleString(rtl ? "fa-IR" : "en-US")}
+                    </span>
+                    <span className="text-[10.5px] font-normal" style={{ color: dom.accent }}>{t(p.title, lang)}</span>
+                  </div>
+                  <div className="mt-1 space-y-1">
+                    {p.subs.map((s) => (
+                      <button
+                        key={s.id}
+                        onClick={() => {
+                          audit("OPEN_SUBPROCESS", { projectId: target.projectId, entity: dom.id, entityId: s.id });
+                          setSelected({ pId: p.id, sId: s.id });
+                        }}
+                        className={`group flex w-full items-start gap-2 rounded-lg px-2 py-2 text-start transition hover:-translate-y-px glass-row ${selected?.sId === s.id ? "row-on" : ""}`}
+                      >
+                        <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: dom.accent }} />
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-[10px] font-light tx1">{t(s.title, lang)}</div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </aside>
+        </div>
+        {taxonomyEditorOpen && (
+          <TaxonomyEditor
+            lang={lang}
+            domainTitle={dom.title}
+            domainId={dom.id}
+            projectId={target.projectId}
+            processes={activeProcesses}
+            defaultProcesses={dom.processes}
+            actor={user?.id}
+            onClose={() => setTaxonomyEditorOpen(false)}
+            onSaved={handleTaxonomySaved}
+          />
+        )}
+      </div>
+    );
+  }
+
+  const d17Tab = ((): HseFieldTab => {
+    const sid = selected?.sId ?? target.subId;
+    if (sid && D17_TAB_BY_SUB[sid]) return D17_TAB_BY_SUB[sid];
     return "dashboard";
   })();
 
-  if (dom.id === "d8") {
+  /* ═══════════ d20 — مدیریت استراتژیک: نقشه، درخت هدف/شاخص، ابتکارات ═══════════ */
+  if (dom.id === "d20") {
+    return (
+      <div className="flex h-full min-h-0 flex-col gap-3 overflow-hidden" dir={rtl ? "rtl" : "ltr"}>
+        <div className="glass flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl px-3 py-2.5">
+          <button onClick={onBack} className="glass-row flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-[10.5px] font-light tx2 transition hover:tx1">
+            <span className={rtl ? "" : "rotate-180"}>→</span>
+            {rtl ? "بازگشت به داشبورد" : "Back to dashboard"}
+          </button>
+          <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl text-[20px]"
+                style={{ background: `${dom.accent}1f`, border: `1px solid ${dom.accent}55` }}>
+            {dom.icon}
+          </span>
+          <div className="min-w-0 flex-1">
+            <h1 className="truncate text-[20px] font-semibold leading-tight" style={{ color: dom.accent }}>
+              {t(dom.title, lang)}
+            </h1>
+            <p className="mt-1 truncate text-[10px] font-extralight tx3">
+              {rtl ? "BSC — چهار منظر؛ تحقق از شاخص تا کلِ استراتژی بالا می‌رود" : "BSC — four perspectives; attainment rolls up from KPI to strategy"}
+            </p>
+          </div>
+          {canEditTaxonomy && (
+            <button type="button" onClick={() => setTaxonomyEditorOpen(true)} className="rounded-lg border border-sky-400/45 bg-sky-400/10 px-3 py-2 text-[10px] text-sky-200 hover:bg-sky-400/20">
+              ✎ {rtl ? "ویرایش فرایندها" : "Edit processes"}
+            </button>
+          )}
+          <div className="shrink-0 text-end">
+            <div className="text-[9px] font-extralight tx3">{rtl ? "مالک: دفتر استراتژی" : "Owner: Strategy Office"}</div>
+            <div className="text-[11px] font-light tx1">{rtl ? "هدف ← شاخص ← ابتکار" : "Objective ← KPI ← Initiative"}</div>
+          </div>
+        </div>
+        <div dir="ltr" className="flex min-h-0 flex-1 gap-3 overflow-hidden">
+          <div dir={rtl ? "rtl" : "ltr"} className="glass flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl p-3">
+            {selected ? (
+              <CapabilityDetail
+                lang={lang}
+                domainId={dom.id}
+                clusterId={target.clusterId}
+                projectId={target.projectId}
+                processId={selected.pId}
+                subId={selected.sId}
+                processes={activeProcesses}
+                onBack={() => setSelected(null)}
+              />
+            ) : (
+              <StrategyWorkspace lang={lang} />
+            )}
+          </div>
+          <aside dir={rtl ? "rtl" : "ltr"} className="glass-dark flex w-[300px] shrink-0 flex-col overflow-hidden rounded-2xl">
+            <div className="b-line border-b px-3 py-2.5">
+              <div className="flex items-center gap-2">
+                <span className="grid h-6 w-6 place-items-center rounded-md text-[12px]" style={{ background: `${dom.accent}1a`, border: `1px solid ${dom.accent}55`, color: dom.accent }}>
+                  {dom.icon}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="text-[10.5px] font-normal tx1">{rtl ? "فرایندها و زیرفرایندها" : "Processes & sub-processes"}</div>
+                  <div className="text-[8.5px] tx4">{activeProcesses.length.toLocaleString(rtl ? "fa-IR" : "en-US")} · {activeProcesses.reduce((n, p) => n + p.subs.length, 0).toLocaleString(rtl ? "fa-IR" : "en-US")}</div>
+                </div>
+              </div>
+            </div>
+            <div className="thin-scroll flex-1 overflow-y-auto p-2 space-y-2">
+              {activeProcesses.map((p, i) => (
+                <div key={p.id} className="rounded-xl border b-line-soft bg-black/10 p-1.5">
+                  <div className="flex items-center gap-1.5 px-1 py-1">
+                    <span className="text-[8px] font-light tabular-nums tx4">{(i + 1).toLocaleString(rtl ? "fa-IR" : "en-US")}</span>
+                    <span className="text-[10.5px] font-normal" style={{ color: dom.accent }}>{t(p.title, lang)}</span>
+                  </div>
+                  <div className="mt-1 space-y-1">
+                    {p.subs.map((s) => (
+                      <button
+                        key={s.id}
+                        type="button"
+                        onClick={() => {
+                          audit("OPEN_SUBPROCESS", { projectId: target.projectId, entity: dom.id, entityId: s.id });
+                          setSelected({ pId: p.id, sId: s.id });
+                        }}
+                        className={`group flex w-full items-start gap-2 rounded-lg px-2 py-2 text-start transition hover:-translate-y-px glass-row ${selected?.sId === s.id ? "row-on" : ""}`}
+                      >
+                        <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: dom.accent }} />
+                        <span className="min-w-0 flex-1 truncate text-[10px] font-light tx1">{t(s.title, lang)}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </aside>
+        </div>
+        {taxonomyEditorOpen && (
+          <TaxonomyEditor
+            lang={lang}
+            domainTitle={dom.title}
+            domainId={dom.id}
+            projectId={target.projectId}
+            processes={activeProcesses}
+            defaultProcesses={dom.processes}
+            actor={user?.id}
+            onClose={() => setTaxonomyEditorOpen(false)}
+            onSaved={handleTaxonomySaved}
+          />
+        )}
+      </div>
+    );
+  }
+
+  /* ═══════════ d18 — GIS: نمودارِ برداری است و کاشیِ نقشه نمی‌خواهد ═══════════ */
+  if (dom.id === "d18") {
+    return (
+      <div className="flex h-full min-h-0 flex-col gap-3 overflow-hidden" dir={rtl ? "rtl" : "ltr"}>
+        <div className="glass flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl px-3 py-2.5">
+          <button onClick={onBack} className="glass-row flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-[10.5px] font-light tx2 transition hover:tx1">
+            <span className={rtl ? "" : "rotate-180"}>→</span>
+            {rtl ? "بازگشت به داشبورد" : "Back to dashboard"}
+          </button>
+          {cluster && (
+            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl text-[20px]"
+                  style={{ background: `${cluster.color}1f`, border: `1px solid ${cluster.color}55` }}>
+              {cluster.icon}
+            </span>
+          )}
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
+              {cluster && (
+                <h1 className="truncate text-[20px] font-semibold leading-tight" style={{ color: cluster.color }}>
+                  {t(cluster.title, lang)}
+                </h1>
+              )}
+              {project && (<h2 className="truncate text-[19px] font-semibold leading-tight tx1">{t(project.name, lang)}</h2>)}
+            </div>
+            <p className="mt-1 truncate text-[10px] font-extralight tx3">
+              {rtl ? "GEO — مختصات مرکز استان/شهر و تقریبی است؛ فاصله با Haversine" : "GEO — province/city centroids; distance via Haversine"}
+            </p>
+          </div>
+          <div className="shrink-0 text-end">
+            <div className="text-[9px] font-extralight tx3">{t(dom.title, lang)}</div>
+            <div className="text-[11px] font-light tx1">{rtl ? "بدون وابستگی به سرویس نقشه" : "no map-tile dependency"}</div>
+          </div>
+        </div>
+        <div className="glass flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl p-3">
+          {selected ? null : <GeoProjectsPanel lang={lang} />}
+          {selected && (
+            <CapabilityDetail
+              lang={lang}
+              domainId={dom.id}
+              clusterId={target.clusterId}
+              projectId={target.projectId}
+              processId={selected.pId}
+              subId={selected.sId}
+              onBack={() => setSelected(null)}
+            />
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  /* ═══════════ d19 — EFQM: خودارزیابیِ نُه‌معیاره با منطق RADAR ═══════════ */
+  if (dom.id === "d19") {
+    return (
+      <div className="flex h-full min-h-0 flex-col gap-3 overflow-hidden" dir={rtl ? "rtl" : "ltr"}>
+        <div className="glass flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl px-3 py-2.5">
+          <button onClick={onBack} className="glass-row flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-[10.5px] font-light tx2 transition hover:tx1">
+            <span className={rtl ? "" : "rotate-180"}>→</span>
+            {rtl ? "بازگشت به داشبورد" : "Back to dashboard"}
+          </button>
+          <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl text-[20px]"
+                style={{ background: `${dom.accent}1f`, border: `1px solid ${dom.accent}55` }}>
+            {dom.icon}
+          </span>
+          <div className="min-w-0 flex-1">
+            <h1 className="truncate text-[20px] font-semibold leading-tight" style={{ color: dom.accent }}>
+              {t(dom.title, lang)}
+            </h1>
+            <p className="mt-1 truncate text-[10px] font-extralight tx3">
+              {rtl ? "EFQM ۲۰۲۰ — پنج توانمندساز (۵۰۰) و چهار نتیجه (۵۰۰)" : "EFQM 2020 — five enablers (500) and four results (500)"}
+            </p>
+          </div>
+          <div className="shrink-0 text-end">
+            <div className="text-[9px] font-extralight tx3">{rtl ? "مالک: دفتر تعالی" : "Owner: Excellence Office"}</div>
+            <div className="text-[11px] font-light tx1">{rtl ? "خودارزیابی قابل ویرایش" : "editable self-assessment"}</div>
+          </div>
+        </div>
+        <div className="glass flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl p-3">
+          {selected ? null : <EfqmPanel lang={lang} />}
+          {selected && (
+            <CapabilityDetail
+              lang={lang}
+              domainId={dom.id}
+              clusterId={target.clusterId}
+              projectId={target.projectId}
+              processId={selected.pId}
+              subId={selected.sId}
+              onBack={() => setSelected(null)}
+            />
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  if (dom.id === "d17") {
     return (
       <div className="flex h-full min-h-0 flex-col gap-3 overflow-hidden" dir={rtl ? "rtl" : "ltr"}>
         <div className="glass flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl px-3 py-2.5">
@@ -817,7 +1777,7 @@ export default function ModuleDetail({ lang, target, onBack, onOpenFlowNet }: Pr
         </div>
         <div className="flex min-h-0 flex-1 gap-3 overflow-hidden">
           <div className="glass flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl p-3">
-            <HseWorkspace lang={lang} initialTab={d8Tab} hideTabs />
+            <HseWorkspace lang={lang} initialTab={d17Tab} hideTabs />
           </div>
           <aside className="glass-dark flex w-[300px] shrink-0 flex-col overflow-hidden rounded-2xl">
             <div className="b-line border-b px-3 py-2.5">
@@ -879,6 +1839,19 @@ export default function ModuleDetail({ lang, target, onBack, onOpenFlowNet }: Pr
         processId={selected.pId}
         subId={selected.sId}
         onBack={() => setSelected(null)}
+        onNavigate={({ domainId, processId, subId }) => {
+          if (!onNavigate) return;
+          /* دامنهٔ یکسان → فقط انتخابِ داخلی عوض می‌شود؛
+             دامنهٔ دیگر → کل صفحهٔ حوزه عوض می‌شود. */
+          if (domainId === dom.id) setSelected({ pId: processId, sId: subId });
+          else onNavigate({
+            moduleId: domainId,
+            clusterId: target.clusterId,
+            projectId: target.projectId,
+            processId,
+            subId,
+          });
+        }}
       />
     );
   }
@@ -926,16 +1899,16 @@ export default function ModuleDetail({ lang, target, onBack, onOpenFlowNet }: Pr
         </div>
       </div>
 
-      <div className="flex min-h-0 flex-1 gap-3 overflow-hidden">
+      <div dir="ltr" className="flex min-h-0 flex-1 gap-3 overflow-hidden">
         {/* Main workspace */}
-        <div className="glass flex flex-1 items-center justify-center rounded-2xl text-[11px] font-extralight tx3">
+        <div dir={rtl ? "rtl" : "ltr"} className="glass flex flex-1 items-center justify-center rounded-2xl text-[11px] font-extralight tx3">
           {rtl
             ? "برای مشاهده جزئیات، از سایدبار سمت راست یک زیرفرآیند را انتخاب کنید."
             : "Pick a sub-process from the right sidebar to view details."}
         </div>
 
         {/* Right in-page sidebar: processes → subs */}
-        <aside className="glass-dark flex w-[300px] shrink-0 flex-col overflow-hidden rounded-2xl">
+        <aside dir={rtl ? "rtl" : "ltr"} className="glass-dark flex w-[300px] shrink-0 flex-col overflow-hidden rounded-2xl">
           <div className="b-line border-b px-3 py-2.5">
             <div className="flex items-center gap-2">
               <span className="grid h-6 w-6 place-items-center rounded-md text-[12px]"
@@ -967,12 +1940,6 @@ export default function ModuleDetail({ lang, target, onBack, onOpenFlowNet }: Pr
                       <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: dom.accent }} />
                       <div className="min-w-0 flex-1">
                         <div className="truncate text-[10px] font-light tx1">{t(s.title, lang)}</div>
-                        <div className="mt-0.5 flex flex-wrap gap-1">
-                          {s.sql.map((tbl) => (
-                            <span key={tbl} className="rounded bg-sky-400/10 px-1 py-[1px] text-[7.5px] font-light text-sky-300" dir="ltr">🗄 {tbl}</span>
-                          ))}
-                          <span className="rounded bg-fuchsia-400/10 px-1 py-[1px] text-[7.5px] font-light text-fuchsia-300" dir="ltr">✨ {s.ai}</span>
-                        </div>
                       </div>
                       <span className="text-[10px] tx4 transition group-hover:accent-t">{rtl ? "←" : "→"}</span>
                     </button>

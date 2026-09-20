@@ -3,7 +3,6 @@ import LeftSidebar from "./components/LeftSidebar";
 import RightSidebar, { type ModuleNavTarget } from "./components/RightSidebar";
 import PmbokRing from "./components/PmbokRing";
 import PortfolioPanel from "./components/PortfolioPanel";
-import ProjectScopeBar from "./components/ProjectScopeBar";
 import CalendarView from "./components/CalendarView";
 import CalcPanel from "./components/CalcPanel";
 import MonitoringWorkspace from "./components/MonitoringWorkspace";
@@ -66,6 +65,9 @@ function useWeather() {
   useEffect(() => {
     let alive = true;
     const apply = (lat: number, lon: number) => {
+      // هیچ ویجتی حق ندارد با خطای همگام کلِ برنامه را پایین بیاورد.
+      if (typeof fetch !== "function") return;
+      try {
       fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true`)
         .then((r) => (r.ok ? r.json() : Promise.reject()))
         .then((d) => {
@@ -77,6 +79,9 @@ function useWeather() {
           }
         })
         .catch(() => {});
+      } catch {
+        /* آب‌وهوا اختیاری است — بی‌توجه عبور می‌کنیم */
+      }
     };
     if (typeof navigator !== "undefined" && navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
@@ -185,9 +190,10 @@ export default function App() {
       >
         {/* ── fixed left corner: live dock + switchers (never moves) ── */}
         <div className="order-first flex shrink-0 items-center gap-2">
-          <div className="hidden md:block">
-            <EnvWidgets lang={lang} />
-          </div>
+          {/* ساعت · تاریخ · آب‌وهوا: همیشه نمایش داده می‌شود.
+            پیش از این فقط از ۷۶۸px به بالا دیده می‌شد (`hidden md:block`)
+            و در پنجره‌های باریک هدر بی‌دلیل خالی به نظر می‌رسید. */}
+          <EnvWidgets lang={lang} />
 
           <span className="hline h-6 w-px" />
 
@@ -256,14 +262,18 @@ export default function App() {
 
       {/* ═══ Three co-existing pillars (physical order locked, LTR flex) ═══ */}
       <main dir="ltr" className="flex min-h-0 flex-1 gap-3 p-3">
-        <LeftSidebar
-          lang={lang}
-          activeSource={source}
-          onPick={(id) => setSource(id === source ? null : id)}
-        />
+        {/* سایدبار منابع داده هم مثل سایدبار چارچوب فقط در صفحهٔ اصلی
+          * می‌ماند. در صفحهٔ حوزه، فضای کاری به پنل تخصصی می‌رسد و
+          * ۲۴۸ پیکسل دیگر آزاد می‌شود. */}
+        {!moduleNav && (
+          <LeftSidebar
+            lang={lang}
+            activeSource={source}
+            onPick={(id) => setSource(id === source ? null : id)}
+          />
+        )}
 
         <section className="flex min-w-0 flex-1 flex-col gap-3 overflow-hidden">
-          <ProjectScopeBar lang={lang} onScopeChange={changeScope} />
           {moduleNav ? (
             <Suspense fallback={<div className="glass flex flex-1 items-center justify-center rounded-2xl text-[11px] tx3">…</div>}>
               <ModuleDetail
@@ -274,6 +284,7 @@ export default function App() {
                   setModuleNav(null);
                   setQuickAction("flownet");
                 }}
+                onNavigate={(next) => setModuleNav(next)}
               />
             </Suspense>
           ) : quickAction === "calendar" ? (
@@ -303,21 +314,32 @@ export default function App() {
           )}
         </section>
 
-        <RightSidebar
-          lang={lang}
-          quickAction={quickAction}
-          onQuickAction={(id) => {
-            setQuickAction(id);
-            setModuleNav(null);
-          }}
-          onNavigate={(target) => {
-            if (target.moduleId !== "d7" && target.clusterId && target.projectId) {
-              changeScope(target.clusterId, target.projectId);
-}
-            setModuleNav(target);
-            setQuickAction("home");
-          }}
-        />
+        {/* سایدبار چارچوب فقط در صفحهٔ اصلی دیده می‌شود.
+          *
+          * پس از انتخاب خوشه/صنعت و پروژه، `ModuleDetail` باز می‌شود و
+          * خودش سایدبار فرعی «فرآیندها و زیرفرآیندها» را دارد. نگه
+          * داشتن سایدبار اصلی در کنارش یعنی دو ستون ناوبری هم‌زمان و
+          * ۳۲۰ پیکسل فضای کاری از دست رفته — بی‌آنکه کاری از آن برآید.
+          *
+          * بازگشت از راه دکمهٔ «بازگشت» درون خودِ صفحهٔ حوزه انجام
+          * می‌شود (`onBack`)، پس هیچ مسیری بن‌بست نمی‌شود. */}
+        {!moduleNav && (
+          <RightSidebar
+            lang={lang}
+            quickAction={quickAction}
+            onQuickAction={(id) => {
+              setQuickAction(id);
+              setModuleNav(null);
+            }}
+            onNavigate={(target) => {
+              if (target.moduleId !== "d7" && target.clusterId && target.projectId) {
+                changeScope(target.clusterId, target.projectId);
+              }
+              setModuleNav(target);
+              setQuickAction("home");
+            }}
+          />
+        )}
       </main>
     </div>
   );

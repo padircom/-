@@ -249,7 +249,6 @@ export default function ProcessFlowNet({ lang, onBack }: { lang: Lang; onBack?: 
                 <g key={n.id} opacity={n.muted ? 0.35 : on ? 1 : 0.55} onClick={() => !n.muted && setSel(n.id)} style={{ cursor: n.muted ? "default" : "pointer" }}>
                   <foreignObject x={n.x} y={n.y} width={n.w} height={n.h}>
                     <div
-                      xmlns="http://www.w3.org/1999/xhtml"
                       dir={rtl ? "rtl" : "ltr"}
                       className={`flex h-full w-full items-center justify-center rounded-xl px-2 text-center ${n.kind === "dom" || isSel ? "glass" : "glass-row"}`}
                       style={{

@@ -1,8 +1,10 @@
 import { useState } from "react";
-import { useSystem } from "../context/SystemContext";
+import { useSystem, type SystemSettings } from "../context/SystemContext";
 import SqlConnectionPanel from "./SqlConnectionPanel";
 import { pmisApiClient } from "../services/pmisApiClient";
-import AccessControlPanel from "./AccessControlPanel";
+import SecurityCenter from "./SecurityCenter";
+import DataLayerPanel from "./DataLayerPanel";
+import IntegrationCenter from "./IntegrationCenter";
 import OperationsReadinessPanel from "./OperationsReadinessPanel";
 import MasterDataSyncPanel from "./MasterDataSyncPanel";
 import ProjectKnowledgePanel from "./ProjectKnowledgePanel";
@@ -93,6 +95,12 @@ export default function AdminWorkspace({ lang, subId, onBack, onOpenFlowNet }: P
 
   // Notification Banner
   const [toast, setToast] = useState<string | null>(null);
+  /* اتصال حساب Arena فقط یک نشانهٔ محلی است تا کاربر بداند زبانهٔ ورود
+   * را باز کرده؛ نشست واقعی سمت Arena.ai است و این سامانه آن را
+   * دریافت نمی‌کند. */
+  const [arenaLinked, setArenaLinked] = useState(false);
+  const [aiTesting, setAiTesting] = useState(false);
+  const [aiTest, setAiTest] = useState<{ ok: boolean; text: string } | null>(null);
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -293,10 +301,10 @@ export default function AdminWorkspace({ lang, subId, onBack, onOpenFlowNet }: P
         {[
           { key: "clusters" as TabKey, label: { fa: "۱. خوشه‌ها و صنایع", en: "1. Industry Clusters" }, icon: "🏭" },
           { key: "projects" as TabKey, label: { fa: "۲. مدیریت پروژه‌ها", en: "2. Projects Master" }, icon: "📊" },
-          { key: "metadata" as TabKey, label: { fa: "۳. متادیتا و اسکیمای SQL", en: "3. SQL & Schema" }, icon: "🗄" },
+          { key: "metadata" as TabKey, label: { fa: "۳. لایه داده و اسکیمای SQL", en: "3. Data Layer & Schema" }, icon: "🗄" },
           { key: "typography" as TabKey, label: { fa: "۴. تنظیمات فونت و ظاهر", en: "4. Typography & Theme" }, icon: "🎨" },
           { key: "ai" as TabKey, label: { fa: "۵. هوش مصنوعی و یکپارچگی", en: "5. AI & Integrations" }, icon: "✨" },
-          { key: "access" as TabKey, label: { fa: "۶. کاربران و دسترسی", en: "6. Users & Access" }, icon: "🛡" },
+          { key: "access" as TabKey, label: { fa: "۶. RBAC و امنیت", en: "6. RBAC & Security" }, icon: "🛡" },
           { key: "sync" as TabKey, label: { fa: "۷. همگام‌سازی", en: "7. Data Sync" }, icon: "↕" },
           { key: "operations" as TabKey, label: { fa: "۸. آمادگی استقرار", en: "8. Operations" }, icon: "⚙" },
           { key: "deployment" as TabKey, label: { fa: "۹. استقرار نهایی", en: "9. Production Deploy" }, icon: "🚀" },
@@ -781,7 +789,8 @@ export default function AdminWorkspace({ lang, subId, onBack, onOpenFlowNet }: P
 
         {/* ═════════ TAB 3: METADATA & DATABASE CONFIG ═════════ */}
         {activeTab === "metadata" && (
-          <div className="fade-rise flex min-h-0 flex-1 flex-col">
+          <div className="fade-rise flex min-h-0 flex-1 flex-col gap-3">
+            <DataLayerPanel lang={lang} />
             <SqlConnectionPanel lang={lang} />
           </div>
         )}
@@ -861,10 +870,28 @@ export default function AdminWorkspace({ lang, subId, onBack, onOpenFlowNet }: P
                   </label>
                   <select
                     value={settings.aiProvider}
-                    onChange={(e) => updateSettings({ aiProvider: e.target.value as any })}
+                    onChange={(e) => {
+                      /* شناسهٔ مدل همراه سرویس عوض می‌شود.
+                       *
+                       * پیش از این کاربر DeepSeek را انتخاب می‌کرد ولی
+                       * مدل روی `gpt-4o-pm-expert` می‌ماند و سرویس آن
+                       * مدل را نمی‌شناسد — خطایی که هیچ ربطی به کلید
+                       * ندارد ولی شبیه خطای کلید دیده می‌شود. */
+                      const next = e.target.value as SystemSettings["aiProvider"];
+                      const DEFAULT_MODEL: Record<string, string> = {
+                        arena: "arena-default",
+                        openai: "gpt-4.1-mini",
+                        deepseek: "deepseek-chat",
+                        local: "llama3",
+                        mock: "built-in-simulator",
+                      };
+                      updateSettings({ aiProvider: next, aiModel: DEFAULT_MODEL[next] ?? settings.aiModel });
+                      setAiTest(null);
+                    }}
                     className="w-full rounded-lg border b-line-soft bg-[var(--row)] px-3 py-2 text-[11px] tx1 outline-none focus:border-fuchsia-400"
                     style={{ colorScheme: "dark" }}
                   >
+                    <option value="arena">Arena.ai (ورود با حساب کاربری — بدون کلید)</option>
                     <option value="openai">OpenAI (GPT-4o / GPT-4-turbo)</option>
                     <option value="deepseek">DeepSeek AI (DeepSeek-V3 / R1)</option>
                     <option value="local">Local On-Premises LLM (Ollama / vLLM)</option>
@@ -885,6 +912,79 @@ export default function AdminWorkspace({ lang, subId, onBack, onOpenFlowNet }: P
                 </div>
               </div>
 
+              {/* Arena با حساب کاربری کار می‌کند، پس میدان کلید برایش
+                * پنهان می‌شود. نمایش میدانی که استفاده نمی‌شود یعنی
+                * کاربر کلیدی وارد می‌کند که هیچ‌جا خوانده نمی‌شود. */}
+              {settings.aiProvider === "arena" ? (
+                <div className="rounded-lg border p-3" style={{ borderColor: "rgba(216,180,254,.4)", background: "rgba(216,180,254,.07)" }}>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-[12px]">✨</span>
+                    <span className="text-[10.5px] tx1">{rtl ? "حساب کاربری Arena.ai" : "Arena.ai account"}</span>
+                    <span
+                      className={`rounded px-1.5 py-0.5 text-[8.5px] ${arenaLinked ? "ok-t" : "tx4"}`}
+                      style={{ background: arenaLinked ? "rgba(110,231,183,.12)" : "var(--row)" }}
+                    >
+                      {arenaLinked
+                        ? (rtl ? "✓ متصل" : "✓ linked")
+                        : (rtl ? "متصل نشده" : "not linked")}
+                    </span>
+
+                    <div className="ms-auto flex items-center gap-2">
+                      {/* باز کردن با window.open و بازگشت به کپی نشانی.
+                        *
+                        * پیش‌نمایش داخل iframe اجرا می‌شود و آنجا
+                        * target="_blank" بی‌صدا مسدود می‌شود — دکمه
+                        * کلیک می‌خورد و هیچ اتفاقی نمی‌افتد. حالا اگر
+                        * مسدود شد، نشانی در تخته‌گیره می‌نشیند و به
+                        * کاربر گفته می‌شود دستی بازش کند. */}
+                      <button
+                        onClick={() => {
+                          const url = "https://arena.ai/account";
+                          let win: Window | null = null;
+                          try {
+                            win = window.open(url, "_blank", "noopener,noreferrer");
+                          } catch {
+                            win = null;
+                          }
+                          if (win) {
+                            setArenaLinked(true);
+                            return;
+                          }
+                          navigator.clipboard?.writeText(url).catch(() => {});
+                          showToast(
+                            rtl
+                              ? "مرورگر پنجرهٔ تازه را مسدود کرد. نشانی کپی شد: arena.ai/account"
+                              : "The browser blocked the pop-up. Address copied: arena.ai/account",
+                          );
+                        }}
+                        className="rounded-lg border px-3 py-1.5 text-[10px] transition hover:-translate-y-px"
+                        style={{ borderColor: "rgba(216,180,254,.55)", background: "rgba(216,180,254,.18)", color: "var(--tx1)" }}
+                      >
+                        {rtl ? "ورود به حساب کاربری ↗" : "Open my account ↗"}
+                      </button>
+                      {arenaLinked && (
+                        <button
+                          onClick={() => setArenaLinked(false)}
+                          className="rounded-lg border b-line-soft px-2 py-1.5 text-[9px] tx3 transition hover:tx1"
+                        >
+                          {rtl ? "قطع اتصال" : "Unlink"}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  <p className="mt-2 text-[8.5px] font-extralight tx4">
+                    {rtl
+                      ? "این سرویس با حساب کاربری کار می‌کند و کلید API نمی‌خواهد."
+                      : "This service uses your account; no API key is required."}
+                  </p>
+                  <p className="mt-1 text-[8.5px] font-extralight text-amber-300">
+                    {rtl
+                      ? "توجه: ورود در زبانهٔ مرورگر انجام می‌شود. تا زمانی که نشست از سمت Arena.ai به این سامانه تحویل داده نشود، درخواست‌های هوش مصنوعی اینجا اجرا نمی‌شوند و پیام خطای روشن می‌گیرید."
+                      : "Note: sign-in happens in a browser tab. Until Arena.ai hands a session back to this system, AI requests here will fail with an explicit error."}
+                  </p>
+                </div>
+              ) : (
               <div>
                 <label className="mb-1 block text-[9.5px] font-extralight tx3">
                   {rtl ? "کلید دسترسی (API Key):" : "API Key:"}
@@ -898,27 +998,86 @@ export default function AdminWorkspace({ lang, subId, onBack, onOpenFlowNet }: P
                 />
                 <p className="mt-1 text-[8.5px] font-extralight text-amber-300">
                   {rtl
-                    ? "کلید فقط در نشست فعلی قرار می‌گیرد و در localStorage ذخیره نمی‌شود؛ در محیط عملیاتی باید در Backend Secret Vault نگهداری شود."
-                    : "The key is session-only and is not written to localStorage; production keys must be stored in the backend secret vault."}
+                    ? "کلید در localStorage ذخیره نمی‌شود و با بستن برنامه پاک می‌شود؛ پس از هر بار باز کردن باید دوباره وارد شود. در محیط عملیاتی آن را در متغیر AI_API_KEY روی سرور بگذارید."
+                    : "The key is never written to localStorage and is lost when the app closes, so it must be re-entered each time. In production set AI_API_KEY on the server instead."}
                 </p>
               </div>
+              )}
 
-              <div className="flex justify-end pt-2">
+              {/* آزمون واقعی اتصال.
+                *
+                * پیش از این این دکمه فقط یک پیام موفقیت نشان می‌داد
+                * بدون آنکه چیزی را بیازماید — بدترین حالت ممکن: کاربر
+                * «تست موفق» می‌دید و بعد در کارگاه با شکست روبه‌رو
+                * می‌شد و دنبال اشکالی می‌گشت که جای دیگری بود. */}
+              <div className="flex flex-wrap items-center justify-end gap-2 pt-2">
+                {aiTest && (
+                  <span
+                    className="rounded-lg px-2.5 py-1.5 text-[9.5px]"
+                    style={{
+                      background: aiTest.ok ? "rgba(110,231,183,.1)" : "rgba(255,159,159,.1)",
+                      color: aiTest.ok ? "#8FE3C8" : "#FF9F9F",
+                    }}
+                  >
+                    {aiTest.ok ? "✓" : "⚠"} {aiTest.text}
+                  </span>
+                )}
                 <button
-                  onClick={() => showToast(rtl ? "پیکربندی هوش مصنوعی با موفقیت تست و ذخیره شد" : "AI Configuration verified")}
-                  className="rounded-lg border border-fuchsia-400 bg-fuchsia-400/20 px-4 py-2 text-[10.5px] font-medium text-fuchsia-200 hover:bg-fuchsia-400/30"
+                  onClick={async () => {
+                    setAiTesting(true);
+                    setAiTest(null);
+                    try {
+                      const res = await fetch("/api/ai/run", {
+                        method: "POST",
+                        headers: {
+                          "content-type": "application/json",
+                          ...(settings.aiApiKey ? { "x-ai-key": settings.aiApiKey } : {}),
+                        },
+                        body: JSON.stringify({
+                          prompt: "translate",
+                          context: { provider: settings.aiProvider, targetLang: "fa", text: "Mechanical completion." },
+                        }),
+                      });
+                      const json = await res.json().catch(() => null);
+                      if (json?.ok && json?.data?.translated) {
+                        setAiTest({
+                          ok: true,
+                          text: rtl
+                            ? `اتصال برقرار است. پاسخ نمونه: ${String(json.data.translated).slice(0, 40)}`
+                            : `Connected. Sample: ${String(json.data.translated).slice(0, 40)}`,
+                        });
+                      } else {
+                        const msg = json?.error?.message ?? json?.data?.message ?? (rtl ? "پاسخ معتبری دریافت نشد." : "No usable response.");
+                        setAiTest({ ok: false, text: String(msg).slice(0, 160) });
+                      }
+                    } catch (err) {
+                      setAiTest({
+                        ok: false,
+                        text: rtl
+                          ? `اتصال برقرار نشد: ${(err as Error).message}`
+                          : `Connection failed: ${(err as Error).message}`,
+                      });
+                    } finally {
+                      setAiTesting(false);
+                    }
+                  }}
+                  disabled={aiTesting}
+                  className="rounded-lg border border-fuchsia-400 bg-fuchsia-400/20 px-4 py-2 text-[10.5px] font-medium text-fuchsia-200 transition hover:bg-fuchsia-400/30 disabled:opacity-50"
                 >
-                  ⚡ {rtl ? "تست اتصال و اعتبارسنجی مدل" : "Test AI Gateway"}
+                  ⚡ {aiTesting
+                    ? (rtl ? "در حال آزمون…" : "Testing…")
+                    : (rtl ? "تست اتصال و اعتبارسنجی مدل" : "Test AI Gateway")}
                 </button>
               </div>
             </div>
+            <IntegrationCenter lang={lang} />
             <ProjectKnowledgePanel lang={lang} />
             <div className="h-[560px]"><NotificationOpsPanel lang={lang} /></div>
           </div>
         )}
 
         {/* ═════════ TAB 6: ACCESS CONTROL ═════════ */}
-        {activeTab === "access" && <AccessControlPanel lang={lang} />}
+        {activeTab === "access" && <SecurityCenter lang={lang} />}
 
         {/* ═════════ TAB 7: MASTER DATA SYNC ═════════ */}
         {activeTab === "sync" && <MasterDataSyncPanel lang={lang} />}

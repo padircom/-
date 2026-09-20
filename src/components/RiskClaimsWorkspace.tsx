@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { type Bi, type Lang, t } from "../data/framework";
+import InvestmentRiskPanel from "./InvestmentRiskPanel";
 import {
   ACTIVITIES,
   computeEvm,
@@ -36,6 +37,7 @@ export type D4Tab =
   | "claim"
   | "notice"
   | "dispute"
+  | "invest"
   | "exec";
 
 type Props = {
@@ -84,6 +86,7 @@ const TABS: { id: D4Tab; fa: string; en: string }[] = [
   { id: "claim", fa: "ادعا", en: "Claim" },
   { id: "notice", fa: "Notice / Time-Bar", en: "Notice / Time-Bar" },
   { id: "dispute", fa: "اختلاف", en: "Dispute" },
+  { id: "invest", fa: "سرمایه‌گذاری", en: "Investment" },
   { id: "exec", fa: "EXEC", en: "EXEC" },
 ];
 
@@ -630,6 +633,8 @@ export default function RiskClaimsWorkspace({ lang, subId, initialTab, hideTabs 
           </p>
         </section>
       )}
+
+      {tab === "invest" && <InvestmentRiskPanel lang={lang} />}
 
       {tab === "exec" && (
         <section className="glass-dark min-h-0 flex-1 overflow-y-auto rounded-2xl p-3">

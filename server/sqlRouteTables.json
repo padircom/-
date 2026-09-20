@@ -1,0 +1,377 @@
+[
+  {
+    "method": "GET",
+    "path": "/api/health",
+    "tables": []
+  },
+  {
+    "method": "GET",
+    "path": "/api/diagnostics/readiness",
+    "tables": []
+  },
+  {
+    "method": "GET",
+    "path": "/api/users",
+    "tables": [
+      "System_User"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/audit",
+    "tables": [
+      "Audit_Log"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/notifications",
+    "tables": [
+      "Notification_Queue"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/notifications",
+    "tables": []
+  },
+  {
+    "method": "POST",
+    "path": "/api/notifications/:id/send",
+    "tables": []
+  },
+  {
+    "method": "POST",
+    "path": "/api/notifications/test",
+    "tables": []
+  },
+  {
+    "method": "POST",
+    "path": "/api/files",
+    "tables": [
+      "File_Object"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/files/:id",
+    "tables": [
+      "File_Object"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/files/:id/download",
+    "tables": [
+      "File_Object"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/projects/:projectId/knowledge/ingest",
+    "tables": [
+      "File_Object",
+      "Knowledge_Document",
+      "Document_Chunk"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/projects/:projectId/knowledge/documents",
+    "tables": [
+      "Knowledge_Document",
+      "File_Object"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/projects/:projectId/knowledge/ask",
+    "tables": [
+      "Document_Chunk",
+      "Knowledge_Document",
+      "File_Object"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/projects/:projectId/ocr/ingest",
+    "tables": [
+      "File_Object",
+      "OCR_Job",
+      "Knowledge_Document",
+      "Document_Chunk"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/projects/:projectId/ocr/jobs",
+    "tables": [
+      "OCR_Job",
+      "File_Object"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/projects/:projectId/templates",
+    "tables": [
+      "Report_Template",
+      "File_Object"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/projects/:projectId/templates",
+    "tables": [
+      "File_Object",
+      "Report_Template"
+    ]
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/projects/:projectId/templates/:templateId",
+    "tables": [
+      "Report_Template"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/projects/:projectId/schedule/import",
+    "tables": [
+      "Schedule_Master",
+      "Schedule_Activity",
+      "Schedule_Import_Log"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/projects/:projectId/schedule/activities",
+    "tables": [
+      "Schedule_Activity",
+      "Schedule_Master"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/industries",
+    "tables": [
+      "Industry_Master"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/industries",
+    "tables": [
+      "Industry_Master"
+    ]
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/industries/:id",
+    "tables": [
+      "Industry_Master"
+    ]
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/industries/:id",
+    "tables": [
+      "Industry_Master"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/projects",
+    "tables": [
+      "Project_Master"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/projects",
+    "tables": [
+      "Project_Master"
+    ]
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/projects/:id",
+    "tables": [
+      "Project_Master"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/projects/:projectId/daily-reports",
+    "tables": [
+      "Daily_Report"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/projects/:projectId/daily-reports",
+    "tables": [
+      "Daily_Report",
+      "Report_Workflow"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/daily-reports/:id/workflow",
+    "tables": [
+      "Report_Workflow",
+      "Report_Workflow_Action"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/daily-reports/:id/workflow/actions",
+    "tables": [
+      "Report_Workflow",
+      "Report_Workflow_Action",
+      "Daily_Report",
+      "pex_activity",
+      "pex_activity_step",
+      "pex_dpr",
+      "pex_progress_line",
+      "pex_dpr_event"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/pex/projects/:code/wbs",
+    "tables": [
+      "pex_wbs"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/pex/projects/:code/activities",
+    "tables": [
+      "pex_activity",
+      "pex_wbs",
+      "pex_activity_step"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/pex/projects/:code/milestones",
+    "tables": [
+      "pex_milestone",
+      "pex_activity"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/pex/projects/:code/roc",
+    "tables": [
+      "pex_roc"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/pex/projects/:code/dpr",
+    "tables": [
+      "pex_dpr",
+      "pex_progress_line"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/pex/projects/:code/dpr",
+    "tables": [
+      "pex_progress_line",
+      "pex_dpr"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/pex/projects/:code/dpr/conflicts",
+    "tables": [
+      "pex_progress_line",
+      "pex_dpr"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/pex/dpr/:id",
+    "tables": [
+      "pex_dpr",
+      "pex_progress_line",
+      "pex_activity",
+      "pex_activity_step",
+      "pex_dpr_event"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/pex/dpr/:id/actions",
+    "tables": [
+      "pex_dpr",
+      "pex_dpr_event",
+      "pex_progress_line",
+      "pex_activity_step",
+      "pex_activity",
+      "hse_incident",
+      "hse_permit"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/hse/projects/:code/incidents",
+    "tables": []
+  },
+  {
+    "method": "POST",
+    "path": "/api/hse/projects/:code/incidents",
+    "tables": [
+      "hse_incident"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/hse/projects/:code/permits",
+    "tables": []
+  },
+  {
+    "method": "POST",
+    "path": "/api/hse/projects/:code/permits",
+    "tables": [
+      "hse_permit"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/hse/permits/:id/actions",
+    "tables": [
+      "hse_permit"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/hse/projects/:code/inspections",
+    "tables": [
+      "hse_inspection"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/hse/projects/:code/inspections",
+    "tables": [
+      "hse_inspection"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/hse/projects/:code/wo-gate",
+    "tables": [
+      "hse_permit"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/portfolio/summary",
+    "tables": [
+      "Portfolio_Snapshot"
+    ]
+  }
+]

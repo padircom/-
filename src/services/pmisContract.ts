@@ -260,6 +260,7 @@ export type PortfolioSummaryDto = {
 
 type Endpoint = {
   method: "GET" | "POST" | "PATCH" | "DELETE" | "PUT";
+  path: string;
   entity: string;
   descriptionFa: string;
 };

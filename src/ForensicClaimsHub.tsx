@@ -1388,6 +1388,16 @@ const riskService = {
 
 
 
+/* ==========================================================================
+   ADVISOR DRAWER — بازیابی امضای تابع گم‌شده (M0)
+   ========================================================================== */
+function AdvisorDrawer({
+  lang, title, onClose,
+}: {
+  lang: Lang; title: string; onClose: () => void;
+}) {
+  const dir = lang === 'fa' ? 'rtl' : 'ltr';
+
   return (
     <div
       className="fixed inset-0 flex items-center justify-center p-4 bg-slate-950/45 backdrop-blur-sm"

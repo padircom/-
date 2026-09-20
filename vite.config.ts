@@ -19,6 +19,19 @@ export default defineConfig(({ command }) => ({
     host: true,
     allowedHosts: true,
     hmr: false,
+    /* رابط کاربری `/api/...` را با مسیر نسبی صدا می‌زند، ولی سرور API
+     * فرایند جدایی روی ۴۰۰۰ است. بدون این پروکسی، Vite هر مسیر ناشناخته
+     * را به `index.html` می‌فرستد و کلاینت به‌جای JSON، HTML می‌گیرد —
+     * پس هر پنل خالی می‌ماند بی‌آنکه خطایی دیده شود.
+     *
+     * مرورگرِ کاربر داخل سندباکس نیست، پس آدرس مطلق `localhost:4000`
+     * در کد کلاینت کار نمی‌کند؛ مسیر نسبی + پروکسی تنها راه درست است. */
+    proxy: {
+      "/api": {
+        target: `http://127.0.0.1:${process.env.API_PORT || 4000}`,
+        changeOrigin: true,
+      },
+    },
     watch: {
       ignored: ["**/docs/**", "**/db/**", "**/pex/**"],
     },

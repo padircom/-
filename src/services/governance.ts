@@ -189,6 +189,15 @@ export const DATA_OWNER: Record<string, string> = {
   claim: "d4",
   cost: "d5",
   document: "d1",
+  /* HRM — مالک ساعت و بهره‌وری (شکاف H-02 سند HRM_D2). کد از HRM_DOMAIN_ID. */
+  manhour: "d10",
+  productivity: "d10",
+  /* CKM — مالک گردش مکاتبات، مصوبات، ذی‌نفعان و درس‌آموخته.
+     مالک فایل مدرک همچنان d1 است. */
+  correspondence: "d11",
+  meeting: "d11",
+  stakeholder: "d11",
+  lesson: "d11",
 };
 
 export function canGovWrite(field: string): boolean {

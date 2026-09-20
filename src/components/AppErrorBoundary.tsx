@@ -2,22 +2,36 @@ import React from "react";
 import { logAudit } from "../services/auditLogger";
 
 type Props = { children: React.ReactNode };
-type State = { hasError: boolean; message: string };
+type State = { hasError: boolean; message: string; attempts: number };
 
 export default class AppErrorBoundary extends React.Component<Props, State> {
-  state: State = { hasError: false, message: "" };
+  state: State = { hasError: false, message: "", attempts: 0 };
 
   static getDerivedStateFromError(error: Error): State {
-    return { hasError: true, message: error.message || "Unknown runtime error" };
+    return { hasError: true, message: error.message || "Unknown runtime error", attempts: 0 };
   }
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {
     logAudit("RUNTIME_ERROR", "Application", `${error.message}\n${info.componentStack ?? ""}`, "critical");
+    /* یک بازیابیِ خودکارِ محدود: خطاهایِ گذرا (مثلِ قطعیِ شبکه در لحظهٔ بارگذاری)
+       نباید برای همیشه کلِ برنامه را پایین نگه دارد. */
+    if (this.state.attempts < 1) {
+      window.setTimeout(() => {
+        this.setState((s) => ({ hasError: false, message: "", attempts: s.attempts + 1 }));
+      }, 1200);
+    }
   }
 
   private recover = () => {
     this.setState({ hasError: false, message: "" });
   };
+
+  componentDidUpdate(_prev: Props, prevState: State) {
+    /* اگر رندرِ بعد از بازیابی موفق بود، شمارنده را صفر کن تا دفعهٔ بعد هم شانسِ بازیابی باشد. */
+    if (!this.state.hasError && prevState.hasError && this.state.attempts > 0) {
+      window.setTimeout(() => this.setState({ attempts: 0 }), 4000);
+    }
+  }
 
   render() {
     if (!this.state.hasError) return this.props.children;

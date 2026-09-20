@@ -1,0 +1,434 @@
+From 8a19560510f895ed4e8982bf45141e1a8ed65f88 Mon Sep 17 00:00:00 2001
+From: Arena Agent <agent@arena.ai>
+Date: Tue, 8 Sep 2026 03:23:29 +0000
+Subject: [PATCH] =?UTF-8?q?GOV=20(d6):=20API=20=D9=88=D8=A7=D9=82=D8=B9?=
+ =?UTF-8?q?=DB=8C=20/api/gov=D8=8C=20=DA=A9=D9=84=D8=A7=DB=8C=D9=86=D8=AA?=
+ =?UTF-8?q?=20=D8=A8=D8=A7=20fallback=20=D8=A7=D9=85=D9=86=20=D9=88=20?=
+ =?UTF-8?q?=D8=A8=D9=87=E2=80=8C=D8=B1=D9=88=D8=B2=D8=B1=D8=B3=D8=A7=D9=86?=
+ =?UTF-8?q?=DB=8C=20HANDOVER?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+- server/index.js: مسیرهای /api/gov (workflow-tasks، approve، connectors، audit/findings، plans/close، decisions، audit-trail) + زمان‌بند اختیاری GOV_SLA_TICK_MS
+- fix: interop امن jalaali-js (CJS) که بوت سرور را می‌شکست
+- src/services/govApiClient.ts: مسیر نسبی /api/gov؛ نبود بک‌اند → داده نمونه (بدون تغییر vite.config)
+- GovernanceWorkspace: بارگذاری زنده + چیپ داده زنده/نمونه + تأیید گام روی API
+- HANDOVER_NEXT_CHAT.md: وضعیت ماژول‌ها و بستن GOV
+
+Co-authored-by: arena-agent <297053741+arena-agent@users.noreply.github.com>
+---
+ HANDOVER_NEXT_CHAT.md                  |  70 ++++++++-------
+ server/index.js                        | 117 ++++++++++++++++++++++++-
+ src/components/GovernanceWorkspace.tsx |  43 ++++++++-
+ src/services/govApiClient.ts           |  93 ++++++++++++++++++++
+ 4 files changed, 290 insertions(+), 33 deletions(-)
+ create mode 100644 src/services/govApiClient.ts
+
+diff --git a/HANDOVER_NEXT_CHAT.md b/HANDOVER_NEXT_CHAT.md
+index 7f0f5e3..1c1d117 100644
+--- a/HANDOVER_NEXT_CHAT.md
++++ b/HANDOVER_NEXT_CHAT.md
+@@ -1,41 +1,51 @@
+ # انتقال به چت جدید — Arena Platform
+-تاریخ: 2026-09-04
++تاریخ به‌روزرسانی: 2026-09-08
+ دستور کاربر: از این پوشه ادامه بده. فایل‌های چت قبلی را دوباره لود نکن مگر فایل جدید بفرستد.
+-پاسخ‌ها: کوتاه فارسی. ظاهر/فونت Vazirmatn و سایدبار اصلی را تغییر نده.
++پاسخ‌ها: کوتاه فارسی. ظاهر/فونت Vazirmatn، `src/index.css` و سایدبار اصلی (domains) را تغییر نده.
+ 
+ ## قانون UI
+ - سایدبار اصلی: ساختار domains دست‌نخورده برای آیتم جدید.
+-- زیرماژول‌های جدید فقط صفحه حوزه (الگوی d1 DocumentWorkspace).
++- زیرماژول‌های جدید فقط داخل صفحه حوزه (الگوی d1 DocumentWorkspace).
+ - Excel ظرف است نه SoT.
++- `vite.config.ts` فقط `server.host: true` و `allowedHosts: true`.
+ 
+-## PIM/EDMS (d1) — تمام شده
+-- UI صفحه d1 بازطراحی شده (DocumentWorkspace + زیرماژول داخلی).
+-- docs/PIM_DMS_D1 … D9 + FINAL_QUALITY_REPORT + F2 stories + TEST_CASES
+-- OpenAPI: docs/openapi/pim-edms-v1.yaml
+-- Postgres migrations: db/postgres/V001–V013 (محصول Arena همچنان SQL Server)
+-
+-## PEX برنامه‌ریزی و اجرا (d2) — در جریان طراحی
+-تأییدشده بدون بازخورد: D1 تا D10
+-- docs/PEX_D1_Architecture.md
+-- docs/PEX_D2_DataModel.md
+-- docs/PEX_D3_Scope_WBS_AI.md
+-- docs/PEX_D4_Schedule_CPM.md
+-- docs/PEX_D5_Milestone.md
+-- docs/PEX_D6_CriticalPath.md
+-- docs/PEX_D7_Cost_EVM.md
+-- docs/PEX_D8_Resources.md
+-- docs/PEX_D9_SiteOps.md
+-- docs/PEX_D10_PMS.md
+-**بعدی: Deliverable 11 Reporting & Templates** (سپس D12 Alert/API/MVP)
+-پرامپت اصلی کاربر: uploads بود 1.txt ؛ ادامه با قالب 2.txt حالت الف.
+-
+-ایراد d2 در UI: صفحه حوزه خالی است؛ ProjectControl/ActionPlan به App وصل نیست — بازطراحی بعد از اتمام اسناد یا وقتی کاربر بگوید پیاده کن.
++## وضعیت ماژول‌ها
++
++| دامنه | ماژول | اسناد | UI | موتور/تست |
++|---|---|---|---|---|
++| d1 | PIM/EDMS | D1–D9 + F2 + TEST_CASES + کیفیت | DocumentWorkspace | — |
++| d2 | PEX برنامه‌ریزی و اجرا | D1–D12 + UIUX + RoC + کیفیت | PlanningWorkspace | pex/cpm |
++| d3 | PMA/MON پایش | D1، D2 + کیفیت (D3–D14 نوشته نشده) | PmaWorkspace | projectControls |
++| d4 | RCC ریسک/ادعا | DELIVERABLE_01–14 + کیفیت | RiskClaimsWorkspace | rccLogic + rcc.test |
++| **d6** | **GOV حاکمیت — بسته شد ✅** | **D1–D10 + کیفیت + openapi/gov-v1.yaml** | **GovernanceWorkspace (۵ تب) + بلوک d6 در ModuleDetail** | **governance.ts / govLogic.js + gov.test.mjs (۱۲ تست)** |
++| d5 | هزینه و تدارکات | ندارد | — | — |
++| d7 | مدیریت سامانه | — | AdminWorkspace | — |
++
++## GOV (d6) — جزئیات بستن
++- اسناد: `docs/GOV_D1_Architecture.md` … `docs/GOV_D10_API_MVP.md` + `docs/GOV_FINAL_QUALITY_REPORT.md`
++- قرارداد API: `docs/openapi/gov-v1.yaml`
++- موتور: `src/services/governance.ts` (SLA/تشدید L0–L3، DoA، دروازه تصمیم، CAPA، سلامت کانکتور، زنجیره ممیزی)
++- بک‌اند: `server/govLogic.js` + مسیرهای `/api/gov/*` در `server/index.js` (in-memory؛ SQL اختیاری)
++- کلاینت: `src/services/govApiClient.ts` — مسیر نسبی `/api/gov`؛ اگر بک‌اند نبود UI روی داده نمونه می‌ماند (چیپ «داده زنده / داده نمونه»)
++- تست: `npm test` → ۱۹/۱۹ سبز (۷ تست RCC + ۱۲ تست GOV)
++- زمان‌بند اختیاری: `GOV_SLA_TICK_MS` (میلی‌ثانیه) برای پایش دوره‌ای SLA
++
++### باقیمانده GOV (برآورد ~۱۲۸ نفر-ساعت، در گزارش کیفیت)
++G1 اجرای Migration روی SQL Server · G2 جایگزینی in-memory با جداول `gov_*` · G4 گزارش‌های GOV-R01…R07 · G5 آشتی‌دهی سه‌طرفه d2/d3/d5 · G6 seed چک‌لیست استانداردها.
+ 
+ ## اجرا
+-- مسیر پروژه: /home/user/arena-platform
+-- Vite: npx vite --host 0.0.0.0 (allowedHosts در vite.config)
+-- node_modules در snapshot نیست → npm ci
++- مسیر پروژه: `/home/user/-`
++- شاخه نشست: `arena/01a07ee6-repo` (روی GitHub؛ PR #1 در main مرج شد)
++- فرانت: `npx vite --host 0.0.0.0` (پورت 5173)
++- بک‌اند: `PORT=4000 node server/index.js` (پورت 4000؛ nginx مسیر `/api` را پراکسی می‌کند)
++- `node_modules` در snapshot نیست → `npm ci`
++- `.gitignore` اضافه شد: `node_modules/`, `dist/`, `test-results/`, `playwright-report/`, `.env`
+ 
+-## سایر
+-- BASELINE.md نسخه قدیمی‌تر PIM؛ این فایل جدیدتر است.
++## نکات فنی باز
++- `src/ForensicClaimsHub.tsx:1424` خطای نحوی از قبل دارد؛ هیچ‌جا import نشده (خارج از دامنه کار GOV).
++- `jalaali-js` فقط CJS است؛ در `server/index.js` با interop امن import می‌شود.
+ - سازنده محصول در هدر App: محمدرضا هاشمی‌پور
++
++## بعدی پیشنهادی
++۱) ماژول d5 (هزینه و تدارکات) از D1 — تنها دامنه بدون سند.
++۲) یا اتصال GOV به SQL Server واقعی (G1+G2).
+diff --git a/server/index.js b/server/index.js
+index e13c4b7..245a501 100644
+--- a/server/index.js
++++ b/server/index.js
+@@ -11,10 +11,24 @@ import crypto from "node:crypto";
+ import XLSX from "xlsx";
+ import { PDFParse } from "pdf-parse";
+ import mammoth from "mammoth";
+-import jalaali from "jalaali-js";
++import * as jalaaliNs from "jalaali-js";
+ import nodemailer from "nodemailer";
+ import { createWorker } from "tesseract.js";
+ import { applyGuardian } from "./rccLogic.js";
++import {
++  appendTrail,
++  auditCloseBlocked,
++  authorityFor,
++  complianceBand,
++  complianceScore,
++  connectorHealth,
++  decisionGate,
++  verifyTrail,
++  workflowTick,
++} from "./govLogic.js";
++
++/** jalaali-js فقط CJS دارد؛ interop امن برای ESM */
++const jalaali = (jalaaliNs.default ?? jalaaliNs);
+ 
+ const app = express();
+ const PORT = Number(process.env.PORT || 4000);
+@@ -1294,6 +1308,107 @@ if (guardianMs > 0) {
+   }, guardianMs).unref();
+ }
+ 
++/* ──────────────────────── GOV governance (d6) — in-memory; SQL optional ──────────────────────── */
++const isoIn = (days) => new Date(Date.now() + days * 86400000).toISOString().slice(0, 10);
++
++const govTasks = [
++  { id: "wf1", code: "WF-MDR-084", processFa: "تأیید نقشه شاپ فونداسیون", assignee: "مهندس ناظر مقیم", dueAt: isoIn(6) },
++  { id: "wf2", code: "WF-CR-012", processFa: "درخواست تغییر قیمت الحاقیه", assignee: "مدیر پروژه کارفرما", dueAt: isoIn(-5) },
++  { id: "wf3", code: "WF-CLM-007", processFa: "دروازه ادعا (Notice / Time-Bar)", assignee: "کمیته ادعا", dueAt: isoIn(1) },
++];
++
++const govConnectors = [
++  { id: "in1", system: "Primavera P6", owningDomain: "d2", direction: "pull", lastSync: new Date(Date.now() - 4 * 3600000).toISOString().slice(0, 16).replace("T", " "), slaHours: 24, records: 4820 },
++  { id: "in2", system: "ERP / SAP", owningDomain: "d5", direction: "pull", lastSync: new Date(Date.now() - 6 * 3600000).toISOString().slice(0, 16).replace("T", " "), slaHours: 24, records: 1290 },
++  { id: "in3", system: "EDMS", owningDomain: "d1", direction: "two_way", lastSync: new Date(Date.now() - 30 * 3600000).toISOString().slice(0, 16).replace("T", " "), slaHours: 24, records: 7315 },
++  { id: "in4", system: "Power BI Gateway", owningDomain: "d3", direction: "push", lastSync: new Date(Date.now() - 8 * 86400000).toISOString().slice(0, 16).replace("T", " "), slaHours: 24, records: 0 },
++];
++
++const govFindings = [
++  { id: "au1", code: "AUD-PMBOK-01", itemFa: "انطباق فرآیند کنترل تغییرات با PMBOK", standard: "PMBOK 7th Ed.", weight: 2, compliance: 92, severity: "minor", capaId: null },
++  { id: "au2", code: "AUD-HSE-04", itemFa: "ممیزی چک‌لیست‌های HSE کارگاه", standard: "ISO 45001", weight: 1, compliance: 85, severity: "major", capaId: "CAPA-118" },
++  { id: "au3", code: "AUD-DOC-11", itemFa: "انطباق شماره‌گذاری و گردش مدارک", standard: "ISO 9001 / EDMS", weight: 1, compliance: 68, severity: "critical", capaId: null },
++];
++
++const govDecisions = [
++  { id: "de1", code: "DEC-2026-041", subjectFa: "تخصیص ذخیره احتیاطی به بسته سیویل", authority: "PM", evidenceRef: "PMA:EVM#1405-06", cost: 180000, days: 10, dueAt: isoIn(12), state: "open" },
++  { id: "de2", code: "DEC-2026-038", subjectFa: "تمدید زمان ۱۴ روزه ناشی از تأخیر کارفرما", authority: "PMO", evidenceRef: "RCC:CLM-007", cost: 0, days: 14, dueAt: isoIn(-3), state: "open" },
++  { id: "de3", code: "DEC-2026-035", subjectFa: "تأیید بازنگری برنامه پایه (Rebaseline)", authority: "STEERING", evidenceRef: "PEX:BL#3", cost: 0, days: 45, dueAt: isoIn(-15), rewritesBaseline: true, crId: "CR-2026-19", state: "approved" },
++];
++
++let govTrail = [];
++
++const govOk = (req, data, meta = {}) =>
++  ({ ok: true, data, meta: { traceId: req.requestId, timestamp: new Date().toISOString(), ...meta } });
++
++app.get("/api/gov/workflow-tasks", (req, res) => {
++  const events = workflowTick(govTasks, new Date());
++  const data = govTasks.map((t) => {
++    const e = events.find((x) => x.taskId === t.id);
++    return { ...t, daysLeft: e?.daysLeft ?? null, slaLevel: e?.level ?? "ok", escalation: e?.escalation ?? "L0", action: e?.action ?? "none" };
++  });
++  res.json(govOk(req, data, { writesOwnedFigures: false }));
++});
++
++app.post("/api/gov/workflow-tasks/:taskId/approve", (req, res) => {
++  const task = govTasks.find((t) => t.id === req.params.taskId);
++  if (!task) return res.status(404).json({ ok: false, error: { code: "NOT_FOUND", message: "task", traceId: req.requestId } });
++  if (task.closedAt) return res.json(govOk(req, { idempotent: true, entry: govTrail[govTrail.length - 1] }));
++  task.closedAt = new Date().toISOString().slice(0, 10);
++  govTrail = appendTrail(govTrail, `APPROVE:${task.id}:${req.body?.actor || "system"}`);
++  res.json(govOk(req, { entry: govTrail[govTrail.length - 1] }));
++});
++
++app.get("/api/gov/connectors", (req, res) => {
++  res.json(govOk(req, govConnectors.map((c) => ({ ...c, health: connectorHealth(c.lastSync, c.slaHours) }))));
++});
++
++app.get("/api/gov/audit/findings", (req, res) => {
++  const score = complianceScore(govFindings);
++  res.json(govOk(req, { score, band: complianceBand(score), closeBlocked: auditCloseBlocked(govFindings), items: govFindings }));
++});
++
++app.post("/api/gov/audit/plans/:planId/close", (req, res) => {
++  if (auditCloseBlocked(govFindings)) {
++    return res.status(409).json({ ok: false, error: { code: "GOV-409-CAPA", message: "major/critical finding without CAPA", traceId: req.requestId } });
++  }
++  res.json(govOk(req, { planId: req.params.planId, state: "closed" }));
++});
++
++app.get("/api/gov/decisions", (req, res) => {
++  res.json(govOk(req, govDecisions.map((d) => ({ ...d, requiredAuthority: authorityFor(d.cost || 0, d.days || 0), gate: decisionGate(d) }))));
++});
++
++app.post("/api/gov/decisions", (req, res) => {
++  const d = req.body || {};
++  const gate = decisionGate(d);
++  if (!gate.ok) {
++    const code = gate.reasons.includes("authority_insufficient")
++      ? "GOV-403-DOA"
++      : gate.reasons.includes("baseline_rewrite_without_cr")
++      ? "GOV-409-BASELINE"
++      : "GOV-409-EVIDENCE";
++    const status = code === "GOV-403-DOA" ? 403 : 409;
++    return res.status(status).json({ ok: false, error: { code, message: "decision gate rejected", reasons: gate.reasons, traceId: req.requestId } });
++  }
++  const row = { ...d, id: d.id || `de${govDecisions.length + 1}`, state: "open", requiredAuthority: authorityFor(d.cost || 0, d.days || 0) };
++  govDecisions.push(row);
++  govTrail = appendTrail(govTrail, `DECISION:${row.code || row.id}`);
++  res.status(201).json(govOk(req, row));
++});
++
++app.get("/api/gov/audit-trail", (req, res) => {
++  res.json(govOk(req, { valid: verifyTrail(govTrail), entries: govTrail }));
++});
++
++const govTickMs = Number(process.env.GOV_SLA_TICK_MS || 0);
++if (govTickMs > 0) {
++  setInterval(() => {
++    const events = workflowTick(govTasks, new Date()).filter((e) => e.action !== "none");
++    if (events.length) console.log("[gov-sla]", events.map((e) => `${e.taskId}:${e.escalation}`).join(","));
++  }, govTickMs).unref();
++}
++
+ app.use((req, res) => {
+   res.status(404).json({ ok: false, error: { code: "NOT_FOUND", message: `Route ${req.method} ${req.path} was not found`, traceId: req.requestId } });
+ });
+diff --git a/src/components/GovernanceWorkspace.tsx b/src/components/GovernanceWorkspace.tsx
+index 3cccd6a..7c8dd54 100644
+--- a/src/components/GovernanceWorkspace.tsx
++++ b/src/components/GovernanceWorkspace.tsx
+@@ -22,6 +22,7 @@ import {
+   type Finding,
+   type TrailEntry,
+ } from "../services/governance";
++import { govApi } from "../services/govApiClient";
+ 
+ export type GovTab = "workflow" | "integration" | "stakeholders" | "audit" | "decision";
+ 
+@@ -131,13 +132,45 @@ export default function GovernanceWorkspace({
+   const [tab, setTab] = useState<GovTab>(initialTab);
+   const [workflows, setWorkflows] = useState<WorkflowRow[]>(sampleWorkflows);
+   const [trail, setTrail] = useState<TrailEntry[]>([]);
++  const [source, setSource] = useState<"sample" | "api">("sample");
+   useEffect(() => setTab(initialTab), [initialTab]);
+ 
+-  const approveWorkflow = (id: string) => {
++  /* داده زنده در صورت در دسترس بودن سرویس؛ در غیر این‌صورت همان داده نمونه می‌ماند. */
++  useEffect(() => {
++    let alive = true;
++    (async () => {
++      const rows = await govApi.workflowTasks();
++      if (!alive || !rows?.length) return;
++      setWorkflows(
++        rows.map((r) => ({
++          id: r.id,
++          code: r.code,
++          processName: { fa: r.processFa, en: r.processFa },
++          currentStep: r.closedAt ? { fa: "تأییدشده و نهایی", en: "Fully Approved" } : { fa: "در جریان بررسی", en: "In review" },
++          assignee: { fa: r.assignee, en: r.assignee },
++          dueAt: r.dueAt,
++          closedAt: r.closedAt,
++        }))
++      );
++      setSource("api");
++      const tr = await govApi.trail();
++      if (alive && tr) setTrail(tr.entries);
++    })();
++    return () => {
++      alive = false;
++    };
++  }, []);
++
++  const approveWorkflow = async (id: string) => {
+     const today = new Date().toISOString().slice(0, 10);
+     setWorkflows((prev) => prev.map((wf) => (wf.id === id ? { ...wf, closedAt: today, currentStep: { fa: "تأییدشده و نهایی", en: "Fully Approved" } } : wf)));
+     setTrail((prev) => appendTrail(prev, `APPROVE:${id}:${settings.activeRole}`));
+     logAudit("WORKFLOW_APPROVE", "Governance", `Approved workflow ${id} under role ${settings.activeRole}`);
++    if (source === "api") {
++      await govApi.approveTask(id, String(settings.activeRole));
++      const tr = await govApi.trail();
++      if (tr) setTrail(tr.entries);
++    }
+   };
+ 
+   const score = useMemo(() => complianceScore(sampleAudits), []);
+@@ -173,6 +206,12 @@ export default function GovernanceWorkspace({
+           <span className="rounded-lg border b-line-soft px-2 py-1 text-[9px] tx3">
+             {rtl ? "تصمیم باز" : "Open decisions"} {openDecisions.toLocaleString(rtl ? "fa-IR" : "en-US")}
+           </span>
++          <span
++            className={`rounded-lg px-2 py-1 text-[9px] ${source === "api" ? "bg-emerald-400/15 text-emerald-300" : "border b-line-soft tx3"}`}
++            title={source === "api" ? "/api/gov" : "mock"}
++          >
++            {source === "api" ? (rtl ? "داده زنده" : "Live data") : rtl ? "داده نمونه" : "Sample data"}
++          </span>
+           <span className="font-mono text-[9px] text-indigo-300" dir="ltr">dbo.Process_Master · dbo.Audit_Register</span>
+         </div>
+       </section>
+@@ -248,7 +287,7 @@ export default function GovernanceWorkspace({
+                         </td>
+                         <td className="px-2 py-1.5 text-end">
+                           <button
+-                            onClick={() => approveWorkflow(wf.id)}
++                            onClick={() => void approveWorkflow(wf.id)}
+                             disabled={!!wf.closedAt}
+                             className="rounded border border-emerald-400/40 bg-emerald-400/10 px-2 py-0.5 text-[8.5px] text-emerald-300 transition hover:bg-emerald-400/20 disabled:opacity-40"
+                           >
+diff --git a/src/services/govApiClient.ts b/src/services/govApiClient.ts
+new file mode 100644
+index 0000000..e503459
+--- /dev/null
++++ b/src/services/govApiClient.ts
+@@ -0,0 +1,93 @@
++/**
++ * GOV API client — مسیر نسبی `/api/gov/*` (nginx به سرویس Node پراکسی می‌کند).
++ * در حالت توسعه که بک‌اند بالا نیست، همه توابع `null` برمی‌گردانند و UI روی داده نمونه می‌ماند.
++ */
++
++const BASE = "/api/gov";
++const TIMEOUT_MS = 2500;
++
++async function getJson<T>(path: string): Promise<T | null> {
++  try {
++    const ctrl = new AbortController();
++    const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
++    const res = await fetch(`${BASE}${path}`, { signal: ctrl.signal, headers: { Accept: "application/json" } });
++    clearTimeout(timer);
++    if (!res.ok) return null;
++    const ct = res.headers.get("content-type") ?? "";
++    if (!ct.includes("application/json")) return null; // dev server → index.html
++    const body = (await res.json()) as { ok?: boolean; data?: T };
++    return body?.ok ? (body.data as T) : null;
++  } catch {
++    return null;
++  }
++}
++
++async function postJson<T>(path: string, payload?: unknown): Promise<T | null> {
++  try {
++    const ctrl = new AbortController();
++    const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
++    const res = await fetch(`${BASE}${path}`, {
++      method: "POST",
++      signal: ctrl.signal,
++      headers: { "Content-Type": "application/json", Accept: "application/json" },
++      body: JSON.stringify(payload ?? {}),
++    });
++    clearTimeout(timer);
++    const ct = res.headers.get("content-type") ?? "";
++    if (!ct.includes("application/json")) return null;
++    const body = (await res.json()) as { ok?: boolean; data?: T };
++    return body?.ok ? (body.data as T) : null;
++  } catch {
++    return null;
++  }
++}
++
++export type ApiWorkflowTask = {
++  id: string;
++  code: string;
++  processFa: string;
++  assignee: string;
++  dueAt: string;
++  closedAt?: string;
++  daysLeft: number | null;
++  slaLevel: "ok" | "due_soon" | "breach";
++  escalation: "L0" | "L1" | "L2" | "L3";
++  action: "none" | "notify" | "escalate";
++};
++
++export type ApiConnector = {
++  id: string;
++  system: string;
++  owningDomain: string;
++  direction: string;
++  lastSync: string;
++  slaHours: number;
++  records: number;
++  health: "ok" | "warn" | "fail";
++};
++
++export type ApiFindings = {
++  score: number;
++  band: "Green" | "Yellow" | "Red";
++  closeBlocked: boolean;
++  items: {
++    id: string;
++    code: string;
++    itemFa: string;
++    standard: string;
++    weight: number;
++    compliance: number;
++    severity: "minor" | "major" | "critical";
++    capaId: string | null;
++  }[];
++};
++
++export type ApiTrail = { valid: boolean; entries: { seq: number; payload: string; hash: string }[] };
++
++export const govApi = {
++  workflowTasks: () => getJson<ApiWorkflowTask[]>("/workflow-tasks"),
++  approveTask: (taskId: string, actor: string) => postJson<{ entry: { seq: number; payload: string; hash: string } }>(`/workflow-tasks/${taskId}/approve`, { actor }),
++  connectors: () => getJson<ApiConnector[]>("/connectors"),
++  findings: () => getJson<ApiFindings>("/audit/findings"),
++  trail: () => getJson<ApiTrail>("/audit-trail"),
++};
+-- 
+2.39.5
+

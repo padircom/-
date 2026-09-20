@@ -7,6 +7,7 @@ import {
   type ProjectStatus,
 } from "../data/framework";
 import { useSystem } from "../context/SystemContext";
+import ProjectScopeBar from "./ProjectScopeBar";
 import {
   KpiRingBar,
   StatusDonut,
@@ -60,6 +61,9 @@ export default function PortfolioPanel({ lang, selected, onSelect, activeProject
 
   return (
     <section dir={rtl ? "rtl" : "ltr"} className="flex h-full min-h-0 w-full flex-col gap-2">
+      {/* ═══ Working scope selector (moved here from the global header) ═══ */}
+      <ProjectScopeBar lang={lang} onScopeChange={onOpenProject} />
+
       {/* ═══ Analytics strip: KPI dials + status donut + budget bars ═══ */}
       <div className="grid shrink-0 grid-cols-1 gap-2 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,.85fr)_minmax(0,1.3fr)]">
         <KpiRingBar lang={lang} />

@@ -10,20 +10,34 @@ type Props = {
 export default function LeftSidebar({ lang, activeSource, onPick }: Props) {
   const rtl = lang === "fa";
   const [connectNotice, setConnectNotice] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
   return (
-    <aside
-      dir={rtl ? "rtl" : "ltr"}
-      className="glass-dark flex h-full w-[248px] shrink-0 flex-col rounded-2xl"
-    >
-      <header className="b-line border-b px-4 py-3.5">
-        <div className="flex items-center gap-2">
-          <span className="chip-bg grid h-7 w-7 place-items-center rounded-lg text-[13px]">🔌</span>
-          <div>
-            <h2 className="text-[12.5px] font-normal tx1">{t(ui.sourcesTitle, lang)}</h2>
-            <p className="mt-0.5 text-[9.5px] font-extralight tx3">{t(ui.sourcesSub, lang)}</p>
+    <div className={`relative h-full shrink-0 transition-[width] duration-300 ease-out ${collapsed ? "w-0" : "w-[248px]"}`}>
+      <aside
+        dir={rtl ? "rtl" : "ltr"}
+        className={`glass-dark flex h-full w-[248px] flex-col rounded-2xl transition-[transform,opacity] duration-300 ease-out ${collapsed ? "pointer-events-none -translate-x-full opacity-0" : "translate-x-0 opacity-100"}`}
+      >
+        <header className="b-line border-b px-4 py-3.5">
+          <div className="flex items-center gap-2">
+            <span className="chip-bg grid h-7 w-7 place-items-center rounded-lg text-[13px]">🔌</span>
+            <div className="min-w-0 flex-1">
+              <h2 className="truncate text-[12.5px] font-normal tx1">{t(ui.sourcesTitle, lang)}</h2>
+              <p className="mt-0.5 truncate text-[9.5px] font-extralight tx3">{t(ui.sourcesSub, lang)}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setCollapsed(true)}
+              aria-expanded={!collapsed}
+              aria-label={rtl ? "پنهان کردن سایدبار منابع داده" : "Hide data sources sidebar"}
+              title={rtl ? "پنهان کردن سایدبار منابع داده" : "Hide data sources sidebar"}
+              className="grid h-7 w-7 shrink-0 place-items-center rounded-lg border b-line-soft bg-[var(--row)] tx3 transition hover:tx1"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+                <path d="m15 6-6 6 6 6" />
+              </svg>
+            </button>
           </div>
-        </div>
-      </header>
+        </header>
 
       <div className="thin-scroll flex-1 space-y-2 overflow-y-auto px-3 py-3">
         {dataSources.map((s) => {
@@ -86,6 +100,21 @@ export default function LeftSidebar({ lang, activeSource, onPick }: Props) {
           </p>
         )}
       </div>
-    </aside>
+      </aside>
+      {collapsed && (
+        <button
+          type="button"
+          onClick={() => setCollapsed(false)}
+          aria-expanded={false}
+          aria-label={rtl ? "نمایش سایدبار منابع داده" : "Show data sources sidebar"}
+          title={rtl ? "نمایش سایدبار منابع داده" : "Show data sources sidebar"}
+          className="absolute left-0 top-4 z-30 grid h-10 w-7 translate-x-0 place-items-center rounded-r-xl border border-l-0 border-sky-400/35 bg-[var(--panel2)] text-sky-200 shadow-lg transition hover:w-8 hover:bg-sky-400/10"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+            <path d="m9 6 6 6-6 6" />
+          </svg>
+        </button>
+      )}
+    </div>
   );
 }

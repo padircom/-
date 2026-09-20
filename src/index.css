@@ -3,7 +3,7 @@
 /* ══════════════════════════════════════════════════════════════
    THEME VARIABLE ENGINE
    data-theme="dark"  → Lightened Royal Blue #2E3D70 executive canvas
-   data-theme="light" → premium high-contrast light canvas
+   data-theme="light" → white canvas with pale sage green accents
    ══════════════════════════════════════════════════════════════ */
 :root,
 html[data-theme="dark"] {
@@ -52,53 +52,53 @@ html[data-theme="dark"] {
   --scroll-thumb: rgba(255, 255, 255, 0.2);
 }
 
-/* ══ LIGHT THEME — "Architect Paper"
-   Warm ivory drafting paper · deep teal-slate ink · bronze accents
-   Deliberately distinct from the royal-blue dark theme.            ══ */
+/* ══ LIGHT THEME — "Clean Sage"
+   Pure white canvas · whisper-soft sage green · deep evergreen accents
+   Deliberately calm and bright; the counterpart to the royal-blue dark. ══ */
 html[data-theme="light"] {
-  --bg-glow-a: #f2e3c8;
-  --bg-glow-b: #dfe7dd;
-  --bg-a: #f7f1e4;
-  --bg-b: #efe7d6;
-  --bg-c: #e3d9c6;
+  --bg-glow-a: #e7f3ec;
+  --bg-glow-b: #eef6f1;
+  --bg-a: #ffffff;
+  --bg-b: #f8fbf9;
+  --bg-c: #eef5f0;
 
   --ink: #000000;
   --ink2: rgba(0, 0, 0, 0.86);
   --ink3: rgba(0, 0, 0, 0.66);
   --ink4: rgba(0, 0, 0, 0.45);
 
-  --line: rgba(28, 54, 48, 0.22);
-  --line-soft: rgba(28, 54, 48, 0.12);
+  --line: rgba(22, 78, 62, 0.20);
+  --line-soft: rgba(22, 78, 62, 0.10);
 
-  --panel: linear-gradient(145deg, rgba(255, 253, 246, 0.86), rgba(250, 244, 231, 0.6));
-  --panel-border: rgba(28, 54, 48, 0.18);
-  --panel-shadow: 0 12px 28px -18px rgba(58, 47, 24, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.7);
-  --panel2: linear-gradient(145deg, rgba(252, 247, 236, 0.78), rgba(243, 235, 219, 0.55));
-  --panel2-border: rgba(28, 54, 48, 0.16);
+  --panel: linear-gradient(145deg, rgba(255, 255, 255, 0.94), rgba(246, 251, 248, 0.78));
+  --panel-border: rgba(22, 78, 62, 0.16);
+  --panel-shadow: 0 12px 30px -20px rgba(20, 60, 48, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  --panel2: linear-gradient(145deg, rgba(250, 253, 251, 0.90), rgba(238, 246, 241, 0.70));
+  --panel2-border: rgba(22, 78, 62, 0.14);
 
-  --row: rgba(120, 96, 52, 0.09);
-  --row-border: rgba(28, 54, 48, 0.14);
-  --row-hover: rgba(120, 96, 52, 0.16);
-  --row-active: rgba(120, 96, 52, 0.22);
+  --row: rgba(22, 122, 95, 0.055);
+  --row-border: rgba(22, 78, 62, 0.12);
+  --row-hover: rgba(22, 122, 95, 0.11);
+  --row-active: rgba(22, 122, 95, 0.17);
 
-  --chip-bg: rgba(120, 96, 52, 0.14);
-  --scrim: rgba(247, 241, 228, 0.78);
+  --chip-bg: rgba(22, 122, 95, 0.10);
+  --scrim: rgba(255, 255, 255, 0.82);
   --accent: #0f6b5c;
-  --accent-soft: rgba(15, 107, 92, 0.12);
+  --accent-soft: rgba(15, 107, 92, 0.10);
   --ok: #0f766e;
   --ok-dim: rgba(15, 118, 110, 0.78);
 
-  --ring-line: rgba(28, 54, 48, 0.5);
-  --ring-line-soft: rgba(160, 122, 54, 0.42);
-  --ring-hair: rgba(28, 54, 48, 0.16);
-  --ring-track: rgba(28, 54, 48, 0.15);
-  --node-fill: rgba(255, 253, 246, 0.96);
-  --spoke: rgba(160, 122, 54, 0.42);
-  --spoke-2: rgba(28, 54, 48, 0.45);
-  --hub-edge: rgba(160, 122, 54, 0.55);
+  --ring-line: rgba(19, 88, 71, 0.48);
+  --ring-line-soft: rgba(45, 138, 111, 0.34);
+  --ring-hair: rgba(22, 78, 62, 0.14);
+  --ring-track: rgba(22, 78, 62, 0.13);
+  --node-fill: rgba(255, 255, 255, 0.97);
+  --spoke: rgba(45, 138, 111, 0.34);
+  --spoke-2: rgba(19, 88, 71, 0.44);
+  --hub-edge: rgba(19, 88, 71, 0.45);
 
-  --toggle-on: rgba(15, 107, 92, 0.16);
-  --scroll-thumb: rgba(28, 54, 48, 0.28);
+  --toggle-on: rgba(15, 107, 92, 0.14);
+  --scroll-thumb: rgba(22, 78, 62, 0.26);
 }
 
 html,
@@ -125,11 +125,11 @@ body {
 /* Light theme gets a faint engineering-paper grid for a distinct identity */
 html[data-theme="light"] body {
   background:
-    linear-gradient(rgba(28, 54, 48, 0.045) 1px, transparent 1px) 0 0 / 26px 26px,
-    linear-gradient(90deg, rgba(28, 54, 48, 0.045) 1px, transparent 1px) 0 0 / 26px 26px,
-    radial-gradient(1100px 760px at 12% -8%, var(--bg-glow-a) 0%, transparent 58%),
-    radial-gradient(900px 700px at 92% 108%, var(--bg-glow-b) 0%, transparent 58%),
-    linear-gradient(165deg, var(--bg-a) 0%, var(--bg-b) 55%, var(--bg-c) 100%);
+    linear-gradient(rgba(22, 122, 95, 0.032) 1px, transparent 1px) 0 0 / 28px 28px,
+    linear-gradient(90deg, rgba(22, 122, 95, 0.032) 1px, transparent 1px) 0 0 / 28px 28px,
+    radial-gradient(1100px 760px at 12% -8%, var(--bg-glow-a) 0%, transparent 60%),
+    radial-gradient(900px 700px at 92% 108%, var(--bg-glow-b) 0%, transparent 60%),
+    linear-gradient(165deg, var(--bg-a) 0%, var(--bg-b) 58%, var(--bg-c) 100%);
   background-attachment: fixed;
 }
 

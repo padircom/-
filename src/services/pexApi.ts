@@ -19,7 +19,7 @@ import {
   type PexProject,
   type PexRoc,
   type PexWbsNode,
-} from "../data/pexProject";
+} from "../data/pexSnapshot";
 
 export type PexSource = "sql" | "seed";
 

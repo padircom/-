@@ -1,5 +1,7 @@
+import ReportCenter from "./ReportCenter";
 import { useEffect, useMemo, useState } from "react";
 import type { Lang } from "../data/framework";
+import ProgressSCurvePanel from "./ProgressSCurvePanel";
 import {
   ACTIVITIES,
   computeEvm,
@@ -22,6 +24,7 @@ export type PmaTab =
   | "action"
   | "forecast"
   | "reports"
+  | "scurve"
   | "exec";
 
 const TABS: { id: PmaTab; fa: string; en: string }[] = [
@@ -36,6 +39,7 @@ const TABS: { id: PmaTab; fa: string; en: string }[] = [
   { id: "forecast", fa: "پیش‌بینی", en: "Forecast" },
   { id: "reports", fa: "گزارش‌ها", en: "Reports" },
   { id: "exec", fa: "یک‌صفحه", en: "EXEC" },
+  { id: "scurve", fa: "نمودار S", en: "S-Curve" },
 ];
 
 export default function PmaWorkspace({
@@ -206,13 +210,10 @@ export default function PmaWorkspace({
         )}
 
         {tab === "reports" && (
-          <div className="fade-rise glass-dark rounded-2xl p-3 flex flex-wrap gap-1.5">
-            {["D", "W", "BW", "M", "Q", "GATE", "ADH", "TRD", "EXEC", "EV", "VA", "KPI", "ALT", "ACT"].map((c) => (
-              <span key={c} className="rounded-lg border b-line-soft px-2 py-1 text-[9px] tx2">RPT-{c}</span>
-            ))}
-            {blocked && <p className="w-full text-[9px] text-rose-300">{rtl ? "تولید External تا رفع Major ممکن نیست" : "Blocked until Major closed"}</p>}
-          </div>
+          <ReportCenter lang={lang} blockers={{ openMajorNcr: blocked ? 1 : 0, timeBarBreach: 2 }} />
         )}
+
+        {tab === "scurve" && <ProgressSCurvePanel lang={lang} />}
 
         {tab === "exec" && (
           <div className="fade-rise glass-dark grid gap-2 rounded-2xl p-3 sm:grid-cols-3 text-[10px]">
