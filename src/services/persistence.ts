@@ -4314,6 +4314,21 @@ export const MIGRATIONS: Migration[] = [
       }),
     ],
   },
+  {
+    /* درخت فرایند پروژه (دامنه‌های d6 و d20) — جدولی که از آغاز در اسکیما
+     * و در مسیرهای /api/framework/process-tree بود ولی مهاجرتش جا مانده
+     * بود؛ روی هر پایگاه تازه ناقص می‌ماند. افزودنش به مهاجرت ۰۰۰۱ یعنی
+     * بازنویسی مهاجرت اجراشده و هشدار drift، پس مهاجرت تازه و افزایشی است.
+     * فقط جدول جدید؛ هیچ جدول یا ستون موجودی دست نمی‌خورد. */
+    version: "0033",
+    name: "process_tree_taxonomy",
+    statements: [
+      ...["ProcessTree"].flatMap((n) => {
+        const t = TABLE_BY_NAME.get(n)!;
+        return [tableDdl(t, "mssql"), ...(t.indexes ?? []).map((i) => indexDdl(t, i, "mssql"))];
+      }),
+    ],
+  },
 ];
 
 export function pendingMigrations(applied: AppliedMigration[], all: Migration[] = MIGRATIONS): Migration[] {
