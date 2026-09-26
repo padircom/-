@@ -18,6 +18,7 @@ import * as jalaaliNs from "jalaali-js";
 import nodemailer from "nodemailer";
 import { createWorker } from "tesseract.js";
 import { applyGuardian } from "./rccLogic.js";
+import { registerDprDocRoutes } from "./dprDocApi.js";
 import { canDprTransition, openDprBlocked, validateDpr } from "./pexDprLogic.js";
 import { inspectionBand, inspectionScore, nextInspectionDue, ptwCanTransition, ptwMissing, severityWeight, validateIncident, validateInspection, validatePermit, woPermitGate } from "./hseFieldLogic.js";
 import {
@@ -541,6 +542,7 @@ import {
 const jalaali = (jalaaliNs.default ?? jalaaliNs);
 
 const app = express();
+registerDprDocRoutes(app);
 const PORT = Number(process.env.PORT || 4000);
 const startedAt = Date.now();
 
