@@ -1,3 +1,5 @@
+import { useAuth } from "../context/AuthContext";
+import { jsonRequest } from "../services/apiClient";
 import { useMemo, useRef, useState } from "react";
 import { type Lang } from "../data/framework";
 import { SCHEMA, allColumns } from "../services/persistence";
@@ -54,18 +56,6 @@ function download(name: string, text: string, mime = "text/plain;charset=utf-8")
   URL.revokeObjectURL(url);
 }
 
-/** فقط پاسخ JSON معتبر است — در dev سرور Vite مسیر /api صفحهٔ HTML می‌دهد. */
-async function postJson<T>(url: string, body: unknown): Promise<T | null> {
-  try {
-    const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-    if (!res.headers.get("content-type")?.includes("application/json")) return null;
-    const json = await res.json();
-    return (json?.data ?? json) as T;
-  } catch {
-    return null;
-  }
-}
-
 function IssueList({ issues, rtl }: { issues: ImportIssue[]; rtl: boolean }) {
   if (!issues.length) {
     return <p className="rounded-lg bg-emerald-500/10 px-3 py-2 text-[10px] text-emerald-300">{rtl ? "هیچ خطا یا هشداری گزارش نشد." : "No issues reported."}</p>;
@@ -87,6 +77,7 @@ function IssueList({ issues, rtl }: { issues: ImportIssue[]; rtl: boolean }) {
 }
 
 export default function IntegrationCenter({ lang }: { lang: Lang }) {
+  const { user } = useAuth();
   const rtl = lang === "fa";
   const T = (b: { fa: string; en: string }) => (rtl ? b.fa : b.en);
 
@@ -125,17 +116,17 @@ export default function IntegrationCenter({ lang }: { lang: Lang }) {
     if (!xer || !xerRaw) return;
     setBusy(true);
     setCommitMsg(null);
-    const res = await postJson<{ committed: boolean; written: Record<string, number> }>(
+    const res = await jsonRequest<{ committed: boolean; written: Record<string, number> }>(
       `/api/integration/xer?projectId=${encodeURIComponent(projectId)}&commit=1`,
-      { content: xerRaw, fileName: xerName },
+      user?.id ?? null, "POST", { content: xerRaw, fileName: xerName },
     );
     setBusy(false);
     setCommitMsg(
-      res?.committed
+      res.ok && res.data.committed
         ? rtl
-          ? `نوشته شد — ${res.written.activities} فعالیت، ${res.written.wbs} گره WBS، ${res.written.relations} رابطه`
-          : `Committed — ${res.written.activities} activities, ${res.written.wbs} WBS nodes, ${res.written.relations} relations`
-        : rtl
+          ? `نوشته شد — ${res.data.written.activities} فعالیت، ${res.data.written.wbs} گره WBS، ${res.data.written.relations} رابطه`
+          : `Committed — ${res.data.written.activities} activities, ${res.data.written.wbs} WBS nodes, ${res.data.written.relations} relations`
+        : !res.ok ? res.message : rtl
         ? "سرویس API در دسترس نیست؛ پیش‌نمایش محلی معتبر است ولی چیزی نوشته نشد."
         : "API unavailable; local preview is valid but nothing was written.",
     );

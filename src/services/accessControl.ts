@@ -59,6 +59,12 @@ const P = (code: string, module: string, fa: string, en: string, touches: Classi
   ({ code, module, title: { fa, en }, touches, audited });
 
 export const PERMISSION_CATALOG: PermissionDef[] = [
+  /* LIVE-6: business access is explicit; system admin is not a strategy assessor. */
+  P("spm.plan.view", "d20", "مشاهده برنامهٔ استراتژیک", "View strategic plans", "confidential"),
+  P("spm.plan.edit", "d20", "ویرایش برنامهٔ استراتژیک", "Edit strategic plans", "confidential", true),
+  P("oex.assessment.view", "d19", "مشاهده خودارزیابی تعالی", "View excellence self-assessments", "confidential"),
+  P("oex.assessment.edit", "d19", "ویرایش خودارزیابی تعالی", "Edit excellence self-assessments", "confidential", true),
+
   /* ── هسته و سامانه ── */
   P("core.portfolio.view", "core", "مشاهده سبد پروژه", "View portfolio", "internal"),
   P("core.project.view", "core", "مشاهده پروژه", "View project", "internal"),
@@ -318,6 +324,11 @@ export const PERMISSION_CATALOG: PermissionDef[] = [
   P("qms.ncr.close", "d8", "بستن عدم انطباق", "Close NCR", "confidential", true),
   P("qms.audit.conduct", "d8", "اجرای ممیزی کیفیت", "Conduct quality audit", "confidential", true),
 
+  /* LIVE-4: machinery workspace, separate preparation from dispatch approval. */
+  P("eqm.workspace.view", "d9", "مشاهده ناوگان و هزینه ماشین‌آلات", "View machinery workspace", "confidential"),
+  P("eqm.workspace.manage", "d9", "ثبت عملیات ماشین‌آلات", "Manage machinery operations", "confidential", true),
+  P("eqm.dispatch.approve", "d9", "تصویب دیسپچ", "Approve machinery dispatch", "restricted", true),
+
   /* ── d10 منابع انسانی ── */
   P("hrm.roster.view", "d10", "مشاهده فهرست نیرو", "View workforce roster", "internal"),
   P("hrm.timesheet.enter", "d10", "ثبت تایم‌شیت", "Enter timesheet", "internal"),
@@ -531,7 +542,7 @@ export const ROLE_CATALOG: RoleDef[] = [
     inherits: ["viewer"],
     clearance: "confidential",
     party: "contractor",
-    grants: ["cnt.contract.view", "cnt.ipc.prepare", "fin.cost.view", "fin.ipc.prepare", "fin.invoice.issue", "fin.rate.view", "pex.evm.view", "hrm.productivity.view", "core.ai.run",
+    grants: ["eqm.workspace.view", "cnt.contract.view", "cnt.ipc.prepare", "fin.cost.view", "fin.ipc.prepare", "fin.invoice.issue", "fin.rate.view", "pex.evm.view", "hrm.productivity.view", "core.ai.run",
       /* هزینهٔ نیروی پیمانکاری بخشی از هزینهٔ مستقیم پروژه است و
        * کنترل هزینه باید مبنای آن را ببیند؛ ثبت و تأیید دست او نیست. */
       "hrm.crew.view", "hrm.sub.view", "hrm.analytics.view",
@@ -656,7 +667,7 @@ export const ROLE_CATALOG: RoleDef[] = [
     inherits: ["viewer"],
     clearance: "restricted",
     party: "contractor",
-    grants: [
+    grants: ["spm.plan.view", "oex.assessment.view", "eqm.workspace.view", "eqm.dispatch.approve",
       "core.project.edit", "core.ai.run",
       "plan.baseline.set", "plan.progress.approve",
       "pex.evm.view", "pex.kpi.edit", "pex.forecast.edit",
@@ -804,7 +815,7 @@ export const ROLE_CATALOG: RoleDef[] = [
     inherits: ["planner"],
     clearance: "restricted",
     party: "contractor",
-    grants: ["gov.process.view", "gov.gate.review", "gov.owner.assign", "pex.kpi.edit", "rcc.risk.edit", "fin.cost.view", "report.official.publish", "report.export.bulk", "sys.audit.view",
+    grants: ["spm.plan.view", "spm.plan.edit", "oex.assessment.view", "oex.assessment.edit", "eqm.workspace.view", "eqm.workspace.manage", "gov.process.view", "gov.gate.review", "gov.owner.assign", "pex.kpi.edit", "rcc.risk.edit", "fin.cost.view", "report.official.publish", "report.export.bulk", "sys.audit.view",
       /* ارسال هزینهٔ نیرو به دفتر مالی.
        *
        * نه مدیر منابع انسانی (نرخ را او تعریف می‌کند — SOD-28) و نه
@@ -821,7 +832,7 @@ export const ROLE_CATALOG: RoleDef[] = [
     inherits: ["viewer"],
     clearance: "restricted",
     party: "contractor",
-    grants: ["fin.cost.view", "fin.budget.edit", "fin.reserve.draw", "pex.evm.view", "rcc.change.approve", "gov.gate.approve", "rcc.claim.view", "core.ai.run"],
+    grants: ["spm.plan.view", "spm.plan.edit", "oex.assessment.view", "oex.assessment.edit", "eqm.workspace.view", "eqm.dispatch.approve", "fin.cost.view", "fin.budget.edit", "fin.reserve.draw", "pex.evm.view", "rcc.change.approve", "gov.gate.approve", "rcc.claim.view", "core.ai.run"],
   },
   {
     code: "consultant",

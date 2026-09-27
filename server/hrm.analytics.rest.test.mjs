@@ -113,7 +113,8 @@ before(async () => {
   ]) {
     const res = await fetch(`${BASE}/api/data/${table}`, {
       method: "POST",
-      headers: { "content-type": "application/json", "x-user-id": "u-admin" },
+      // SEC-1: budget fixtures need budget permission; admin is not a business superuser.
+      headers: { "content-type": "application/json", "x-user-id": table === "CostAccount" ? "u-ceo" : "u-planner" },
       body: JSON.stringify(row),
     });
     assert.ok(res.ok || res.status === 409, `${table}: ${res.status}`);

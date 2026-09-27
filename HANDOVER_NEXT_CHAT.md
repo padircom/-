@@ -1,5 +1,20 @@
 # انتقال به چت جدید — Arena Platform
-تاریخ به‌روزرسانی: 2026-09-14 — **این بخش جدیدتر از جدول‌های پایین است.**
+تاریخ به‌روزرسانی: 2026-09-27 — **گزارش مرجع جاری: `docs/GAP_ROADMAP.md`؛ بخش‌های پایین تاریخچه‌اند.**
+
+## ادامهٔ نقشهٔ راه (۲۰۲۶-۰۹-۲۷)
+- شاخهٔ نشست: `arena/01a0e2cf-repo`؛ SEC-1 و LIVE-3 تا LIVE-6 تکمیل شده‌اند؛ پیشرفت ۲۲/۱۳۵ ≈ ۱۶٪ (۱۳ مورد انجام‌شده، ۵۷ باز؛ P1: ۱۰۰٪). مرحلهٔ بعد **P2 / CSU-1** است.
+- دروازهٔ فعلی: **۴۳۲۳/۴۳۲۳ آزمون**، `npx tsc --noEmit` و `npm run build` موفق.
+- LIVE-3: `server/rccWorkspaceApi.js` + `src/services/rccWorkspace.ts` + صفحهٔ `RiskClaimsWorkspace`؛ مهاجرت 0036؛ جزئیات و محدودیت‌ها در نقشهٔ راه.
+- فایل `ForensicClaimsHub.tsx` حفظ شد؛ مفاهیم اصلی به صفحهٔ فعال منتقل شد، نه موتور کامل تحلیل تأخیر/مونت‌کارلو و خروجی‌های نمایشی آن.
+- راه‌اندازی از checkout تازه: `npm ci`، سپس `npm test` (ساخت bundleهای سرور، شامل `build:rccws`، `build:monitoring` و `build:sxws`)، سپس فقط `PERSIST_DRIVER=json DATA_DIR=./server/rundata PORT=4000 node server/index.js`.
+- دستور قدیمی `node server/seed.mjs` را بی‌بررسی اجرا نکنید: پس از SEC-1 نقش admin مجوز نوشتن تمام جداول کسب‌وکار را ندارد. هیچ دادهٔ نمونه‌ای برای RCC خودکار درج نمی‌شود.
+- LIVE-4: ماشین‌آلات روی API پروژه‌ای، فرم‌های ماندگار و گزارش احراز هویت‌شده؛ جزئیات و محدودیت‌ها در نقشهٔ راه. برای ثبت نقش PMO و برای تصویب دیسپچ مدیر پروژه را انتخاب کنید.
+- LIVE-5: `server/monitoringWorkspaceApi.js` و `src/services/monitoringWorkspace.ts`؛ صفحهٔ مشترک همهٔ ورودی‌های پایش، مجوز هر منبع، EVM دارای مهر/ورودی سازگار، پیش‌نگر، مصوبات و هشدار واقعی، منشأ/تاریخ/وضعیت داده، خروجی داخلی JSON. PHI/پیش‌بینی تازه/ACK ماندگار/گزارش قراردادی ساخته نشده‌اند؛ جزئیات مرز تحویل در نقشهٔ راه.
+- LIVE-6: `server/strategyExcellenceWorkspaceApi.js` و `src/services/strategyExcellenceWorkspace.ts`، فرم مشترک `PersistentBusinessWorkspace` و بازنویسی StrategyWorkspace/EfqmPanel؛ مهاجرت **0037** برای دو جدول، چهار مجوز مستقل، PMO/مدیر ارشد ویرایش و مدیر پروژه مشاهده. مدل تعالی داخلی نه‌معیاره است، نه EFQM 2020/گواهی رسمی؛ مرزها و ظرفیت و نبود تراکنش اتمی ممیزی در نقشهٔ راه ثبت‌اند.
+- قبل از آزمون‌های runtime، API پیش‌نمایش را متوقف کنید. پنج suite مشترک قفل `server/rundata/.rest-test-lock` دارند؛ پس از kill اجباری آزمون، فقط با اطمینان از نبود آزمون فعال، قفل باقی‌مانده را پاک کنید. این راهکار مجوز چند API هم‌زمان با JSON نیست.
+- پیش‌نمایش فعال: وب ۵۱۷۳، API ۴۰۰۰ با JSON و `server/rundata`. HTTP وب و API پراکسی بررسی شده؛ آزمون بصری مرورگر/SQL Server انجام نشده است.
+
+---
 
 ## وضعیت نشست جاری (۲۰۲۶-۰۹-۱۴)
 
@@ -81,7 +96,7 @@ G1 اجرای Migration روی SQL Server · G2 جایگزینی in-memory با 
 - `.gitignore` اضافه شد: `node_modules/`, `dist/`, `test-results/`, `playwright-report/`, `.env`
 
 ## نکات فنی باز
-- `src/ForensicClaimsHub.tsx` (بازبینی FIX-4): خطای نحوی **ندارد** (esbuild و tsc آن را تجزیه می‌کنند). فایل میراثی است، در `tsconfig.exclude` است و import نشده؛ به `Widget` و `WorkspaceHeader` تعریف‌نشده و بستهٔ نصب‌نشدهٔ `lucide-react` ارجاع دارد (مثل ۷ فایل میراثی دیگر). طبق BASELINE حذف نمی‌شود؛ محتوایش در LIVE-3 (ریسک و ادعاها) به ورک‌اسپیس جدید منتقل می‌شود.
+- `src/ForensicClaimsHub.tsx` (بازبینی FIX-4): خطای نحوی **ندارد** (esbuild و tsc آن را تجزیه می‌کنند). فایل میراثی است، در `tsconfig.exclude` است و import نشده؛ به `Widget` و `WorkspaceHeader` تعریف‌نشده و بستهٔ نصب‌نشدهٔ `lucide-react` ارجاع دارد (مثل ۷ فایل میراثی دیگر). طبق BASELINE حذف نمی‌شود؛ در LIVE-3 مفاهیم اصلی به ورک‌اسپیس جدید منتقل شد؛ مهاجرت کامل موتورهای نمایشی/خروجی‌ها انجام نشده است (جزئیات در نقشهٔ راه).
 - `jalaali-js` فقط CJS است؛ در `server/index.js` با interop امن import می‌شود.
 - سازنده محصول در هدر App: محمدرضا هاشمی‌پور
 

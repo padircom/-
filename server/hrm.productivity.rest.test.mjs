@@ -32,7 +32,8 @@ async function req(path, { user = "u-planner", method = "GET", body } = {}) {
 /** ساخت فعالیت با بودجهٔ نفر-ساعت روی جدول عمومی. */
 async function makeActivity(id, budgetMh, physicalPct, code) {
   return req("/api/data/Activity", {
-    user: "u-admin", method: "POST",
+    // SEC-1: activity setup requires schedule.edit, which admin does not hold.
+    user: "u-planner", method: "POST",
     body: {
       Id: id, ProjectId: PROJECT, Code: code ?? id, NameFa: `فعالیت ${id}`,
       PlannedStart: "2026-05-01", PlannedFinish: "2026-05-31",

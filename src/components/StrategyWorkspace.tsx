@@ -1,159 +1,55 @@
-import { Fragment, useMemo, useState } from "react";
-import { type Lang } from "../data/framework";
-import {
-  INITIATIVES_SEED,
-  OBJECTIVES_SEED,
-  type Perspective,
-  evaluateStrategy,
-} from "../services/strategy";
-
-/* ══════════════════════════════════════════════════════════════════════
-   «مدیریت استراتژیک» — دامنهٔ d20
-   نقشه‌ی استراتژی در چهار منظرِ BSC، درختِ هدف/شاخص و سبدِ ابتکارات.
-   خروجیِ اصلی: کدام هدف از مسیر خارج شده و کدام ابتکار اثرِ بیشتری دارد.
-   ══════════════════════════════════════════════════════════════════════ */
-
-const perspColor: Record<Perspective, string> = {
-  financial: "#7FB2FF",
-  customer: "#34D399",
-  process: "#FBBF24",
-  learning: "#A78BFA",
-};
-
-const statusLabel = (s: "on_track" | "at_risk" | "delayed", rtl: boolean) =>
-  s === "on_track" ? (rtl ? "طبق برنامه" : "On track") : s === "at_risk" ? (rtl ? "در خطر" : "At risk") : (rtl ? "تأخیر" : "Delayed");
-
-const statusColor = (s: "on_track" | "at_risk" | "delayed") =>
-  s === "on_track" ? "#34D399" : s === "at_risk" ? "#FBBF24" : "#F87171";
-
-export default function StrategyWorkspace({ lang }: { lang: Lang }) {
-  const rtl = lang === "fa";
-  const [open, setOpen] = useState<string | null>("o1");
-  const res = useMemo(() => evaluateStrategy(OBJECTIVES_SEED, INITIATIVES_SEED), []);
-
-  const pct = (n: number) => `${(n * 100).toLocaleString(rtl ? "fa-IR" : "en-US", { maximumFractionDigits: 1 })}%`;
-  const money = (n: number) =>
-    `${(n / 1_000_000_000).toLocaleString(rtl ? "fa-IR" : "en-US", { maximumFractionDigits: 1 })} ${rtl ? "میلیارد ریال" : "B IRR"}`;
-  const num = (n: number) => Math.round(n).toLocaleString(rtl ? "fa-IR" : "en-US");
-
-  return (
-    <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden" dir={rtl ? "rtl" : "ltr"}>
-      <div className="grid grid-cols-2 gap-2 xl:grid-cols-4">
-        <Cell label={rtl ? "تحققِ استراتژی" : "Strategy attainment"} value={pct(res.attainment)} tone={res.attainment >= 0.9 ? "#34D399" : res.attainment >= 0.75 ? "#FBBF24" : "#F87171"} hint={rtl ? "میانگینِ وزنیِ چهار منظر" : "weighted mean of four perspectives"} />
-        <Cell label={rtl ? "اهدافِ خارج از مسیر" : "Off-track objectives"} value={num(res.offTrackObjectives.length)} tone={res.offTrackObjectives.length ? "#F87171" : "#34D399"} hint={rtl ? "تحققِ کمتر از ۹۰٪" : "attainment below 90%"} />
-        <Cell label={rtl ? "ابتکاراتِ فعال" : "Active initiatives"} value={num(res.priorityInitiatives.length)} hint={rtl ? "شش ابتکارِ جاری" : "six running initiatives"} />
-        <Cell label={rtl ? "مصرفِ بودجهٔ ابتکارات" : "Initiative budget used"} value={pct(res.budgetUtilisation)} hint={rtl ? "هزینه‌شده ÷ مصوب" : "spent ÷ approved"} />
-      </div>
-
-      {/* منظرها */}
-      <div className="grid shrink-0 grid-cols-2 gap-2 xl:grid-cols-4">
-        {res.perspectives.map((p) => (
-          <div key={p.code} className="rounded-xl border b-line-soft bg-[var(--row)] p-2.5">
-            <div className="flex items-baseline justify-between">
-              <span className="text-[10px] font-light tx1">{rtl ? p.label.fa : p.label.en}</span>
-              <span className="text-[9px] tx4" dir="ltr">{num(p.weight)}%</span>
-            </div>
-            <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-[var(--row-hover)]">
-              <div className="h-full rounded-full" style={{ width: `${Math.min(100, p.attainment * 100)}%`, background: perspColor[p.code] }} />
-            </div>
-            <div className="mt-1 text-[11px] font-light" style={{ color: perspColor[p.code] }}>{pct(p.attainment)}</div>
-          </div>
-        ))}
-      </div>
-
-      {/* درختِ هدف / شاخص */}
-      <div className="thin-scroll min-h-0 flex-1 overflow-auto rounded-xl border b-line-soft">
-        <table className="w-full border-collapse text-[10px]">
-          <thead className="sticky top-0 bg-[var(--panel2)]">
-            <tr className="tx4">
-              <th className="px-2 py-2 text-start font-light">{rtl ? "هدف / شاخص" : "Objective / KPI"}</th>
-              <th className="px-2 py-2 text-start font-light">{rtl ? "منظر" : "Perspective"}</th>
-              <th className="px-2 py-2 text-end font-light" dir="ltr">{rtl ? "مبنا" : "Base"}</th>
-              <th className="px-2 py-2 text-end font-light" dir="ltr">{rtl ? "هدف" : "Target"}</th>
-              <th className="px-2 py-2 text-end font-light" dir="ltr">{rtl ? "واقعی" : "Actual"}</th>
-              <th className="px-2 py-2 text-end font-light">{rtl ? "تحقق" : "Attainment"}</th>
-              <th className="px-2 py-2 text-end font-light">{rtl ? "اثر" : "Leverage"}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {res.perspectives.flatMap((p) =>
-              p.objectives.map((o) => (
-                <Fragment key={o.id}>
-                  <tr
-                    key={o.id}
-                    className="cursor-pointer border-t border-[var(--line-soft)] bg-[var(--row)] hover:bg-[var(--row-hover)]"
-                    onClick={() => setOpen(open === o.id ? null : o.id)}
-                  >
-                    <td className="px-2 py-1.5 tx1">
-                      <span className="tx4 me-1">{open === o.id ? "▾" : "▸"}</span>
-                      {rtl ? o.title.fa : o.title.en}
-                    </td>
-                    <td className="px-2 py-1.5 tx3">
-                      <span className="inline-flex items-center gap-1">
-                        <i className="h-1.5 w-1.5 rounded-full" style={{ background: perspColor[p.code] }} />
-                        {rtl ? p.label.fa : p.label.en}
-                      </span>
-                    </td>
-                    <td className="px-2 py-1.5 text-end tx4">—</td>
-                    <td className="px-2 py-1.5 text-end tx4">—</td>
-                    <td className="px-2 py-1.5 text-end tx4">—</td>
-                    <td className="px-2 py-1.5 text-end tx1" style={{ color: o.offTrack ? "#F87171" : "#34D399" }} dir="ltr">{pct(o.attainment)}</td>
-                    <td className="px-2 py-1.5 text-end tx3" dir="ltr">{num(o.leverage)}%</td>
-                  </tr>
-                  {open === o.id &&
-                    o.kpis.map((k) => (
-                      <tr key={k.id} className="border-t border-[var(--line-soft)]">
-                        <td className="ps-6 px-2 py-1.5 tx2">
-                          {rtl ? k.name.fa : k.name.en} <span className="tx4">· {rtl ? k.unit.fa : k.unit.en}</span>
-                        </td>
-                        <td className="px-2 py-1.5 tx4">{rtl ? `وزن ${num(k.weight)}` : `w ${num(k.weight)}`}</td>
-                        <td className="px-2 py-1.5 text-end tx3" dir="ltr">{num(k.baseline)}</td>
-                        <td className="px-2 py-1.5 text-end tx3" dir="ltr">{num(k.target)}</td>
-                        <td className="px-2 py-1.5 text-end tx1" dir="ltr">{num(k.actual)}</td>
-                        <td className="px-2 py-1.5 text-end" dir="ltr" style={{ color: k.offTrack ? "#FBBF24" : "#34D399" }}>{pct(k.attainment)}</td>
-                        <td className="px-2 py-1.5" />
-                      </tr>
-                    ))}
-                </Fragment>
-              )),
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      {/* ابتکارات */}
-      <div className="shrink-0">
-        <div className="mb-1 text-[9.5px] font-light tx3">
-          {rtl ? "اولویتِ مداخله — اثرِ وزنی × فاصله تا تکمیل" : "Intervention priority — weighted impact × remaining gap"}
-        </div>
-        <div className="flex gap-2 overflow-x-auto pb-1">
-          {res.priorityInitiatives.map((i) => (
-            <div key={i.id} className="min-w-[190px] flex-1 rounded-xl border b-line-soft bg-[var(--row)] p-2.5">
-              <div className="truncate text-[10px] font-light tx1">{rtl ? i.name.fa : i.name.en}</div>
-              <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-[var(--row-hover)]">
-                <div className="h-full rounded-full" style={{ width: `${i.progress}%`, background: statusColor(i.status) }} />
-              </div>
-              <div className="mt-1 flex items-center justify-between text-[9px]">
-                <span style={{ color: statusColor(i.status) }}>{statusLabel(i.status, rtl)}</span>
-                <span className="tx3" dir="ltr">{i.progress}%</span>
-              </div>
-              <div className="mt-0.5 text-[8.5px] tx4" dir="ltr">
-                {money(i.spent)} / {money(i.budget)}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
+import { type Lang } from '../data/framework';
+import { useAuth } from '../context/AuthContext';
+import PersistentBusinessWorkspace, { BusinessField as Field } from './PersistentBusinessWorkspace';
+import { PERSPECTIVES, type StrategyInput, type StrategyObjective, type StrategyInitiative, type StrategyKpi, type strategyMetrics } from '../services/strategyExcellenceWorkspace';
+const nextCode=(prefix:string,items:{Code:string}[])=>{let n=1;while(items.some(i=>i.Code===prefix+n))n++;return prefix+n;};
+const numeric=(v:string)=>v===''?null:Number(v);
+const action='rounded-lg border b-line-soft px-2 py-1.5 text-xs tx2 disabled:opacity-40';
+export default function StrategyWorkspace({lang,projectId}:{lang:Lang;projectId:string}) {
+  const {user}=useAuth(),fa=lang==='fa',t=(a:string,b:string)=>fa?a:b;
+  return <PersistentBusinessWorkspace<StrategyInput,ReturnType<typeof strategyMetrics>> key={`${projectId}:${user?.id}`} lang={lang} projectId={projectId} userId={user?.id??null} path="spm" resource="plans"
+    title={t('استراتژی — برنامه‌های ذخیره‌شده','Strategy — persisted plans')}
+    notice={t('BSC داخلی: چهار منظر با وزن ۳۰/۲۵/۲۵/۲۰. تحقق، پیشرفت از مبنا به هدف با سقف ۱۰۰٪ است؛ دادهٔ واقعیِ نامعلوم، صفر نیست. ارقام ابتکارات اظهار دستی‌اند، نه دفتر هزینهٔ مالی.','Internal BSC: four perspectives weighted 30/25/25/20. Attainment is baseline-to-target progress capped at 100%; missing observations are not zero. Initiative costs are manually declared, not the finance ledger.')}
+    newValue={()=>({Code:'',TitleFa:'',DataDate:new Date().toISOString().slice(0,10),Objectives:[],Initiatives:[]})}
+    editor={(v,set)=><StrategyEditor value={v} set={set} lang={lang}/>}
+    result={row=>{
+      const fmt=(n:number|null)=>n===null?'—':n.toLocaleString(fa?'fa-IR':'en-US',{maximumFractionDigits:2});
+      const pct=(n:number|null)=>n===null?'—':fmt(n*100)+'%';
+      return <>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">{[[t('تحقق کل','Overall attainment'),pct(row.metrics.attainment)],[t('اهداف زیر ۹۰٪','Objectives below 90%'),fmt(row.metrics.offTrack)],[t('اهداف با دادهٔ ناقص','Objectives with missing data'),fmt(row.metrics.unknownObjectives)],[t('ابتکارات فعال','Active initiatives'),fmt(row.metrics.activeInitiatives)]].map(([label,value])=><div key={label} className="rounded-lg border b-line-soft p-3"><p className="text-xs tx3">{label}</p><p className="text-xl tx1">{value}</p></div>)}</div>
+        <p className="text-xs tx3">{t('تحقق کل تنها با دادهٔ کامل هر چهار منظر محاسبه می‌شود. وزن اهداف و شاخص‌ها در گروه خود نرمال می‌شود.','Overall attainment requires complete data in all four perspectives. Objective and KPI weights are normalized within their group.')}</p>
+        <div className="grid sm:grid-cols-4 gap-2">{row.metrics.perspectives.map(m=><div key={m.code} className="border b-line-soft rounded-lg p-2 text-xs tx2">{PERSPECTIVES.find(p=>p.code===m.code)?.label[lang]} · {m.weight}%<strong className="block tx1 mt-2">{pct(m.attainment)}</strong></div>)}</div>
+        {row.Objectives.map((o,idx)=><section key={o.Code} className="border b-line-soft rounded-xl p-3 space-y-2"><h4 className="text-sm tx1">{o.Code} · {o.TitleFa} — {pct(row.metrics.objectives[idx].attainment)}</h4><div className="overflow-x-auto"><table className="w-full text-xs tx2"><thead><tr>{[t('شاخص','KPI'),t('واحد','Unit'),t('مبنا','Baseline'),t('هدف','Target'),t('واقعی','Actual'),t('وزن','Weight'),t('تحقق','Attainment')].map(s=><th key={s} className="p-2 text-start">{s}</th>)}</tr></thead><tbody>{o.Kpis.map((k,n)=><tr key={k.Code}><td className="p-2">{k.Code} · {k.TitleFa}</td><td>{k.Unit}</td><td>{fmt(k.Baseline)}</td><td>{fmt(k.Target)}</td><td>{fmt(k.Actual)}</td><td>{fmt(k.Weight)}</td><td>{pct(row.metrics.objectives[idx].kpis[n].attainment)}</td></tr>)}</tbody></table></div></section>)}
+        {row.Initiatives.map(i=><article key={i.Code} className="border b-line-soft rounded-xl p-3 text-xs tx2 space-y-1"><h4 className="tx1">{i.Code} · {i.TitleFa}</h4><p>{i.ObjectiveCodes.join(' / ')} · {i.Status} · {t('پیشرفت','Progress')}: {i.Progress===null?'—':fmt(i.Progress)+'%'}</p><p>{t('بودجه / هزینه','Budget / spent')}: {fmt(i.Budget)} / {fmt(i.Spent)} {i.Currency}</p></article>)}
+        {row.metrics.currencies.map(c=><p key={c.currency} className="text-xs tx3">{c.currency} · {t('جمع بودجه / هزینه / مصرف','Total budget / spent / utilisation')}: {fmt(c.budget)} / {fmt(c.spent)} / {pct(c.utilisation)}</p>)}
+      </>;
+    }}/>;
 }
-
-function Cell({ label, value, hint, tone }: { label: string; value: string; hint?: string; tone?: string }) {
-  return (
-    <div className="rounded-xl border b-line-soft bg-[var(--row)] p-3">
-      <div className="text-[8.5px] font-extralight tx4">{label}</div>
-      <div className="mt-1 text-[12.5px] font-light tx1" style={{ color: tone }}>{value}</div>
-      {hint && <div className="mt-0.5 text-[9px] font-extralight tx3">{hint}</div>}
-    </div>
-  );
+function StrategyEditor({value:v,set,lang}:{value:StrategyInput;set:(v:StrategyInput)=>void;lang:Lang}) {
+  const t=(a:string,b:string)=>lang==='fa'?a:b;
+  const objective=(index:number,patch:Partial<StrategyObjective>)=>{
+    const previous=v.Objectives[index].Code;
+    set({...v,Objectives:v.Objectives.map((o,n)=>n===index?{...o,...patch}:o),Initiatives:patch.Code!==undefined?v.Initiatives.map(i=>({...i,ObjectiveCodes:i.ObjectiveCodes.map(c=>c===previous?patch.Code!:c)})):v.Initiatives});
+  };
+  const kpi=(oi:number,ki:number,patch:Partial<StrategyKpi>)=>objective(oi,{Kpis:v.Objectives[oi].Kpis.map((k,n)=>n===ki?{...k,...patch}:k)});
+  const initiative=(index:number,patch:Partial<StrategyInitiative>)=>set({...v,Initiatives:v.Initiatives.map((i,n)=>n===index?{...i,...patch}:i)});
+  return <div className="space-y-3">
+    <h4 className="text-sm tx1">{t('اهداف و شاخص‌ها','Objectives and KPIs')}</h4>
+    {v.Objectives.map((o,oi)=><section key={oi} className="rounded-xl border b-line-soft p-3 space-y-3">
+      <div className="grid sm:grid-cols-4 gap-2"><Field label={t('کد هدف','Objective code')} value={o.Code} onChange={s=>objective(oi,{Code:s})}/><Field label={t('عنوان هدف','Objective title')} value={o.TitleFa} onChange={s=>objective(oi,{TitleFa:s})}/><label className="text-xs tx3">{t('منظر','Perspective')}<select className="block w-full rounded-lg border b-line-soft bg-[var(--row)] mt-1 p-2 tx1" value={o.Perspective} onChange={e=>objective(oi,{Perspective:e.target.value})}>{PERSPECTIVES.map(p=><option key={p.code} value={p.code}>{p.label[lang]}</option>)}</select></label><Field label={t('وزن هدف','Objective weight')} type="number" min={.001} max={100} value={o.Weight} onChange={s=>objective(oi,{Weight:numeric(s)!})}/></div>
+      {o.Kpis.map((k,ki)=><div key={ki} className="rounded-lg bg-[var(--row)] p-2 space-y-2"><div className="grid sm:grid-cols-3 xl:grid-cols-5 gap-2">
+        <Field label={t('کد شاخص','KPI code')} value={k.Code} onChange={s=>kpi(oi,ki,{Code:s})}/><Field label={t('نام شاخص','KPI title')} value={k.TitleFa} onChange={s=>kpi(oi,ki,{TitleFa:s})}/><Field label={t('واحد','Unit')} value={k.Unit} onChange={s=>kpi(oi,ki,{Unit:s})}/>
+        <Field label={t('مبنا','Baseline')} type="number" value={k.Baseline} onChange={s=>kpi(oi,ki,{Baseline:numeric(s)!})}/><Field label={t('هدف','Target')} type="number" value={k.Target} onChange={s=>kpi(oi,ki,{Target:numeric(s)!})}/><Field label={t('واقعی — خالی یعنی نامعلوم','Actual — blank means unknown')} type="number" optional value={k.Actual} onChange={s=>kpi(oi,ki,{Actual:numeric(s)})}/><Field label={t('وزن شاخص','KPI weight')} type="number" min={.001} max={100} value={k.Weight} onChange={s=>kpi(oi,ki,{Weight:numeric(s)!})}/>
+        <label className="text-xs tx3">{t('جهت','Direction')}<select className="block w-full rounded-lg border b-line-soft bg-[var(--row)] mt-1 p-2 tx1" value={k.Direction} onChange={e=>kpi(oi,ki,{Direction:e.target.value as 'up'|'down'})}><option value="up">{t('افزایش بهتر است','Higher is better')}</option><option value="down">{t('کاهش بهتر است','Lower is better')}</option></select></label>
+      </div><button type="button" className={action} onClick={()=>objective(oi,{Kpis:o.Kpis.filter((_,n)=>n!==ki)})}>{t('حذف شاخص از پیش‌نویس','Remove draft KPI')}</button></div>)}
+      <div className="flex flex-wrap gap-2"><button type="button" className={action} disabled={o.Kpis.length>=20} onClick={()=>objective(oi,{Kpis:[...o.Kpis,{Code:nextCode('K',o.Kpis),TitleFa:'',Unit:'',Baseline:0,Target:100,Actual:null,Direction:'up',Weight:1}]})}>{t('افزودن شاخص','Add KPI')}</button><button type="button" className={action} disabled={v.Initiatives.some(i=>i.ObjectiveCodes.includes(o.Code))} onClick={()=>set({...v,Objectives:v.Objectives.filter((_,n)=>n!==oi)})}>{t('حذف هدف — فقط بدون پیوند ابتکار','Remove objective — only when unlinked')}</button></div>
+    </section>)}
+    <button type="button" className={action} disabled={v.Objectives.length>=30} onClick={()=>set({...v,Objectives:[...v.Objectives,{Code:nextCode('O',v.Objectives),TitleFa:'',Perspective:'financial',Weight:1,Kpis:[]}]})}>{t('افزودن هدف','Add objective')}</button>
+    <h4 className="text-sm tx1">{t('ابتکارات — ارقام اظهارشده','Initiatives — declared figures')}</h4>
+    {v.Initiatives.map((i,idx)=><section key={idx} className="rounded-xl border b-line-soft p-3 space-y-2"><div className="grid sm:grid-cols-3 gap-2"><Field label={t('کد ابتکار','Initiative code')} value={i.Code} onChange={s=>initiative(idx,{Code:s})}/><Field label={t('عنوان','Title')} value={i.TitleFa} onChange={s=>initiative(idx,{TitleFa:s})}/><Field label={t('پیشرفت — اختیاری','Progress — optional')} type="number" min={0} max={100} optional value={i.Progress} onChange={s=>initiative(idx,{Progress:numeric(s)})}/><Field label={t('بودجه — اختیاری','Budget — optional')} type="number" min={0} optional value={i.Budget} onChange={s=>initiative(idx,{Budget:numeric(s)})}/><Field label={t('هزینه — اختیاری','Spent — optional')} type="number" min={0} optional value={i.Spent} onChange={s=>initiative(idx,{Spent:numeric(s)})}/><Field label={t('ارز (IRR / USD / …)','Currency (IRR / USD / …)')} value={i.Currency} onChange={s=>initiative(idx,{Currency:s.toUpperCase()})}/><label className="text-xs tx3">{t('وضعیت اظهارشده','Declared status')}<select className="block w-full rounded-lg border b-line-soft bg-[var(--row)] mt-1 p-2 tx1" value={i.Status} onChange={e=>initiative(idx,{Status:e.target.value as StrategyInitiative['Status']})}>{(['on_track','at_risk','delayed','completed'] as const).map(s=><option key={s} value={s}>{s}</option>)}</select></label></div>
+      <div className="flex flex-wrap gap-3 text-xs tx2">{t('اهداف پشتیبانی‌شده:','Supports objectives:')}{v.Objectives.map(o=><label key={o.Code}><input type="checkbox" checked={i.ObjectiveCodes.includes(o.Code)} onChange={e=>initiative(idx,{ObjectiveCodes:e.target.checked?[...i.ObjectiveCodes,o.Code]:i.ObjectiveCodes.filter(c=>c!==o.Code)})}/> {o.Code} · {o.TitleFa}</label>)}</div>
+      <button type="button" className={action} onClick={()=>set({...v,Initiatives:v.Initiatives.filter((_,n)=>n!==idx)})}>{t('حذف ابتکار از پیش‌نویس','Remove draft initiative')}</button>
+    </section>)}
+    <button type="button" className={action} disabled={!v.Objectives.length||v.Initiatives.length>=100} onClick={()=>set({...v,Initiatives:[...v.Initiatives,{Code:nextCode('I',v.Initiatives),TitleFa:'',ObjectiveCodes:[v.Objectives[0].Code],Progress:null,Budget:null,Spent:null,Currency:'IRR',Status:'on_track'}]})}>{t('افزودن ابتکار','Add initiative')}</button>
+  </div>;
 }

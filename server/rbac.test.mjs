@@ -67,7 +67,9 @@ test("کاتالوگ: نسخه موتور و اندازه‌ها", () => {
      + ۴ میز کار هزینه و تأمین LIVE-1 (ثبت هزینه، ثبت خرید/موجودی،
        تأیید PR، آزادسازی ذخیره)؛
      ۲۰ نقش پیشین + افسر ایمنی و بهداشت. */
-  assert.equal(PERMISSION_CATALOG.length, 186);
+  // LIVE-4 adds three explicit machinery permissions; existing roles are not made superusers.
+  // LIVE-6: four explicit strategy/excellence view/edit permissions.
+  assert.equal(PERMISSION_CATALOG.length, 193);
   assert.equal(ROLE_CATALOG.length, 21);
 });
 

@@ -216,6 +216,19 @@ const req = (name: string, kind: ColumnKind, extra: Partial<ColumnDef> = {}): Co
 const id = (): ColumnDef => ({ name: "Id", kind: "text", len: 60, nullable: false });
 
 export const SCHEMA: TableDef[] = [
+  /* LIVE-6: aggregate rows keep a whole plan/assessment under one optimistic version.
+   * Children are schema-validated JSON, not public generic CRUD tables. */
+  {
+    name: "StrategyPlan", module: "d20", title: { fa: "برنامهٔ استراتژیک", en: "Strategy plan" }, pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("Code", "text", { len: 40 }), req("TitleFa", "text", { len: 300 }), req("DataDate", "date"), req("ModelVersion", "text", { len: 40 }), req("Objectives", "json"), req("Initiatives", "json")],
+    indexes: [{ name: "UX_StrategyPlan_Code", columns: ["ProjectId", "Code"], unique: true }],
+  },
+  {
+    name: "ExcellenceAssessment", module: "d19", title: { fa: "خودارزیابی داخلی تعالی", en: "Internal excellence self-assessment" }, pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("Code", "text", { len: 40 }), req("TitleFa", "text", { len: 300 }), req("DataDate", "date"), req("ModelVersion", "text", { len: 40 }), req("Scores", "json"), c("Notes", "text", { len: 6000 })],
+    indexes: [{ name: "UX_ExcellenceAssessment_Code", columns: ["ProjectId", "Code"], unique: true }],
+  },
+
   /* ── هسته ── */
   {
     name: "SchemaMigration",
@@ -482,7 +495,7 @@ export const SCHEMA: TableDef[] = [
     module: "d4",
     title: { fa: "ریسک", en: "Risk" },
     pk: "Id",
-    columns: [id(), req("ProjectId", "text", { len: 60 }), req("Code", "text", { len: 40 }), req("TitleFa", "text", { len: 400 }), req("Category", "text", { len: 40 }), req("Probability", "int"), req("Impact", "int"), c("Score", "int"), req("Status", "text", { len: 30 }), c("Owner", "text", { len: 120 }), c("Response", "text", { len: 1000 })],
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("Code", "text", { len: 40 }), req("TitleFa", "text", { len: 400 }), req("Category", "text", { len: 40 }), req("Probability", "int"), req("Impact", "int"), c("Score", "int"), req("Status", "text", { len: 30 }), c("Owner", "text", { len: 120 }), c("Response", "text", { len: 1000 }), c("Cause", "text", { len: 1000 }), c("Event", "text", { len: 1000 }), c("Effect", "text", { len: 1000 }), c("SourceRef", "text", { len: 200 })],
     indexes: [{ name: "UX_Risk_Code", columns: ["ProjectId", "Code"], unique: true }],
     foreignKeys: [{ column: "ProjectId", refTable: "Project", refColumn: "Id", onDelete: "CASCADE" }],
   },
@@ -491,7 +504,7 @@ export const SCHEMA: TableDef[] = [
     module: "d4",
     title: { fa: "درخواست تغییر", en: "Change request" },
     pk: "Id",
-    columns: [id(), req("ProjectId", "text", { len: 60 }), req("Code", "text", { len: 40 }), req("TitleFa", "text", { len: 400 }), req("RaisedBy", "text", { len: 60 }), req("RaisedAt", "date"), c("CostImpact", "decimal", { precision: 18, scale: 2 }), c("TimeImpactDays", "int"), req("Status", "text", { len: 30 }), c("ApprovedBy", "text", { len: 60 }), c("ApprovedAt", "datetime")],
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("Code", "text", { len: 40 }), req("TitleFa", "text", { len: 400 }), req("RaisedBy", "text", { len: 60 }), req("RaisedAt", "date"), c("CostImpact", "decimal", { precision: 18, scale: 2 }), c("TimeImpactDays", "int"), req("Status", "text", { len: 30 }), c("ApprovedBy", "text", { len: 60 }), c("ApprovedAt", "datetime"), c("Reason", "text", { len: 1000 }), c("Assessment", "json"), c("DecisionReason", "text", { len: 1000 })],
     indexes: [{ name: "UX_ChangeRequest_Code", columns: ["ProjectId", "Code"], unique: true }],
   },
   {
@@ -499,7 +512,7 @@ export const SCHEMA: TableDef[] = [
     module: "d4",
     title: { fa: "ادعا", en: "Claim" },
     pk: "Id",
-    columns: [id(), req("ProjectId", "text", { len: 60 }), req("Code", "text", { len: 40 }), req("TitleFa", "text", { len: 400 }), req("NoticeDate", "date"), c("SubmittedAt", "date"), c("Amount", "decimal", { precision: 18, scale: 2 }), c("ExtensionDays", "int"), req("Status", "text", { len: 30 }), req("TimeBarred", "bool", { default: "0" })],
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("Code", "text", { len: 40 }), req("TitleFa", "text", { len: 400 }), req("NoticeDate", "date"), c("SubmittedAt", "date"), c("Amount", "decimal", { precision: 18, scale: 2 }), c("ExtensionDays", "int"), req("Status", "text", { len: 30 }), req("TimeBarred", "bool", { default: "0" }), c("EventDate", "date"), c("NoticeDays", "int"), c("NoticeDeliveredAt", "datetime"), c("NoticeRef", "text", { len: 200 }), c("Clause", "text", { len: 200 }), c("EvidenceRef", "text", { len: 1000 }), c("Entitlement", "text", { len: 1000 }), c("Causation", "text", { len: 1000 }), c("QuantumNote", "text", { len: 1000 }), c("BaselineId", "text", { len: 60 }), c("DataDate", "date"), c("SubmittedBy", "text", { len: 60 })],
     indexes: [{ name: "UX_Claim_Code", columns: ["ProjectId", "Code"], unique: true }],
   },
 
@@ -4457,6 +4470,24 @@ export const MIGRATIONS: Migration[] = [
       }),
     ],
   },
+  {
+    version: "0036",
+    name: "rcc_workspace_live",
+    statements: [
+      ...["Cause", "Event", "Effect", "SourceRef"].map(col => addColumnDdl("Risk", col, "mssql")),
+      ...["Reason", "Assessment", "DecisionReason"].map(col => addColumnDdl("ChangeRequest", col, "mssql")),
+      ...["EventDate", "NoticeDays", "NoticeDeliveredAt", "NoticeRef", "Clause", "EvidenceRef", "Entitlement", "Causation", "QuantumNote", "BaselineId", "DataDate", "SubmittedBy"].map(col => addColumnDdl("Claim", col, "mssql")),
+    ],
+  },
+
+  {
+    version: "0037", name: "strategy_excellence_live",
+    statements: ["StrategyPlan", "ExcellenceAssessment"].flatMap(n => {
+      const t = TABLE_BY_NAME.get(n)!;
+      return [tableDdl(t, "mssql"), ...(t.indexes ?? []).map(i => indexDdl(t, i, "mssql"))];
+    }),
+  },
+
 ];
 
 export function pendingMigrations(applied: AppliedMigration[], all: Migration[] = MIGRATIONS): Migration[] {

@@ -63,7 +63,8 @@ async function approvedSheet(crewId, workDate, cbsId, projectId = PROJECT) {
 async function account(id, projectId, actual = 0) {
   const res = await fetch(`${BASE}/api/data/CostAccount`, {
     method: "POST",
-    headers: { "content-type": "application/json", "x-user-id": "u-admin" },
+    // SEC-1: budget fixtures need budget permission; admin is not a business superuser.
+    headers: { "content-type": "application/json", "x-user-id": "u-ceo" },
     body: JSON.stringify({
       Id: id, ProjectId: projectId, Code: id, TitleFa: "حساب نیرو",
       Budget: 999999, Committed: 0, Actual: actual, Currency: "IRR",

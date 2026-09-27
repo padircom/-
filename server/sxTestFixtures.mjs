@@ -1,0 +1,3 @@
+/** Test-only input factories; never seeded into a running user's workspace. */
+export const strategyInput=(code='PLAN')=>({Code:code,TitleFa:'برنامهٔ آزمون',DataDate:new Date().toISOString().slice(0,10),Objectives:[{Code:'O1',TitleFa:'هدف آزمون',Perspective:'financial',Weight:1,Kpis:[{Code:'K1',TitleFa:'شاخص آزمون',Unit:'%',Baseline:0,Target:100,Actual:50,Direction:'up',Weight:1}]}],Initiatives:[{Code:'I1',TitleFa:'ابتکار آزمون',ObjectiveCodes:['O1'],Progress:20,Budget:100,Spent:25,Currency:'IRR',Status:'on_track'}]});
+export const excellenceInput=(code='ASSESS')=>({Code:code,TitleFa:'ارزیابی آزمون',DataDate:new Date().toISOString().slice(0,10),Scores:{C1:{a:40,b:60,evidence:'DOC-TEST',strengths:'نقطهٔ قوت',improvements:'فرصت بهبود'}},Notes:'یادداشت آزمون'});

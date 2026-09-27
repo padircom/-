@@ -89,7 +89,8 @@ before(async () => {
    * ماژول دیگر روی همان حساب دست‌نخورده می‌ماند. */
   const acc = await fetch(`${BASE}/api/data/CostAccount`, {
     method: "POST",
-    headers: { "content-type": "application/json", "x-user-id": "u-admin" },
+    // SEC-1: budget fixtures need budget permission; admin is not a business superuser.
+    headers: { "content-type": "application/json", "x-user-id": "u-ceo" },
     body: JSON.stringify({
       Id: "CBS-1", ProjectId: PROJECT, Code: "CBS-1",
       TitleFa: "هزینهٔ مستقیم نیرو", Budget: 100000, Committed: 0,
@@ -426,7 +427,8 @@ test("برگه نمی‌تواند حساب هزینهٔ پروژهٔ دیگر �
    * کرد. نمایهٔ حساب‌ها حالا با `ProjectId` فیلتر می‌شود. */
   const acc = await fetch(`${BASE}/api/data/CostAccount`, {
     method: "POST",
-    headers: { "content-type": "application/json", "x-user-id": "u-admin" },
+    // SEC-1: budget fixtures need budget permission; admin is not a business superuser.
+    headers: { "content-type": "application/json", "x-user-id": "u-ceo" },
     body: JSON.stringify({
       Id: "CBS-OTHER", ProjectId: OTHER, Code: "CBS-OTHER",
       TitleFa: "حساب پروژهٔ دیگر", Budget: 9999, Committed: 0, Actual: 777, Currency: "IRR",
