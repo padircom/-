@@ -81,7 +81,7 @@ G1 اجرای Migration روی SQL Server · G2 جایگزینی in-memory با 
 - `.gitignore` اضافه شد: `node_modules/`, `dist/`, `test-results/`, `playwright-report/`, `.env`
 
 ## نکات فنی باز
-- `src/ForensicClaimsHub.tsx:1424` خطای نحوی از قبل دارد؛ هیچ‌جا import نشده (خارج از دامنه کار GOV).
+- `src/ForensicClaimsHub.tsx` (بازبینی FIX-4): خطای نحوی **ندارد** (esbuild و tsc آن را تجزیه می‌کنند). فایل میراثی است، در `tsconfig.exclude` است و import نشده؛ به `Widget` و `WorkspaceHeader` تعریف‌نشده و بستهٔ نصب‌نشدهٔ `lucide-react` ارجاع دارد (مثل ۷ فایل میراثی دیگر). طبق BASELINE حذف نمی‌شود؛ محتوایش در LIVE-3 (ریسک و ادعاها) به ورک‌اسپیس جدید منتقل می‌شود.
 - `jalaali-js` فقط CJS است؛ در `server/index.js` با interop امن import می‌شود.
 - سازنده محصول در هدر App: محمدرضا هاشمی‌پور
 

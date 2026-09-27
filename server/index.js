@@ -19,6 +19,8 @@ import nodemailer from "nodemailer";
 import { createWorker } from "tesseract.js";
 import { applyGuardian } from "./rccLogic.js";
 import { registerDprDocRoutes } from "./dprDocApi.js";
+import { registerFinWorkspaceRoutes } from "./finWorkspaceApi.js";
+import { registerCkmWorkspaceRoutes } from "./ckmWorkspaceApi.js";
 import { canDprTransition, openDprBlocked, validateDpr } from "./pexDprLogic.js";
 import { inspectionBand, inspectionScore, nextInspectionDue, ptwCanTransition, ptwMissing, severityWeight, validateIncident, validateInspection, validatePermit, woPermitGate } from "./hseFieldLogic.js";
 import {
@@ -542,7 +544,6 @@ import {
 const jalaali = (jalaaliNs.default ?? jalaaliNs);
 
 const app = express();
-registerDprDocRoutes(app);
 const PORT = Number(process.env.PORT || 4000);
 const startedAt = Date.now();
 
@@ -571,12 +572,25 @@ async function repo() {
   return persistence.repo;
 }
 
+/* LIVE-2: جدول‌های d11 از CRUD عمومی بیرون آمدند. مکاتبات «محرمانه»اند و
+ * CRUD عمومی هیچ کنترل مجوزی ندارد؛ ثبت و خواندن فقط از `/api/ckm/:projectId`
+ * با اعتبارسنجی موتور CKM، تفکیک وظیفه و لاگ ممیزی. */
+const DEDICATED_TABLE_ROUTES = {
+  Correspondence: "/api/ckm/:projectId/letters",
+  MeetingMinute: "/api/ckm/:projectId/meetings",
+  MeetingAction: "/api/ckm/:projectId/meetings/:code/actions",
+  LessonLearned: "/api/ckm/:projectId/lessons",
+  LessonReuse: "/api/ckm/:projectId/lessons/:code/reuse",
+  Stakeholder: "/api/ckm/:projectId/stakeholders",
+  NotificationRule: "/api/ckm/:projectId/rules",
+};
+
 /** جدول‌هایی که از راه REST عمومی قابل دسترسی‌اند — بقیه فقط از مسیر اختصاصی خودشان. */
 const PUBLIC_TABLES = new Set([
   "Industry", "Project", "Document", "Transmittal", "WbsNode", "Activity", "ActivityRelation",
   "Baseline", "Period", "ProgressEntry", "EvmSnapshot", "KpiSnapshot", "Risk", "ChangeRequest",
   "Claim", "CostAccount", "PaymentCertificate", "Ncr", "InspectionRecord", "WorkforceMember",
-  "Timesheet", "Correspondence", "MeetingMinute", "LessonLearned", "ReportIssue",
+  "Timesheet", "ReportIssue",
   "Equipment", "EquipmentMeter", "EquipmentRental", "MaintenanceOrder",
   "EquipmentDispatch", "EquipmentFuelLog", "PmSchedule", "SparePart", "PartTransaction",
   "ProcessTree",
@@ -783,6 +797,13 @@ app.use((req, res, next) => {
   res.setHeader("X-Request-Id", requestId);
   next();
 });
+
+/* پیوست‌های DPR (FIX-3) — پس از میان‌افزارهای امنیتی و requestId ثبت می‌شود
+ * تا helmet، محدودیت نرخ و traceId روی این مسیرها هم اعمال شود. */
+registerDprDocRoutes(app, { storageRoot, acceptedMimeTypes, maxFileBytes });
+/* LIVE-1: میز کار هزینه و تأمین d5 روی دادهٔ ماندگار (/api/fin/:projectId/...). */
+registerFinWorkspaceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
+registerCkmWorkspaceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
 
 const sanitizeFileName = (name) => path.basename(name).replace(/[^a-zA-Z0-9._-]/g, "_").slice(-180) || "upload.bin";
 const uploadStorage = multer.diskStorage({
@@ -1855,6 +1876,17 @@ app.post("/api/ai/run", async (req, res) => {
       });
     }
 
+    /* مشاورهٔ آزاد صفحهٔ قابلیت (FIX-1). موتور قاعده‌محور به پرسش آزاد
+     * پاسخ نمی‌دهد؛ پیام صادقانه برمی‌گردد نه پیام نامربوط «ترجمه». */
+    const isAdvise = prompt === "advise";
+    if (isAdvise && providerId === "rule") {
+      return res.json({
+        ok: true,
+        data: { answer: null, translated: null, message: aiLogic.ADVISOR_NO_PROVIDER_FA, provider: "rule" },
+        meta: { traceId: req.requestId, engine: "ai-v1" },
+      });
+    }
+
     /* موتور قاعده‌محور هیچ سرویسی صدا نمی‌زند. برای ترجمه کاری از آن
      * برنمی‌آید، پس به‌جای متن ساختگی، صریح می‌گوید. */
     if (providerId === "rule") {
@@ -1885,9 +1917,14 @@ app.post("/api/ai/run", async (req, res) => {
       });
     }
 
-    const instructions = prompt === "translate"
-      ? ogwLogic.translationInstructions(context.targetLang === "en" ? "en" : "fa")
-      : ogwLogic.wbsInstructions(context.templateId || null);
+    const instructions = isAdvise
+      ? aiLogic.advisorInstructions({
+          domain: context.domain, process: context.process, sub: context.sub,
+          lang: context.lang === "en" ? "en" : "fa",
+        })
+      : prompt === "translate"
+        ? ogwLogic.translationInstructions(context.targetLang === "en" ? "en" : "fa")
+        : ogwLogic.wbsInstructions(context.templateId || null);
 
     const wire = aiLogic.buildWireRequest(
       { provider: providerId, mode: context.mode || "api_key", secret },
@@ -1930,7 +1967,7 @@ app.post("/api/ai/run", async (req, res) => {
     const out = aiLogic.extractText(providerId, payload);
     res.json({
       ok: true,
-      data: { translated: out, message: out ? null : "سرویس پاسخ متنی برنگرداند.", provider: providerId },
+      data: { translated: out, answer: isAdvise ? out : undefined, message: out ? null : "سرویس پاسخ متنی برنگرداند.", provider: providerId },
       meta: { traceId: req.requestId, engine: "ai-v1" },
     });
   } catch (err) {
@@ -3300,10 +3337,14 @@ app.delete("/api/framework/process-tree", async (req, res, next) => {
   }
 });
 
+const dedicatedTable = (req, res, name) =>
+  res.status(403).json({ ok: false, error: { code: "TABLE_HAS_DEDICATED_API", message: `جدول ${name} فقط از مسیر اختصاصی ${DEDICATED_TABLE_ROUTES[name]} نوشته و خوانده می‌شود`, route: DEDICATED_TABLE_ROUTES[name], traceId: req.requestId } });
+
 /** CRUD عمومی روی جدول‌های مجاز — همه از راه سازندهٔ پارامتری. */
 app.get("/api/data/:table", async (req, res, next) => {
   try {
     const t = tableDef(req.params.table);
+    if (t && DEDICATED_TABLE_ROUTES[t.name]) return dedicatedTable(req, res, t.name);
     if (!t || !PUBLIC_TABLES.has(t.name)) return res.status(404).json({ ok: false, error: { code: "UNKNOWN_TABLE", message: `جدول ${req.params.table} در دسترس نیست`, traceId: req.requestId } });
     const r = await repo();
     const spec = parseSelectSpec(t, req.query);
@@ -3317,6 +3358,7 @@ app.get("/api/data/:table", async (req, res, next) => {
 app.get("/api/data/:table/:id", async (req, res, next) => {
   try {
     const t = tableDef(req.params.table);
+    if (t && DEDICATED_TABLE_ROUTES[t.name]) return dedicatedTable(req, res, t.name);
     if (!t || !PUBLIC_TABLES.has(t.name)) return res.status(404).json({ ok: false, error: { code: "UNKNOWN_TABLE", message: `جدول ${req.params.table} در دسترس نیست`, traceId: req.requestId } });
     const r = await repo();
     const row = await r.get(t.name, req.params.id);
@@ -3330,6 +3372,7 @@ app.get("/api/data/:table/:id", async (req, res, next) => {
 app.post("/api/data/:table", async (req, res, next) => {
   try {
     const t = tableDef(req.params.table);
+    if (t && DEDICATED_TABLE_ROUTES[t.name]) return dedicatedTable(req, res, t.name);
     if (!t || !PUBLIC_TABLES.has(t.name)) return res.status(404).json({ ok: false, error: { code: "UNKNOWN_TABLE", message: `جدول ${req.params.table} در دسترس نیست`, traceId: req.requestId } });
     const r = await repo();
     const userId = String(req.headers["x-user-id"] ?? "anonymous");
@@ -3343,6 +3386,7 @@ app.post("/api/data/:table", async (req, res, next) => {
 app.patch("/api/data/:table/:id", async (req, res, next) => {
   try {
     const t = tableDef(req.params.table);
+    if (t && DEDICATED_TABLE_ROUTES[t.name]) return dedicatedTable(req, res, t.name);
     if (!t || !PUBLIC_TABLES.has(t.name)) return res.status(404).json({ ok: false, error: { code: "UNKNOWN_TABLE", message: `جدول ${req.params.table} در دسترس نیست`, traceId: req.requestId } });
     const r = await repo();
     const userId = String(req.headers["x-user-id"] ?? "anonymous");
@@ -3360,6 +3404,7 @@ app.patch("/api/data/:table/:id", async (req, res, next) => {
 app.delete("/api/data/:table/:id", async (req, res, next) => {
   try {
     const t = tableDef(req.params.table);
+    if (t && DEDICATED_TABLE_ROUTES[t.name]) return dedicatedTable(req, res, t.name);
     if (!t || !PUBLIC_TABLES.has(t.name)) return res.status(404).json({ ok: false, error: { code: "UNKNOWN_TABLE", message: `جدول ${req.params.table} در دسترس نیست`, traceId: req.requestId } });
     const r = await repo();
     const result = await r.remove(t.name, req.params.id);
@@ -4496,6 +4541,9 @@ app.post("/api/integration/import/:code", integrationUpload.single("file"), asyn
     };
     if (!commit) return itgOk(req, res, payload);
     if (result.counts.errors) return itgFail(req, res, 422, "IMPORT_BLOCKED", `${result.counts.errors} خطا در فایل؛ پیش از نوشتن اصلاح شود`);
+    if (DEDICATED_TABLE_ROUTES[template.targetTable]) {
+      return itgFail(req, res, 403, "TABLE_HAS_DEDICATED_API", `ورود مستقیم به ${template.targetTable} بسته است؛ ثبت فقط از ${DEDICATED_TABLE_ROUTES[template.targetTable]} با اعتبارسنجی`);
+    }
     if (!PUBLIC_TABLES.has(template.targetTable)) return itgFail(req, res, 403, "TABLE_NOT_EXPOSED", `نوشتن در ${template.targetTable} مجاز نیست`);
 
     const r = await repo();
@@ -18941,7 +18989,7 @@ app.use((err, req, res, next) => {
 
 const server = app.listen(PORT, () => {
   console.log("=======================================================");
-  console.log(`  PMIS REST API Service running on http://localhost:${PORT}`);
+  console.log(`  Arena PMIS REST API Service running on http://localhost:${PORT}`);
   console.log(`  SQL Server Target: ${process.env.SQL_SERVER || ".\\SQL2008EXPRESS"} (${process.env.SQL_DATABASE || "PMIS_MASTER_DB"})`);
   console.log("=======================================================");
 });

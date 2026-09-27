@@ -9,6 +9,8 @@ server/rundata/
 
 # باندل‌های تولیدی esbuild برای تست‌های Node (بازتولید: npm test)
 server/finLogic.js
+server/finWsLogic.js
+server/ckmWsLogic.js
 server/qmsLogic.js
 server/pexLogic.js
 server/pexModelBundle.js
@@ -48,3 +50,6 @@ vite.preview.config.mts
 /[0-9a-f][0-9a-f]/
 
 # سرویس ساختگی AI فقط برای عیب‌یابی محلی است و در تولید اجرا نمی‌شود.
+
+# پیوست‌های DPR زمان اجرا (FIX-3) — داده است، نه کد
+server/storage/dpr/

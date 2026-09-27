@@ -72,7 +72,7 @@ export default function CapabilityDetail({
   lang, domainId, clusterId, projectId, processId, subId, processes, onBack, onNavigate,
 }: Props) {
   const rtl = lang === "fa";
-  const { clusters, projectsByCluster } = useSystem();
+  const { clusters, projectsByCluster, settings } = useSystem();
   const dom = domains.find((d) => d.id === domainId);
   const cluster = clusters.find((c) => c.id === clusterId);
   const project = (projectsByCluster[clusterId] ?? []).find((p) => p.id === projectId);
@@ -150,140 +150,138 @@ export default function CapabilityDetail({
     a.remove(); URL.revokeObjectURL(url);
   };
 
+  /* FIX-1: پیش از این، در صورت خطا یک پاسخ ثابتِ ساختگی نمایش داده می‌شد
+   * («بر اساس اسناد بارگذاری‌شده… خط بحرانی پروژه تحلیل شد») و پرسش هم
+   * بدون متن و ارائه‌دهنده به سرور می‌رفت. اکنون پرسش با ارائه‌دهنده و
+   * کلید «مدیریت سامانه ← هوش مصنوعی» فرستاده می‌شود و هر خطایی
+   * همان‌طور که هست نشان داده می‌شود. */
   const askAI = async () => {
     const q = aiInput.trim();
-    if (!q || busy) return;
+    if (!q || busy || !dom || !proc || !sub) return;
     setAiThread((p) => [...p, { role: "user", text: q }]);
     setAiInput(""); setBusy(true);
+    const say = (text: string) => setAiThread((p) => [...p, { role: "ai", text }]);
     try {
-      const result = await pmisApiClient.runAi({ prompt: q, context: { domainId, clusterId, projectId, processId, subId } });
-      const answer = (result.message as string) || (rtl ? "پاسخ AI دریافت شد." : "AI response received.");
-      setAiThread((p) => [...p, { role: "ai", text: answer }]);
+      const secret = settings.aiApiKey?.trim() ?? "";
+      const res = await fetch("/api/ai/run", {
+        method: "POST",
+        headers: { "content-type": "application/json", ...(secret ? { "x-ai-key": secret } : {}) },
+        body: JSON.stringify({
+          prompt: "advise",
+          context: {
+            provider: settings.aiProvider,
+            lang,
+            text: q.slice(0, 4000),
+            domain: t(dom.title, lang),
+            process: t(proc.title, lang),
+            sub: t(sub.title, lang),
+          },
+        }),
+      });
+      const body = await res.json().catch(() => null);
+      if (!res.ok || !body?.ok) {
+        say((rtl ? "خطا: " : "Error: ") + (body?.error?.message ?? (rtl ? `پاسخ نامعتبر از سرور (HTTP ${res.status})` : `Invalid server response (HTTP ${res.status})`)));
+        return;
+      }
+      const d = body.data ?? {};
+      say((d.answer || d.translated || d.message || (rtl ? "سرویس پاسخی برنگرداند." : "The service returned no answer.")) as string);
     } catch {
-      const answer =
-        rtl
-          ? `بر اساس اسناد بارگذاری‌شده و جدول‌های ${sub.sql.join(", ")}، خط بحرانی پروژه تحلیل شد و قالب مربوطه آماده انطباق است.`
-          : `Based on the uploaded contract and ${sub.sql.join(", ")} tables, the critical path was analyzed and templates are synced.`;
-      setAiThread((p) => [...p, { role: "ai", text: answer }]);
+      say(rtl ? "خطا: ارتباط با سرور برقرار نشد." : "Error: could not reach the server.");
     } finally {
       setBusy(false);
     }
   };
 
-  const handleDocUpload = (files: FileList | null) => {
-    if (!files || !files.length) return;
+  /* FIX-1: ابزارهای این بخش پیش از این شبیه‌سازی بودند — محتوای فایل
+   * نادیده گرفته می‌شد و متن ثابت جایگزین می‌شد، «ترجمه» متن از پیش
+   * نوشته‌شده بود، «تراز هوشمند» مدت فعالیت‌های بحرانی را بی‌دلیل دو روز
+   * کم می‌کرد و «استخراج WBS» همیشه همان چهار فعالیت را می‌ساخت.
+   * اکنون: استخراج متن واقعی، ترجمهٔ واقعی با سرویس انتخاب‌شده، و
+   * استخراج WBS به کارگاه قرارداد (d2) که موتور واقعی آن است ارجاع می‌شود. */
+  const sayAi = (text: string) => setAiThread((p) => [...p, { role: "ai", text }]);
+  const detectLang = (text: string): "fa" | "en" => {
+    const fa = (text.match(/[\u0600-\u06FF]/g) ?? []).length;
+    const en = (text.match(/[A-Za-z]/g) ?? []).length;
+    return fa >= en ? "fa" : "en";
+  };
+
+  const handleDocUpload = async (files: FileList | null) => {
+    if (!files || !files.length || busy) return;
     const file = files[0];
     setUploadedDocName(file.name);
     setIsTranslated(false);
-    
-    // Simulate auto-detecting language (english as default mock)
-    const isEn = !file.name.match(/[\u0600-\u06FF]/);
-    setDocLang(isEn ? "en" : "fa");
-
-    // mock seed content based on standard templates
-    if (isEn) {
-      setContractText(
-        `CONSTRUCTION CONTRACT - SECTION 4:\n` +
-        `The Contractor shall mobilize on site within 10 days of sign-off. Detailed Foundation design and engineering must be delivered in civil format within 14 days. Pipeline procurement starts in week 3. Phase 1 cold commissioning is scheduled for day 54.`
-      );
-    } else {
-      setContractText(
-        `پیمان ساخت و تجهیز کارگاه - بند ۴:\n` +
-        `پیمانکار مکلف به تجهیز کارگاه ظرف ۱۰ روز است. نقشه‌های فونداسیون تفصیلی باید ظرف ۱۴ روز ارائه شود. خرید لوله‌ها از هفته ۳ آغاز شده و راه‌اندازی آزمایشی فاز ۱ در روز ۵۴ زمان‌بندی شده است.`
-      );
-    }
-  };
-
-  const handleTranslate = () => {
-    if (!contractText.trim() || busy) return;
-    setBusy(true);
-    setTimeout(() => {
-      if (docLang === "en") {
-        setDocLang("fa");
-        setContractText(
-          `[ترجمه تخصصی شده به فارسی]:\n` +
-          `قرارداد احداث - بخش ۴:\n` +
-          `پیمانکار باید ظرف ۱۰ روز پس از امضا، در کارگاه تجهیز کند. طراحی تفصیلی و مهندسی فونداسیون باید در فرمت سیویل ظرف ۱۴ روز تحویل داده شود. تامین لوله‌کشی از هفته سوم آغاز می‌شود. راه‌اندازی آزمایشی سرد فاز ۱ برای روز ۵۴ برنامه‌ریزی شده است.`
-        );
-      } else {
-        setDocLang("en");
-        setContractText(
-          `[Expert Translation to English]:\n` +
-          `Construction & Mobilization Contract - Clause 4:\n` +
-          `The contractor is obliged to mobilize the workshop within 10 days. Detailed foundation designs must be provided within 14 days. Pipe procurement starts from week 3 and phase 1 cold commissioning is scheduled for day 54.`
-        );
-      }
-      setIsTranslated(true);
-      setBusy(false);
-    }, 1100);
-  };
-
-  const handleAIBalance = () => {
-    setBusy(true);
-    setTimeout(() => {
-      setActivities((prev) =>
-        prev.map((act) => {
-          if (act.critical && act.duration > 10) {
-            return { ...act, duration: act.duration - 2, progress: Math.min(100, act.progress + 5), resource: `${act.resource} (Balanced)` };
-          }
-          return act;
-        })
-      );
-      setAiThread((p) => [
-        ...p,
-        {
-          role: "ai",
-          text: rtl
-            ? "نمودار زمان‌بندی بر اساس محدودیت منابع و خط بحرانی تحلیل شد. فعالیت‌های بحرانی فونداسیون و دپارتمان سیویل متعادل و مدت زمان آنها ۲ روز کاهش یافت."
-            : "Schedule successfully balanced. Critical civil activities adjusted to level resource allocation and reduce critical path by 2 days.",
-        },
-      ]);
-      setBusy(false);
-    }, 1200);
-  };
-
-  const generateWbsFromContract = () => {
-    if (!contractText.trim()) return;
-    setBusy(true);
-    setTimeout(() => {
-      const generated: Activity[] = [
-        { id: "g1", name: { fa: "مطالعه اسناد پیمان و تحلیل ریسک اولیه", en: "Contract Document Review & Risk Analysis" }, startDay: 1, duration: 5, progress: 10, critical: true, resource: "PMO" },
-        { id: "g2", name: { fa: "طراحی تفصیلی مطابق بند ۴.۲ قرارداد", en: "Detailed Design per Clause 4.2" }, startDay: 6, duration: 14, progress: 0, critical: true, resource: "Engineering" },
-        { id: "g3", name: { fa: "خرید تجهیزات موضوع الحاقیه الف", en: "Procurement of Annex A Equipment" }, startDay: 20, duration: 25, progress: 0, critical: false, resource: "Supply Chain" },
-        { id: "g4", name: { fa: "ساخت و راه‌اندازی آزمایشی فاز ۱", en: "Phase 1 Construction & Pilot Commissioning" }, startDay: 45, duration: 20, progress: 0, critical: true, resource: "Operations" },
-      ];
-      setActivities(generated);
-      setAiThread((p) => [
-        ...p,
-        {
-          role: "ai",
-          text: rtl
-            ? "قرارداد با موفقیت تحلیل شد. ساختار شکست کار (WBS) در ۴ فعالیت کلیدی با مشورت استانداردهای PMBOK استخراج و روی نمودار گنجانده شد."
-            : "Contract parsed. WBS successfully generated with 4 key milestones based on clause rules and integrated onto the online Gantt chart.",
-        },
-      ]);
-      setBusy(false);
-    }, 1500);
-  };
-
-  const simulateScheduleImport = async (filename: string) => {
-    setImportedFile(filename);
     setBusy(true);
     try {
-      await pmisApiClient.importSchedule(projectId || "PRJ-01", {
-        sourceSystem: filename.endsWith(".mpp") ? "msp" : "primavera",
-        fileName: filename,
-      });
+      let text = "";
+      if (/\.txt$/i.test(file.name)) {
+        text = await file.text();
+      } else {
+        const fd = new FormData();
+        fd.append("file", file);
+        const code = project?.code ?? projectId ?? "PRJ-01";
+        const res = await fetch(`/api/projects/${encodeURIComponent(code)}/knowledge/ingest`, { method: "POST", body: fd });
+        const json = await res.json().catch(() => null);
+        if (!res.ok || !json?.ok) {
+          sayAi((rtl ? "استخراج متن ناموفق بود: " : "Text extraction failed: ") + (json?.error?.message ?? `HTTP ${res.status}`));
+          return;
+        }
+        text = json?.data?.text ?? json?.data?.content ?? "";
+      }
+      if (!text.trim()) {
+        sayAi(rtl
+          ? "متنی از فایل استخراج نشد. اگر PDF اسکن‌شده است نیاز به OCR دارد؛ متن را در کادر بچسبانید."
+          : "No text could be extracted. A scanned PDF needs OCR; paste the text instead.");
+        return;
+      }
+      setContractText(text);
+      setDocLang(detectLang(text));
     } catch {
-      // ignore
+      sayAi(rtl ? "ارتباط با سرور برای استخراج متن برقرار نشد." : "Could not reach the server for text extraction.");
+    } finally {
+      setBusy(false);
     }
-    setActivities([
-      { id: "imp1", name: { fa: "تجهیز کارگاه - ایمپورت شده از Primavera", en: "Site Mobilization - Imported from P6" }, startDay: 1, duration: 10, progress: 100, critical: false, resource: "Subcontractor" },
-      { id: "imp2", name: { fa: "عملیات بتن‌ریزی مخازن ذخیره", en: "Storage Tank Concrete Operations" }, startDay: 11, duration: 18, progress: 40, critical: true, resource: "Civil Contractor" },
-      { id: "imp3", name: { fa: "نصب هدرهای اصلی لوله‌کشی", en: "Main Piping Headers Erection" }, startDay: 29, duration: 22, progress: 5, critical: true, resource: "Piping Team" },
-      { id: "imp4", name: { fa: "تست هیدرو استاتیک و بازرسی فنی", en: "Hydrostatic Testing & Inspection" }, startDay: 51, duration: 6, progress: 0, critical: false, resource: "QC Team" },
-    ]);
-    setBusy(false);
+  };
+
+  const handleTranslate = async () => {
+    if (!contractText.trim() || busy) return;
+    const target: "fa" | "en" = docLang === "en" ? "fa" : "en";
+    setBusy(true);
+    try {
+      const secret = settings.aiApiKey?.trim() ?? "";
+      const res = await fetch("/api/ai/run", {
+        method: "POST",
+        headers: { "content-type": "application/json", ...(secret ? { "x-ai-key": secret } : {}) },
+        body: JSON.stringify({ prompt: "translate", context: { provider: settings.aiProvider, targetLang: target, text: contractText.slice(0, 20000) } }),
+      });
+      const body = await res.json().catch(() => null);
+      if (!res.ok || !body?.ok) {
+        sayAi((rtl ? "ترجمه انجام نشد: " : "Translation failed: ") + (body?.error?.message ?? `HTTP ${res.status}`));
+        return;
+      }
+      const out = body.data?.translated as string | null | undefined;
+      if (!out) {
+        sayAi((body.data?.message as string) || (rtl ? "سرویس ترجمه‌ای برنگرداند." : "The service returned no translation."));
+        return;
+      }
+      setContractText(out);
+      setDocLang(target);
+      setIsTranslated(true);
+    } catch {
+      sayAi(rtl ? "ارتباط با سرور برای ترجمه برقرار نشد." : "Could not reach the server for translation.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /** استخراج واقعی WBS در کارگاه قرارداد (d2 ← قرارداد و ساختار شکست) انجام می‌شود. */
+  const openContractWorkshop = () => {
+    if (onNavigate) {
+      onNavigate({ domainId: "d2", processId: "d2-p2", subId: "d2-p2-ws" });
+    } else {
+      sayAi(rtl
+        ? "استخراج WBS از قرارداد در «برنامه‌ریزی و اجرا ← قرارداد و ساختار شکست» انجام می‌شود."
+        : "Contract WBS extraction lives in Planning & Execution → Contract & Breakdown.");
+    }
   };
 
   const importScheduleFile = async (files: FileList | null) => {
@@ -594,12 +592,12 @@ export default function CapabilityDetail({
                   </div>
 
                   <button
-                    onClick={generateWbsFromContract}
-                    disabled={busy || !contractText.trim()}
+                    onClick={openContractWorkshop}
+                    disabled={busy}
                     className="flex shrink-0 flex-col items-center justify-center gap-1 rounded-xl border border-fuchsia-400/50 bg-fuchsia-400/10 px-4 py-3 text-center text-[11px] font-light text-fuchsia-300 transition hover:bg-fuchsia-400/20 disabled:opacity-40"
                   >
                     <span>✨</span>
-                    <span>{rtl ? "استخراج WBS با AI" : "Extract WBS via AI"}</span>
+                    <span>{rtl ? "استخراج WBS در کارگاه قرارداد" : "Extract WBS in Contract Workshop"}</span>
                   </button>
                 </div>
 
@@ -614,20 +612,6 @@ export default function CapabilityDetail({
                   <span>⬆</span>
                   {rtl ? "ایمپورت واقعی فایل برنامه (XER/XLSX/CSV/MPP)" : "Import real schedule file (XER/XLSX/CSV/MPP)"}
                 </button>
-                <button
-                  onClick={() => simulateScheduleImport("Baseline_SouthAzadegan_Rev12.xer")}
-                  className="glass-row flex items-center gap-2 rounded-xl px-4 py-2.5 text-[11px] font-light text-sky-300 hover:border-sky-400"
-                >
-                  <span>📂</span>
-                  {rtl ? "بارگذاری فایل Primavera P6 (.xer)" : "Import Primavera P6 (.xer)"}
-                </button>
-                <button
-                  onClick={() => simulateScheduleImport("Schedule_Phase3_MSP.mpp")}
-                  className="glass-row flex items-center gap-2 rounded-xl px-4 py-2.5 text-[11px] font-light text-sky-300 hover:border-sky-400"
-                >
-                  <span>📂</span>
-                  {rtl ? "بارگذاری فایل MS Project (.mpp)" : "Import MS Project (.mpp)"}
-                </button>
                 {importedFile && (
                   <span className="text-[10px] text-emerald-400 font-normal">
                     ✓ {rtl ? "فایل بارگذاری شد:" : "File loaded:"} {importedFile}
@@ -641,14 +625,7 @@ export default function CapabilityDetail({
             
             <div className="glass-dark flex w-full flex-col rounded-2xl p-3 lg:w-[280px]">
               <div className="mb-2.5 flex items-center justify-between border-b b-line-soft pb-2">
-                <span className="text-[10.5px] font-normal tx1">{rtl ? "تعدیل دستی و تراز هوشمند" : "Manual & AI Adjustments"}</span>
-                <button
-                  onClick={handleAIBalance}
-                  disabled={busy}
-                  className="rounded-lg border border-emerald-400 bg-emerald-400/10 px-2 py-1 text-[9.5px] font-medium text-emerald-300 hover:bg-emerald-400/20 disabled:opacity-40"
-                >
-                  {rtl ? "تراز هوشمند AI" : "AI Stabilize & Level"}
-                </button>
+                <span className="text-[10.5px] font-normal tx1">{rtl ? "تعدیل دستی مدت فعالیت‌ها" : "Manual Duration Adjustments"}</span>
               </div>
 
               <div className="thin-scroll flex-1 space-y-2.5 overflow-y-auto pr-1">

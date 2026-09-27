@@ -203,10 +203,26 @@ function failureMessageFa(kind, providerId) {
 function shouldFallbackToRule(kind) {
   return kind !== "auth";
 }
+var ADVISOR_NO_PROVIDER_FA = "\u0645\u0634\u0627\u0648\u0631\u0647\u0654 \u0647\u0648\u0634 \u0645\u0635\u0646\u0648\u0639\u06CC \u0641\u0639\u0627\u0644 \u0646\u06CC\u0633\u062A: \u0645\u0648\u062A\u0648\u0631 \u0642\u0627\u0639\u062F\u0647\u200C\u0645\u062D\u0648\u0631 \u0628\u0647 \u067E\u0631\u0633\u0634 \u0622\u0632\u0627\u062F \u067E\u0627\u0633\u062E \u0646\u0645\u06CC\u200C\u062F\u0647\u062F. \u06CC\u06A9 \u0633\u0631\u0648\u06CC\u0633 (Claude\u060C OpenAI \u06CC\u0627 DeepSeek) \u0631\u0627 \u062F\u0631 \xAB\u0645\u062F\u06CC\u0631\u06CC\u062A \u0633\u0627\u0645\u0627\u0646\u0647 \u2190 \u0647\u0648\u0634 \u0645\u0635\u0646\u0648\u0639\u06CC\xBB \u0627\u0646\u062A\u062E\u0627\u0628 \u0648 \u06A9\u0644\u06CC\u062F \u0622\u0646 \u0631\u0627 \u0648\u0627\u0631\u062F \u06A9\u0646\u06CC\u062F.";
+var clip = (s, n = 200) => String(s ?? "").replace(/\s+/g, " ").trim().slice(0, n);
+function advisorInstructions(ctx = {}) {
+  const fa = (ctx.lang ?? "fa") === "fa";
+  const where = [clip(ctx.domain), clip(ctx.process), clip(ctx.sub)].filter(Boolean).join(" \u203A ");
+  return [
+    "You are a senior project-controls advisor inside Arena PMIS (oil, gas, petrochemical and construction projects).",
+    where ? `The user is on this capability page: ${where}.` : "",
+    "You do NOT have access to this project's live data. Never claim that you analysed, loaded or checked any project data, documents or tables.",
+    "Answer with general best practice (PMBOK, FIDIC, common Iranian EPC practice) and say clearly when an answer depends on project data the user must check.",
+    "Be concise and practical: short paragraphs or bullet points.",
+    fa ? "Reply in Persian (Farsi)." : "Reply in English."
+  ].filter(Boolean).join("\n");
+}
 export {
+  ADVISOR_NO_PROVIDER_FA,
   AI_PROVIDERS,
   AI_VERSION,
   PROVIDER_BY_ID,
+  advisorInstructions,
   buildWireRequest,
   checkCredential,
   classifyHttpFailure,

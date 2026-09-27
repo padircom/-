@@ -366,3 +366,37 @@ export function failureMessageFa(kind: AiFailureKind, providerId: AiProviderId):
 export function shouldFallbackToRule(kind: AiFailureKind): boolean {
   return kind !== "auth";
 }
+
+/* ══════════════════════ مشاورهٔ آزاد (Advisor) ══════════════════════
+ *
+ * پرسش آزاد کاربر در صفحهٔ قابلیت. این حالت **به داده‌های پروژه دسترسی
+ * ندارد** (آن کار AI-1 است)؛ پس دستورالعمل صریحاً می‌گوید چیزی را که
+ * نمی‌داند ادعا نکند. پیش از این، کلاینت در صورت خطا یک پاسخ ثابتِ
+ * ساختگی («خط بحرانی پروژه تحلیل شد…») نشان می‌داد. */
+
+export type AdvisorContext = {
+  domain?: string;
+  process?: string;
+  sub?: string;
+  lang?: "fa" | "en";
+};
+
+/** پیام صادقانه وقتی سرویس هوش مصنوعی فعال نیست. */
+export const ADVISOR_NO_PROVIDER_FA =
+  "مشاورهٔ هوش مصنوعی فعال نیست: موتور قاعده‌محور به پرسش آزاد پاسخ نمی‌دهد. " +
+  "یک سرویس (Claude، OpenAI یا DeepSeek) را در «مدیریت سامانه ← هوش مصنوعی» انتخاب و کلید آن را وارد کنید.";
+
+const clip = (s: string | undefined, n = 200) => String(s ?? "").replace(/\s+/g, " ").trim().slice(0, n);
+
+export function advisorInstructions(ctx: AdvisorContext = {}): string {
+  const fa = (ctx.lang ?? "fa") === "fa";
+  const where = [clip(ctx.domain), clip(ctx.process), clip(ctx.sub)].filter(Boolean).join(" › ");
+  return [
+    "You are a senior project-controls advisor inside Arena PMIS (oil, gas, petrochemical and construction projects).",
+    where ? `The user is on this capability page: ${where}.` : "",
+    "You do NOT have access to this project's live data. Never claim that you analysed, loaded or checked any project data, documents or tables.",
+    "Answer with general best practice (PMBOK, FIDIC, common Iranian EPC practice) and say clearly when an answer depends on project data the user must check.",
+    "Be concise and practical: short paragraphs or bullet points.",
+    fa ? "Reply in Persian (Farsi)." : "Reply in English.",
+  ].filter(Boolean).join("\n");
+}

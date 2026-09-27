@@ -24,6 +24,7 @@ import GeoProjectsPanel from "./GeoProjectsPanel";
 import EfqmPanel from "./EfqmPanel";
 import StrategyWorkspace from "./StrategyWorkspace";
 import TaxonomyEditor from "./TaxonomyEditor";
+import SystemBadge from "./SystemBadge";
 import { EDITABLE_TAXONOMY_DOMAINS, loadProcessTree } from "../services/taxonomyApi";
 
 /** Extra submodules only on the d1 inner page — not in the main right sidebar. */
@@ -481,6 +482,7 @@ export default function ModuleDetail({ lang, target, onBack, onOpenFlowNet, onNa
             )}
           </div>
           <div className="shrink-0 text-end">
+            <SystemBadge domainId={dom.id} lang={lang} className="mb-1 justify-end" />
             <div className="text-[9px] font-extralight tx3">{t(dom.title, lang)}</div>
             <div className="text-[11px] font-light tx1">
               {rtl ? "PIM / EDMS — Excel ظرف است" : "PIM / EDMS — Excel is a vessel"}
@@ -587,6 +589,7 @@ export default function ModuleDetail({ lang, target, onBack, onOpenFlowNet, onNa
             )}
           </div>
           <div className="shrink-0 text-end">
+            <SystemBadge domainId={dom.id} lang={lang} className="mb-1 justify-end" />
             <div className="text-[9px] font-extralight tx3">{t(dom.title, lang)}</div>
             <div className="text-[11px] font-light tx1">
               {rtl ? "PEX — Excel/XER ظرف است" : "PEX — Excel/XER is a vessel"}
@@ -690,6 +693,7 @@ export default function ModuleDetail({ lang, target, onBack, onOpenFlowNet, onNa
             )}
           </div>
           <div className="shrink-0 text-end">
+            <SystemBadge domainId={dom.id} lang={lang} className="mb-1 justify-end" />
             <div className="text-[9px] font-extralight tx3">{t(dom.title, lang)}</div>
             <div className="text-[11px] font-light tx1">
               {rtl ? "PMA — فقط Approved" : "PMA — Approved only"}
@@ -787,6 +791,7 @@ export default function ModuleDetail({ lang, target, onBack, onOpenFlowNet, onNa
             )}
           </div>
           <div className="shrink-0 text-end">
+            <SystemBadge domainId={dom.id} lang={lang} className="mb-1 justify-end" />
             <div className="text-[9px] font-extralight tx3">{t(dom.title, lang)}</div>
             <div className="text-[11px] font-light tx1">
               {rtl ? "d4 — ارجاع؛ بدون بازنویسی اعداد" : "d4 — reference only; no number rewrite"}
@@ -900,6 +905,7 @@ export default function ModuleDetail({ lang, target, onBack, onOpenFlowNet, onNa
             )}
           </div>
           <div className="shrink-0 text-end">
+            <SystemBadge domainId={dom.id} lang={lang} className="mb-1 justify-end" />
             <div className="text-[9px] font-extralight tx3">{t(dom.title, lang)}</div>
             <div className="text-[11px] font-light tx1">
               {rtl ? "QMS — نقطه توقف مسدودکننده؛ تحویل بدون پانچ کلاس A" : "QMS — hold points block; no MC with open class-A punch"}
@@ -1025,6 +1031,7 @@ export default function ModuleDetail({ lang, target, onBack, onOpenFlowNet, onNa
             )}
           </div>
           <div className="shrink-0 text-end">
+            <SystemBadge domainId={dom.id} lang={lang} className="mb-1 justify-end" />
             <div className="text-[9px] font-extralight tx3">{t(dom.title, lang)}</div>
             <div className="text-[11px] font-light tx1">
               {rtl ? "CNT — مالک پیمان و صورت‌وضعیت؛ ثبت مالی در FIN" : "CNT — owns contract & IPC; posting lives in FIN"}
@@ -1090,6 +1097,7 @@ export default function ModuleDetail({ lang, target, onBack, onOpenFlowNet, onNa
             )}
           </div>
           <div className="shrink-0 text-end">
+            <SystemBadge domainId={dom.id} lang={lang} className="mb-1 justify-end" />
             <div className="text-[9px] font-extralight tx3">{t(dom.title, lang)}</div>
             <div className="text-[11px] font-light tx1">
               {rtl ? "EQM — مالک ساعت ماشین؛ نرخ و هزینه در FIN" : "EQM — owns machine hours; rates & cost live in FIN"}
@@ -1178,6 +1186,7 @@ export default function ModuleDetail({ lang, target, onBack, onOpenFlowNet, onNa
             )}
           </div>
           <div className="shrink-0 text-end">
+            <SystemBadge domainId={dom.id} lang={lang} className="mb-1 justify-end" />
             <div className="text-[9px] font-extralight tx3">{t(dom.title, lang)}</div>
             <div className="text-[11px] font-light tx1">
               {rtl ? "HRM — هر ساعت به یک فعالیت شارژ می‌شود؛ بهره‌وری از پیشرفت تأییدشده" : "HRM — every hour charged to an activity; productivity from approved progress"}
@@ -1275,6 +1284,7 @@ export default function ModuleDetail({ lang, target, onBack, onOpenFlowNet, onNa
             )}
           </div>
           <div className="shrink-0 text-end">
+            <SystemBadge domainId={dom.id} lang={lang} className="mb-1 justify-end" />
             <div className="text-[9px] font-extralight tx3">{t(dom.title, lang)}</div>
             <div className="text-[11px] font-light tx1">
               {rtl ? "CKM — اعلان قراردادی مهلت‌دار است؛ مصوبه بدون مالک و موعد پذیرفته نمی‌شود" : "CKM — notices are time-barred; no action without an owner and a due date"}
@@ -1366,6 +1376,7 @@ export default function ModuleDetail({ lang, target, onBack, onOpenFlowNet, onNa
             )}
           </div>
           <div className="shrink-0 text-end">
+            <SystemBadge domainId={dom.id} lang={lang} className="mb-1 justify-end" />
             <div className="text-[9px] font-extralight tx3">{t(dom.title, lang)}</div>
             <div className="text-[11px] font-light tx1">
               {rtl ? "FIN — تعهد پیش از هزینه؛ Snapshot تغییرناپذیر" : "FIN — commitment first; immutable snapshots"}
@@ -1462,6 +1473,7 @@ export default function ModuleDetail({ lang, target, onBack, onOpenFlowNet, onNa
             </button>
           )}
           <div className="shrink-0 text-end">
+            <SystemBadge domainId={dom.id} lang={lang} className="mb-1 justify-end" />
             <div className="text-[9px] font-extralight tx3">{t(dom.title, lang)}</div>
             <div className="text-[11px] font-light tx1">
               {rtl ? "GOV — حاکمیت؛ ارجاع بدون بازنویسی" : "GOV — governance; reference, no rewrite"}
@@ -1670,6 +1682,7 @@ export default function ModuleDetail({ lang, target, onBack, onOpenFlowNet, onNa
             </p>
           </div>
           <div className="shrink-0 text-end">
+            <SystemBadge domainId={dom.id} lang={lang} className="mb-1 justify-end" />
             <div className="text-[9px] font-extralight tx3">{t(dom.title, lang)}</div>
             <div className="text-[11px] font-light tx1">{rtl ? "بدون وابستگی به سرویس نقشه" : "no map-tile dependency"}</div>
           </div>
@@ -1769,6 +1782,7 @@ export default function ModuleDetail({ lang, target, onBack, onOpenFlowNet, onNa
             )}
           </div>
           <div className="shrink-0 text-end">
+            <SystemBadge domainId={dom.id} lang={lang} className="mb-1 justify-end" />
             <div className="text-[9px] font-extralight tx3">{t(dom.title, lang)}</div>
             <div className="text-[11px] font-light tx1">
               {rtl ? "HSE — TRIR از من‌اور واقعی" : "HSE — real man-hour TRIR"}
@@ -1892,6 +1906,7 @@ export default function ModuleDetail({ lang, target, onBack, onOpenFlowNet, onNa
         </div>
 
         <div className="shrink-0 text-end">
+          <SystemBadge domainId={dom.id} lang={lang} className="mb-1 justify-end" />
           <div className="text-[9px] font-extralight tx3">{t(dom.title, lang)}</div>
           <div className="text-[11px] font-light tx1">
             {rtl ? "فرآیندها و زیرفرآیندها" : "Processes & Sub-processes"}

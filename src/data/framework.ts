@@ -1,3 +1,4 @@
+import { PLATFORM_BRAND } from "./systemCatalog";
 export type Lang = "fa" | "en";
 export type Bi = { fa: string; en: string };
 
@@ -1785,7 +1786,8 @@ export const statusMeta: Record<ProjectStatus, { color: string; label: Bi }> = {
    UI strings
    ============================================================ */
 export const ui = {
-  hubTitle: { fa: "پلتفرم جامع مدیریت و کنترل پروژه", en: "Comprehensive Project Management & Control Platform" },
+  /* NAM-2: عنوان اصلی از کاتالوگ نام‌گذاری (منبع واحد برند). */
+  hubTitle: PLATFORM_BRAND.name,
   hubSub: { fa: "رینگ ۵ فرآیندی PMBOK — بتا ۱.۱.۰", en: "PMBOK 5-Process Ring — Beta 1.1.0" },
   frameworkTitle: { fa: "چارچوب جامع مدیریت پروژه", en: "Comprehensive Project Management Framework" },
   frameworkSub: { fa: "۵ ماژول · نمای سرتیترها", en: "5 Modules · Header Overview" },

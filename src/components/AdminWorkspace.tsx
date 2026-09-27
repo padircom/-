@@ -837,7 +837,7 @@ export default function AdminWorkspace({ lang, subId, onBack, onOpenFlowNet }: P
               <h3 className="text-[11px] font-normal tx3">{rtl ? "پیش‌نمایش زنده متون:" : "Live Typography Preview:"}</h3>
               <div className="rounded-xl bg-black/15 p-4 space-y-1.5">
                 <div className="text-[18px] font-semibold tx1">
-                  {rtl ? "پلتفرم جامع مدیریت و کنترل پروژه (عنوان اصلی)" : "Comprehensive Project Management Platform"}
+                  {rtl ? "سامانهٔ جامع مدیریت و کنترل پروژه آرنا (عنوان اصلی)" : "Arena PMIS — Project Management & Control"}
                 </div>
                 <div className="text-[13px] font-normal tx2">
                   {rtl

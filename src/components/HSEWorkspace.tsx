@@ -14,6 +14,7 @@
  */
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { type Lang } from "../data/framework";
+import SystemBadge from "./SystemBadge";
 import { useAuth } from "../context/AuthContext";
 import { logAudit } from "../services/auditLogger";
 
@@ -347,6 +348,7 @@ export default function HSEWorkspace({ lang, onBack, initialTab }: Props) {
             <div className="truncate text-[9.5px] font-light tx3">
               {rtl ? `دامنهٔ d16 · پروژهٔ ${PROJECT_ID}` : `Domain d16 · project ${PROJECT_ID}`}
             </div>
+            <SystemBadge domainId="d16" lang={lang} className="mt-1" />
           </div>
         </div>
         {loading && <span className="text-[10px] font-light tx3">{rtl ? "در حال بارگذاری…" : "Loading…"}</span>}
