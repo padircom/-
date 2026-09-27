@@ -77,13 +77,13 @@ async function makeAccount(over = {}) {
   const r = await post(`/api/data/CostAccount?projectId=${PROJECT}`, {
     ProjectId: PROJECT, Code: `CA-${tag()}`, TitleFa: "حساب آزمون",
     Budget: 1_000_000, Committed: 0, Actual: 0, Currency: "IRR", ...over,
-  }, PM);
+  }, "u-ceo"); // SEC-1: fixture setup is not a PM budget edit.
   assert.equal(r.status, 201, JSON.stringify(r.body));
   return r.body.data ?? r.body.item ?? r.body;
 }
 
 async function readAccount(id) {
-  const r = await get(`/api/data/CostAccount/${id}?projectId=${PROJECT}`, PM);
+  const r = await get(`/api/data/CostAccount/${id}?projectId=${PROJECT}`, "u-ceo");
   assert.equal(r.status, 200, JSON.stringify(r.body));
   return r.body.data ?? r.body.item ?? r.body;
 }

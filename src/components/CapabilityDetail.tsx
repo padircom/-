@@ -1,3 +1,5 @@
+import StrategyWorkspace from "./StrategyWorkspace";
+import EfqmPanel from "./EfqmPanel";
 import { useRef, useState } from "react";
 import {
   domains,
@@ -717,9 +719,13 @@ export default function CapabilityDetail({
       ) : domainId === "d2" && subId === "d2-p6-s1" ? (
         <PeriodicReportWorkspace lang={lang} kind="monthly" />
       ) : domainId === "d3" ? (
-        <MonitoringWorkspace lang={lang} />
+        <MonitoringWorkspace projectId={projectId} lang={lang} subId={subId} />
       ) : domainId === "d4" ? (
-        <RiskClaimsWorkspace lang={lang} subId={subId} />
+        <RiskClaimsWorkspace projectId={projectId} lang={lang} subId={subId} />
+      ) : domainId === "d20" ? (
+        <StrategyWorkspace projectId={projectId} lang={lang} />
+      ) : domainId === "d19" ? (
+        <EfqmPanel projectId={projectId} lang={lang} />
       ) : domainId === "d7" ? (
         <AdminWorkspace lang={lang} subId={subId} onBack={onBack} />
       ) : (

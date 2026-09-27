@@ -586,7 +586,10 @@ test("OpenAPI: مسیرهای یکپارچه‌سازی هم مستند شده�
 
 test("OpenAPI: مدل خطای مشترک تعریف شده", () => {
   assert.ok(spec.components.schemas.ApiError);
-  assert.ok(spec.components.securitySchemes.bearerAuth);
+  // SEC-1: the server uses its identity header adapter, not JWT authentication.
+  assert.equal(spec.components.securitySchemes.userIdentity.name, "x-user-id");
+  assert.ok(spec.paths["/api/data/Activity"].post.responses[401]);
+  assert.ok(spec.paths["/api/data/Activity"].get.responses[403]);
 });
 
 test("OpenAPI: تولید برای کل اسکیما بدون استثنا انجام می‌شود", () => {

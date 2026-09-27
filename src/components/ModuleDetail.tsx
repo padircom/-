@@ -702,7 +702,7 @@ export default function ModuleDetail({ lang, target, onBack, onOpenFlowNet, onNa
         </div>
         <div dir="ltr" className="flex min-h-0 flex-1 gap-3 overflow-hidden">
           <div dir={rtl ? "rtl" : "ltr"} className="glass flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl p-3">
-            <PmaWorkspace lang={lang} initialTab={d3Tab} hideTabs />
+            <PmaWorkspace projectId={target.projectId} lang={lang} initialTab={d3Tab} hideTabs />
           </div>
           <aside dir={rtl ? "rtl" : "ltr"} className="glass-dark flex w-[300px] shrink-0 flex-col overflow-hidden rounded-2xl">
             <div className="b-line border-b px-3 py-2.5">
@@ -800,7 +800,7 @@ export default function ModuleDetail({ lang, target, onBack, onOpenFlowNet, onNa
         </div>
         <div dir="ltr" className="flex min-h-0 flex-1 gap-3 overflow-hidden">
           <div dir={rtl ? "rtl" : "ltr"} className="glass flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl p-3">
-            <RiskClaimsWorkspace lang={lang} initialTab={d4Tab} hideTabs />
+            <RiskClaimsWorkspace projectId={target.projectId} lang={lang} initialTab={d4Tab} hideTabs />
           </div>
           <aside dir={rtl ? "rtl" : "ltr"} className="glass-dark flex w-[300px] shrink-0 flex-col overflow-hidden rounded-2xl">
             <div className="b-line border-b px-3 py-2.5">
@@ -1106,7 +1106,7 @@ export default function ModuleDetail({ lang, target, onBack, onOpenFlowNet, onNa
         </div>
         <div dir="ltr" className="flex min-h-0 flex-1 gap-3 overflow-hidden">
           <div dir={rtl ? "rtl" : "ltr"} className="glass flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl p-3">
-            <MachineryWorkspace lang={lang} initialTab={d9Tab} hideTabs />
+            <MachineryWorkspace projectId={target.projectId} lang={lang} initialTab={d9Tab} hideTabs />
           </div>
           <aside dir={rtl ? "rtl" : "ltr"} className="glass-dark flex w-[300px] shrink-0 flex-col overflow-hidden rounded-2xl">
             <div className="b-line border-b px-3 py-2.5">
@@ -1593,7 +1593,7 @@ export default function ModuleDetail({ lang, target, onBack, onOpenFlowNet, onNa
                 onBack={() => setSelected(null)}
               />
             ) : (
-              <StrategyWorkspace lang={lang} />
+              <StrategyWorkspace projectId={target.projectId} lang={lang} />
             )}
           </div>
           <aside dir={rtl ? "rtl" : "ltr"} className="glass-dark flex w-[300px] shrink-0 flex-col overflow-hidden rounded-2xl">
@@ -1723,7 +1723,7 @@ export default function ModuleDetail({ lang, target, onBack, onOpenFlowNet, onNa
               {t(dom.title, lang)}
             </h1>
             <p className="mt-1 truncate text-[10px] font-extralight tx3">
-              {rtl ? "EFQM ۲۰۲۰ — پنج توانمندساز (۵۰۰) و چهار نتیجه (۵۰۰)" : "EFQM 2020 — five enablers (500) and four results (500)"}
+              {rtl ? "خودارزیابی داخلی نه‌معیاره — نه ارزیابی رسمی EFQM 2020" : "Internal nine-criterion self-assessment — not official EFQM 2020"}
             </p>
           </div>
           <div className="shrink-0 text-end">
@@ -1732,7 +1732,7 @@ export default function ModuleDetail({ lang, target, onBack, onOpenFlowNet, onNa
           </div>
         </div>
         <div className="glass flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl p-3">
-          {selected ? null : <EfqmPanel lang={lang} />}
+          {selected ? null : <EfqmPanel projectId={target.projectId} lang={lang} />}
           {selected && (
             <CapabilityDetail
               lang={lang}

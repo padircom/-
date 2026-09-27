@@ -482,7 +482,8 @@ test("دور زدن دروازه با مجوز و دلیل ثبت می‌شود 
 async function seed(table, row) {
   const res = await fetch(`${BASE}/api/data/${table}`, {
     method: "POST",
-    headers: { "content-type": "application/json", "x-user-id": CONTRACTS },
+    // SEC-1: raw QC fixtures require system permission; contract actors retain their workflow roles.
+    headers: { "content-type": "application/json", "x-user-id": "u-admin" },
     body: JSON.stringify(row),
   });
   const j = await res.json();

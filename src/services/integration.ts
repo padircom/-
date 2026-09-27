@@ -1062,6 +1062,20 @@ export function generateOpenApi(tables: OpenApiTable[], opts: { title?: string; 
     },
   };
 
+  // SEC-1: document the actual identity adapter, not an unimplemented JWT scheme.
+  for (const [path, item] of Object.entries(paths)) {
+    if (!path.startsWith("/api/data/") && path !== "/api/integration/xer" && path !== "/api/integration/import/{code}") continue;
+    for (const method of ["get", "post", "patch", "delete"]) {
+      const op = (item as Record<string, Record<string, unknown>>)[method];
+      if (!op) continue;
+      op.security = path === "/api/integration/import/{code}" ? [{}, { userIdentity: [] }] : [{ userIdentity: [] }];
+      op.responses = { ...(op.responses as Record<string, unknown>),
+        401: { description: "هویت معتبر الزامی است (برای قالب: هنگام commit=1)" },
+        403: { description: "مجوز جدول یا پروژه وجود ندارد؛ یا مسیر اختصاصی لازم است" },
+      };
+    }
+  }
+
   schemas.ApiError = {
     type: "object",
     properties: {
@@ -1080,7 +1094,7 @@ export function generateOpenApi(tables: OpenApiTable[], opts: { title?: string; 
     servers: [{ url: opts.serverUrl ?? "http://localhost:4000", description: "Local" }],
     tags: [{ name: "Integration" }, ...tables.map((t) => ({ name: t.name, description: t.title.fa }))],
     paths,
-    components: { schemas, securitySchemes: { bearerAuth: { type: "http", scheme: "bearer", bearerFormat: "JWT" } } },
+    components: { schemas, securitySchemes: { userIdentity: { type: "apiKey", in: "header", name: "x-user-id", description: "Existing trusted identity adapter; authenticated gateway required in production" } } },
   };
 }
 

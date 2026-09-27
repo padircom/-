@@ -13,7 +13,7 @@
     "build:ckm": "esbuild src/services/communication.ts --bundle --outfile=server/ckmLogic.js --format=esm --platform=node --target=node18 --banner:js=\"/* GENERATED از src/services/communication.ts — ویرایش دستی ممنوع. بازتولید: npm run build:ckm */\"",
     "build:hrm": "esbuild src/services/workforce.ts --outfile=server/hrmLogic.js --format=esm --platform=node --target=node18 --banner:js=\"/* GENERATED از src/services/workforce.ts — ویرایش دستی ممنوع. بازتولید: npm run build:hrm */\"",
     "build:pexdata": "esbuild src/services/pexModel.ts --bundle --outfile=server/pexModelBundle.js --format=esm --platform=node --target=node18 --banner:js=\"/* GENERATED از src/services/pexModel.ts — ویرایش دستی ممنوع. بازتولید: npm run build:pexdata */\"",
-    "test": "npm run build:fin --silent && npm run build:finws --silent && npm run build:ckmws --silent && npm run build:qms --silent && npm run build:pex --silent && npm run build:pexdata --silent && npm run build:hrm --silent && npm run build:ckm --silent && npm run build:rpt --silent && npm run build:rbac --silent && npm run build:sql --silent && npm run build:itg --silent && npm run build:eqm --silent && npm run build:eng --silent && npm run build:cnt --silent && npm run build:com --silent && npm run build:hse --silent && npm run build:ai --silent && npm run build:clause --silent && npm run build:lsw --silent && npm run build:bex --silent && npm run build:ogw --silent && npm run build:lay --silent && npm run build:wcmd --silent && npm run build:wsess --silent && npm run build:perr --silent && node --test server/*.test.mjs",
+    "test": "npm run build:fin --silent && npm run build:finws --silent && npm run build:ckmws --silent && npm run build:rccws --silent && npm run build:monitoring --silent && npm run build:sxws --silent && npm run build:qms --silent && npm run build:pex --silent && npm run build:pexdata --silent && npm run build:hrm --silent && npm run build:ckm --silent && npm run build:rpt --silent && npm run build:rbac --silent && npm run build:sql --silent && npm run build:itg --silent && npm run build:eqm --silent && npm run build:eng --silent && npm run build:cnt --silent && npm run build:com --silent && npm run build:hse --silent && npm run build:ai --silent && npm run build:clause --silent && npm run build:lsw --silent && npm run build:bex --silent && npm run build:ogw --silent && npm run build:lay --silent && npm run build:wcmd --silent && npm run build:wsess --silent && npm run build:perr --silent && node --test server/*.test.mjs",
     "build:rpt": "esbuild src/services/reporting.ts --bundle --format=esm --platform=node --outfile=server/rptLogic.js",
     "build:finws": "esbuild src/services/finWorkspace.ts --bundle --outfile=server/finWsLogic.js --format=esm --platform=node --target=node18 --banner:js=\"/* GENERATED از src/services/finWorkspace.ts — ویرایش دستی ممنوع. بازتولید: npm run build:finws */\"",
     "build:ckmws": "esbuild src/services/ckmWorkspace.ts --bundle --outfile=server/ckmWsLogic.js --format=esm --platform=node --target=node18 --banner:js=\"/* GENERATED از src/services/ckmWorkspace.ts — ویرایش دستی ممنوع. بازتولید: npm run build:ckmws */\"",
@@ -36,7 +36,10 @@
     "build:hse": "esbuild src/services/hse.ts --bundle --format=esm --platform=node --outfile=server/hseLogic.js",
     "db:schema": "node scripts/generate-schema.mjs",
     "db:seed": "node scripts/generate-schema.mjs",
-    "build:routemap": "node scripts/generate-sql-route-map.mjs"
+    "build:routemap": "node scripts/generate-sql-route-map.mjs",
+    "build:rccws": "esbuild src/services/rccWorkspace.ts --bundle --outfile=server/rccWsLogic.js --format=esm --platform=node --target=node18",
+    "build:monitoring": "esbuild src/services/monitoringWorkspace.ts --bundle --outfile=server/monitoringWsLogic.js --format=esm --platform=node --target=node18",
+    "build:sxws": "esbuild src/services/strategyExcellenceWorkspace.ts --bundle --outfile=server/sxWsLogic.js --format=esm --platform=node --target=node18"
   },
   "dependencies": {
     "@types/leaflet": "^1.9.12",

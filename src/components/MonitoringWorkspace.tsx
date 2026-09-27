@@ -1,250 +1,106 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { t, type Bi, type Lang } from "../data/framework";
-import { useSystem } from "../context/SystemContext";
+import { useEffect, useRef, useState } from 'react';
+import { type Lang } from '../data/framework';
+import { useAuth } from '../context/AuthContext';
+import { jsonRequest } from '../services/apiClient';
+import { type MonitoringData, type MonitoringItem, type SourceState } from '../services/monitoringWorkspace';
 
-type Horizon = "1m" | "2m" | "3m";
-type InputMode = "workshop" | "schedule";
-
-type ActionItem = {
-  id: string;
-  title: Bi;
-  horizon: Horizon;
-  source: InputMode;
-  weight: number;
-  status: "open" | "risk" | "done";
-  important: boolean;
-};
-
-const orgTemplates: Record<Horizon, { name: Bi; rev: string }> = {
-  "1m": { name: { fa: "قالب سازمانی اکشن‌پلن ۱ ماهه", en: "Org 1-Month Action Plan" }, rev: "ORG-AP-1M-v3" },
-  "2m": { name: { fa: "قالب سازمانی اکشن‌پلن ۲ ماهه", en: "Org 2-Month Action Plan" }, rev: "ORG-AP-2M-v2" },
-  "3m": { name: { fa: "قالب سازمانی اکشن‌پلن ۳ ماهه", en: "Org 3-Month Action Plan" }, rev: "ORG-AP-3M-v4" },
-};
-
-const seedActions: ActionItem[] = [
-  { id: "a1", title: { fa: "تکمیل بتن فونداسیون زون شمال", en: "Complete north-zone foundation concrete" }, horizon: "1m", source: "workshop", weight: 92, status: "open", important: true },
-  { id: "a2", title: { fa: "تحویل لوله‌های Long Lead", en: "Deliver long-lead piping" }, horizon: "2m", source: "schedule", weight: 88, status: "risk", important: true },
-  { id: "a3", title: { fa: "آزادسازی جبهه نصب مکانیک", en: "Release mechanical installation front" }, horizon: "1m", source: "workshop", weight: 81, status: "open", important: true },
-  { id: "a4", title: { fa: "رفع گلوگاه ماشین‌آلات سنگین", en: "Clear heavy-equipment bottleneck" }, horizon: "3m", source: "workshop", weight: 76, status: "risk", important: true },
-  { id: "a5", title: { fa: "تست هیدرواستاتیک هدر اصلی", en: "Main header hydrostatic test" }, horizon: "2m", source: "schedule", weight: 64, status: "open", important: false },
-  { id: "a6", title: { fa: "بستن Punch List فاز ۱", en: "Close Phase-1 punch list" }, horizon: "3m", source: "schedule", weight: 58, status: "done", important: false },
-];
-
-const statusLabel: Record<ActionItem["status"], Bi> = {
-  open: { fa: "باز", en: "Open" },
-  risk: { fa: "ریسک", en: "Risk" },
-  done: { fa: "انجام", en: "Done" },
-};
-
-const statusColor: Record<ActionItem["status"], string> = {
-  open: "#7FB2FF",
-  risk: "#F87171",
-  done: "#34D399",
-};
-
-export default function MonitoringWorkspace({ lang }: { lang: Lang }) {
-  const rtl = lang === "fa";
-  const { clusters, projectsByCluster, projectScope } = useSystem();
-  const [horizon, setHorizon] = useState<Horizon>("1m");
-  const [mode, setMode] = useState<InputMode>("workshop");
-  const [templateName, setTemplateName] = useState<string | null>(null);
-  const [actions, setActions] = useState<ActionItem[]>(seedActions);
-  const [tick, setTick] = useState(0);
-  const [live, setLive] = useState(true);
-  const fileRef = useRef<HTMLInputElement | null>(null);
-
-  useEffect(() => {
-    if (!live) return;
-    const id = window.setInterval(() => setTick((n) => n + 1), 4000);
-    return () => window.clearInterval(id);
-  }, [live]);
-
-  const metrics = useMemo(() => {
-    const spi = Number((0.94 + (tick % 5) * 0.008).toFixed(3));
-    const cpi = Number((1.02 - (tick % 4) * 0.006).toFixed(3));
-    const sv = -2 - (tick % 3);
-    const cv = 18 - (tick % 4) * 3;
-    const kpi = 71 + (tick % 6);
-    const alerts = 4 + (tick % 3);
-    return { spi, cpi, sv, cv, kpi, alerts, pv: 850, ev: Math.round(790 + tick * 2), ac: 820 };
-  }, [tick]);
-
-  const important = actions.filter((a) => a.important && a.horizon === horizon);
-  const tpl = orgTemplates[horizon];
-  const scopeCluster = clusters.find((cluster) => cluster.id === projectScope?.clusterId);
-  const scopeProject = projectScope ? projectsByCluster[projectScope.clusterId]?.find((project) => project.id === projectScope.projectId) : undefined;
-
-  const loadOrgTemplate = () => {
-    setTemplateName(`${tpl.rev}.xlsx`);
-  };
-
-  const importOrgTemplate = (files: FileList | null) => {
-    if (!files?.length) return;
-    setTemplateName(files[0].name);
-  };
-
-  const ingest = () => {
-    if (mode === "workshop") {
-      setActions((prev) =>
-        prev.map((a) =>
-          a.horizon === horizon
-            ? { ...a, source: "workshop", important: a.weight >= 75, status: a.weight >= 85 ? "risk" : a.status }
-            : a
-        )
-      );
-    } else {
-      setActions((prev) => {
-        const imported: ActionItem[] = [
-          { id: `imp-${horizon}-1`, title: { fa: `خروجی برنامه اصلی — افق ${horizon}`, en: `Main schedule output — ${horizon}` }, horizon, source: "schedule", weight: 90, status: "open", important: true },
-          { id: `imp-${horizon}-2`, title: { fa: "فعالیت‌های بحرانی Lookahead", en: "Critical lookahead activities" }, horizon, source: "schedule", weight: 86, status: "risk", important: true },
-        ];
-        return [...imported, ...prev.filter((a) => !(a.source === "schedule" && a.horizon === horizon && a.id.startsWith("imp-")))];
-      });
+export type MonitorTab = 'dash' | 'wpd' | 'evm' | 'kpi' | 'phi' | 'var' | 'ews' | 'action' | 'forecast' | 'reports' | 'scurve' | 'exec';
+type Props = { lang: Lang; projectId: string; initialTab?: MonitorTab; subId?: string; hideTabs?: boolean };
+const TABS: [MonitorTab, string, string][] = [['dash','داشبورد','Dashboard'],['wpd','منابع داده','Data sources'],['evm','ارزش کسب‌شده','EVM'],['kpi','شاخص‌ها','KPIs'],['phi','سلامت PHI','PHI'],['var','انحراف','Variance'],['ews','هشدار','Alerts'],['action','پیش‌نگر / مصوبات','Lookahead / actions'],['forecast','پیش‌بینی ثبت‌شده','Stored forecast'],['scurve','روند تصاویر','Snapshot trend'],['reports','خروجی داخلی','Internal export'],['exec','خلاصهٔ مدیریتی','Executive summary']];
+const SUB: Record<string,MonitorTab> = { 'd3-p1-s1':'kpi','d3-p1-phi':'phi','d3-p2-s1':'evm','d3-p2-wpd':'wpd','d3-p2-fc':'forecast','d3-p3-s1':'var','d3-p4-s1':'ews','d3-p4-ews':'ews','d3-p5-s1':'action','d3-p6-s1':'dash','d3-p6-14':'reports','d3-p6-exec':'exec','d3-p6-dash':'dash' };
+const SOURCE_LABELS: Record<string,[string,string]> = { Activity:['برنامهٔ فعالیت‌ها','Activities'],ProgressEntry:['پیشرفت تأییدشده','Approved progress'],EvmSnapshot:['تصویر ارزش کسب‌شده','EVM snapshot'],Risk:['ریسک بازِ بالا','High open risks'],ChangeRequest:['تغییر در انتظار تصمیم','Pending changes'],Claim:['ادعای پیش‌نویس','Draft claims'],Document:['مدرک پیش‌نویس / در بازبینی','Draft / under-review documents'],Ncr:['عدم انطباق بسته‌نشده','Unclosed NCRs'],Equipment:['ماشین در تعمیر','Equipment in repair'],MaintenanceOrder:['تعمیرات باز','Open maintenance orders'],Correspondence:['مکاتبات معوق','Overdue correspondence'],MeetingAction:['مصوبات معوق','Overdue meeting actions'] };
+const STATES: Record<SourceState|string,[string,string]> = { unverified:['تصویر فاقد ورودی یا مهر سازگاری','Snapshot lacks inputs or integrity stamp'],ready:['دادهٔ موجود','Available'],empty:['بدون داده','No data'],restricted:['بدون مجوز','Restricted'],unavailable:['منبع در دسترس نیست','Source unavailable'],too_large:['بیش از سقف پردازش؛ عدد کامل نمایش داده نمی‌شود','Over processing limit; no partial total'],invalid:['دادهٔ نامعتبر','Invalid data'] };
+export default function MonitoringWorkspace(props: Props) {
+  const { user } = useAuth();
+  return <LiveMonitoring key={`${props.projectId}:${user?.id ?? ''}`} {...props} userId={user?.id ?? null} />;
+}
+function LiveMonitoring({lang,projectId,initialTab,subId,hideTabs,userId}:Props & {userId:string|null}) {
+  const fa=lang==='fa'; const text=(a:string,b:string)=>fa?a:b;
+  const [tab,setTab]=useState<MonitorTab>(initialTab??SUB[subId??'']??'dash');
+  const [horizon,setHorizon]=useState(30);
+  const [auto,setAuto]=useState(false);
+  const [revision,setRevision]=useState(0);
+  const [data,setData]=useState<MonitoringData|null>(null);
+  const [error,setError]=useState('');
+  const [loading,setLoading]=useState(false);
+  const [receivedHorizon,setReceivedHorizon]=useState<number|null>(null);
+  const generation=useRef(0);
+  useEffect(()=>setTab(initialTab??SUB[subId??'']??'dash'),[initialTab,subId]);
+  useEffect(()=>{
+    let cancelled=false; let timer:ReturnType<typeof setTimeout>|undefined;
+    const seq=++generation.current;
+    setData(null);setReceivedHorizon(null);setError('');
+    async function refresh() {
+      if(cancelled)return;
+      setLoading(true);
+      const result=await jsonRequest<MonitoringData>(`/api/monitoring/${encodeURIComponent(projectId)}/workspace?horizonDays=${horizon}`,userId,'GET');
+      if(cancelled||seq!==generation.current)return;
+      setLoading(false);
+      if(result.ok){setData(result.data);setReceivedHorizon(horizon);setError('');}
+      else{setData(null);setReceivedHorizon(null);setError(result.message);}
+      // Real, serialized polling. It never changes a KPI locally or overlaps requests.
+      if(auto)timer=setTimeout(()=>void refresh(),30000);
     }
+    void refresh();
+    return()=>{cancelled=true;generation.current++;if(timer)clearTimeout(timer);};
+  },[projectId,userId,horizon,auto,revision]);
+  const current=receivedHorizon===horizon?data:null;
+  const fmt=(n:number|null|undefined)=>n===null||n===undefined?'—':n.toLocaleString(fa?'fa-IR':'en-US',{maximumFractionDigits:3});
+  const state=(s:string)=>{const label=STATES[s];return label?text(...label):s;};
+  const sourceName=(s:string)=>SOURCE_LABELS[s]?text(...SOURCE_LABELS[s]):s;
+  const button='rounded-lg border b-line-soft px-3 py-2 text-xs tx1 disabled:opacity-40';
+  const p=current?.evm.latest;
+  const showEvm=['dash','evm','var','forecast','exec'].includes(tab);
+  const showSummary=['dash','kpi','exec'].includes(tab);
+  const exportData=()=>{
+    if(!current)return;
+    const url=URL.createObjectURL(new Blob([JSON.stringify(current,null,2)],{type:'application/json'}));
+    const a=document.createElement('a');a.href=url;a.download=`monitoring-${projectId}-${current.today}.json`;a.click();URL.revokeObjectURL(url);
   };
-
-  return (
-    <div className="mt-4 flex min-h-0 flex-1 flex-col gap-3 overflow-hidden" dir={rtl ? "rtl" : "ltr"}>
-      {/* Compact org-template + action-plan intake */}
-      <section className="glass-dark shrink-0 rounded-2xl px-3 py-2.5">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="grid h-7 w-7 place-items-center rounded-lg border border-amber-400/40 bg-amber-400/10 text-[13px]">📋</span>
-          <div>
-            <h3 className="text-[11.5px] font-normal tx1">{rtl ? "گزارش مدیریتی زنده" : "Live Management Report"}</h3>
-            <p className="text-[8px] font-extralight tx3">{rtl ? "ادغام KPI · EVM · انحراف · هشدار + اهم اکشن‌پلن" : "Merged KPI · EVM · Variance · Alert + Action Plan highlights"}</p>
-            {scopeCluster && scopeProject && (
-              <p className="mt-0.5 truncate text-[8px] font-light text-amber-200" dir={rtl ? "rtl" : "ltr"}>
-                {t(scopeCluster.title, lang)} · {scopeProject.code} · {t(scopeProject.name, lang)}
-              </p>
-            )}
-          </div>
-
-          <span className="mx-1 hidden h-4 w-px hline md:block" />
-          <span className="text-[8.5px] font-extralight tx3">{rtl ? "افق:" : "Horizon:"}</span>
-          {(["1m", "2m", "3m"] as Horizon[]).map((h) => (
-            <button key={h} onClick={() => setHorizon(h)} className={`rounded-md border px-2 py-0.5 text-[9px] font-light ${horizon === h ? "border-amber-400/60 bg-amber-400/15 text-amber-200" : "b-line-soft tx3"}`}>
-              {h === "1m" ? (rtl ? "۱ ماهه" : "1M") : h === "2m" ? (rtl ? "۲ ماهه" : "2M") : rtl ? "۳ ماهه" : "3M"}
-            </button>
-          ))}
-
-          <span className="mx-1 hidden h-4 w-px hline md:block" />
-          <div className="toggle-shell flex items-center gap-1 rounded-lg p-[2px]">
-            <button onClick={() => setMode("workshop")} className={`rounded-md px-2 py-0.5 text-[9px] font-light ${mode === "workshop" ? "toggle-on tx1" : "tx3"}`}>
-              {rtl ? "تشخیص کارگاه" : "Workshop policy"}
-            </button>
-            <button onClick={() => setMode("schedule")} className={`rounded-md px-2 py-0.5 text-[9px] font-light ${mode === "schedule" ? "toggle-on tx1" : "tx3"}`}>
-              {rtl ? "خروجی برنامه اصلی" : "Main schedule"}
-            </button>
-          </div>
-
-          <input ref={fileRef} type="file" hidden accept=".xlsx,.xls,.docx,.pdf" onChange={(e) => importOrgTemplate(e.target.files)} />
-          <button onClick={() => fileRef.current?.click()} className="glass-row rounded-lg px-2 py-1 text-[9px] font-light tx1">⬆ {rtl ? "ورود قالب سازمانی" : "Import org template"}</button>
-          <button onClick={loadOrgTemplate} className="rounded-lg border border-sky-400/40 bg-sky-400/10 px-2 py-1 text-[9px] font-light text-sky-200">⚙ {rtl ? "تولید قالب برنامه" : "Build org template"}</button>
-          <button onClick={ingest} className="rounded-lg border border-emerald-400/50 bg-emerald-400/10 px-2 py-1 text-[9px] font-light text-emerald-300">
-            {mode === "workshop" ? (rtl ? "تشخیص و ورود اهم اقلام" : "Detect key items") : (rtl ? "ایمپورت Lookahead" : "Import lookahead")}
-          </button>
-
-          <button onClick={() => setLive((v) => !v)} className={`ms-auto rounded-lg border px-2 py-1 text-[9px] font-light ${live ? "border-emerald-400/50 text-emerald-300" : "b-line-soft tx3"}`}>
-            <span className={`me-1 inline-block h-1.5 w-1.5 rounded-full ${live ? "pulse-dot bg-emerald-400" : "bg-slate-400"}`} />
-            {live ? (rtl ? "آپدیت لحظه‌ای" : "Live") : (rtl ? "متوقف" : "Paused")}
-          </button>
-        </div>
-        <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[8px] font-extralight tx4">
-          <span>🏢 {tpl.name[lang]} · {tpl.rev}</span>
-          {templateName && <span className="text-emerald-300">✓ {templateName}</span>}
-          <span className="tx4">·</span>
-          <span>{rtl ? "قالب کارفرما در این حوزه وجود ندارد" : "No client-mandated template in this domain"}</span>
-        </div>
+  return <div dir={fa?'rtl':'ltr'} className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-1">
+    <header className="glass-dark rounded-xl p-3 flex flex-wrap items-center gap-3">
+      <div className="flex-1"><h3 className="tx1 font-semibold">{text('پایش و کنترل — دادهٔ واقعی پروژه','Monitoring — persisted project data')}</h3><p className="text-xs tx3" dir="ltr">{projectId}</p></div>
+      <button className={button} disabled={loading} onClick={()=>setRevision(v=>v+1)}>{text('تازه‌سازی','Refresh')}</button>
+      <label className="text-xs tx2"><input type="checkbox" checked={auto} onChange={e=>setAuto(e.target.checked)}/> {text('بازخوانی واقعی هر ۳۰ ثانیه','Fetch every 30 seconds')}</label>
+      <label className="text-xs tx3">{text('افق پیش‌نگر (روز)','Lookahead (days)')} <select className="bg-[var(--row)] tx1 rounded-lg border b-line-soft p-2" value={horizon} onChange={e=>setHorizon(Number(e.target.value))}>{[30,60,90].map(n=><option key={n} value={n}>{n}</option>)}</select></label>
+    </header>
+    {!hideTabs&&<nav className="flex flex-wrap gap-2">{TABS.map(([id,a,b])=><button key={id} className={`${button} ${tab===id?'toggle-on':''}`} onClick={()=>setTab(id)}>{text(a,b)}</button>)}</nav>}
+    {error&&<p role="alert" className="rounded-xl p-3 bg-rose-500/10 text-rose-400 text-sm">{error} — {text('دادهٔ قبلی به‌عنوان دادهٔ زنده نمایش داده نمی‌شود.','Old data is not shown as live data.')}</p>}
+    {loading&&<p role="status" className="tx3 text-xs">{text('در حال دریافت از سرور…','Fetching from server…')}</p>}
+    {current&&<>
+      <section className="glass-dark rounded-xl p-3 text-xs tx3 space-y-1">
+        <p>{text('زمان بازخوانی سرور: ','Server read time: ')}<time dir="ltr">{current.generatedAt}</time></p>
+        <p>{text('این نما فقط‌خواندنی است. شاخص‌های جاری حوزه‌ها لزوماً هم‌تاریخ با تصویر EVM نیستند؛ بازخوانی، تاریخ داده را جلو نمی‌برد.','Read-only. Domain counts and the EVM snapshot can have different data dates; refresh does not advance the source data date.')}</p>
+        <p>{text('ارقام فقط محدودهٔ مجاز شما را پوشش می‌دهند؛ نبود مجوز با صفر برابر نیست.','Figures cover only your authorized scope; restricted is not zero.')}</p>
       </section>
-
-      <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-hidden xl:grid-cols-[minmax(280px,.85fr)_minmax(0,1.55fr)]">
-        {/* Action plan important items */}
-        <section className="glass-dark flex min-h-0 flex-col overflow-hidden rounded-2xl">
-          <header className="border-b b-line-soft px-3 py-2">
-            <h4 className="text-[11px] font-normal tx1">{rtl ? "اهم اقلام اکشن‌پلن" : "Action Plan Highlights"}</h4>
-            <p className="text-[8px] font-extralight tx3">
-              {rtl ? `فقط اقلام با اولویت بالا در افق ${horizon === "1m" ? "۱ ماهه" : horizon === "2m" ? "۲ ماهه" : "۳ ماهه"}` : `High-weight items only · ${horizon}`}
-            </p>
-          </header>
-          <div className="thin-scroll min-h-0 flex-1 space-y-1.5 overflow-y-auto p-2">
-            {important.length === 0 && (
-              <div className="flex h-full items-center justify-center text-[10px] font-extralight tx4">
-                {rtl ? "اقلام مهمی برای این افق ثبت نشده." : "No highlight items for this horizon."}
-              </div>
-            )}
-            {important.map((item) => (
-              <div key={item.id} className="glass-row rounded-xl px-2.5 py-2">
-                <div className="flex items-center gap-2">
-                  <i className="h-2 w-2 rounded-full" style={{ background: statusColor[item.status] }} />
-                  <span className="min-w-0 flex-1 truncate text-[10px] font-light tx1">{t(item.title, lang)}</span>
-                  <span className="text-[8px] font-light tabular-nums tx3">{item.weight}</span>
-                </div>
-                <div className="mt-1 flex items-center gap-2 text-[8px] font-extralight tx4">
-                  <span>{statusLabel[item.status][lang]}</span>
-                  <span>·</span>
-                  <span>{item.source === "workshop" ? (rtl ? "تشخیص کارگاه" : "Workshop") : (rtl ? "برنامه اصلی" : "Schedule")}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {/* Live merged management report */}
-        <section className="flex min-h-0 flex-col gap-2 overflow-hidden">
-          <div className="grid shrink-0 grid-cols-2 gap-2 md:grid-cols-4">
-            <MetricCard label={rtl ? "KPI تجمیعی" : "Composite KPI"} value={`${metrics.kpi}٪`} color="#FFD48A" source="KPI_Value" />
-            <MetricCard label="SPI" value={metrics.spi.toFixed(2)} color={metrics.spi < 1 ? "#FBBF24" : "#34D399"} source="EVM_Transaction" />
-            <MetricCard label="CPI" value={metrics.cpi.toFixed(2)} color={metrics.cpi < 1 ? "#FBBF24" : "#34D399"} source="EVM_Transaction" />
-            <MetricCard label={rtl ? "هشدار باز" : "Open alerts"} value={String(metrics.alerts)} color="#F87171" source="Alert_Register" />
-          </div>
-
-          <div className="grid shrink-0 grid-cols-3 gap-2">
-            <MetricCard label="PV" value={metrics.pv.toLocaleString()} color="#7FB2FF" source="PV" compact />
-            <MetricCard label="EV" value={metrics.ev.toLocaleString()} color="#8FE3C8" source="EV" compact />
-            <MetricCard label="AC" value={metrics.ac.toLocaleString()} color="#C9A7FF" source="AC" compact />
-          </div>
-
-          <div className="glass flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl p-3">
-            <div className="mb-2 flex items-center gap-2">
-              <h4 className="text-[11px] font-normal tx1">{rtl ? "ادغام چهار ماژول پایش" : "Four-module merge"}</h4>
-              <span className="text-[8px] font-extralight tx4">KPI · EVM · Variance · Early Warning</span>
-              <span className="ms-auto text-[8px] font-extralight ok-dim-t">{rtl ? "به‌روز در لحظه" : "Realtime"} · tick {tick}</span>
-            </div>
-            <div className="thin-scroll min-h-0 flex-1 space-y-1.5 overflow-y-auto">
-              <MergeRow tone="#FFD48A" title={rtl ? "KPI" : "KPI"} text={rtl ? `شاخص ترکیبی ${metrics.kpi}٪ — فاصله با هدف سازمانی ۱۲ واحد.` : `Composite KPI ${metrics.kpi}% — 12 pts below org target.`} />
-              <MergeRow tone="#8FE3C8" title="EVM" text={rtl ? `SPI ${metrics.spi.toFixed(2)} · CPI ${metrics.cpi.toFixed(2)} · EV ${metrics.ev.toLocaleString()} در برابر PV ${metrics.pv.toLocaleString()}.` : `SPI ${metrics.spi.toFixed(2)} · CPI ${metrics.cpi.toFixed(2)} · EV ${metrics.ev.toLocaleString()} vs PV ${metrics.pv.toLocaleString()}.`} />
-              <MergeRow tone="#FBBF24" title={rtl ? "انحراف" : "Variance"} text={rtl ? `SV ${metrics.sv} روز · CV ${metrics.cv} واحد هزینه — ریشه اصلی تأمین Long Lead.` : `SV ${metrics.sv} days · CV ${metrics.cv} cost units — primary root: long-lead supply.`} />
-              <MergeRow tone="#F87171" title={rtl ? "هشدار زودهنگام" : "Early Warning"} text={rtl ? `${metrics.alerts} هشدار باز. دو مورد مرتبط با گلوگاه ماشین‌آلات و تأخیر مصالح.` : `${metrics.alerts} open alerts. Two linked to equipment bottleneck and material delay.`} />
-              <MergeRow tone="#C9A7FF" title={rtl ? "اهم اکشن‌پلن" : "Action Plan"} text={rtl ? `${important.length} قلم اولویت‌دار از افق جاری به گزارش مدیریتی تزریق شد.` : `${important.length} high-priority items from current horizon injected into the report.`} />
-            </div>
-          </div>
-        </section>
-      </div>
-    </div>
-  );
+      {showEvm&&<section className="glass-dark rounded-xl p-3 space-y-3">
+        <div className="flex flex-wrap gap-3 text-xs tx2"><h4>EVM · {state(current.evm.state)}</h4><span>{text('تاریخ داده: ','Data date: ')}{p?.dataDate??'—'}</span><span dir="ltr">{p?.formulaVersion??'—'} · {p?.id??'—'}</span></div>
+        <p className="text-xs tx3">{text('سازگاری تصویر: ','Snapshot integrity: ')}{p?.integrity??'—'} · {text('ردیف بی‌تاریخ / آینده کنارگذاشته‌شده: ','Undated / future rows excluded: ')}{fmt(current.evm.excludedUndatedOrFuture)}</p>
+        {p?.stale&&<p className="text-amber-400 text-xs">{text('این تصویر بیش از ۳۰ روز قدمت دارد.','This snapshot is over 30 days old.')}</p>}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">{(tab==='forecast'?['eac','etc','vac']:tab==='var'?['spi','cpi','sv','cv']:['pv','ev','ac','bac','spi','cpi','sv','cv']).map(k=><div key={k} className="rounded-lg border b-line-soft p-3"><div className="text-xs tx3">{k.toUpperCase()}</div><div className="text-xl tx1 tabular-nums" dir="ltr">{fmt(p?.[k as 'pv'])}</div></div>)}</div>
+        <p className="text-xs tx3">{text('منبع: EvmSnapshot؛ SPI=EV/PV و CPI=EV/AC. مخرج صفر یا دادهٔ ناقص → نامعلوم. مبالغ در واحد منبع‌اند؛ هیچ تبدیل ارز یا جمع دوباره با هزینهٔ جاری انجام نشده است.','Source: EvmSnapshot; SPI=EV/PV and CPI=EV/AC. Zero denominators or missing data → unknown. Amounts retain source units; no FX conversion or double counting with current costs.')}</p>
+        {tab==='forecast'&&<p className="text-xs tx3">{text('EAC فقط مقدار ثبت‌شده است؛ ETC=EAC−AC و VAC=BAC−EAC. مدل پیش‌بینی تازه ساخته نمی‌شود.','EAC is the stored forecast only; ETC=EAC−AC and VAC=BAC−EAC. No new forecast model is fabricated.')}</p>}
+      </section>}
+      {showSummary&&<section className="grid grid-cols-2 xl:grid-cols-4 gap-3">{current.summaries.map(k=><article key={k.table} className="glass-dark rounded-xl p-3"><h4 className="text-xs tx2">{fa?k.label:sourceName(k.table)}</h4><p className="text-2xl tx1 mt-2">{fmt(k.value)}</p><p className="text-[10px] tx3 mt-2">{k.table} · {state(k.state)}</p></article>)}</section>}
+      <details open={tab==='wpd'} className="glass-dark rounded-xl p-3 overflow-x-auto"><summary className="tx1 text-sm mb-2 cursor-pointer">{text('منشأ و پوشش داده — وضعیت هر منبع','Data provenance and coverage — per-source status')}</summary><table className="w-full text-xs text-start tx2"><thead><tr>{[text('منبع','Source'),text('وضعیت','State'),text('تعداد رکورد مجاز','Visible rows'),text('آخرین ثبت / ویرایش','Latest write')].map(v=><th key={v} className="p-2 text-start">{v}</th>)}</tr></thead><tbody>{current.sources.map(s=><tr key={s.table} className="border-t b-line-soft"><td className="p-2">{s.table}</td><td>{state(s.state)}</td><td>{fmt(s.rowCount)}</td><td dir="ltr">{s.lastUpdatedAt??'—'}</td></tr>)}</tbody></table></details>
+      {['dash','ews','exec'].includes(tab)&&<section className="glass-dark rounded-xl p-3 space-y-2"><h4 className="text-sm tx1">{text('هشدارهای محاسبه‌شده از منابع مجاز','Rules evaluated from authorized sources')}</h4>{current.alerts.map(a=><div key={a.code} className="border b-line-soft rounded-lg p-2 text-xs text-amber-300"><strong>{fa?a.message:a.code}</strong> · {fmt(a.count)} <span className="tx3">{a.table}</span></div>)}{!current.alerts.length&&<p className="tx3 text-xs">{text('در داده‌های قابل مشاهده، قاعده‌ای فعال نشده؛ این به معنی سالم‌بودن منابع نامعلوم نیست.','No rule triggered in visible data; unknown sources are not certified healthy.')}</p>}<p className="tx3 text-xs">{text('هشدارها ثبت ACK یا قفل انتشار گزارش ایجاد نمی‌کنند. آستانه‌های EVM: SPI<۰٫۹۵ و CPI<۱.','Alerts do not create acknowledgements or report-release locks. EVM thresholds: SPI<0.95 and CPI<1.')}</p></section>}
+      {['dash','action'].includes(tab)&&<section className="space-y-3"><Items title={text('فعالیت‌های همپوشان افق + معوقات برنامه','Activities overlapping the horizon + overdue work')} items={current.lookahead} lang={lang}/><Items title={text('مصوبات باز جلسه تا انتهای افق','Open meeting actions due within the horizon')} items={current.actions} lang={lang}/><p className="tx3 text-xs">{text('درصد پیشرفت فقط از آخرین ProgressEntry پذیرفته‌شده و امضاشده است؛ پیشرفت خام Activity به EV تبدیل نمی‌شود. تغییر یا بستن مصوبه در حوزهٔ مبدأ انجام می‌شود.','Progress is the latest accepted, signed ProgressEntry; raw Activity progress is not turned into EV. Edit/close actions in their source workspace.')}</p></section>}
+      {tab==='phi'&&<section className="glass-dark rounded-xl p-4 tx2 text-sm">PHI: —<p className="mt-2">{text(current.phi.reason,'No calibrated health model with approved, synchronized inputs is stored. No synthetic composite score is shown.')}</p></section>}
+      {tab==='scurve'&&<SnapshotTrend data={current} lang={lang}/>}
+      {tab==='reports'&&<section className="glass-dark rounded-xl p-4 space-y-3 tx2 text-sm"><p>{text('خروجی JSON همین دادهٔ مجاز، همراه منشأ و زمان بازخوانی است؛ گزارش رسمی، قالب Excel یا مجوز انتشار قراردادی نیست.','JSON exports this authorized projection with provenance and read time. It is not an official report, Excel template, or contractual release.')}</p><button className={button} onClick={exportData}>{text('دریافت گزارش داخلی JSON','Download internal JSON')}</button></section>}
+    </>}
+  </div>;
 }
-
-function MetricCard({ label, value, color, source, compact }: { label: string; value: string; color: string; source: string; compact?: boolean }) {
-  return (
-    <div className="glass-dark rounded-2xl p-2.5">
-      <div className="flex items-center gap-1.5">
-        <i className="h-1.5 w-1.5 rounded-full" style={{ background: color }} />
-        <span className="truncate text-[8.5px] font-extralight tx3">{label}</span>
-      </div>
-      <div className={`${compact ? "text-[15px]" : "text-[18px]"} mt-1 font-light tabular-nums tx1`} dir="ltr">{value}</div>
-      <div className="mt-0.5 text-[7.5px] font-extralight tx4" dir="ltr">{source}</div>
-    </div>
-  );
+function Items({title,items,lang}:{title:string;items:MonitoringItem[];lang:Lang}) {
+  return <section className="glass-dark rounded-xl p-3 space-y-2"><h4 className="text-sm tx1">{title}</h4>{!items.length&&<p className="tx3 text-xs">{lang==='fa'?'مورد قابل مشاهده‌ای در این افق نیست؛ وضعیت منبع را در جدول پوشش بررسی کنید.':'No visible items in this horizon; check source coverage.'}</p>}{items.map(i=><article key={`${i.table}:${i.id}`} className="rounded-lg border b-line-soft p-2 flex flex-wrap gap-3 text-xs tx2"><strong>{i.code} — {i.title}</strong><span dir="ltr">{i.dueDate??'—'}</span><span className={i.status==='overdue'||i.critical?'text-amber-300':''}>{i.status}{i.critical?' · !':''}</span>{i.table==='Activity'&&<span>{lang==='fa'?'پیشرفت مصوب: ':'Approved: '}{i.approvedPct===null?'—':`${i.approvedPct}%`}</span>}<small className="tx3" dir="ltr">{i.table} · {i.id}</small></article>)}</section>;
 }
-
-function MergeRow({ tone, title, text }: { tone: string; title: string; text: string }) {
-  return (
-    <div className="rounded-xl border b-line-soft bg-black/10 px-3 py-2">
-      <div className="flex items-center gap-2">
-        <i className="h-2 w-2 rounded-full" style={{ background: tone }} />
-        <span className="text-[10px] font-medium" style={{ color: tone }}>{title}</span>
-      </div>
-      <p className="mt-1 text-[10px] font-light leading-5 tx2">{text}</p>
-    </div>
-  );
+function SnapshotTrend({data,lang}:{data:MonitoringData;lang:Lang}) {
+  const points=data.evm.history.slice(-60);
+  const values=points.flatMap(p=>[p.pv,p.ev,p.ac]).filter((v):v is number=>v!==null);
+  const max=Math.max(1,...values);
+  const first=Date.parse(points[0]?.dataDate??data.today), last=Date.parse(points[points.length-1]?.dataDate??data.today);
+  const x=(p:typeof points[number])=>30+((Date.parse(p.dataDate??data.today)-first)/Math.max(86400000,last-first))*620;
+  const y=(n:number)=>185-(n/max)*160;
+  const colours={pv:'#7fb2ff',ev:'#34d399',ac:'#fbbf24'};
+  return <section className="glass-dark rounded-xl p-3 space-y-3"><h4 className="text-sm tx1">{lang==='fa'?'روند حداکثر ۶۰ تصویر آخر؛ نه منحنی برنامهٔ ساخته‌شده':'Up to 60 latest snapshots; not an invented planned curve'}</h4>{!points.length?<p className="tx3 text-xs">{lang==='fa'?'تصویر قابل مشاهده‌ای وجود ندارد.':'No visible snapshots.'}</p>:<><svg viewBox="0 0 680 210" className="w-full max-h-64" role="img" aria-label="PV EV AC snapshot trend"><path d="M30 20 V185 H650" stroke="currentColor" fill="none" opacity=".3"/>{(['pv','ev','ac'] as const).map(key=><g key={key}>{points.map((p,i)=>{const value=p[key],prev=points[i-1];return value===null?null:<g key={p.id}><circle cx={x(p)} cy={y(value)} r="3" fill={colours[key]}/>{prev&&prev.formulaVersion===p.formulaVersion&&prev[key]!==null&&<line x1={x(prev)} y1={y(prev[key]!)} x2={x(p)} y2={y(value)} stroke={colours[key]}/>}</g>;})}</g>)}</svg><div className="flex gap-4 text-xs">{Object.entries(colours).map(([k,v])=><span key={k} style={{color:v}}>{k.toUpperCase()}</span>)}</div><div className="overflow-x-auto"><table className="w-full text-xs tx2"><thead><tr><th>DataDate</th><th>PV</th><th>EV</th><th>AC</th><th>Status</th></tr></thead><tbody>{points.map(p=><tr key={p.id}><td>{p.dataDate}</td><td>{p.pv??'—'}</td><td>{p.ev??'—'}</td><td>{p.ac??'—'}</td><td>{p.state}</td></tr>)}</tbody></table></div></>}</section>;
 }

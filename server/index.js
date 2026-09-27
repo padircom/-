@@ -1,3 +1,7 @@
+import { registerStrategyExcellenceRoutes } from "./strategyExcellenceWorkspaceApi.js";
+import { registerMonitoringWorkspaceRoutes } from "./monitoringWorkspaceApi.js";
+import { registerEqmWorkspaceRoutes, EQM_TABLES } from "./eqmWorkspaceApi.js";
+import { authorizeData, scopeData } from "./dataAccess.js";
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
@@ -17,7 +21,7 @@ import * as fallbackStore from "./fallbackStore.mjs";
 import * as jalaaliNs from "jalaali-js";
 import nodemailer from "nodemailer";
 import { createWorker } from "tesseract.js";
-import { applyGuardian } from "./rccLogic.js";
+import { registerRccWorkspaceRoutes } from "./rccWorkspaceApi.js";
 import { registerDprDocRoutes } from "./dprDocApi.js";
 import { registerFinWorkspaceRoutes } from "./finWorkspaceApi.js";
 import { registerCkmWorkspaceRoutes } from "./ckmWorkspaceApi.js";
@@ -576,6 +580,12 @@ async function repo() {
  * CRUD عمومی هیچ کنترل مجوزی ندارد؛ ثبت و خواندن فقط از `/api/ckm/:projectId`
  * با اعتبارسنجی موتور CKM، تفکیک وظیفه و لاگ ممیزی. */
 const DEDICATED_TABLE_ROUTES = {
+  StrategyPlan: "/api/spm/:projectId/plans",
+  ExcellenceAssessment: "/api/oex/:projectId/assessments",
+  ...Object.fromEntries([...EQM_TABLES, "PartTransaction"].map(t => [t, "/api/eqp/:projectId/rows/" + t])),
+  Risk: "/api/rcc/:projectId/risks",
+  ChangeRequest: "/api/rcc/:projectId/changes",
+  Claim: "/api/rcc/:projectId/claims",
   Correspondence: "/api/ckm/:projectId/letters",
   MeetingMinute: "/api/ckm/:projectId/meetings",
   MeetingAction: "/api/ckm/:projectId/meetings/:code/actions",
@@ -588,11 +598,9 @@ const DEDICATED_TABLE_ROUTES = {
 /** جدول‌هایی که از راه REST عمومی قابل دسترسی‌اند — بقیه فقط از مسیر اختصاصی خودشان. */
 const PUBLIC_TABLES = new Set([
   "Industry", "Project", "Document", "Transmittal", "WbsNode", "Activity", "ActivityRelation",
-  "Baseline", "Period", "ProgressEntry", "EvmSnapshot", "KpiSnapshot", "Risk", "ChangeRequest",
-  "Claim", "CostAccount", "PaymentCertificate", "Ncr", "InspectionRecord", "WorkforceMember",
+  "Baseline", "Period", "ProgressEntry", "EvmSnapshot", "KpiSnapshot",
+  "CostAccount", "PaymentCertificate", "Ncr", "InspectionRecord", "WorkforceMember",
   "Timesheet", "ReportIssue",
-  "Equipment", "EquipmentMeter", "EquipmentRental", "MaintenanceOrder",
-  "EquipmentDispatch", "EquipmentFuelLog", "PmSchedule", "SparePart", "PartTransaction",
   "ProcessTree",
 ]);
 
@@ -804,6 +812,10 @@ registerDprDocRoutes(app, { storageRoot, acceptedMimeTypes, maxFileBytes });
 /* LIVE-1: میز کار هزینه و تأمین d5 روی دادهٔ ماندگار (/api/fin/:projectId/...). */
 registerFinWorkspaceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
 registerCkmWorkspaceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
+registerRccWorkspaceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
+registerEqmWorkspaceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
+registerMonitoringWorkspaceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
+registerStrategyExcellenceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
 
 const sanitizeFileName = (name) => path.basename(name).replace(/[^a-zA-Z0-9._-]/g, "_").slice(-180) || "upload.bin";
 const uploadStorage = multer.diskStorage({
@@ -2692,40 +2704,11 @@ app.get("/api/portfolio/summary", async (req, res) => {
   }
 });
 
-/* ──────────────────────── RCC guardian (in-memory job; SQL optional) ──────────────────────── */
-const rccNotices = [
-  { id: "n1", claimId: "CLM-01", title: "EOT Long Lead", dueAt: new Date(Date.now() + 12 * 86400000).toISOString().slice(0, 10) },
-  { id: "n2", claimId: "CLM-02", title: "Access delay", dueAt: new Date(Date.now() + 2 * 86400000).toISOString().slice(0, 10) },
-  { id: "n3", claimId: "CLM-03", title: "Weather window", dueAt: new Date(Date.now() - 86400000).toISOString().slice(0, 10) },
-];
-
-app.get("/api/rcc/notices", (_req, res) => {
-  res.json({ ok: true, data: rccNotices });
-});
-
-app.post("/api/rcc/guardian/tick", (req, res) => {
-  const result = applyGuardian(rccNotices, new Date());
-  rccNotices.splice(0, rccNotices.length, ...result.notices);
-  res.json({ ok: true, data: result, meta: { writesSpi: false } });
-});
-
-app.get("/api/rcc/suggests", (_req, res) => {
-  res.json({
-    ok: true,
-    data: {
-      rules: ["TF0→risk", "High occurred→issue", "CCB approve→PEX snapshot suggest"],
-      note: "RCC never writes pctApproved/SPI",
-    },
-  });
-});
-
-const guardianMs = Number(process.env.RCC_GUARDIAN_MS || 0);
-if (guardianMs > 0) {
-  setInterval(() => {
-    const result = applyGuardian(rccNotices, new Date());
-    rccNotices.splice(0, rccNotices.length, ...result.notices);
-    if (result.events.length) console.log("[rcc-guardian]", result.events.map((e) => e.ews).join(","));
-  }, guardianMs).unref();
+/* LIVE-3: retire unscoped, synthetic, in-memory RCC endpoints. No silent demo fallback. */
+for (const path of ["/api/rcc/notices", "/api/rcc/guardian/tick", "/api/rcc/suggests"]) {
+  app.all(path, (req, res) => res.status(410).json({ ok: false, error: {
+    code: "RCC_PROJECT_REQUIRED", message: "از مسیر پروژه‌ای /api/rcc/:projectId/workspace استفاده کنید", traceId: req.requestId,
+  } }));
 }
 
 /* ──────────────────────── GOV governance (d6) — in-memory; SQL optional ──────────────────────── */
@@ -3309,7 +3292,7 @@ app.post("/api/framework/process-tree", async (req, res, next) => {
     const processes = normalizeTaxonomyProcesses(req.body?.processes);
     const payload = JSON.stringify({ version: 1, processes });
     const r = await repo();
-    const actor = String(req.headers["x-user-id"] ?? "anonymous");
+    const actor = String(req.headers["x-user-id"] ?? "anonymous").trim();
     await r.upsert("ProcessTree", { ProjectId: projectId, DomainId: domainId }, { Payload: payload, IsActive: true }, actor);
     const result = taxonomyResponse(req, { projectId, domainId, processes, source: "database" }, 200);
     return res.status(result.status).json(result.body);
@@ -3346,8 +3329,9 @@ app.get("/api/data/:table", async (req, res, next) => {
     const t = tableDef(req.params.table);
     if (t && DEDICATED_TABLE_ROUTES[t.name]) return dedicatedTable(req, res, t.name);
     if (!t || !PUBLIC_TABLES.has(t.name)) return res.status(404).json({ ok: false, error: { code: "UNKNOWN_TABLE", message: `جدول ${req.params.table} در دسترس نیست`, traceId: req.requestId } });
+    if (!authorizeData(req, res, t.name, !["GET", "HEAD"].includes(req.method))) return;
     const r = await repo();
-    const spec = parseSelectSpec(t, req.query);
+    const spec = scopeData(req, t, parseSelectSpec(t, req.query));
     const [items, total] = await Promise.all([r.list(t.name, spec), r.count(t.name, spec.where)]);
     res.json({ ok: true, data: { items, total, limit: spec.limit, offset: spec.offset }, meta: { traceId: req.requestId, timestamp: new Date().toISOString() } });
   } catch (err) {
@@ -3360,9 +3344,11 @@ app.get("/api/data/:table/:id", async (req, res, next) => {
     const t = tableDef(req.params.table);
     if (t && DEDICATED_TABLE_ROUTES[t.name]) return dedicatedTable(req, res, t.name);
     if (!t || !PUBLIC_TABLES.has(t.name)) return res.status(404).json({ ok: false, error: { code: "UNKNOWN_TABLE", message: `جدول ${req.params.table} در دسترس نیست`, traceId: req.requestId } });
+    if (!authorizeData(req, res, t.name, !["GET", "HEAD"].includes(req.method))) return;
     const r = await repo();
     const row = await r.get(t.name, req.params.id);
     if (!row) return res.status(404).json({ ok: false, error: { code: "NOT_FOUND", message: "رکورد یافت نشد", traceId: req.requestId } });
+    if (!authorizeData(req, res, t.name, false, t.name === "Project" ? row.Id : row.ProjectId)) return;
     res.json({ ok: true, data: row, meta: { traceId: req.requestId, timestamp: new Date().toISOString() } });
   } catch (err) {
     next(err);
@@ -3374,8 +3360,13 @@ app.post("/api/data/:table", async (req, res, next) => {
     const t = tableDef(req.params.table);
     if (t && DEDICATED_TABLE_ROUTES[t.name]) return dedicatedTable(req, res, t.name);
     if (!t || !PUBLIC_TABLES.has(t.name)) return res.status(404).json({ ok: false, error: { code: "UNKNOWN_TABLE", message: `جدول ${req.params.table} در دسترس نیست`, traceId: req.requestId } });
+    if (!authorizeData(req, res, t.name, !["GET", "HEAD"].includes(req.method))) return;
     const r = await repo();
-    const userId = String(req.headers["x-user-id"] ?? "anonymous");
+    const userId = String(req.headers["x-user-id"] ?? "anonymous").trim();
+    if (t.name === "Project" && !req.body?.Id) {
+      return res.status(400).json({ ok: false, error: { code: "PROJECT_ID_REQUIRED", message: "شناسهٔ پروژه برای کنترل دسترسی الزامی است", traceId: req.requestId } });
+    }
+    if (!authorizeData(req, res, t.name, true, t.name === "Project" ? req.body?.Id : req.body?.ProjectId)) return;
     const row = await r.create(t.name, r.pickWritable(t.name, req.body), userId, t.name.toLowerCase());
     res.status(201).json({ ok: true, data: row, meta: { traceId: req.requestId, timestamp: new Date().toISOString() } });
   } catch (err) {
@@ -3388,8 +3379,15 @@ app.patch("/api/data/:table/:id", async (req, res, next) => {
     const t = tableDef(req.params.table);
     if (t && DEDICATED_TABLE_ROUTES[t.name]) return dedicatedTable(req, res, t.name);
     if (!t || !PUBLIC_TABLES.has(t.name)) return res.status(404).json({ ok: false, error: { code: "UNKNOWN_TABLE", message: `جدول ${req.params.table} در دسترس نیست`, traceId: req.requestId } });
+    if (!authorizeData(req, res, t.name, !["GET", "HEAD"].includes(req.method))) return;
     const r = await repo();
-    const userId = String(req.headers["x-user-id"] ?? "anonymous");
+    const userId = String(req.headers["x-user-id"] ?? "anonymous").trim();
+    const existing = await r.get(t.name, req.params.id);
+    if (existing && !authorizeData(req, res, t.name, true, t.name === "Project" ? existing.Id : existing.ProjectId)) return;
+    // Identity and scope are immutable through generic PATCH, including null/empty values.
+    if (existing && [t.pk, "ProjectId"].some(k => Object.hasOwn(req.body ?? {}, k) && req.body[k] !== existing[k])) {
+      return res.status(400).json({ ok: false, error: { code: "IMMUTABLE_SCOPE", message: "شناسه و پروژهٔ رکورد قابل تغییر نیست", traceId: req.requestId } });
+    }
     const expected = req.headers["if-match"] ? Number(req.headers["if-match"]) : undefined;
     const result = await r.patch(t.name, req.params.id, r.pickWritable(t.name, req.body), userId, expected);
     if (!result.ok) {
@@ -3406,7 +3404,10 @@ app.delete("/api/data/:table/:id", async (req, res, next) => {
     const t = tableDef(req.params.table);
     if (t && DEDICATED_TABLE_ROUTES[t.name]) return dedicatedTable(req, res, t.name);
     if (!t || !PUBLIC_TABLES.has(t.name)) return res.status(404).json({ ok: false, error: { code: "UNKNOWN_TABLE", message: `جدول ${req.params.table} در دسترس نیست`, traceId: req.requestId } });
+    if (!authorizeData(req, res, t.name, !["GET", "HEAD"].includes(req.method))) return;
     const r = await repo();
+    const existing = await r.get(t.name, req.params.id);
+    if (existing && !authorizeData(req, res, t.name, true, t.name === "Project" ? existing.Id : existing.ProjectId)) return;
     const result = await r.remove(t.name, req.params.id);
     if (!result.affected) return res.status(404).json({ ok: false, error: { code: "NOT_FOUND", message: "رکورد یافت نشد", traceId: req.requestId } });
     res.json({ ok: true, data: { deleted: result.affected }, meta: { traceId: req.requestId, timestamp: new Date().toISOString() } });
@@ -3426,7 +3427,7 @@ const EQM_WINDOW_DAYS = 30;
 const eqmNowIso = () => new Date().toISOString().slice(0, 10);
 const eqmWindowFrom = () => {
   const d = new Date();
-  d.setDate(d.getDate() - EQM_WINDOW_DAYS);
+  d.setDate(d.getDate() - (EQM_WINDOW_DAYS - 1));
   return d.toISOString().slice(0, 10);
 };
 
@@ -3459,7 +3460,7 @@ app.get("/api/eqm/summary", async (req, res, next) => {
     const nowIso = eqmNowIso();
     const fromIso = eqmWindowFrom();
     const metrics = equipment.map((e) => {
-      const em = meters.filter((m) => m.EquipmentId === e.Id);
+      const em = meters.filter((m) => m.EquipmentId === e.Id && m.ReadAt >= fromIso && m.ReadAt <= nowIso);
       const eo = orders.filter((o) => o.EquipmentId === e.Id);
       return { workHours: workHoursSum(em), downtimeHrs: downtimeHours(eo, fromIso, nowIso), periodDays: EQM_WINDOW_DAYS };
     });
@@ -3472,7 +3473,7 @@ app.get("/api/eqm/summary", async (req, res, next) => {
       const lastPm = [...eo].filter((o) => (o.Kind === "preventive" || o.Kind === "inspection") && (o.Status === "done" || o.Status === "closed")).sort((a, b) => String(b.ReportedAt).localeCompare(String(a.ReportedAt)))[0];
       const age = equipmentAge(e.CommissionedAt, nowIso);
       const rental = rentals.find((rl) => rl.EquipmentId === e.Id && rl.Status === "active");
-      const em = meters.filter((m) => m.EquipmentId === e.Id);
+      const em = meters.filter((m) => m.EquipmentId === e.Id && m.ReadAt >= fromIso && m.ReadAt <= nowIso);
       warnings += eqmEws(e, {
         nowIso, periodDays: EQM_WINDOW_DAYS, workHours: workHoursSum(em),
         downtimeHrs: downtimeHours(eo, fromIso, nowIso), orders: eo, rental,
@@ -3501,7 +3502,7 @@ app.get("/api/eqm/equipment/:id/kpi", async (req, res, next) => {
     const nowIso = eqmNowIso();
     const fromIso = eqmWindowFrom();
     const cat = CATEGORY_BY_CODE[equipment.Category] ?? CATEGORY_BY_CODE["OTH"];
-    const workHours = workHoursSum(meters);
+    const workHours = workHoursSum(meters.filter(m => m.ReadAt >= fromIso && m.ReadAt <= nowIso));
     const down = downtimeHours(orders, fromIso, nowIso);
     const age = equipmentAge(equipment.CommissionedAt, nowIso);
     const rental = rentals.find((rl) => rl.Status === "active");
@@ -3602,7 +3603,7 @@ app.get("/api/eqp/equipment/:id/idcard", async (req, res, next) => {
  * اگر اپراتور در HRM نباشد، `licenseExpiry` تعریف‌نشده می‌ماند و دروازهٔ
  * گواهی‌نامه ساکت می‌شود — ولی `G-EQP-OPERATOR` همچنان تخصیص را می‌سنجد.
  */
-async function eqpOperatorLicense(operatorId) {
+async function eqpOperatorLicense(operatorId, projectId) {
   const id = String(operatorId || "");
   if (!id) return { assigned: false, found: false };
   const r = await repo();
@@ -3612,7 +3613,7 @@ async function eqpOperatorLicense(operatorId) {
     const [byNo] = await r.list("WorkforceMember", { where: [{ column: "PersonnelNo", op: "eq", value: id }], limit: 1 });
     member = byNo;
   }
-  if (!member) return { assigned: true, found: false };
+  if (!member || member.ProjectId !== projectId) return { assigned: false, found: false };
   return {
     assigned: true,
     found: true,
@@ -3646,7 +3647,7 @@ app.post("/api/eqp/dispatch/precheck", async (req, res, next) => {
         pmOverdueDays = Math.max(pmOverdueDays, sc.Basis === "calendar_days" ? Math.abs(due.remaining) : Math.ceil(Math.abs(due.remaining) / 8));
       }
     }
-    const operator = await eqpOperatorLicense(body.operatorId);
+    const operator = await eqpOperatorLicense(body.operatorId, equipment.ProjectId);
     const check = dispatchPrecheck({
       nowIso,
       equipment,
@@ -3692,7 +3693,7 @@ app.post("/api/eqp/dispatch/:id/advance", async (req, res, next) => {
     if (!canAdvanceDispatch(row.Status, to)) {
       return eqpBad(req, res, "E-EQP-FLOW", `گذار از «${row.Status}» به «${to}» مجاز نیست`, 409);
     }
-    const userId = String(req.headers["x-user-id"] ?? "anonymous");
+    const userId = String(req.headers["x-user-id"] ?? "anonymous").trim();
     const patch = to === "approved" ? { Status: to, ApprovedBy: userId } : { Status: to };
     const result = await r.patch("EquipmentDispatch", req.params.id, patch, userId);
     if (!result.ok) return eqpBad(req, res, result.code, result.message, result.code === "NOT_FOUND" ? 404 : 409);
@@ -3761,22 +3762,19 @@ app.get("/api/eqp/kpi", async (req, res, next) => {
     const nowIso = eqmNowIso();
     const fromIso = eqmWindowFrom();
     const metrics = equipment.map((e) => ({
-      workHours: workHoursSum(meters.filter((m) => m.EquipmentId === e.Id)),
+      workHours: workHoursSum(meters.filter((m) => m.EquipmentId === e.Id && m.ReadAt >= fromIso && m.ReadAt <= nowIso)),
       downtimeHrs: downtimeHours(orders.filter((o) => o.EquipmentId === e.Id), fromIso, nowIso),
       periodDays: EQM_WINDOW_DAYS,
     }));
-    const fuelStats = fuelSummary(fuel);
+    const fuelStats = fuelSummary(fuel.filter(f => f.LogDate >= fromIso && f.LogDate <= nowIso));
     const assetValue = equipment.reduce((s, e) => s + (Number(e.PurchaseValue) || 0), 0);
     const maintenanceCost = orders.reduce((s, o) => s + (Number(o.Cost) || 0), 0);
     const totalWork = metrics.reduce((s, m) => s + m.workHours, 0);
     const totalDown = metrics.reduce((s, m) => s + m.downtimeHrs, 0);
-    /* تولید واقعی از برگه‌های دیسپچ اجراشده می‌آید؛ نبودش یعنی OEE سنجش‌ناپذیر است
-     * و مؤلفهٔ «عملکرد» را نباید ۱۰۰٪ فرض کرد. */
-    const executed = dispatches.filter((x) => x.Status === "executed" && Number(x.PlannedQty) > 0);
-    const actualOutput = executed.reduce((s, x) => s + (Number(x.PlannedQty) || 0), 0);
-    const executedHours = executed.reduce((s, x) => s + (Number(x.PlannedHours) || 0), 0);
-    const ratedOutputPerHour = executedHours > 0 ? actualOutput / executedHours : 0;
-    const oeeMeasured = executed.length > 0 && ratedOutputPerHour > 0;
+    // LIVE-4: PlannedQty is not measured output; never use plan as actual OEE.
+    const actualOutput = undefined;
+    const ratedOutputPerHour = undefined;
+    const oeeMeasured = false;
     const activePm = pm.filter((x) => x.Active !== false && x.Active !== 0);
     const board = fleetKpiBoard({
       equipment,
@@ -3819,15 +3817,15 @@ app.get("/api/eqp/kpi", async (req, res, next) => {
       pmCompliance: pmCompliance(orders, activePm.length),
       oee: oeeMeasured
         ? { measured: true, ...oee({ downtimeHours: totalDown, periodHours: Math.max(1, EQM_WINDOW_DAYS * 24 * Math.max(1, equipment.length)), workHours: totalWork, actualOutput, ratedOutputPerHour }) }
-        : { measured: false, reason: "تولید واقعی ثبت نشده — برگه دیسپچ اجراشده با حجم لازم است" },
+        : { measured: false, reason: "تولید واقعی و ظرفیت مرجع ثبت نشده؛ حجم برنامهٔ دیسپچ، تولید واقعی نیست" },
       rcaPareto: rcaPareto(orders),
-      health: equipmentHealthScore({
+      health: equipment.length && equipment.every(e => e.CommissionedAt) ? equipmentHealthScore({
         availabilityPct: board.availability,
         utilizationPct: board.utilization,
         pmCompliancePct: board.pmCompliance,
         criticalBacklog: maintenanceBacklog(orders).byPriority.critical,
-        agingRatio: 0.3,
-      }),
+        agingRatio: equipment.filter(e => equipmentAge(e.CommissionedAt, nowIso).years > (CATEGORY_BY_CODE[e.Category]?.economicLifeYears ?? 10)).length / equipment.length,
+      }) : null,
       pmOverdueDays,
       alerts,
     }));
@@ -3872,12 +3870,12 @@ app.post("/api/eqp/validate", (req, res) => {
  * فقط سازندهٔ داده در eqmLogic و سریال‌سازی در rptLogic به هم وصل شدند. */
 
 const EQP_DEFAULT_LETTERHEAD = {
-  projectName: "پروژه نمونه — واحد فرآورش گاز",
-  projectCode: "OG-2401",
-  contractNo: "C-1404-118",
-  contractor: { name: "شرکت پیمانکار نمونه", logoText: "پیمانکار", role: { fa: "پیمانکار", en: "Contractor" } },
-  client: { name: "شرکت کارفرمای نمونه", logoText: "کارفرما", role: { fa: "کارفرما", en: "Client" } },
-  consultant: { name: "مهندسین مشاور نمونه", logoText: "مشاور", role: { fa: "مشاور", en: "Consultant" } },
+  projectName: "",
+  projectCode: "",
+  contractNo: "",
+  contractor: { name: "", logoText: "پیمانکار", role: { fa: "پیمانکار", en: "Contractor" } },
+  client: { name: "", logoText: "کارفرما", role: { fa: "کارفرما", en: "Client" } },
+  consultant: { name: "", logoText: "مشاور", role: { fa: "مشاور", en: "Consultant" } },
   docNo: "",
   revision: "R00",
   issueDate: new Date().toISOString().slice(0, 10),
@@ -3955,7 +3953,7 @@ app.get("/api/eqp/reports/:code", async (req, res, next) => {
     const codeById = Object.fromEntries(data.equipment.map((e) => [e.Id, e.Code]));
 
     const metricsOf = (e) => ({
-      workHours: workHoursSum(data.meters.filter((m) => m.EquipmentId === e.Id)),
+      workHours: workHoursSum(data.meters.filter((m) => m.EquipmentId === e.Id && m.ReadAt >= fromIso && m.ReadAt <= nowIso)),
       downtimeHrs: downtimeHours(data.orders.filter((o) => o.EquipmentId === e.Id), fromIso, nowIso),
     });
     const activePm = data.pm.filter((x) => x.Active !== false && x.Active !== 0);
@@ -4054,7 +4052,7 @@ app.get("/api/eqp/reports/:code", async (req, res, next) => {
         utilizationPct: board.utilization,
         pmCompliancePct: board.pmCompliance,
         criticalBacklog: maintenanceBacklog(data.orders).byPriority.critical,
-        agingRatio: 0.3,
+        agingRatio: data.equipment.length ? data.equipment.filter(e => e.CommissionedAt && equipmentAge(e.CommissionedAt, nowIso).years > (CATEGORY_BY_CODE[e.Category]?.economicLifeYears ?? 10)).length / data.equipment.length : 0,
       });
       report = buildFleetPerformanceReport({
         fromIso,
@@ -4131,7 +4129,7 @@ app.get("/api/eqp/reports/:code", async (req, res, next) => {
         utilizationPct: board.utilization,
         pmCompliancePct: board.pmCompliance,
         criticalBacklog: backlog.byPriority.critical,
-        agingRatio: 0.3,
+        agingRatio: data.equipment.length ? data.equipment.filter(e => e.CommissionedAt && equipmentAge(e.CommissionedAt, nowIso).years > (CATEGORY_BY_CODE[e.Category]?.economicLifeYears ?? 10)).length / data.equipment.length : 0,
       });
       /* بودجه از حساب‌های هزینهٔ مرتبط با دیسپچ‌ها می‌آید؛ اگر ثبت نشده باشد
        * انحراف «سنجش‌ناپذیر» گزارش می‌شود نه صفر. */
@@ -4187,7 +4185,11 @@ app.get("/api/eqp/reports/:code", async (req, res, next) => {
       missingMeterReadings: missingMeter,
     });
 
+    const projectRow = await (await repo()).get("Project", projectId);
     const lh = eqpLetterhead(req.query, code, Number(req.query.seq) || 1);
+    lh.projectName = projectRow?.NameFa || projectId;
+    lh.projectCode = projectRow?.Code || projectId;
+
     lh.periodLabel = `${fromIso} … ${nowIso}`;
     const letterheadIssues = validateLetterhead(lh, audience);
     const blockingIssues = letterheadIssues.filter((i) => i.severity === "error");
@@ -4324,7 +4326,7 @@ app.post("/api/eqp/fin/post-costs", async (req, res, next) => {
         equipmentId: e.Id,
         code: e.Code,
         costAccountId: dispatch?.CostAccountId ?? null,
-        workHours: workHoursSum(data.meters.filter((m) => m.EquipmentId === e.Id)),
+        workHours: workHoursSum(data.meters.filter((m) => m.EquipmentId === e.Id && m.ReadAt >= fromIso && m.ReadAt <= nowIso)),
         rentalCost: rental ? rentalCostAccrued(rental, nowIso).accrued : 0,
         maintenanceCost: data.orders.filter((o) => o.EquipmentId === e.Id).reduce((s, o) => s + (Number(o.Cost) || 0), 0),
         fuelCost: fuelSummary(data.fuel.filter((f) => f.EquipmentId === e.Id)).cost,
@@ -4448,6 +4450,11 @@ app.post("/api/integration/xer", integrationUpload.single("file"), async (req, r
     const projectId = String(req.query.projectId || req.body?.projectId || "").trim();
     if (!projectId) return itgFail(req, res, 400, "NO_PROJECT", "شناسه پروژه (projectId) الزامی است");
 
+    // XER reads existing schedule data even during preview; protect that read too.
+    const writing = req.query.commit === "1" || req.body?.commit === true;
+    for (const table of ["WbsNode", "Activity", "ActivityRelation"]) {
+      if (!authorizeData(req, res, table, writing, projectId)) return;
+    }
     const parsedTables = parseXerTables(source.text);
     if (!parsedTables.tableNames.length) return itgFail(req, res, 422, "BAD_XER", "ساختار XER شناسایی نشد");
     const extracted = extractXer(parsedTables, projectId, jalaali.toGregorian);
@@ -4479,7 +4486,7 @@ app.post("/api/integration/xer", integrationUpload.single("file"), async (req, r
     if (!commit) return itgOk(req, res, payload);
     if (blocking.length) return itgFail(req, res, 422, "IMPORT_BLOCKED", `${blocking.length} خطای مسدودکننده؛ پیش از نوشتن اصلاح شود`);
 
-    const actor = req.headers["x-user-id"] || "integration";
+    const actor = String(req.headers["x-user-id"]).trim();
     const written = { wbs: 0, activities: 0, relations: 0 };
     /** شناسهٔ ردیف‌های XER قطعی است، پس upsert روی همان کلید تکرارپذیر می‌ماند. */
     const upsertById = async (table, row) => {
@@ -4524,6 +4531,8 @@ app.post("/api/integration/import/:code", integrationUpload.single("file"), asyn
   try {
     const template = templateByCode(req.params.code.toUpperCase());
     if (!template) return itgFail(req, res, 404, "UNKNOWN_TEMPLATE", `قالب ${req.params.code} تعریف نشده است`);
+    if ((req.query.commit === "1" || req.body?.commit === true) && PUBLIC_TABLES.has(template.targetTable)
+      && !authorizeData(req, res, template.targetTable, true)) return;
     const source = integrationText(req);
     if (!source) return itgFail(req, res, 400, "NO_FILE", "فایلی برای ورود ارسال نشده است");
 
@@ -4547,8 +4556,15 @@ app.post("/api/integration/import/:code", integrationUpload.single("file"), asyn
     if (!PUBLIC_TABLES.has(template.targetTable)) return itgFail(req, res, 403, "TABLE_NOT_EXPOSED", `نوشتن در ${template.targetTable} مجاز نیست`);
 
     const r = await repo();
-    const actor = req.headers["x-user-id"] || "integration";
+    // Preflight the entire batch before the first write (including every row's scope).
+    if (!authorizeData(req, res, template.targetTable, true, projectId || undefined)) return;
+    for (const row of result.rows) {
+      const scope = template.targetTable === "Project" ? row.Id : projectId || row.ProjectId;
+      if (!authorizeData(req, res, template.targetTable, true, scope)) return;
+    }
+    const actor = String(req.headers["x-user-id"]).trim();
     const hasProject = allColumns(tableDef(template.targetTable)).some((c) => c.name === "ProjectId");
+    if (hasProject && !projectId) return itgFail(req, res, 400, "NO_PROJECT", "شناسه پروژه برای ثبت نهایی الزامی است");
     let written = 0;
     let inserted = 0;
     for (const row of result.rows) {
@@ -4949,12 +4965,12 @@ app.get("/api/eng/reports/:code", async (req, res, next) => {
  * ENG هیچ عددی نمی‌سازد؛ فقط بدنهٔ ساخته‌شده را به سریال‌ساز می‌دهد. */
 
 const ENG_DEFAULT_LETTERHEAD = {
-  projectName: "پروژه نمونه — واحد فرآورش گاز",
-  projectCode: "OG-2401",
-  contractNo: "C-1404-118",
-  contractor: { name: "شرکت پیمانکار نمونه", logoText: "پیمانکار", role: { fa: "پیمانکار", en: "Contractor" } },
-  client: { name: "شرکت کارفرمای نمونه", logoText: "کارفرما", role: { fa: "کارفرما", en: "Client" } },
-  consultant: { name: "مهندسین مشاور نمونه", logoText: "مشاور", role: { fa: "مشاور", en: "Consultant" } },
+  projectName: "",
+  projectCode: "",
+  contractNo: "",
+  contractor: { name: "", logoText: "پیمانکار", role: { fa: "پیمانکار", en: "Contractor" } },
+  client: { name: "", logoText: "کارفرما", role: { fa: "کارفرما", en: "Client" } },
+  consultant: { name: "", logoText: "مشاور", role: { fa: "مشاور", en: "Consultant" } },
   docNo: "",
   revision: "R00",
   issueDate: new Date().toISOString().slice(0, 10),
@@ -5204,7 +5220,10 @@ app.post("/api/eng/rcc/draft-eot", engRequire("eng.ifc.release"), async (req, re
     if (apply) {
       const userId = req.headers["x-user-id"] || "system";
       for (const d of plan.drafts) {
-        const claim = await r.upsert("Claim", { ProjectId: projectId, Code: d.code }, {
+        // LIVE-3: draft producers cannot overwrite a reviewed/final RCC record.
+        const existingRcc = await r.findOne("Claim", [{ column: "ProjectId", op: "eq", value: projectId }, { column: "Code", op: "eq", value: d.code }]);
+        if (existingRcc) continue;
+        const claim = await r.create("Claim", {
           ProjectId: projectId,
           Code: d.code,
           TitleFa: d.titleFa,
@@ -5899,7 +5918,10 @@ app.post("/api/eng/rcc/draft-crs", engRequire("eng.tq.answer"), async (req, res,
       const userId = req.headers["x-user-id"] || "system";
       const byCode = new Map(queries.map((q) => [q.Code, q]));
       for (const d of plan.drafts) {
-        const cr = await r.upsert("ChangeRequest", { ProjectId: projectId, Code: d.code }, {
+        // LIVE-3: draft producers cannot overwrite a reviewed/final RCC record.
+        const existingRcc = await r.findOne("ChangeRequest", [{ column: "ProjectId", op: "eq", value: projectId }, { column: "Code", op: "eq", value: d.code }]);
+        if (existingRcc) continue;
+        const cr = await r.create("ChangeRequest", {
           ProjectId: projectId,
           Code: d.code,
           TitleFa: d.titleFa,

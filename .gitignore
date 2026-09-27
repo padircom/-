@@ -53,3 +53,12 @@ vite.preview.config.mts
 
 # پیوست‌های DPR زمان اجرا (FIX-3) — داده است، نه کد
 server/storage/dpr/
+
+# Generated LIVE-3 shared logic
+server/rccWsLogic.js
+
+# Generated LIVE-5 monitoring projections
+server/monitoringWsLogic.js
+
+# Generated LIVE-6 strategy / excellence logic
+server/sxWsLogic.js

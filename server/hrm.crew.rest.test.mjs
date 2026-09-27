@@ -107,7 +107,8 @@ before(async () => {
   ]) {
     const res = await fetch(`${BASE}/api/data/${table}`, {
       method: "POST",
-      headers: { "content-type": "application/json", "x-user-id": "u-admin" },
+      // SEC-1: budget fixtures need budget permission; admin is not a business superuser.
+      headers: { "content-type": "application/json", "x-user-id": table === "CostAccount" ? "u-ceo" : "u-planner" },
       body: JSON.stringify(row),
     });
     assert.ok(res.ok || res.status === 409, `${table}: ${res.status}`);
@@ -586,7 +587,8 @@ test("حساب هزینهٔ پروژهٔ دیگر پذیرفته نمی‌شود
   /* وجود داشتن کافی نیست — باید به همین پروژه تعلق داشته باشد. */
   const res = await fetch(`${BASE}/api/data/CostAccount`, {
     method: "POST",
-    headers: { "content-type": "application/json", "x-user-id": "u-admin" },
+    // SEC-1: budget fixtures need budget permission; admin is not a business superuser.
+    headers: { "content-type": "application/json", "x-user-id": "u-ceo" },
     body: JSON.stringify({
       Id: "CBS-OTHER-CREW", ProjectId: OTHER, Code: "CBS-OTHER-CREW",
       TitleFa: "حساب پروژهٔ دیگر", Budget: 999, Committed: 0, Actual: 0, Currency: "IRR",

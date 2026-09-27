@@ -292,7 +292,7 @@ export default function App() {
           ) : quickAction === "calc" ? (
             <CalcPanel lang={lang} />
           ) : quickAction === "reports" ? (
-            <MonitoringWorkspace lang={lang} />
+            projectScope?.projectId ? <MonitoringWorkspace projectId={projectScope.projectId} lang={lang} /> : <div className="glass rounded-xl p-4 tx2 text-sm">{rtl ? "ابتدا پروژه را از سبد پروژه‌ها انتخاب کنید." : "Select a project from the portfolio first."}</div>
           ) : quickAction === "alerts" ? (
             <NotificationOpsPanel lang={lang} />
           ) : quickAction === "portfolio" ? (
