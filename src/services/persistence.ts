@@ -464,7 +464,7 @@ export const SCHEMA: TableDef[] = [
     module: "d3",
     title: { fa: "عکس ارزش کسب‌شده", en: "EVM snapshot" },
     pk: "Id",
-    columns: [id(), req("ProjectId", "text", { len: 60 }), req("DataDate", "date"), req("Pv", "decimal", { precision: 18, scale: 2 }), req("Ev", "decimal", { precision: 18, scale: 2 }), req("Ac", "decimal", { precision: 18, scale: 2 }), c("Bac", "decimal", { precision: 18, scale: 2 }), c("Eac", "decimal", { precision: 18, scale: 2 }), c("Spi", "decimal", { precision: 8, scale: 4 }), c("Cpi", "decimal", { precision: 8, scale: 4 })],
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("DataDate", "date"), req("Pv", "decimal", { precision: 18, scale: 2 }), req("Ev", "decimal", { precision: 18, scale: 2 }), req("Ac", "decimal", { precision: 18, scale: 2 }), c("Bac", "decimal", { precision: 18, scale: 2 }), c("Eac", "decimal", { precision: 18, scale: 2 }), c("Spi", "decimal", { precision: 8, scale: 4 }), c("Cpi", "decimal", { precision: 8, scale: 4 }), c("FormulaVersion", "text", { len: 20 }), c("Hash", "text", { len: 40 }), c("Inputs", "json")],
     indexes: [{ name: "UX_EvmSnapshot", columns: ["ProjectId", "DataDate"], unique: true }],
   },
   {
@@ -509,7 +509,7 @@ export const SCHEMA: TableDef[] = [
     module: "d5",
     title: { fa: "حساب هزینه", en: "Cost account" },
     pk: "Id",
-    columns: [id(), req("ProjectId", "text", { len: 60 }), req("Code", "text", { len: 40 }), req("TitleFa", "text", { len: 300 }), req("Budget", "decimal", { precision: 18, scale: 2 }), req("Committed", "decimal", { precision: 18, scale: 2, default: "0" }), req("Actual", "decimal", { precision: 18, scale: 2, default: "0" }), c("Currency", "text", { len: 10, default: "'IRR'" })],
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("Code", "text", { len: 40 }), req("TitleFa", "text", { len: 300 }), req("Budget", "decimal", { precision: 18, scale: 2 }), req("Committed", "decimal", { precision: 18, scale: 2, default: "0" }), req("Actual", "decimal", { precision: 18, scale: 2, default: "0" }), c("Currency", "text", { len: 10, default: "'IRR'" }), c("ParentCode", "text", { len: 40, comment: "LIVE-1: کد والد در CBS" }), c("Kind", "text", { len: 20, comment: "direct|indirect|reserve" }), c("Category", "text", { len: 20, comment: "labor|material|equipment|subcontract|overhead" }), c("ProgressPct", "decimal", { precision: 5, scale: 2, comment: "درصد پیشرفت فیزیکی برای EV" })],
     indexes: [{ name: "UX_CostAccount_Code", columns: ["ProjectId", "Code"], unique: true }],
   },
   {
@@ -535,7 +535,7 @@ export const SCHEMA: TableDef[] = [
     module: "d5",
     title: { fa: "درخواست خرید", en: "Purchase requisition" },
     pk: "Id",
-    columns: [id(), req("ProjectId", "text", { len: 60 }), req("Code", "text", { len: 40 }), c("MrCode", "text", { len: 40 }), req("TitleFa", "text", { len: 400 }), c("Discipline", "text", { len: 40 }), req("RequestedBy", "text", { len: 60 }), req("RequestedAt", "date"), c("NeedByDate", "date"), c("EstimatedAmount", "decimal", { precision: 18, scale: 2 }), c("Currency", "text", { len: 10 }), c("CostAccountCode", "text", { len: 40 }), c("BudgetStatus", "text", { len: 30, comment: "ok|over_budget|unknown" }), req("Status", "text", { len: 30, comment: "draft|submitted|approved|rejected|converted|cancelled" }), c("ApprovedBy", "text", { len: 60 }), c("ApprovedAt", "datetime"), c("RemarksFa", "text", { len: 1000 })],
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("Code", "text", { len: 40 }), c("MrCode", "text", { len: 40 }), req("TitleFa", "text", { len: 400 }), c("Discipline", "text", { len: 40 }), req("RequestedBy", "text", { len: 60 }), req("RequestedAt", "date"), c("NeedByDate", "date"), c("EstimatedAmount", "decimal", { precision: 18, scale: 2 }), c("Currency", "text", { len: 10 }), c("CostAccountCode", "text", { len: 40 }), c("BudgetStatus", "text", { len: 30, comment: "ok|over_budget|unknown" }), req("Status", "text", { len: 30, comment: "draft|submitted|approved|rejected|converted|cancelled" }), c("ApprovedBy", "text", { len: 60 }), c("ApprovedAt", "datetime"), c("RemarksFa", "text", { len: 1000 }), c("Quantity", "decimal", { precision: 18, scale: 3 }), c("Unit", "text", { len: 20 }), c("IsUrgent", "bool")],
     indexes: [
       { name: "UX_PurchaseRequisition", columns: ["ProjectId", "Code"], unique: true },
       { name: "IX_PurchaseRequisition_Mr", columns: ["ProjectId", "MrCode"] },
@@ -546,11 +546,59 @@ export const SCHEMA: TableDef[] = [
     module: "d5",
     title: { fa: "سفارش خرید", en: "Purchase order" },
     pk: "Id",
-    columns: [id(), req("ProjectId", "text", { len: 60 }), req("PoNo", "text", { len: 40 }), c("PrCode", "text", { len: 40 }), req("VendorName", "text", { len: 200 }), c("VendorCode", "text", { len: 40 }), req("TitleFa", "text", { len: 400 }), c("Discipline", "text", { len: 40 }), req("IssuedAt", "date"), c("PromisedDate", "date"), c("Amount", "decimal", { precision: 18, scale: 2 }), c("Currency", "text", { len: 10 }), c("CostAccountCode", "text", { len: 40 }), req("Status", "text", { len: 30, comment: "draft|issued|acknowledged|partially_received|received|closed|cancelled" }), c("ClosedAt", "datetime"), c("RemarksFa", "text", { len: 1000 })],
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("PoNo", "text", { len: 40 }), c("PrCode", "text", { len: 40 }), req("VendorName", "text", { len: 200 }), c("VendorCode", "text", { len: 40 }), req("TitleFa", "text", { len: 400 }), c("Discipline", "text", { len: 40 }), req("IssuedAt", "date"), c("PromisedDate", "date"), c("Amount", "decimal", { precision: 18, scale: 2 }), c("Currency", "text", { len: 10 }), c("CostAccountCode", "text", { len: 40 }), req("Status", "text", { len: 30, comment: "draft|issued|acknowledged|partially_received|received|closed|cancelled" }), c("ClosedAt", "datetime"), c("RemarksFa", "text", { len: 1000 }), c("Quantity", "decimal", { precision: 18, scale: 3 }), c("Unit", "text", { len: 20 }), c("UnitPrice", "decimal", { precision: 18, scale: 2 }), c("ReceivedQty", "decimal", { precision: 18, scale: 3 }), c("InvoicedQty", "decimal", { precision: 18, scale: 3 }), c("InvoiceUnitPrice", "decimal", { precision: 18, scale: 2 }), c("PaidAmount", "decimal", { precision: 18, scale: 2 }), c("DeliveredDate", "date"), c("KpiOnTimePct", "int"), c("KpiQualityPct", "int"), c("KpiPricePct", "int"), c("KpiResponsePct", "int"), c("KpiHsePct", "int")],
     indexes: [
       { name: "UX_PurchaseOrder", columns: ["ProjectId", "PoNo"], unique: true },
       { name: "IX_PurchaseOrder_Pr", columns: ["ProjectId", "PrCode"] },
     ],
+  },
+
+  /* ── LIVE-1: میز کار هزینه و تأمین d5 روی دادهٔ ماندگار ──
+   * هزینهٔ واقعی دفتر مشترک است: EQP و HRM هم به CostAccount.Actual
+   * ثبت می‌زنند، پس d5 فقط «افزایشی» می‌نویسد و هر سطر مبلغ پایهٔ همان
+   * لحظه را نگه می‌دارد تا برگشت آن دقیق باشد. */
+  {
+    name: "FinSetting",
+    module: "d5",
+    title: { fa: "تنظیمات مالی پروژه", en: "Project finance settings" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("DataDate", "date"), req("CurrentPeriod", "int"), req("PeriodCount", "int"), c("Curve", "text", { len: 20 }), c("Rates", "json", { comment: "نرخ ارز به ارز پایه IRR" }), c("BillingMarkupPct", "decimal", { precision: 6, scale: 2 }), c("CollectionLagPeriods", "int"), c("RetentionPct", "decimal", { precision: 6, scale: 2 }), c("AdvanceRecoveryPct", "decimal", { precision: 6, scale: 2 }), c("LegalDeductionPct", "decimal", { precision: 6, scale: 2 }), c("MrpHorizonDays", "int")],
+    indexes: [{ name: "UX_FinSetting", columns: ["ProjectId"], unique: true }],
+  },
+  {
+    name: "CostTransaction",
+    module: "d5",
+    title: { fa: "هزینهٔ واقعی", en: "Actual cost transaction" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("Code", "text", { len: 40 }), req("CostAccountCode", "text", { len: 40 }), req("DescriptionFa", "text", { len: 400 }), req("Amount", "decimal", { precision: 18, scale: 2 }), req("Currency", "text", { len: 10 }), req("BaseAmount", "decimal", { precision: 18, scale: 2, comment: "مبلغ به ارز پایه با نرخ لحظهٔ ثبت" }), req("PeriodNo", "int"), c("TxnDate", "date"), req("SourceType", "text", { len: 20, comment: "manual|po_invoice" }), c("SourceRef", "text", { len: 60 })],
+    indexes: [
+      { name: "UX_CostTransaction", columns: ["ProjectId", "Code"], unique: true },
+      { name: "IX_CostTransaction_Account", columns: ["ProjectId", "CostAccountCode"] },
+    ],
+  },
+  {
+    name: "StockItem",
+    module: "d5",
+    title: { fa: "کالای انبار", en: "Stock item" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("Code", "text", { len: 40 }), req("NameFa", "text", { len: 300 }), c("Unit", "text", { len: 20 }), req("OnHand", "decimal", { precision: 18, scale: 3 }), req("AvgDailyUse", "decimal", { precision: 18, scale: 3 }), req("MaxDailyUse", "decimal", { precision: 18, scale: 3 }), req("LeadTimeDays", "int"), req("UnitCost", "decimal", { precision: 18, scale: 2 }), c("OnOrder", "decimal", { precision: 18, scale: 3 }), c("BatchNo", "text", { len: 40 })],
+    indexes: [{ name: "UX_StockItem", columns: ["ProjectId", "Code"], unique: true }],
+  },
+  {
+    name: "Receivable",
+    module: "d5",
+    title: { fa: "مطالبه", en: "Receivable" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("Code", "text", { len: 40 }), req("PartyFa", "text", { len: 300 }), req("Amount", "decimal", { precision: 18, scale: 2 }), c("Currency", "text", { len: 10 }), req("DueDate", "date"), req("Status", "text", { len: 20, comment: "open|collected" }), c("CollectedAt", "date")],
+    indexes: [{ name: "UX_Receivable", columns: ["ProjectId", "Code"], unique: true }],
+  },
+  {
+    name: "BudgetTransfer",
+    module: "d5",
+    title: { fa: "جابه‌جایی بودجه", en: "Budget transfer" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("Code", "text", { len: 40 }), req("FromCode", "text", { len: 40 }), req("ToCode", "text", { len: 40 }), req("Amount", "decimal", { precision: 18, scale: 2 }), req("Authority", "text", { len: 30 }), c("ReasonFa", "text", { len: 1000 }), req("ApprovedBy", "text", { len: 60 }), req("ApprovedAt", "datetime")],
+    indexes: [{ name: "UX_BudgetTransfer", columns: ["ProjectId", "Code"], unique: true }],
   },
 
   /* ── d8 کیفیت ── */
@@ -1419,7 +1467,10 @@ export const SCHEMA: TableDef[] = [
     module: "d11",
     title: { fa: "مکاتبه", en: "Correspondence" },
     pk: "Id",
-    columns: [id(), req("ProjectId", "text", { len: 60 }), req("LetterNo", "text", { len: 80 }), req("Direction", "text", { len: 20 }), req("Kind", "text", { len: 30 }), req("SubjectFa", "text", { len: 500 }), req("IssuedAt", "date"), c("DueAt", "date"), req("Status", "text", { len: 30 }), c("Classification", "text", { len: 20 }), c("RefLetterNo", "text", { len: 80 }), req("TimeBarred", "bool", { default: "0" })],
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("LetterNo", "text", { len: 80 }), req("Direction", "text", { len: 20 }), req("Kind", "text", { len: 30 }), req("SubjectFa", "text", { len: 500 }), req("IssuedAt", "date"), c("DueAt", "date"), req("Status", "text", { len: 30 }), c("Classification", "text", { len: 20 }), c("RefLetterNo", "text", { len: 80 }), req("TimeBarred", "bool", { default: "0" }),
+      /* LIVE-2: دفتر مکاتبات ماندگار — مهلت روز کاری، مالک پاسخ و امضا با تفکیک وظیفه */
+      c("FromParty", "text", { len: 200 }), c("ToParty", "text", { len: 200 }), c("ReceivedAt", "date"), c("ResponseDays", "int"), c("RespondedAt", "date"), c("ResponseRef", "text", { len: 80 }),
+      c("Links", "json"), c("OwnerRole", "text", { len: 80 }), c("Attachments", "int"), c("DraftedBy", "text", { len: 60 }), c("SignedBy", "text", { len: 60 }), c("SignedAt", "datetime")],
     indexes: [
       { name: "UX_Correspondence_LetterNo", columns: ["ProjectId", "LetterNo"], unique: true },
       { name: "IX_Correspondence_Due", columns: ["ProjectId", "DueAt", "Status"] },
@@ -1430,7 +1481,10 @@ export const SCHEMA: TableDef[] = [
     module: "d11",
     title: { fa: "صورت‌جلسه", en: "Meeting minutes" },
     pk: "Id",
-    columns: [id(), req("ProjectId", "text", { len: 60 }), req("Code", "text", { len: 40 }), req("TitleFa", "text", { len: 300 }), req("HeldAt", "date"), c("Attendees", "json"), c("Decisions", "json"), c("Actions", "json")],
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("Code", "text", { len: 40 }), req("TitleFa", "text", { len: 300 }), req("HeldAt", "date"), c("Attendees", "json"), c("Decisions", "json"), c("Actions", "json"),
+      /* LIVE-2: مصوبات در جدول جداگانهٔ MeetingAction؛ صورت‌جلسهٔ تصویب‌شده قفل است */
+      c("MeetingType", "text", { len: 20 }), c("Chair", "text", { len: 120 }), c("Invited", "json"), c("MinutesApproved", "bool"), c("ApprovedBy", "text", { len: 60 }), c("ApprovedAt", "datetime"),
+      c("DistributedAt", "date"), c("DistributedTo", "json"), c("RecordedBy", "text", { len: 60 })],
     indexes: [{ name: "UX_MeetingMinute_Code", columns: ["ProjectId", "Code"], unique: true }],
   },
   {
@@ -1438,8 +1492,50 @@ export const SCHEMA: TableDef[] = [
     module: "d11",
     title: { fa: "درس آموخته", en: "Lesson learned" },
     pk: "Id",
-    columns: [id(), req("ProjectId", "text", { len: 60 }), req("Code", "text", { len: 40 }), req("TitleFa", "text", { len: 400 }), req("Category", "text", { len: 40 }), req("Impact", "text", { len: 20 }), req("Validated", "bool", { default: "0" }), req("ReuseCount", "int", { default: "0" }), c("Value", "int")],
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("Code", "text", { len: 40 }), req("TitleFa", "text", { len: 400 }), req("Category", "text", { len: 40 }), req("Impact", "text", { len: 20 }), req("Validated", "bool", { default: "0" }), req("ReuseCount", "int", { default: "0" }), c("Value", "int"),
+      /* LIVE-2: منشأ الزامی، توصیهٔ اجرایی و تأیید شورای دانش با تفکیک وظیفه */
+      c("SourceRef", "text", { len: 80 }), c("SituationFa", "text", { len: 2000 }), c("RecommendationFa", "text", { len: 2000 }), c("CapturedAt", "date"), c("CapturedBy", "text", { len: 60 }),
+      c("Tags", "json"), c("ValidatedBy", "text", { len: 60 }), c("ValidatedAt", "datetime")],
     indexes: [{ name: "UX_LessonLearned_Code", columns: ["ProjectId", "Code"], unique: true }],
+  },
+  {
+    name: "MeetingAction",
+    module: "d11",
+    title: { fa: "مصوبهٔ جلسه", en: "Meeting action item" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("Code", "text", { len: 40 }), req("MeetingCode", "text", { len: 40 }), req("TitleFa", "text", { len: 500 }), req("OwnerRole", "text", { len: 80 }),
+      req("DueDate", "date"), req("Status", "text", { len: 20 }), c("ClosedAt", "date"), c("Links", "json"), c("CancelReasonFa", "text", { len: 400 })],
+    indexes: [
+      { name: "UX_MeetingAction_Code", columns: ["ProjectId", "Code"], unique: true },
+      { name: "IX_MeetingAction_Meeting", columns: ["ProjectId", "MeetingCode"] },
+      { name: "IX_MeetingAction_Due", columns: ["ProjectId", "DueDate", "Status"] },
+    ],
+  },
+  {
+    name: "Stakeholder",
+    module: "d11",
+    title: { fa: "ذی‌نفع", en: "Stakeholder" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("Code", "text", { len: 40 }), req("NameFa", "text", { len: 300 }), c("Org", "text", { len: 120 }), c("RoleFa", "text", { len: 120 }),
+      req("Power", "int"), req("Interest", "int"), req("CurrentLevel", "text", { len: 20 }), req("DesiredLevel", "text", { len: 20 }), c("Channels", "json"), c("Frequency", "text", { len: 20 }), c("OwnerRole", "text", { len: 80 })],
+    indexes: [{ name: "UX_Stakeholder_Code", columns: ["ProjectId", "Code"], unique: true }],
+  },
+  {
+    name: "LessonReuse",
+    module: "d11",
+    title: { fa: "استفادهٔ مجدد از درس‌آموخته", en: "Lesson reuse record" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("LessonCode", "text", { len: 40 }), req("UsedBy", "text", { len: 60 }), req("UsedAt", "date"), req("NoteFa", "text", { len: 600 })],
+    indexes: [{ name: "UX_LessonReuse", columns: ["ProjectId", "LessonCode", "UsedBy"], unique: true }],
+  },
+  {
+    name: "NotificationRule",
+    module: "d11",
+    title: { fa: "قاعدهٔ اطلاع‌رسانی و تشدید", en: "Notification & escalation rule" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("Code", "text", { len: 40 }), req("EventCode", "text", { len: 40 }), req("NameFa", "text", { len: 300 }), c("Channels", "json"),
+      c("AudienceRoles", "json"), req("EscalateAfterHours", "int"), c("EscalateToRole", "text", { len: 80 }), req("Active", "bool", { default: "1" })],
+    indexes: [{ name: "UX_NotificationRule_Code", columns: ["ProjectId", "Code"], unique: true }],
   },
 
   /* ── d9 ماشین‌آلات و تجهیزات ── */
@@ -4309,6 +4405,53 @@ export const MIGRATIONS: Migration[] = [
     name: "contract_breakdown_structure",
     statements: [
       ...["CtrDocument", "CtrClause", "CtrBoqDraft", "BreakdownNode", "BreakdownColumnDef", "BreakdownValue"].flatMap((n) => {
+        const t = TABLE_BY_NAME.get(n)!;
+        return [tableDdl(t, "mssql"), ...(t.indexes ?? []).map((i) => indexDdl(t, i, "mssql"))];
+      }),
+    ],
+  },
+  {
+    /* FIX-2: درخت فرایند پروژه (ویرایشگر فرایند d6/d20). جدول در SCHEMA
+     * و pmisFullSchema بود ولی در هیچ مهاجرتی نبود؛ روی پایگاهی که فقط با
+     * مهاجرت‌ها ساخته شود، ذخیرهٔ فرایندها با «جدول ناموجود» شکست می‌خورد. */
+    version: "0033",
+    name: "project_process_tree",
+    statements: [
+      ...["ProcessTree"].flatMap((n) => {
+        const t = TABLE_BY_NAME.get(n)!;
+        return [tableDdl(t, "mssql"), ...(t.indexes ?? []).map((i) => indexDdl(t, i, "mssql"))];
+      }),
+    ],
+  },
+  {
+    /* LIVE-1: میز کار هزینه و تأمین d5 از دادهٔ نمونهٔ درون کد به دادهٔ
+     * ماندگار منتقل شد. ستون‌های افزوده nullable‌اند تا رکوردهای موجود
+     * (از جمله PRهای ساختهٔ مهندسی) نشکنند. */
+    version: "0034",
+    name: "fin_workspace_live",
+    statements: [
+      ...[["CostAccount", ["ParentCode", "Kind", "Category", "ProgressPct"]],
+        ["PurchaseRequisition", ["Quantity", "Unit", "IsUrgent"]],
+        ["PurchaseOrder", ["Quantity", "Unit", "UnitPrice", "ReceivedQty", "InvoicedQty", "InvoiceUnitPrice", "PaidAmount", "DeliveredDate", "KpiOnTimePct", "KpiQualityPct", "KpiPricePct", "KpiResponsePct", "KpiHsePct"]],
+        ["EvmSnapshot", ["FormulaVersion", "Hash", "Inputs"]],
+      ].flatMap(([t, cols]) => (cols as string[]).map((col) => addColumnDdl(t as string, col, "mssql"))),
+      ...["FinSetting", "CostTransaction", "StockItem", "Receivable", "BudgetTransfer"].flatMap((n) => {
+        const t = TABLE_BY_NAME.get(n)!;
+        return [tableDdl(t, "mssql"), ...(t.indexes ?? []).map((i) => indexDdl(t, i, "mssql"))];
+      }),
+    ],
+  },
+  {
+    /* LIVE-2: میز کار ارتباطات و دانش d11 از حافظهٔ مرورگر به دادهٔ ماندگار
+     * منتقل شد. ستون‌های افزوده nullable‌اند تا ردیف‌های موجود نشکنند. */
+    version: "0035",
+    name: "ckm_workspace_live",
+    statements: [
+      ...[["Correspondence", ["FromParty", "ToParty", "ReceivedAt", "ResponseDays", "RespondedAt", "ResponseRef", "Links", "OwnerRole", "Attachments", "DraftedBy", "SignedBy", "SignedAt"]],
+        ["MeetingMinute", ["MeetingType", "Chair", "Invited", "MinutesApproved", "ApprovedBy", "ApprovedAt", "DistributedAt", "DistributedTo", "RecordedBy"]],
+        ["LessonLearned", ["SourceRef", "SituationFa", "RecommendationFa", "CapturedAt", "CapturedBy", "Tags", "ValidatedBy", "ValidatedAt"]],
+      ].flatMap(([t, cols]) => (cols as string[]).map((col) => addColumnDdl(t as string, col, "mssql"))),
+      ...["MeetingAction", "Stakeholder", "LessonReuse", "NotificationRule"].flatMap((n) => {
         const t = TABLE_BY_NAME.get(n)!;
         return [tableDdl(t, "mssql"), ...(t.indexes ?? []).map((i) => indexDdl(t, i, "mssql"))];
       }),

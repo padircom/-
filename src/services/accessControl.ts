@@ -295,6 +295,11 @@ export const PERMISSION_CATALOG: PermissionDef[] = [
   /* ── d5 مالی و هزینه ── */
   P("fin.cost.view", "d5", "مشاهده هزینه", "View cost", "confidential"),
   P("fin.budget.edit", "d5", "ویرایش بودجه", "Edit budget", "restricted", true),
+  /* LIVE-1: میز کار هزینه و تأمین روی دادهٔ ماندگار. */
+  P("fin.cost.post", "d5", "ثبت هزینهٔ واقعی و مطالبات", "Post actual cost & receivables", "confidential", true),
+  P("fin.procure.edit", "d5", "ثبت درخواست/سفارش خرید و موجودی", "Edit PR/PO & stock", "confidential", true),
+  P("fin.procure.approve", "d5", "تأیید درخواست خرید", "Approve purchase requisition", "restricted", true),
+  P("fin.reserve.draw", "d5", "آزادسازی ذخیرهٔ احتیاطی", "Release contingency reserve", "restricted", true),
   P("fin.ipc.prepare", "d5", "تهیه صورت‌وضعیت", "Prepare payment certificate", "confidential", true),
   P("fin.ipc.approve", "d5", "تأیید صورت‌وضعیت", "Approve payment certificate", "restricted", true),
   P("fin.rate.view", "d5", "مشاهده نرخ و قیمت واحد", "View unit rates", "restricted"),
@@ -421,6 +426,9 @@ export const PERMISSION_CATALOG: PermissionDef[] = [
   P("ckm.letter.sign", "d11", "امضا و صدور نامه", "Sign & issue letter", "restricted", true),
   P("ckm.meeting.record", "d11", "ثبت صورت‌جلسه", "Record meeting minutes", "internal"),
   P("ckm.lesson.publish", "d11", "انتشار درس آموخته", "Publish lesson learned", "internal"),
+  /* LIVE-2: ثبت ذی‌نفعان و قواعد اطلاع‌رسانی دیگر در حافظهٔ مرورگر نیست. */
+  P("ckm.stakeholder.edit", "d11", "ویرایش ثبت ذی‌نفعان", "Edit stakeholder register", "internal"),
+  P("ckm.notify.manage", "d11", "مدیریت قواعد اطلاع‌رسانی", "Manage notification rules", "internal"),
 
   /* ── گزارش‌ساز ── */
   P("report.internal.generate", "core", "تولید گزارش داخلی", "Generate internal report", "internal"),
@@ -532,7 +540,10 @@ export const ROLE_CATALOG: RoleDef[] = [
       "cnt.fin.view",
       /* شکاف میان دفتر داخلی و سامانهٔ بیرونی را می‌بیند؛ تلاش دوباره
        * دست او نیست چون هر تلاش یک نوشتن در سامانهٔ بیرونی است. */
-      "core.event.view"],
+      "core.event.view",
+      /* LIVE-1: ثبت هزینه، مطالبات، PR/PO و موجودی کار روزانهٔ اوست؛
+       * تأیید PR و آزادسازی ذخیره دست مدیر پروژه است. */
+      "fin.cost.post", "fin.procure.edit"],
   },
   {
     code: "qc_inspector",
@@ -603,7 +614,7 @@ export const ROLE_CATALOG: RoleDef[] = [
     inherits: ["viewer"],
     clearance: "confidential",
     party: "contractor",
-    grants: ["doc.document.upload", "doc.transmittal.issue", "ckm.letter.view", "ckm.letter.draft", "ckm.meeting.record", "ckm.lesson.publish", "eng.mdr.edit", "eng.revision.issue"],
+    grants: ["doc.document.upload", "doc.transmittal.issue", "ckm.letter.view", "ckm.letter.draft", "ckm.meeting.record", "ckm.lesson.publish", "ckm.notify.manage", "eng.mdr.edit", "eng.revision.issue"],
   },
   {
     code: "contracts_manager",
@@ -650,7 +661,7 @@ export const ROLE_CATALOG: RoleDef[] = [
       "plan.baseline.set", "plan.progress.approve",
       "pex.evm.view", "pex.kpi.edit", "pex.forecast.edit",
       "rcc.risk.view", "rcc.risk.edit", "rcc.change.raise", "rcc.claim.view", "rcc.claim.submit",
-      "fin.cost.view", "fin.rate.view", "fin.ipc.approve",
+      "fin.cost.view", "fin.rate.view", "fin.ipc.approve", "fin.procure.approve", "fin.reserve.draw",
       "qms.itp.view", "qms.ncr.close",
       "hrm.roster.view", "hrm.timesheet.approve", "hrm.productivity.view",
       /* مدیر پروژه عدد را نهایی می‌کند و دوره را می‌بندد، ولی ارسال به
@@ -694,6 +705,9 @@ export const ROLE_CATALOG: RoleDef[] = [
       "hse.metrics.view", "hse.metrics.publish",
       "doc.document.approve", "doc.transmittal.issue",
       "ckm.letter.view", "ckm.letter.draft", "ckm.letter.sign",
+      /* LIVE-2: مدیر پروژه صورت‌جلسه را تصویب می‌کند (ثبت‌کننده ≠ تصویب‌کننده
+       * در سرور)، مالک برنامهٔ ارتباطات است و درس‌آموخته را تأیید می‌کند. */
+      "ckm.meeting.record", "ckm.lesson.publish", "ckm.stakeholder.edit", "ckm.notify.manage",
       "gov.gate.review", "report.official.publish",
       "eng.ifc.release", "eng.mr.approve", "eng.tq.answer",
       /* مدیر پروژه متره ثبت می‌کند چون کلید دور زدن دروازهٔ کیفی دست
@@ -807,7 +821,7 @@ export const ROLE_CATALOG: RoleDef[] = [
     inherits: ["viewer"],
     clearance: "restricted",
     party: "contractor",
-    grants: ["fin.cost.view", "fin.budget.edit", "pex.evm.view", "rcc.change.approve", "gov.gate.approve", "rcc.claim.view", "core.ai.run"],
+    grants: ["fin.cost.view", "fin.budget.edit", "fin.reserve.draw", "pex.evm.view", "rcc.change.approve", "gov.gate.approve", "rcc.claim.view", "core.ai.run"],
   },
   {
     code: "consultant",

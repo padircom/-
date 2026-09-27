@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react
 import { type Lang } from "../data/framework";
 import { useAuth } from "../context/AuthContext";
 import { logAudit } from "../services/auditLogger";
+import SystemBadge from "./SystemBadge";
 import {
   DISCIPLINE_FA,
   DISCIPLINES,
@@ -619,6 +620,7 @@ export default function EngineeringWorkspace({ lang, onBack }: Props) {
             <div className="truncate text-[9.5px] font-light tx3">
               {rtl ? `موتور ${ENG_VERSION} · دامنه d12` : `${ENG_VERSION} · domain d12`}
             </div>
+            <SystemBadge domainId="d12" lang={lang} className="mt-1" />
           </div>
         </div>
         {loading && <span className="text-[10px] font-light tx3">{rtl ? "در حال بارگذاری…" : "Loading…"}</span>}

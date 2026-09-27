@@ -547,6 +547,34 @@ export function progressInvoice(gross: number, retentionPct = 10, advanceRecover
   return { gross, retention, advanceRecovery, legalDeductions, netPayable: gross - retention - advanceRecovery - legalDeductions };
 }
 
+/** LIVE-1: گرهٔ حساب هزینه با ستون‌های دفتر (همه به ارز پایه). */
+export type LedgerNode = { code: string; parent?: string | null; budget: number; committed: number; actual: number };
+
+/**
+ * بودجهٔ در دسترس یک گرهٔ CBS با همهٔ فرزندانش:
+ * Σبودجه − Σتعهد − Σهزینهٔ واقعی. این جایگزین فرمول ساختگی قبلی
+ * (`بودجه − AC×0.2`) است و همان مقداری است که کنترل بودجهٔ PR می‌سنجد.
+ * گره ناموجود = null (کنترل ممکن نیست، نه «صفر»).
+ */
+export function cbsAvailable(nodes: LedgerNode[], code: string): number | null {
+  if (!nodes.some((n) => n.code === code)) return null;
+  const kids: Record<string, string[]> = {};
+  for (const n of nodes) if (n.parent) (kids[n.parent] ??= []).push(n.code);
+  const byCode = new Map(nodes.map((n) => [n.code, n]));
+  let total = 0;
+  const seen = new Set<string>();
+  const stack = [code];
+  while (stack.length) {
+    const c = stack.pop()!;
+    if (seen.has(c)) continue; // حلقهٔ والد/فرزند نباید بی‌نهایت بچرخد
+    seen.add(c);
+    const n = byCode.get(c);
+    if (n) total += n.budget - n.committed - n.actual;
+    stack.push(...(kids[c] ?? []));
+  }
+  return total;
+}
+
 /** ذخیره احتیاطی (Reserve) فقط با مجوز DoA آزاد می‌شود. */
 export function reserveDraw(available: number, request: number, approvedBy?: string): { ok: boolean; drawn: number; remaining: number; reason?: string } {
   if (!approvedBy) return { ok: false, drawn: 0, remaining: available, reason: "no_authority" };
