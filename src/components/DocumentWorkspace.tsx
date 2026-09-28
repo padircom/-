@@ -6,10 +6,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Lang } from '../data/framework';
 import { useAuth } from '../context/AuthContext';
 import { useSystem } from '../context/SystemContext';
-import { EdmsClient, type EdmsDocumentList, type EdmsFileList, type EdmsHoldList, type EdmsDependencyList, type EdmsReadiness, type EdmsCommentList, type EdmsDciList, type EdmsDistributionList, type EdmsTemplateList, type EdmsNotificationList } from '../services/edmsWorkspace';
+import { EdmsClient, type EdmsDocumentList, type EdmsFileList, type EdmsHoldList, type EdmsDependencyList, type EdmsReadiness, type EdmsCommentList, type EdmsDciList, type EdmsDistributionList, type EdmsTemplateList, type EdmsNotificationList, type EdmsEffortList } from '../services/edmsWorkspace';
 import { createRow, listRows } from '../services/edmsApi';
 
-export type EdmsTab = 'overview' | 'mdr' | 'revision' | 'files' | 'holds' | 'deps' | 'comments' | 'dci' | 'templates' | 'notifications' | 'workflow' | 'excel' | 'numbering' | 'correspondence' | 'transmittal' | 'lessons';
+export type EdmsTab = 'overview' | 'mdr' | 'revision' | 'files' | 'holds' | 'deps' | 'comments' | 'dci' | 'templates' | 'notifications' | 'effort' | 'workflow' | 'excel' | 'numbering' | 'correspondence' | 'transmittal' | 'lessons';
 
 const TABS: { id: EdmsTab; fa: string; en: string }[] = [
   { id: 'overview', fa: 'نمای کلی', en: 'Overview' },
@@ -22,6 +22,7 @@ const TABS: { id: EdmsTab; fa: string; en: string }[] = [
   { id: 'dci', fa: 'DCI و توزیع', en: 'DCI & Dist' },
   { id: 'templates', fa: 'قالب‌ها', en: 'Templates' },
   { id: 'notifications', fa: 'اعلان‌ها', en: 'Notifications' },
+  { id: 'effort', fa: 'نفرساعت', en: 'Effort' },
   { id: 'workflow', fa: 'گردش کار', en: 'Workflow' },
   { id: 'excel', fa: 'اکسل', en: 'Excel' },
   { id: 'numbering', fa: 'شماره‌گذاری', en: 'Numbering' },
@@ -101,6 +102,7 @@ function LiveEdms({
   const [distData, setDistData] = useState<EdmsDistributionList | null>(null);
   const [tplData, setTplData] = useState<EdmsTemplateList | null>(null);
   const [notifData, setNotifData] = useState<EdmsNotificationList | null>(null);
+  const [effortData, setEffortData] = useState<EdmsEffortList | null>(null);
   const [selDocId, setSelDocId] = useState<string>('');
   const [selDocNo, setSelDocNo] = useState<string>('');
   const [loading, setLoading] = useState(false);
@@ -121,6 +123,7 @@ function LiveEdms({
   const [concludeForm, setConcludeForm] = useState({ commentId: '', conclusionText: '', reviewCode: '' });
   const [distForm, setDistForm] = useState({ documentId: '', party: 'client', transmittalNo: '', noteFa: '' });
   const [tplForm, setTplForm] = useState({ templateType: 'doc', nameFa: '', code: '', noteFa: '' });
+  const [effortForm, setEffortForm] = useState({ documentId: '', workDate: new Date().toISOString().slice(0,10), hours: '4', personName: '', activity: 'design', cost: '', noteFa: '' });
 
   const loadDocs = useCallback(async () => {
     if (!client) return;
@@ -140,6 +143,7 @@ function LiveEdms({
         setDepForm(f => ({ ...f, documentId: first.Id }));
         setCommentForm(f => ({ ...f, documentId: first.Id }));
         setDistForm(f => ({ ...f, documentId: first.Id }));
+        setEffortForm(f => ({ ...f, documentId: first.Id }));
       }
     } catch (e: any) {
       if (seq !== gen.current) return;
@@ -179,6 +183,17 @@ function LiveEdms({
     if (r.ok) setDciData(r.data);
   }, [client]);
 
+  const loadEffort = useCallback(async (docId?: string) => {
+    if (!client) return;
+    if (docId) {
+      const r = await client.effort(docId);
+      if (r.ok) setEffortData(r.data);
+    } else {
+      const r = await client.allEffort({});
+      if (r.ok) setEffortData(r.data);
+    }
+  }, [client]);
+
   const loadNotif = useCallback(async () => {
     if (!client) return;
     const r = await client.notifications({});
@@ -209,8 +224,8 @@ function LiveEdms({
   }, [client]);
 
   useEffect(() => { void loadDocs(); return () => { gen.current++; }; }, [loadDocs]);
-  useEffect(() => { if (selDocId) { void loadFiles(selDocId); void loadReadiness(selDocId); void loadDeps(selDocId); void loadComments(selDocId); void loadDist(selDocId); } }, [selDocId, loadFiles, loadReadiness, loadDeps, loadComments, loadDist]);
-  useEffect(() => { void loadHolds(); void loadDci(); void loadDist(); void loadTpl(); void loadNotif(); }, [loadHolds, loadDci, loadDist, loadTpl, loadNotif]);
+  useEffect(() => { if (selDocId) { void loadFiles(selDocId); void loadReadiness(selDocId); void loadDeps(selDocId); void loadComments(selDocId); void loadDist(selDocId); void loadEffort(selDocId); } }, [selDocId, loadFiles, loadReadiness, loadDeps, loadComments, loadDist, loadEffort]);
+  useEffect(() => { void loadHolds(); void loadDci(); void loadDist(); void loadTpl(); void loadNotif(); void loadEffort(); }, [loadHolds, loadDci, loadDist, loadTpl, loadNotif, loadEffort]);
 
   const filtered = useMemo(() => {
     if (!docsData) return [];
@@ -240,6 +255,7 @@ function LiveEdms({
       await loadDci();
       await loadTpl();
       await loadNotif();
+      if (selDocId) await loadEffort(selDocId); else await loadEffort();
       await loadHolds();
       return true;
     }
@@ -605,10 +621,10 @@ function LiveEdms({
             {dciData?.summary && <div className="grid grid-cols-3 md:grid-cols-6 gap-2 mb-2"><Kpi label={t('کل','Total')} value={String(dciData.summary.total)} /><Kpi label={t('قابل صدور','Can Issue')} value={String(dciData.summary.canIssue)} /><Kpi label={t('مسدود','Blocked')} value={String(dciData.summary.blocked)} /><Kpi label={t('با فایل','With File')} value={String(dciData.summary.withFile)} /><Kpi label={t('Hold باز','Open Holds')} value={String(dciData.summary.openHolds)} /><Kpi label={t('نظر باز','Open Comments')} value={String(dciData.summary.openComments)} /></div>}
             <div className="overflow-x-auto max-h-[500px]">
               <table className="w-full text-[11px] tx2">
-                <thead><tr><th className="p-1">DocNo</th><th className="p-1">Rev</th><th className="p-1">Status</th><th className="p-1">Disc</th><th className="p-1">File</th><th className="p-1">Holds</th><th className="p-1">Deps</th><th className="p-1">Mand Block</th><th className="p-1">CanIssue</th><th className="p-1">Comments</th><th className="p-1">Dist</th></tr></thead>
+                <thead><tr><th className="p-1">DocNo</th><th className="p-1">Rev</th><th className="p-1">Status</th><th className="p-1">Disc</th><th className="p-1">File</th><th className="p-1">Holds</th><th className="p-1">Deps</th><th className="p-1">Mand Block</th><th className="p-1">CanIssue</th><th className="p-1">Comments</th><th className="p-1">Dist</th><th className="p-1">Effort h</th></tr></thead>
                 <tbody>
                   {(dciData?.items ?? []).map(d=>(
-                    <tr key={d.Id} className="border-t b-line-soft"><td className="p-1" dir="ltr">{d.DocNo}</td><td className="p-1" dir="ltr">{d.Revision}</td><td className="p-1">{d.Status}</td><td className="p-1">{d.Discipline ?? '—'}</td><td className="p-1">{d.fileCount}</td><td className="p-1">{d.openHolds}</td><td className="p-1">{d.totalDeps} ({d.mandatoryDeps} mand)</td><td className="p-1">{d.mandatoryNotApproved}</td><td className="p-1">{d.canIssue?'✓':'✗'}</td><td className="p-1">{d.comments.open}/{d.comments.total}</td><td className="p-1">{d.distCount}</td></tr>
+                    <tr key={d.Id} className="border-t b-line-soft"><td className="p-1" dir="ltr">{d.DocNo}</td><td className="p-1" dir="ltr">{d.Revision}</td><td className="p-1">{d.Status}</td><td className="p-1">{d.Discipline ?? '—'}</td><td className="p-1">{d.fileCount}</td><td className="p-1">{d.openHolds}</td><td className="p-1">{d.totalDeps} ({d.mandatoryDeps} mand)</td><td className="p-1">{d.mandatoryNotApproved}</td><td className="p-1">{d.canIssue?'✓':'✗'}</td><td className="p-1">{d.comments.open}/{d.comments.total}</td><td className="p-1">{d.distCount}</td><td className="p-1">{d.effortHours}</td></tr>
                   ))}
                 </tbody>
               </table>
@@ -711,6 +727,51 @@ function LiveEdms({
               {!notifData?.items.length && <p className="tx3 text-[11px] mt-2">{t('اعلانی نیست','No notifications')}</p>}
             </div>
             <button className={btnGhost} onClick={()=>void loadNotif()}>{t('تازه‌سازی','Refresh')}</button>
+          </Section>
+        </div>
+      )}
+
+      {tab === 'effort' && (
+        <div className="grid gap-3">
+          <Section title={t('ثبت نفرساعت واقعی مدرک','Log document effort')} note={t('اتصال به تایم‌شیت — از HRM یا ثبت دستی — ساعت واقعی هر مدرک','Linked to timesheet — from HRM or manual — real hours per doc')}>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+              <select className={inputCls} value={effortForm.documentId} onChange={e=>setEffortForm({...effortForm, documentId:e.target.value})}>
+                <option value="">{t('انتخاب مدرک','Select doc')}</option>
+                {(docsData?.items ?? []).map(d=><option key={d.Id} value={d.Id}>{d.DocNo} Rev {d.Revision}</option>)}
+              </select>
+              <input className={inputCls} type="date" value={effortForm.workDate} onChange={e=>setEffortForm({...effortForm, workDate:e.target.value})} />
+              <input className={inputCls} type="number" step="0.5" placeholder={t('ساعت','Hours')} value={effortForm.hours} onChange={e=>setEffortForm({...effortForm, hours:e.target.value})} />
+              <input className={inputCls} placeholder={t('نام شخص','Person name')} value={effortForm.personName} onChange={e=>setEffortForm({...effortForm, personName:e.target.value})} />
+              <select className={inputCls} value={effortForm.activity} onChange={e=>setEffortForm({...effortForm, activity:e.target.value})}>
+                {['design','review','check','approval','other'].map(v=><option key={v} value={v}>{v}</option>)}
+              </select>
+              <input className={inputCls} type="number" step="0.01" placeholder={t('هزینه (اختیاری)','Cost opt')} value={effortForm.cost} onChange={e=>setEffortForm({...effortForm, cost:e.target.value})} />
+              <input className={inputCls} placeholder={t('یادداشت','Note')} value={effortForm.noteFa} onChange={e=>setEffortForm({...effortForm, noteFa:e.target.value})} />
+              <button className={btnPrimary} disabled={busy || !effortForm.documentId || !effortForm.workDate || !effortForm.hours} onClick={()=>void act(async ()=>{
+                if(!client) return {ok:false, message:'No client'};
+                const r=await client.createEffort(effortForm.documentId, {workDate:effortForm.workDate, hours:Number(effortForm.hours), personName:effortForm.personName||undefined, activity:effortForm.activity||undefined, cost:effortForm.cost?Number(effortForm.cost):undefined, noteFa:effortForm.noteFa||undefined});
+                return r.ok ? {ok:true} : {ok:false, message:r.message};
+              }, t('نفرساعت ثبت شد','Effort logged'))}>{t('ثبت نفرساعت','Log effort')}</button>
+            </div>
+          </Section>
+          <Section title={t('خلاصه نفرساعت مدرک انتخاب‌شده','Effort summary of selected doc')}>
+            {effortData?.summary && <div className="grid grid-cols-3 gap-2 mb-2"><Kpi label={t('کل ساعت','Total Hours')} value={String(effortData.summary.totalHours)} /><Kpi label={t('کل هزینه','Total Cost')} value={String(effortData.summary.totalCost)} /><Kpi label={t('تعداد رکورد','Records')} value={String(effortData.count)} /></div>}
+            {effortData?.summary?.byPerson && <div className="text-[11px] tx2 mb-2">{Object.entries(effortData.summary.byPerson).map(([k,v])=><span key={k} className="me-3">{k}: {v}h</span>)}</div>}
+            <div className="overflow-x-auto max-h-[400px]">
+              <table className="w-full text-[11px] tx2">
+                <thead><tr><th className="p-1">DocNo</th><th className="p-1">Date</th><th className="p-1">Person</th><th className="p-1">Hours</th><th className="p-1">Activity</th><th className="p-1">Cost</th><th className="p-1">Note</th><th className="p-1">{t('حذف','Delete')}</th></tr></thead>
+                <tbody>
+                  {(effortData?.items ?? []).map(e=>(
+                    <tr key={e.Id} className="border-t b-line-soft"><td className="p-1" dir="ltr">{e.DocNo}</td><td className="p-1" dir="ltr">{e.WorkDate}</td><td className="p-1">{e.PersonName ?? e.PersonId ?? '—'}</td><td className="p-1">{e.Hours}</td><td className="p-1">{e.Activity ?? '—'}</td><td className="p-1">{e.Cost ?? '—'}</td><td className="p-1">{e.NoteFa ?? '—'}</td><td className="p-1"><button className={btnGhost} disabled={busy} onClick={()=>void act(async ()=>{
+                      if(!client) return {ok:false, message:'No client'};
+                      const r=await client.deleteEffort(e.Id);
+                      return r.ok ? {ok:true} : {ok:false, message:r.message};
+                    }, t('حذف شد','Deleted'))}>{t('حذف','Delete')}</button></td></tr>
+                  ))}
+                </tbody>
+              </table>
+              {!effortData?.items.length && <p className="tx3 text-[11px] mt-2">{t('نفرساعتی ثبت نشده','No effort')}</p>}
+            </div>
           </Section>
         </div>
       )}

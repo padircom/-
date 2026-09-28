@@ -8799,6 +8799,7 @@ app.get("/api/edms/:projectId/dci", comRequire("doc.document.view"), async (req,
     const comments = await r.list("DocumentComment", { where: [{ column: "ProjectId", op: "eq", value: projectId }], limit: 5000 });
     const attachments = await r.list("DocumentAttachment", { where: [{ column: "ProjectId", op: "eq", value: projectId }], limit: 5000 });
     const dists = await r.list("DocumentDistribution", { where: [{ column: "ProjectId", op: "eq", value: projectId }], limit: 5000 });
+    const efforts = await r.list("DocumentEffort", { where: [{ column: "ProjectId", op: "eq", value: projectId }], limit: 5000 });
     const items = docs.map(d=>{
       const docId = d.Id;
       const openHolds = holds.filter(h=> h.DocumentId===docId && h.Status==="open").length;
@@ -8812,6 +8813,7 @@ app.get("/api/edms/:projectId/dci", comRequire("doc.document.view"), async (req,
       const cForDoc = comments.filter(c=> c.DocumentId===docId);
       const files = attachments.filter(a=> a.DocumentId===docId).length;
       const distCount = dists.filter(x=> x.DocumentId===docId).length;
+      const effortHours = efforts.filter(x=> x.DocumentId===docId).reduce((s,x)=> s + (Number(x.Hours)||0), 0);
       const canIssue = openHolds===0 && mandatoryNotApproved===0;
       return {
         Id: d.Id,
@@ -8829,6 +8831,7 @@ app.get("/api/edms/:projectId/dci", comRequire("doc.document.view"), async (req,
         canIssue,
         comments: { total: cForDoc.length, open: cForDoc.filter(c=>c.Status==="open").length, replied: cForDoc.filter(c=>c.Status==="replied").length, concluded: cForDoc.filter(c=>c.Status==="concluded").length },
         distCount,
+        effortHours,
       };
     });
     items.sort((a,b)=> String(a.DocNo).localeCompare(String(b.DocNo)));
@@ -9045,6 +9048,81 @@ app.post("/api/edms/:projectId/notifications", comRequire("doc.document.upload")
     if(!doc) return cntBad(req, res, "E-EDM-DOC-NOT-FOUND", "مدرک یافت نشد", 404);
     const row = await edmsNotify(r, { projectId, documentId: String(b.documentId), docNo: doc.DocNo, eventType: String(b.eventType), party: b.party||'client', subjectFa: b.subjectFa||String(b.eventType), bodyFa: b.bodyFa||'', channel: b.channel||'email' });
     res.status(201).json(cntOk(req, { id: row.Id, item: row }));
+  } catch(err){ next(err); }
+});
+
+
+/* ── MOD-18 EDM-8 نفرساعت واقعی مدرک ── */
+app.get("/api/edms/:projectId/documents/:docId/effort", comRequire("doc.document.view"), async (req, res, next) => {
+  try {
+    const docId = String(req.params.docId || "");
+    const r = await repo();
+    const rows = await r.list("DocumentEffort", { where: [{ column: "DocumentId", op: "eq", value: docId }], limit: 1000 });
+    rows.sort((a,b)=> String(a.WorkDate||"").localeCompare(String(b.WorkDate||"")));
+    const totalHours = rows.reduce((s,x)=> s + (Number(x.Hours)||0), 0);
+    const totalCost = rows.reduce((s,x)=> s + (Number(x.Cost)||0), 0);
+    const byPerson = {};
+    for(const x of rows){
+      const key = x.PersonName || x.PersonId || 'unknown';
+      byPerson[key] = (byPerson[key]||0) + (Number(x.Hours)||0);
+    }
+    res.json(cntOk(req, { count: rows.length, summary: { totalHours, totalCost, byPerson }, items: rows }));
+  } catch(err){ next(err); }
+});
+
+app.get("/api/edms/:projectId/effort", comRequire("doc.document.view"), async (req, res, next) => {
+  try {
+    const projectId = String(req.params.projectId || "");
+    const r = await repo();
+    const where=[{ column: "ProjectId", op: "eq", value: projectId }];
+    if(req.query.documentId) where.push({ column: "DocumentId", op: "eq", value: String(req.query.documentId) });
+    const rows = await r.list("DocumentEffort", { where, limit: 2000 });
+    const totalHours = rows.reduce((s,x)=> s + (Number(x.Hours)||0), 0);
+    const totalCost = rows.reduce((s,x)=> s + (Number(x.Cost)||0), 0);
+    res.json(cntOk(req, { count: rows.length, summary: { totalHours, totalCost }, items: rows }));
+  } catch(err){ next(err); }
+});
+
+app.post("/api/edms/:projectId/documents/:docId/effort", comRequire("doc.document.upload"), async (req, res, next) => {
+  try {
+    const projectId = String(req.params.projectId || "");
+    const docId = String(req.params.docId || "");
+    const b = req.body || {};
+    if(!b.workDate) return cntBad(req, res, "E-EDM-EFFORT-NO-DATE", "تاریخ کار الزامی است", 400);
+    if(b.hours==null || isNaN(Number(b.hours)) || Number(b.hours)<=0) return cntBad(req, res, "E-EDM-EFFORT-NO-HOURS", "ساعت کار معتبر الزامی است", 400);
+    const r = await repo();
+    const doc = await r.findOne("Document", [{ column: "Id", op: "eq", value: docId }]);
+    if(!doc) return cntBad(req, res, "E-EDM-DOC-NOT-FOUND", "مدرک یافت نشد", 404);
+    const userId = req.headers["x-user-id"] || "system";
+    const id = crypto.randomUUID();
+    const row = {
+      Id: id,
+      ProjectId: projectId,
+      DocumentId: docId,
+      DocNo: doc.DocNo,
+      Revision: doc.Revision,
+      PersonId: b.personId ? String(b.personId) : null,
+      PersonName: b.personName ? String(b.personName).slice(0,120) : null,
+      WorkDate: String(b.workDate).slice(0,10),
+      Hours: Number(b.hours),
+      Cost: b.cost!=null ? Number(b.cost) : null,
+      Activity: b.activity ? String(b.activity).slice(0,40) : null,
+      NoteFa: b.noteFa ? String(b.noteFa).slice(0,500) : null,
+      CreatedBy: userId,
+      CreatedAt: new Date().toISOString(),
+    };
+    await r.upsert("DocumentEffort", { Id: id }, row, userId);
+    res.status(201).json(cntOk(req, { id, item: row }));
+  } catch(err){ next(err); }
+});
+
+app.delete("/api/edms/:projectId/effort/:effortId", comRequire("doc.document.upload"), async (req, res, next) => {
+  try {
+    const r = await repo();
+    const e = await r.findOne("DocumentEffort", [{ column: "Id", op: "eq", value: String(req.params.effortId) }]);
+    if(!e) return cntBad(req, res, "E-EDM-EFFORT-NOT-FOUND", "رکورد نفرساعت یافت نشد", 404);
+    await r.delete("DocumentEffort", String(req.params.effortId), req.headers["x-user-id"] || "system");
+    res.json(cntOk(req, { deleted: true, id: String(req.params.effortId) }));
   } catch(err){ next(err); }
 });
 

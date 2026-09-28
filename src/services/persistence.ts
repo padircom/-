@@ -2982,6 +2982,35 @@ export const SCHEMA: TableDef[] = [
     ],
   },
 
+        /* ══════════════ MOD-18 · EDM-8 نفرساعت واقعی مدرک از تایم‌شیت (d1) ══════════════ */
+  {
+    name: "DocumentEffort",
+    module: "d1",
+    title: { fa: "نفرساعت مدرک", en: "Document effort" },
+    pk: "Id",
+    columns: [
+      id(),
+      req("ProjectId", "text", { len: 60 }),
+      req("DocumentId", "text", { len: 60 }),
+      req("DocNo", "text", { len: 80 }),
+      req("Revision", "text", { len: 10 }),
+      c("PersonId", "text", { len: 60 }),
+      c("PersonName", "text", { len: 120 }),
+      req("WorkDate", "text", { len: 20, comment: "YYYY-MM-DD" }),
+      req("Hours", "number", { comment: "ساعت کار" }),
+      c("Cost", "number"),
+      c("Activity", "text", { len: 40, comment: "design|review|check|etc" }),
+      c("NoteFa", "text", { len: 500 }),
+      req("CreatedBy", "text", { len: 60 }),
+      req("CreatedAt", "datetime"),
+    ],
+    indexes: [
+      { name: "UX_DocEffort_Id", columns: ["Id"], unique: true },
+      { name: "IX_DocEffort_Doc", columns: ["ProjectId", "DocumentId"] },
+      { name: "IX_DocEffort_Date", columns: ["ProjectId", "WorkDate"] },
+    ],
+  },
+
     /* ══════════════ d16 — بهداشت، ایمنی و محیط زیست (HSE) ══════════════
    * پروانهٔ کار پیش‌نیاز دروازهٔ RFSU در ماژول راه‌اندازی است؛ تا پیش از
    * این جداول، آن پیش‌نیاز فقط رشتهٔ آزاد بود و قابل کنترل نبود. */

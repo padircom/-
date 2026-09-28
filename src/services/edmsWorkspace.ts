@@ -135,6 +135,7 @@ export type EdmsDciItem = {
   canIssue: boolean;
   comments: { total: number; open: number; replied: number; concluded: number };
   distCount: number;
+  effortHours: number;
 };
 export type EdmsDciList = { count: number; summary: { total: number; canIssue: number; blocked: number; withFile: number; openHolds: number; openComments: number }; items: EdmsDciItem[] };
 
@@ -181,6 +182,24 @@ export type EdmsNotification = {
   SentAt?: string | null;
 };
 export type EdmsNotificationList = { count: number; summary: { pending: number; sent: number; total: number }; items: EdmsNotification[] };
+
+export type EdmsEffort = {
+  Id: string;
+  ProjectId: string;
+  DocumentId: string;
+  DocNo: string;
+  Revision: string;
+  PersonId?: string | null;
+  PersonName?: string | null;
+  WorkDate: string;
+  Hours: number;
+  Cost?: number | null;
+  Activity?: string | null;
+  NoteFa?: string | null;
+  CreatedBy: string;
+  CreatedAt: string;
+};
+export type EdmsEffortList = { count: number; summary: { totalHours: number; totalCost: number; byPerson?: Record<string, number> }; items: EdmsEffort[] };
 
 export type EdmsCommentList = {
   count: number;
@@ -308,6 +327,16 @@ export class EdmsClient {
     return this.req<EdmsNotificationList>('GET', `/api/edms/${encodeURIComponent(this.projectId)}/notifications${extra}`);
   };
   sendNotification = (notifId: string) => this.req<{ item: EdmsNotification }>('POST', `/api/edms/${encodeURIComponent(this.projectId)}/notifications/${encodeURIComponent(notifId)}/send`, {});
+  effort = (docId: string) => this.req<EdmsEffortList>('GET', `/api/edms/${encodeURIComponent(this.projectId)}/documents/${encodeURIComponent(docId)}/effort`);
+  allEffort = (params: { documentId?: string } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.documentId) qs.set('documentId', params.documentId);
+    const extra = qs.toString() ? `&${qs.toString()}` : '';
+    return this.req<EdmsEffortList>('GET', `/api/edms/${encodeURIComponent(this.projectId)}/effort${extra}`);
+  };
+  createEffort = (docId: string, body: { workDate: string; hours: number; personName?: string; personId?: string; activity?: string; cost?: number; noteFa?: string }) => this.req<{ id: string; item: EdmsEffort }>('POST', `/api/edms/${encodeURIComponent(this.projectId)}/documents/${encodeURIComponent(docId)}/effort`, body);
+  deleteEffort = (effortId: string) => this.req<{ deleted: boolean; id: string }>('DELETE', `/api/edms/${encodeURIComponent(this.projectId)}/effort/${encodeURIComponent(effortId)}`);
+
   createNotification = (body: { documentId: string; eventType: string; party?: string; subjectFa?: string; bodyFa?: string; channel?: string }) => this.req<{ id: string; item: EdmsNotification }>('POST', `/api/edms/${encodeURIComponent(this.projectId)}/notifications`, body);
 
   deleteTemplate = (templateId: string) => this.req<{ deleted: boolean; id: string }>('DELETE', `/api/edms/${encodeURIComponent(this.projectId)}/templates/${encodeURIComponent(templateId)}`);

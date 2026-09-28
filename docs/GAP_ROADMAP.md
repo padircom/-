@@ -64,7 +64,7 @@
 - **آزمون‌ها: ۴۲۵۲/۴۲۵۲** (۱۹ آزمون جدید: ۸ واحد و ۱۱ REST، شامل راه‌اندازی مجدد، تفکیک وظیفه، جداسازی پروژه، نسخهٔ هم‌زمان و عدم تغییر مبنا). `npx tsc --noEmit` بدون خطا؛ `npm run build` موفق. آزمون دستی مرورگر و SQL Server انجام نشده است.
 - سرور جدید آزمون فقط با `PERSIST_DRIVER=json DATA_DIR=./server/rundata` اجرا شد؛ پاک‌سازی فقط رکوردهای دارای پیشوند یکتای آزمون است، نه پوشهٔ داده. harnessهای قدیمی همچنان JSON موقت و ایزولهٔ خودشان را دارند.
 - مرز استقرار: همان آداپتور هویت SEC-1؛ JSON برای یک فرایند API است، نه چند replica. تراکنش اتمیِ تغییر رکورد + ممیزی و قفل توزیع‌شده برای استقرار چندفرایندی در این مرحله اضافه نشده‌اند.
-- پیشرفت: **38/85 = 45٪**؛ **P1: 16/16 = 100٪، P2: 3/3 = 100٪، P3: 7/9 = 78٪**. مرحلهٔ بعد **P3 / EDM-8** نفرساعت.
+- پیشرفت: **39/85 = 46٪**؛ **P1: 16/16 = 100٪، P2: 3/3 = 100٪، P3: 8/9 = 89٪**. مرحلهٔ بعد **P3 / EDM-9** شفاف‌سازی پیمانکار فرعی.
 
 
 ### LIVE-4 — گزارش مرحله (۲۰۲۶-۰۹-۲۷)
@@ -154,7 +154,7 @@
 | ✅ EDM-5 | EDMS | فهرست کنترل و توزیع مدارک (DCI) — جدول DocumentDistribution، ۴ مسیر dci/distributions/distribute، تجمیع hasFile/openHolds/mandatoryDeps/comments/distCount/canIssue، تب DCI و توزیع در UI | M |
 | ✅ EDM-6 | EDMS | قالب‌های پروژه (مدرک، ترنسمیتال، برگه‌ها) — جدول DocumentTemplate، ۳ مسیر templates CRUD، تب Templates در UI | M |
 | ✅ EDM-7 | EDMS | اعلان ایمیلی رخدادهای EDMS — جدول EdmsNotification، ۳ مسیر notifications/send، auto-notify روی hold/comment/distribute، موتور SMTP موجود (شبیه‌سازی اگر تنظیم نباشد)، تب Notifications در UI | M |
-| ⬜ EDM-8 | EDMS/HRM | نفرساعت واقعی هر مدرک از تایم‌شیت | M |
+| ✅ EDM-8 | EDMS/HRM | نفرساعت واقعی هر مدرک از تایم‌شیت — جدول DocumentEffort، ۴ مسیر effort CRUD، تجمیع ساعت/هزینه در DCI و effort summary، تب Effort در UI | M |
 | ⬜ EDM-9 | EDMS | شفاف‌سازی فنی پیمانکار فرعی در گردش مدرک | S |
 
 ## P4 — اتوماسیون و مکاتبات — CKM/PATS (d11)
