@@ -2904,6 +2904,31 @@ export const SCHEMA: TableDef[] = [
     ],
   },
 
+        /* ══════════════ MOD-15 · EDM-5 DCI — توزیع مدارک (d1) ══════════════ */
+  {
+    name: "DocumentDistribution",
+    module: "d1",
+    title: { fa: "توزیع مدرک", en: "Document distribution" },
+    pk: "Id",
+    columns: [
+      id(),
+      req("ProjectId", "text", { len: 60 }),
+      req("DocumentId", "text", { len: 60 }),
+      req("DocNo", "text", { len: 80 }),
+      req("Revision", "text", { len: 10 }),
+      req("Party", "text", { len: 30, comment: "client|consultant|contractor|subcontractor|vendor" }),
+      c("TransmittalNo", "text", { len: 80 }),
+      req("DistributedAt", "datetime"),
+      req("DistributedBy", "text", { len: 60 }),
+      c("NoteFa", "text", { len: 500 }),
+    ],
+    indexes: [
+      { name: "UX_DocDist_Id", columns: ["Id"], unique: true },
+      { name: "IX_DocDist_Doc", columns: ["ProjectId", "DocumentId"] },
+      { name: "IX_DocDist_Party", columns: ["ProjectId", "Party"] },
+    ],
+  },
+
     /* ══════════════ d16 — بهداشت، ایمنی و محیط زیست (HSE) ══════════════
    * پروانهٔ کار پیش‌نیاز دروازهٔ RFSU در ماژول راه‌اندازی است؛ تا پیش از
    * این جداول، آن پیش‌نیاز فقط رشتهٔ آزاد بود و قابل کنترل نبود. */

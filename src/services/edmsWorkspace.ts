@@ -119,6 +119,39 @@ export type EdmsComment = {
   Status: string;
 };
 
+export type EdmsDciItem = {
+  Id: string;
+  DocNo: string;
+  TitleFa: string;
+  Revision: string;
+  Status: string;
+  Discipline: string | null;
+  hasFile: boolean;
+  fileCount: number;
+  openHolds: number;
+  totalDeps: number;
+  mandatoryDeps: number;
+  mandatoryNotApproved: number;
+  canIssue: boolean;
+  comments: { total: number; open: number; replied: number; concluded: number };
+  distCount: number;
+};
+export type EdmsDciList = { count: number; summary: { total: number; canIssue: number; blocked: number; withFile: number; openHolds: number; openComments: number }; items: EdmsDciItem[] };
+
+export type EdmsDistribution = {
+  Id: string;
+  ProjectId: string;
+  DocumentId: string;
+  DocNo: string;
+  Revision: string;
+  Party: string;
+  TransmittalNo?: string | null;
+  DistributedAt: string;
+  DistributedBy: string;
+  NoteFa?: string | null;
+};
+export type EdmsDistributionList = { count: number; items: EdmsDistribution[] };
+
 export type EdmsCommentList = {
   count: number;
   summary: { open: number; replied: number; concluded: number; total: number };
@@ -220,5 +253,16 @@ export class EdmsClient {
     const payload = typeof body === 'string' ? { conclusionText: body } : body;
     return this.req<{ item: EdmsComment }>('POST', `/api/edms/${encodeURIComponent(this.projectId)}/comments/${encodeURIComponent(commentId)}/conclude`, payload);
   };
+  dci = () => this.req<EdmsDciList>('GET', `/api/edms/${encodeURIComponent(this.projectId)}/dci`);
+  distributions = (params: { documentId?: string; party?: string } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.documentId) qs.set('documentId', params.documentId);
+    if (params.party) qs.set('party', params.party);
+    const extra = qs.toString() ? `&${qs.toString()}` : '';
+    return this.req<EdmsDistributionList>('GET', `/api/edms/${encodeURIComponent(this.projectId)}/distributions${extra}`);
+  };
+  docDistributions = (docId: string) => this.req<EdmsDistributionList>('GET', `/api/edms/${encodeURIComponent(this.projectId)}/documents/${encodeURIComponent(docId)}/distributions`);
+  distribute = (docId: string, body: { party: string; transmittalNo?: string; noteFa?: string }) => this.req<{ id: string; item: EdmsDistribution }>('POST', `/api/edms/${encodeURIComponent(this.projectId)}/documents/${encodeURIComponent(docId)}/distribute`, body);
+
   voidComment = (commentId: string) => this.req<{ item: EdmsComment }>('POST', `/api/edms/${encodeURIComponent(this.projectId)}/comments/${encodeURIComponent(commentId)}/void`, {});
 }

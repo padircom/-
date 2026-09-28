@@ -8785,6 +8785,116 @@ app.post("/api/edms/:projectId/comments/:commentId/void", comRequire("doc.docume
   } catch (err) { next(err); }
 });
 
+
+/* ── MOD-15 EDM-5 DCI — فهرست کنترل و توزیع مدارک ── */
+app.get("/api/edms/:projectId/dci", comRequire("doc.document.view"), async (req, res, next) => {
+  try {
+    const projectId = String(req.params.projectId || "");
+    const r = await repo();
+    const docs = await r.list("Document", { where: [{ column: "ProjectId", op: "eq", value: projectId }], limit: 5000 });
+    const holds = await r.list("DocumentHold", { where: [{ column: "ProjectId", op: "eq", value: projectId }], limit: 5000 });
+    const deps = await r.list("DocumentDependency", { where: [{ column: "ProjectId", op: "eq", value: projectId }], limit: 5000 });
+    const comments = await r.list("DocumentComment", { where: [{ column: "ProjectId", op: "eq", value: projectId }], limit: 5000 });
+    const attachments = await r.list("DocumentAttachment", { where: [{ column: "ProjectId", op: "eq", value: projectId }], limit: 5000 });
+    const dists = await r.list("DocumentDistribution", { where: [{ column: "ProjectId", op: "eq", value: projectId }], limit: 5000 });
+    const items = docs.map(d=>{
+      const docId = d.Id;
+      const openHolds = holds.filter(h=> h.DocumentId===docId && h.Status==="open").length;
+      const totalDeps = deps.filter(x=> x.DocumentId===docId).length;
+      const mandatoryDeps = deps.filter(x=> x.DocumentId===docId && x.IsMandatory).length;
+      const mandatoryNotApproved = deps.filter(x=>{
+        if(x.DocumentId!==docId || !x.IsMandatory) return false;
+        const prereq = docs.find(p=> p.Id===x.DependsOnDocumentId);
+        return !prereq || prereq.Status!=="approved";
+      }).length;
+      const cForDoc = comments.filter(c=> c.DocumentId===docId);
+      const files = attachments.filter(a=> a.DocumentId===docId).length;
+      const distCount = dists.filter(x=> x.DocumentId===docId).length;
+      const canIssue = openHolds===0 && mandatoryNotApproved===0;
+      return {
+        Id: d.Id,
+        DocNo: d.DocNo,
+        TitleFa: d.TitleFa,
+        Revision: d.Revision,
+        Status: d.Status,
+        Discipline: d.Discipline||null,
+        hasFile: files>0,
+        fileCount: files,
+        openHolds,
+        totalDeps,
+        mandatoryDeps,
+        mandatoryNotApproved,
+        canIssue,
+        comments: { total: cForDoc.length, open: cForDoc.filter(c=>c.Status==="open").length, replied: cForDoc.filter(c=>c.Status==="replied").length, concluded: cForDoc.filter(c=>c.Status==="concluded").length },
+        distCount,
+      };
+    });
+    items.sort((a,b)=> String(a.DocNo).localeCompare(String(b.DocNo)));
+    const summary = {
+      total: items.length,
+      canIssue: items.filter(x=>x.canIssue).length,
+      blocked: items.filter(x=>!x.canIssue).length,
+      withFile: items.filter(x=>x.hasFile).length,
+      openHolds: holds.filter(h=>h.Status==="open").length,
+      openComments: comments.filter(c=>c.Status==="open").length,
+    };
+    res.json(cntOk(req, { count: items.length, summary, items }));
+  } catch(err){ next(err); }
+});
+
+app.get("/api/edms/:projectId/distributions", comRequire("doc.document.view"), async (req, res, next) => {
+  try {
+    const projectId = String(req.params.projectId || "");
+    const r = await repo();
+    const where=[{ column: "ProjectId", op: "eq", value: projectId }];
+    if(req.query.documentId) where.push({ column: "DocumentId", op: "eq", value: String(req.query.documentId) });
+    if(req.query.party) where.push({ column: "Party", op: "eq", value: String(req.query.party) });
+    const rows = await r.list("DocumentDistribution", { where, limit: 1000 });
+    rows.sort((a,b)=> String(b.DistributedAt||"").localeCompare(String(a.DistributedAt||"")));
+    res.json(cntOk(req, { count: rows.length, items: rows }));
+  } catch(err){ next(err); }
+});
+
+app.get("/api/edms/:projectId/documents/:docId/distributions", comRequire("doc.document.view"), async (req, res, next) => {
+  try {
+    const docId = String(req.params.docId || "");
+    const r = await repo();
+    const rows = await r.list("DocumentDistribution", { where: [{ column: "DocumentId", op: "eq", value: docId }], limit: 500 });
+    rows.sort((a,b)=> String(b.DistributedAt||"").localeCompare(String(a.DistributedAt||"")));
+    res.json(cntOk(req, { count: rows.length, items: rows }));
+  } catch(err){ next(err); }
+});
+
+app.post("/api/edms/:projectId/documents/:docId/distribute", comRequire("doc.transmittal.issue"), async (req, res, next) => {
+  try {
+    const projectId = String(req.params.projectId || "");
+    const docId = String(req.params.docId || "");
+    const b = req.body || {};
+    if(!b.party) return cntBad(req, res, "E-EDM-DIST-NO-PARTY", "طرف توزیع الزامی است", 400);
+    const allowed=["client","consultant","contractor","subcontractor","vendor","other"];
+    if(!allowed.includes(String(b.party))) return cntBad(req, res, "E-EDM-DIST-BAD-PARTY", "طرف نامعتبر", 400);
+    const r = await repo();
+    const doc = await r.findOne("Document", [{ column: "Id", op: "eq", value: docId }]);
+    if(!doc) return cntBad(req, res, "E-EDM-DOC-NOT-FOUND", "مدرک یافت نشد", 404);
+    const userId = req.headers["x-user-id"] || "system";
+    const id = crypto.randomUUID();
+    const row = {
+      Id: id,
+      ProjectId: projectId,
+      DocumentId: docId,
+      DocNo: doc.DocNo,
+      Revision: doc.Revision,
+      Party: String(b.party),
+      TransmittalNo: b.transmittalNo ? String(b.transmittalNo) : null,
+      DistributedAt: new Date().toISOString(),
+      DistributedBy: userId,
+      NoteFa: b.noteFa ? String(b.noteFa) : null,
+    };
+    await r.upsert("DocumentDistribution", { Id: id }, row, userId);
+    res.status(201).json(cntOk(req, { id, item: row }));
+  } catch(err){ next(err); }
+});
+
 /* ── ۱۴٫۱ وضعیت ماژول ── */
 app.get("/api/cnt/status", (req, res) => {
   res.json(cntOk(req, {

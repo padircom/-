@@ -6,10 +6,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Lang } from '../data/framework';
 import { useAuth } from '../context/AuthContext';
 import { useSystem } from '../context/SystemContext';
-import { EdmsClient, type EdmsDocumentList, type EdmsFileList, type EdmsHoldList, type EdmsDependencyList, type EdmsReadiness, type EdmsCommentList } from '../services/edmsWorkspace';
+import { EdmsClient, type EdmsDocumentList, type EdmsFileList, type EdmsHoldList, type EdmsDependencyList, type EdmsReadiness, type EdmsCommentList, type EdmsDciList, type EdmsDistributionList } from '../services/edmsWorkspace';
 import { createRow, listRows } from '../services/edmsApi';
 
-export type EdmsTab = 'overview' | 'mdr' | 'revision' | 'files' | 'holds' | 'deps' | 'comments' | 'workflow' | 'excel' | 'numbering' | 'correspondence' | 'transmittal' | 'lessons';
+export type EdmsTab = 'overview' | 'mdr' | 'revision' | 'files' | 'holds' | 'deps' | 'comments' | 'dci' | 'workflow' | 'excel' | 'numbering' | 'correspondence' | 'transmittal' | 'lessons';
 
 const TABS: { id: EdmsTab; fa: string; en: string }[] = [
   { id: 'overview', fa: 'نمای کلی', en: 'Overview' },
@@ -19,6 +19,7 @@ const TABS: { id: EdmsTab; fa: string; en: string }[] = [
   { id: 'holds', fa: 'Hold Items', en: 'Holds' },
   { id: 'deps', fa: 'پیش‌نیاز و قفل', en: 'Prereq & Gate' },
   { id: 'comments', fa: 'نظر و Conclusion', en: 'Comments' },
+  { id: 'dci', fa: 'DCI و توزیع', en: 'DCI & Dist' },
   { id: 'workflow', fa: 'گردش کار', en: 'Workflow' },
   { id: 'excel', fa: 'اکسل', en: 'Excel' },
   { id: 'numbering', fa: 'شماره‌گذاری', en: 'Numbering' },
@@ -94,6 +95,8 @@ function LiveEdms({
   const [depsData, setDepsData] = useState<EdmsDependencyList | null>(null);
   const [readiness, setReadiness] = useState<EdmsReadiness | null>(null);
   const [commentsData, setCommentsData] = useState<EdmsCommentList | null>(null);
+  const [dciData, setDciData] = useState<EdmsDciList | null>(null);
+  const [distData, setDistData] = useState<EdmsDistributionList | null>(null);
   const [selDocId, setSelDocId] = useState<string>('');
   const [selDocNo, setSelDocNo] = useState<string>('');
   const [loading, setLoading] = useState(false);
@@ -112,6 +115,7 @@ function LiveEdms({
   const [commentForm, setCommentForm] = useState({ documentId: '', commentText: '', reviewCode: '' });
   const [replyForm, setReplyForm] = useState({ commentId: '', replyText: '' });
   const [concludeForm, setConcludeForm] = useState({ commentId: '', conclusionText: '', reviewCode: '' });
+  const [distForm, setDistForm] = useState({ documentId: '', party: 'client', transmittalNo: '', noteFa: '' });
 
   const loadDocs = useCallback(async () => {
     if (!client) return;
@@ -130,6 +134,7 @@ function LiveEdms({
         setHoldForm(f => ({ ...f, documentId: first.Id }));
         setDepForm(f => ({ ...f, documentId: first.Id }));
         setCommentForm(f => ({ ...f, documentId: first.Id }));
+        setDistForm(f => ({ ...f, documentId: first.Id }));
       }
     } catch (e: any) {
       if (seq !== gen.current) return;
@@ -163,6 +168,23 @@ function LiveEdms({
     if (r.ok) setReadiness(r.data); else setReadiness(null);
   }, [client]);
 
+  const loadDci = useCallback(async () => {
+    if (!client) return;
+    const r = await client.dci();
+    if (r.ok) setDciData(r.data);
+  }, [client]);
+
+  const loadDist = useCallback(async (docId?: string) => {
+    if (!client) return;
+    if (docId) {
+      const r = await client.docDistributions(docId);
+      if (r.ok) setDistData(r.data);
+    } else {
+      const r = await client.distributions({});
+      if (r.ok) setDistData(r.data);
+    }
+  }, [client]);
+
   const loadComments = useCallback(async (docId: string) => {
     if (!client || !docId) { setCommentsData(null); return; }
     const r = await client.comments(docId);
@@ -170,8 +192,8 @@ function LiveEdms({
   }, [client]);
 
   useEffect(() => { void loadDocs(); return () => { gen.current++; }; }, [loadDocs]);
-  useEffect(() => { if (selDocId) { void loadFiles(selDocId); void loadReadiness(selDocId); void loadDeps(selDocId); void loadComments(selDocId); } }, [selDocId, loadFiles, loadReadiness, loadDeps, loadComments]);
-  useEffect(() => { void loadHolds(); }, [loadHolds]);
+  useEffect(() => { if (selDocId) { void loadFiles(selDocId); void loadReadiness(selDocId); void loadDeps(selDocId); void loadComments(selDocId); void loadDist(selDocId); } }, [selDocId, loadFiles, loadReadiness, loadDeps, loadComments, loadDist]);
+  useEffect(() => { void loadHolds(); void loadDci(); void loadDist(); }, [loadHolds, loadDci, loadDist]);
 
   const filtered = useMemo(() => {
     if (!docsData) return [];
@@ -197,7 +219,8 @@ function LiveEdms({
     if (r.ok) {
       setMsg({ tone: 'ok', text: okText });
       await loadDocs();
-      if (selDocId) { await loadFiles(selDocId); await loadReadiness(selDocId); await loadDeps(selDocId); await loadComments(selDocId); }
+      if (selDocId) { await loadFiles(selDocId); await loadReadiness(selDocId); await loadDeps(selDocId); await loadComments(selDocId); await loadDist(selDocId); }
+      await loadDci();
       await loadHolds();
       return true;
     }
@@ -553,6 +576,60 @@ function LiveEdms({
                 return r.ok ? {ok:true} : {ok:false, message:r.message};
               }, t('Conclusion ثبت شد','Concluded'))}>{t('ثبت Conclusion','Conclude')}</button>
             </div>
+          </Section>
+        </div>
+      )}
+
+      {tab === 'dci' && (
+        <div className="grid gap-3">
+          <Section title={t('فهرست کنترل مدارک (DCI)','Document Control Index (DCI)')} note={t('تجمیع فایل، Hold، پیش‌نیاز، نظر و آمادگی صدور','Aggregated file, Hold, prereq, comments, readiness')}>
+            {dciData?.summary && <div className="grid grid-cols-3 md:grid-cols-6 gap-2 mb-2"><Kpi label={t('کل','Total')} value={String(dciData.summary.total)} /><Kpi label={t('قابل صدور','Can Issue')} value={String(dciData.summary.canIssue)} /><Kpi label={t('مسدود','Blocked')} value={String(dciData.summary.blocked)} /><Kpi label={t('با فایل','With File')} value={String(dciData.summary.withFile)} /><Kpi label={t('Hold باز','Open Holds')} value={String(dciData.summary.openHolds)} /><Kpi label={t('نظر باز','Open Comments')} value={String(dciData.summary.openComments)} /></div>}
+            <div className="overflow-x-auto max-h-[500px]">
+              <table className="w-full text-[11px] tx2">
+                <thead><tr><th className="p-1">DocNo</th><th className="p-1">Rev</th><th className="p-1">Status</th><th className="p-1">Disc</th><th className="p-1">File</th><th className="p-1">Holds</th><th className="p-1">Deps</th><th className="p-1">Mand Block</th><th className="p-1">CanIssue</th><th className="p-1">Comments</th><th className="p-1">Dist</th></tr></thead>
+                <tbody>
+                  {(dciData?.items ?? []).map(d=>(
+                    <tr key={d.Id} className="border-t b-line-soft"><td className="p-1" dir="ltr">{d.DocNo}</td><td className="p-1" dir="ltr">{d.Revision}</td><td className="p-1">{d.Status}</td><td className="p-1">{d.Discipline ?? '—'}</td><td className="p-1">{d.fileCount}</td><td className="p-1">{d.openHolds}</td><td className="p-1">{d.totalDeps} ({d.mandatoryDeps} mand)</td><td className="p-1">{d.mandatoryNotApproved}</td><td className="p-1">{d.canIssue?'✓':'✗'}</td><td className="p-1">{d.comments.open}/{d.comments.total}</td><td className="p-1">{d.distCount}</td></tr>
+                  ))}
+                </tbody>
+              </table>
+              {!dciData?.items.length && <p className="tx3 text-[11px] mt-2">{t('مدرکی نیست','No docs')}</p>}
+            </div>
+            <button className={btnGhost} onClick={()=>void loadDci()}>{t('تازه‌سازی DCI','Refresh DCI')}</button>
+          </Section>
+
+          <Section title={t('ثبت توزیع مدرک','Distribute document')} note={t('Party: client/consultant/contractor/subcontractor/vendor — نیاز مجوز transmittal.issue','Party needs transmittal.issue permission')}>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+              <select className={inputCls} value={distForm.documentId} onChange={e=>setDistForm({...distForm, documentId:e.target.value})}>
+                <option value="">{t('انتخاب مدرک','Select doc')}</option>
+                {(docsData?.items ?? []).map(d=><option key={d.Id} value={d.Id}>{d.DocNo} Rev {d.Revision}</option>)}
+              </select>
+              <select className={inputCls} value={distForm.party} onChange={e=>setDistForm({...distForm, party:e.target.value})}>
+                {['client','consultant','contractor','subcontractor','vendor','other'].map(v=><option key={v} value={v}>{v}</option>)}
+              </select>
+              <input className={inputCls} placeholder={t('شماره ترنسمیتال','Transmittal No')} value={distForm.transmittalNo} onChange={e=>setDistForm({...distForm, transmittalNo:e.target.value})} />
+              <input className={inputCls} placeholder={t('یادداشت','Note')} value={distForm.noteFa} onChange={e=>setDistForm({...distForm, noteFa:e.target.value})} />
+              <button className={btnPrimary} disabled={busy || !distForm.documentId || !distForm.party} onClick={()=>void act(async ()=>{
+                if(!client) return {ok:false, message:'No client'};
+                const r=await client.distribute(distForm.documentId, {party:distForm.party, transmittalNo:distForm.transmittalNo||undefined, noteFa:distForm.noteFa||undefined});
+                return r.ok ? {ok:true} : {ok:false, message:r.message};
+              }, t('توزیع ثبت شد','Distributed'))}>{t('ثبت توزیع','Distribute')}</button>
+            </div>
+          </Section>
+
+          <Section title={t('تاریخچه توزیع','Distribution history')}>
+            <div className="overflow-x-auto max-h-[400px]">
+              <table className="w-full text-[11px] tx2">
+                <thead><tr><th className="p-1">DocNo</th><th className="p-1">Rev</th><th className="p-1">Party</th><th className="p-1">Transmittal</th><th className="p-1">At</th><th className="p-1">By</th><th className="p-1">Note</th></tr></thead>
+                <tbody>
+                  {(distData?.items ?? []).map(x=>(
+                    <tr key={x.Id} className="border-t b-line-soft"><td className="p-1" dir="ltr">{x.DocNo}</td><td className="p-1" dir="ltr">{x.Revision}</td><td className="p-1">{x.Party}</td><td className="p-1" dir="ltr">{x.TransmittalNo ?? '—'}</td><td className="p-1" dir="ltr">{(x.DistributedAt||'').slice(0,16)}</td><td className="p-1" dir="ltr">{x.DistributedBy.slice(0,12)}</td><td className="p-1">{x.NoteFa ?? '—'}</td></tr>
+                  ))}
+                </tbody>
+              </table>
+              {!distData?.items.length && <p className="tx3 text-[11px] mt-2">{t('توزیعی ثبت نشده','No distributions')}</p>}
+            </div>
+            <button className={btnGhost} onClick={()=>void loadDist()}>{t('تازه‌سازی','Refresh')}</button>
           </Section>
         </div>
       )}
