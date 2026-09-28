@@ -25,6 +25,7 @@ import { registerRccWorkspaceRoutes } from "./rccWorkspaceApi.js";
 import { registerDprDocRoutes } from "./dprDocApi.js";
 import { registerFinWorkspaceRoutes } from "./finWorkspaceApi.js";
 import { registerCkmWorkspaceRoutes } from "./ckmWorkspaceApi.js";
+import { registerScmWorkspaceRoutes } from "./scmWorkspaceApi.js";
 import { canDprTransition, openDprBlocked, validateDpr } from "./pexDprLogic.js";
 import { inspectionBand, inspectionScore, nextInspectionDue, ptwCanTransition, ptwMissing, severityWeight, validateIncident, validateInspection, validatePermit, woPermitGate } from "./hseFieldLogic.js";
 import {
@@ -486,6 +487,12 @@ import {
   packProgress,
   coldTestClearance,
   preCommSummary,
+  TAG_TYPE_FA,
+  TAG_STATUS_FA,
+  TAG_TYPES,
+  TAG_STATUSES,
+  validateTagInput,
+  tagSummary,
 } from "./comLogic.js";
 
 import {
@@ -812,6 +819,7 @@ registerDprDocRoutes(app, { storageRoot, acceptedMimeTypes, maxFileBytes });
 /* LIVE-1: میز کار هزینه و تأمین d5 روی دادهٔ ماندگار (/api/fin/:projectId/...). */
 registerFinWorkspaceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
 registerCkmWorkspaceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
+registerScmWorkspaceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
 registerRccWorkspaceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
 registerEqmWorkspaceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
 registerMonitoringWorkspaceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
@@ -8270,6 +8278,942 @@ app.get("/api/com/precomm", comRequire("com.system.view"), async (req, res, next
       })),
     }));
   } catch (err) { next(err); }
+});
+
+/* ══════════════ CSU-2 — بانک تگ راه‌اندازی (Tag Register) ══════════════ */
+app.post("/api/com/tag", comRequire("com.system.edit"), async (req, res, next) => {
+  try {
+    const projectId = String(req.query.projectId || "");
+    if (!projectId) return cntBad(req, res, "E-CNT-NO-PROJECT", "پارامتر projectId الزامی است");
+    const b = req.body || {};
+    const errors = validateTagInput({ tagNo: b.tagNo, titleFa: b.titleFa, tagType: b.tagType, status: b.status, criticalityFa: b.criticalityFa, systemId: b.systemId });
+    if (errors.length) return res.status(400).json({ ok: false, error: { code: errors[0].code, message: errors[0].message, details: errors, traceId: req.requestId } });
+    const r = await repo();
+    const existing = await r.findOne("CommissioningTag", [{ column: "ProjectId", op: "eq", value: projectId }, { column: "TagNo", op: "eq", value: String(b.tagNo).trim() }]);
+    if (existing) return cntBad(req, res, "E-COM-TAG-DUP", "شماره تگ در این پروژه تکراری است", 409);
+    if (b.systemId) {
+      const sys = await r.findOne("SystemSubsystem", [{ column: "Id", op: "eq", value: String(b.systemId) }]);
+      if (!sys) return cntBad(req, res, "E-COM-SYSTEM-NOT-FOUND", "سیستم یافت نشد", 404);
+      if (sys.ProjectId !== projectId) return cntBad(req, res, "E-COM-PROJECT-MISMATCH", "سیستم به پروژه دیگری تعلق دارد", 400);
+    }
+    const userId = req.headers["x-user-id"] || "system";
+    const id = b.id ? String(b.id) : (globalThis.crypto?.randomUUID?.() || require('crypto').randomUUID());
+    const row = {
+      Id: id,
+      ProjectId: projectId,
+      SystemId: b.systemId ? String(b.systemId) : null,
+      TagNo: String(b.tagNo).trim(),
+      TitleFa: String(b.titleFa).trim(),
+      TitleEn: b.titleEn ? String(b.titleEn).trim() : null,
+      TagType: String(b.tagType),
+      DisciplineCode: b.disciplineCode ? String(b.disciplineCode).trim() : null,
+      LocationFa: b.locationFa ? String(b.locationFa).trim() : null,
+      LoopNo: b.loopNo ? String(b.loopNo).trim() : null,
+      ManufacturerFa: b.manufacturerFa ? String(b.manufacturerFa).trim() : null,
+      ModelFa: b.modelFa ? String(b.modelFa).trim() : null,
+      SerialNo: b.serialNo ? String(b.serialNo).trim() : null,
+      CriticalityFa: b.criticalityFa ? String(b.criticalityFa).trim() : null,
+      NoteFa: b.noteFa ? String(b.noteFa).trim() : null,
+      Status: b.status ? String(b.status) : "planned",
+    };
+    const saved = await r.upsert("CommissioningTag", { Id: id }, row, userId);
+    res.status(201).json(cntOk(req, { id, item: { ...row, typeFa: TAG_TYPE_FA[row.TagType] ?? row.TagType, statusFa: TAG_STATUS_FA[row.Status] ?? row.Status } }));
+  } catch (err) { next(err); }
+});
+
+app.get("/api/com/tag", comRequire("com.system.view"), async (req, res, next) => {
+  try {
+    const projectId = String(req.query.projectId || "");
+    if (!projectId) return cntBad(req, res, "E-CNT-NO-PROJECT", "پارامتر projectId الزامی است");
+    const r = await repo();
+    const where = [{ column: "ProjectId", op: "eq", value: projectId }];
+    if (req.query.systemId) where.push({ column: "SystemId", op: "eq", value: String(req.query.systemId) });
+    if (req.query.tagType) where.push({ column: "TagType", op: "eq", value: String(req.query.tagType) });
+    if (req.query.status) where.push({ column: "Status", op: "eq", value: String(req.query.status) });
+    if (req.query.q) {
+      // simple contains on TagNo/TitleFa via list then filter (json driver has no like)
+      const all = await r.list("CommissioningTag", { where, limit: 5000 });
+      const q = String(req.query.q).toLowerCase();
+      const filtered = all.filter(t => String(t.TagNo).toLowerCase().includes(q) || String(t.TitleFa).toLowerCase().includes(q));
+      const items = filtered.slice(0, 500).map(t => ({ ...t, typeFa: TAG_TYPE_FA[t.TagType] ?? t.TagType, statusFa: TAG_STATUS_FA[t.Status] ?? t.Status }));
+      return res.json(cntOk(req, { count: filtered.length, summary: tagSummary(filtered), items }));
+    }
+    const tags = await r.list("CommissioningTag", { where, limit: 5000 });
+    const items = tags.slice(0, 500).map(t => ({ ...t, typeFa: TAG_TYPE_FA[t.TagType] ?? t.TagType, statusFa: TAG_STATUS_FA[t.Status] ?? t.Status }));
+    res.json(cntOk(req, { count: tags.length, summary: tagSummary(tags), items }));
+  } catch (err) { next(err); }
+});
+
+app.post("/api/com/tag/:id", comRequire("com.system.edit"), async (req, res, next) => {
+  try {
+    const projectId = String(req.query.projectId || "");
+    const b = req.body || {};
+    const r = await repo();
+    const existing = await r.findOne("CommissioningTag", [{ column: "Id", op: "eq", value: String(req.params.id) }]);
+    if (!existing) return cntBad(req, res, "E-COM-TAG-NOT-FOUND", "تگ یافت نشد", 404);
+    if (projectId && existing.ProjectId !== projectId) return cntBad(req, res, "E-COM-PROJECT-MISMATCH", "تگ به پروژه دیگری تعلق دارد", 400);
+    const merged = {
+      tagNo: b.tagNo ?? existing.TagNo,
+      titleFa: b.titleFa ?? existing.TitleFa,
+      tagType: b.tagType ?? existing.TagType,
+      status: b.status ?? existing.Status,
+      criticalityFa: b.criticalityFa ?? existing.CriticalityFa,
+      systemId: b.systemId !== undefined ? b.systemId : existing.SystemId,
+    };
+    const errors = validateTagInput(merged);
+    if (errors.length) return res.status(400).json({ ok: false, error: { code: errors[0].code, message: errors[0].message, details: errors, traceId: req.requestId } });
+    if (b.systemId) {
+      const sys = await r.findOne("SystemSubsystem", [{ column: "Id", op: "eq", value: String(b.systemId) }]);
+      if (!sys) return cntBad(req, res, "E-COM-SYSTEM-NOT-FOUND", "سیستم یافت نشد", 404);
+    }
+    const userId = req.headers["x-user-id"] || "system";
+    const row = {
+      ...existing,
+      SystemId: b.systemId !== undefined ? (b.systemId ? String(b.systemId) : null) : existing.SystemId,
+      TagNo: b.tagNo ? String(b.tagNo).trim() : existing.TagNo,
+      TitleFa: b.titleFa ? String(b.titleFa).trim() : existing.TitleFa,
+      TitleEn: b.titleEn !== undefined ? (b.titleEn ? String(b.titleEn).trim() : null) : existing.TitleEn,
+      TagType: b.tagType ? String(b.tagType) : existing.TagType,
+      DisciplineCode: b.disciplineCode !== undefined ? (b.disciplineCode ? String(b.disciplineCode).trim() : null) : existing.DisciplineCode,
+      LocationFa: b.locationFa !== undefined ? (b.locationFa ? String(b.locationFa).trim() : null) : existing.LocationFa,
+      LoopNo: b.loopNo !== undefined ? (b.loopNo ? String(b.loopNo).trim() : null) : existing.LoopNo,
+      ManufacturerFa: b.manufacturerFa !== undefined ? (b.manufacturerFa ? String(b.manufacturerFa).trim() : null) : existing.ManufacturerFa,
+      ModelFa: b.modelFa !== undefined ? (b.modelFa ? String(b.modelFa).trim() : null) : existing.ModelFa,
+      SerialNo: b.serialNo !== undefined ? (b.serialNo ? String(b.serialNo).trim() : null) : existing.SerialNo,
+      CriticalityFa: b.criticalityFa !== undefined ? (b.criticalityFa ? String(b.criticalityFa).trim() : null) : existing.CriticalityFa,
+      NoteFa: b.noteFa !== undefined ? (b.noteFa ? String(b.noteFa).trim() : null) : existing.NoteFa,
+      Status: b.status ? String(b.status) : existing.Status,
+    };
+    const saved = await r.upsert("CommissioningTag", { Id: existing.Id }, row, userId);
+    res.json(cntOk(req, { item: { ...row, typeFa: TAG_TYPE_FA[row.TagType] ?? row.TagType, statusFa: TAG_STATUS_FA[row.Status] ?? row.Status } }));
+  } catch (err) { next(err); }
+});
+
+
+/* ══════════════ EDM-1 — اتصال فایل به مدرک و نسخه (d1) ══════════════ */
+const edmsStorageDir = path.join(storageRoot, "edms");
+fs.mkdirSync(edmsStorageDir, { recursive: true });
+const edmsUpload = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, edmsStorageDir),
+    filename: (_req, _file, cb) => cb(null, `${Date.now()}-${crypto.randomUUID()}.bin`),
+  }),
+  limits: { fileSize: maxFileBytes, files: 1 },
+});
+
+app.post("/api/edms/:projectId/documents/:docId/files", edmsUpload.single("file"), comRequire("doc.document.upload"), async (req, res, next) => {
+  try {
+    const projectId = String(req.params.projectId || "");
+    const docId = String(req.params.docId || "");
+    if (!projectId) return cntBad(req, res, "E-CNT-NO-PROJECT", "پارامتر projectId الزامی است");
+    const r = await repo();
+    const doc = await r.findOne("Document", [{ column: "Id", op: "eq", value: docId }]);
+    if (!doc) return cntBad(req, res, "E-EDM-DOC-NOT-FOUND", "مدرک یافت نشد", 404);
+    if (doc.ProjectId !== projectId) return cntBad(req, res, "E-COM-PROJECT-MISMATCH", "مدرک به پروژه دیگری تعلق دارد", 400);
+    const file = req.file;
+    if (!file) return cntBad(req, res, "E-EDM-NO-FILE", "فایل ارسال نشده است", 400);
+    const userId = req.headers["x-user-id"] || "system";
+    const checksum = (() => { try { return crypto.createHash("sha256").update(fs.readFileSync(file.path)).digest("hex"); } catch { return null; } })();
+    const id = crypto.randomUUID();
+    const row = {
+      Id: id,
+      ProjectId: projectId,
+      DocumentId: docId,
+      DocNo: doc.DocNo,
+      Revision: doc.Revision,
+      FileName: file.originalname,
+      MimeType: file.mimetype,
+      SizeBytes: file.size,
+      StorageKey: path.basename(file.path),
+      ChecksumSha256: checksum,
+      UploadedBy: userId,
+      UploadedAt: new Date().toISOString(),
+      NoteFa: req.body.noteFa ? String(req.body.noteFa).slice(0,600) : null,
+    };
+    await r.upsert("DocumentAttachment", { Id: id }, row, userId);
+    // update Document FilePath for quick reference (optional)
+    try { await r.upsert("Document", { Id: docId }, { ...doc, FilePath: row.StorageKey }, userId); } catch {}
+    res.status(201).json(cntOk(req, { id, item: row, downloadUrl: `/api/edms/${encodeURIComponent(projectId)}/files/${encodeURIComponent(id)}/download` }));
+  } catch (err) { next(err); }
+});
+
+app.get("/api/edms/:projectId/documents/:docId/files", comRequire("doc.document.view"), async (req, res, next) => {
+  try {
+    const projectId = String(req.params.projectId || "");
+    const docId = String(req.params.docId || "");
+    const r = await repo();
+    const doc = await r.findOne("Document", [{ column: "Id", op: "eq", value: docId }]);
+    if (!doc) return cntBad(req, res, "E-EDM-DOC-NOT-FOUND", "مدرک یافت نشد", 404);
+    const atts = await r.list("DocumentAttachment", { where: [{ column: "DocumentId", op: "eq", value: docId }], limit: 200 });
+    atts.sort((a,b)=> new Date(b.UploadedAt) - new Date(a.UploadedAt));
+    const items = atts.map(a=> ({ ...a, downloadUrl: `/api/edms/${encodeURIComponent(projectId)}/files/${encodeURIComponent(a.Id)}/download` }));
+    res.json(cntOk(req, { count: atts.length, document: { id: doc.Id, docNo: doc.DocNo, revision: doc.Revision, titleFa: doc.TitleFa }, items }));
+  } catch (err) { next(err); }
+});
+
+app.get("/api/edms/:projectId/documents", comRequire("doc.document.view"), async (req, res, next) => {
+  try {
+    const projectId = String(req.params.projectId || "");
+    if (!projectId) return cntBad(req, res, "E-CNT-NO-PROJECT", "پارامتر projectId الزامی است");
+    const r = await repo();
+    const where = [{ column: "ProjectId", op: "eq", value: projectId }];
+    if (req.query.docNo) where.push({ column: "DocNo", op: "eq", value: String(req.query.docNo) });
+    if (req.query.discipline) where.push({ column: "Discipline", op: "eq", value: String(req.query.discipline) });
+    if (req.query.status) where.push({ column: "Status", op: "eq", value: String(req.query.status) });
+    const docs = await r.list("Document", { where, limit: 500 });
+    // group by DocNo for version history
+    const byDocNo = new Map();
+    for (const d of docs) {
+      const arr = byDocNo.get(d.DocNo) || [];
+      arr.push(d);
+      byDocNo.set(d.DocNo, arr);
+    }
+    for (const arr of byDocNo.values()) arr.sort((a,b)=> String(a.Revision).localeCompare(String(b.Revision)));
+    const items = docs.slice(0,200).map(d=> ({ ...d, versions: (byDocNo.get(d.DocNo)||[]).length, hasFile: Boolean(d.FilePath) }));
+    res.json(cntOk(req, { count: docs.length, items, byDocNo: Object.fromEntries([...byDocNo.entries()].map(([k,v])=> [k, v.map(x=> ({ id: x.Id, revision: x.Revision, status: x.Status, issuedAt: x.IssuedAt, filePath: x.FilePath }))])) }));
+  } catch (err) { next(err); }
+});
+
+app.get("/api/edms/:projectId/files/:fileId/download", comRequire("doc.document.view"), async (req, res, next) => {
+  try {
+    const r = await repo();
+    const att = await r.findOne("DocumentAttachment", [{ column: "Id", op: "eq", value: String(req.params.fileId) }]);
+    if (!att) return cntBad(req, res, "E-EDM-FILE-NOT-FOUND", "پیوست یافت نشد", 404);
+    const filePath = path.join(edmsStorageDir, path.basename(att.StorageKey));
+    if (!fs.existsSync(filePath)) return cntBad(req, res, "E-EDM-FILE-MISSING", "فایل روی دیسک موجود نیست", 404);
+    res.download(filePath, att.FileName || "document");
+  } catch (err) { next(err); }
+});
+
+app.delete("/api/edms/:projectId/files/:fileId", comRequire("doc.document.upload"), async (req, res, next) => {
+  try {
+    const r = await repo();
+    const att = await r.findOne("DocumentAttachment", [{ column: "Id", op: "eq", value: String(req.params.fileId) }]);
+    if (!att) return cntBad(req, res, "E-EDM-FILE-NOT-FOUND", "پیوست یافت نشد", 404);
+    const filePath = path.join(edmsStorageDir, path.basename(att.StorageKey));
+    try { if (fs.existsSync(filePath)) fs.unlinkSync(filePath); } catch {}
+    await r.delete("DocumentAttachment", { Id: att.Id });
+    res.json(cntOk(req, { deleted: true, id: att.Id }));
+  } catch (err) { next(err); }
+});
+
+/* ══════════════ EDM-2 — مدیریت Hold و Hold Items (d1) ══════════════ */
+app.post("/api/edms/:projectId/holds", comRequire("doc.document.upload"), async (req, res, next) => {
+  try {
+    const projectId = String(req.params.projectId || "");
+    if (!projectId) return cntBad(req, res, "E-CNT-NO-PROJECT", "پارامتر projectId الزامی است");
+    const b = req.body || {};
+    if (!b.documentId || !String(b.documentId).trim()) return cntBad(req, res, "E-EDM-HOLD-NO-DOC", "شناسه مدرک الزامی است", 400);
+    if (!b.titleFa || !String(b.titleFa).trim()) return cntBad(req, res, "E-EDM-HOLD-NO-TITLE", "دلیل هولد الزامی است", 400);
+    const r = await repo();
+    const doc = await r.findOne("Document", [{ column: "Id", op: "eq", value: String(b.documentId) }]);
+    if (!doc) return cntBad(req, res, "E-EDM-DOC-NOT-FOUND", "مدرک یافت نشد", 404);
+    if (doc.ProjectId !== projectId) return cntBad(req, res, "E-COM-PROJECT-MISMATCH", "مدرک به پروژه دیگری تعلق دارد", 400);
+    const holdNo = b.holdNo ? String(b.holdNo).trim() : `HOLD-${Date.now().toString().slice(-6)}-${Math.random().toString(36).slice(2,5).toUpperCase()}`;
+    const existing = await r.findOne("DocumentHold", [{ column: "ProjectId", op: "eq", value: projectId }, { column: "HoldNo", op: "eq", value: holdNo }]);
+    if (existing) return cntBad(req, res, "E-EDM-HOLD-DUP", "شماره هولد تکراری است", 409);
+    const userId = req.headers["x-user-id"] || "system";
+    const id = crypto.randomUUID();
+    const row = {
+      Id: id,
+      ProjectId: projectId,
+      DocumentId: String(b.documentId),
+      DocNo: doc.DocNo,
+      Revision: doc.Revision,
+      HoldNo: holdNo,
+      TitleFa: String(b.titleFa).trim(),
+      HoldType: b.holdType ? String(b.holdType) : "other",
+      RaisedBy: userId,
+      RaisedAt: new Date().toISOString(),
+      DueAt: b.dueAt ? String(b.dueAt) : null,
+      ReleasedBy: null,
+      ReleasedAt: null,
+      NoteFa: b.noteFa ? String(b.noteFa).slice(0,1000) : null,
+      Status: "open",
+    };
+    await r.upsert("DocumentHold", { Id: id }, row, userId);
+    await edmsNotify(r, { projectId, documentId: String(b.documentId), docNo: doc.DocNo, eventType: 'hold_created', party: 'client', subjectFa: `Hold جدید ${holdNo} برای ${doc.DocNo}`, bodyFa: `${b.titleFa} - ${b.noteFa||''}`, channel: 'email' });
+    res.status(201).json(cntOk(req, { id, item: row }));
+  } catch (err) { next(err); }
+});
+
+app.get("/api/edms/:projectId/holds", comRequire("doc.document.view"), async (req, res, next) => {
+  try {
+    const projectId = String(req.params.projectId || "");
+    if (!projectId) return cntBad(req, res, "E-CNT-NO-PROJECT", "پارامتر projectId الزامی است");
+    const r = await repo();
+    const where = [{ column: "ProjectId", op: "eq", value: projectId }];
+    if (req.query.documentId) where.push({ column: "DocumentId", op: "eq", value: String(req.query.documentId) });
+    if (req.query.status) where.push({ column: "Status", op: "eq", value: String(req.query.status) });
+    if (req.query.holdType) where.push({ column: "HoldType", op: "eq", value: String(req.query.holdType) });
+    const holds = await r.list("DocumentHold", { where, limit: 500 });
+    holds.sort((a,b)=> new Date(b.RaisedAt) - new Date(a.RaisedAt));
+    const open = holds.filter(h=> h.Status==="open").length;
+    const overdue = holds.filter(h=> h.Status==="open" && h.DueAt && new Date(h.DueAt) < new Date()).length;
+    res.json(cntOk(req, { count: holds.length, summary: { open, overdue, released: holds.filter(h=>h.Status==="released").length }, items: holds }));
+  } catch (err) { next(err); }
+});
+
+app.post("/api/edms/:projectId/holds/:holdId/release", comRequire("doc.document.upload"), async (req, res, next) => {
+  try {
+    const r = await repo();
+    const hold = await r.findOne("DocumentHold", [{ column: "Id", op: "eq", value: String(req.params.holdId) }]);
+    if (!hold) return cntBad(req, res, "E-EDM-HOLD-NOT-FOUND", "هولد یافت نشد", 404);
+    if (hold.Status !== "open") return cntBad(req, res, "E-EDM-HOLD-NOT-OPEN", "هولد باز نیست", 409);
+    const userId = req.headers["x-user-id"] || "system";
+    const row = { ...hold, Status: "released", ReleasedBy: userId, ReleasedAt: new Date().toISOString(), NoteFa: req.body.noteFa ? String(req.body.noteFa).slice(0,1000) : hold.NoteFa };
+    await r.upsert("DocumentHold", { Id: hold.Id }, row, userId);
+    res.json(cntOk(req, { item: row }));
+  } catch (err) { next(err); }
+});
+
+app.post("/api/edms/:projectId/holds/:holdId/cancel", comRequire("doc.document.upload"), async (req, res, next) => {
+  try {
+    const r = await repo();
+    const hold = await r.findOne("DocumentHold", [{ column: "Id", op: "eq", value: String(req.params.holdId) }]);
+    if (!hold) return cntBad(req, res, "E-EDM-HOLD-NOT-FOUND", "هولد یافت نشد", 404);
+    if (hold.Status !== "open") return cntBad(req, res, "E-EDM-HOLD-NOT-OPEN", "هولد باز نیست", 409);
+    const userId = req.headers["x-user-id"] || "system";
+    const row = { ...hold, Status: "cancelled", ReleasedBy: userId, ReleasedAt: new Date().toISOString() };
+    await r.upsert("DocumentHold", { Id: hold.Id }, row, userId);
+    res.json(cntOk(req, { item: row }));
+  } catch (err) { next(err); }
+});
+
+/* ══════════════ EDM-3 — پیش‌نیاز مدارک و قفل صدور (d1) ══════════════ */
+app.post("/api/edms/:projectId/dependencies", comRequire("doc.document.upload"), async (req, res, next) => {
+  try {
+    const projectId = String(req.params.projectId || "");
+    if (!projectId) return cntBad(req, res, "E-CNT-NO-PROJECT", "پارامتر projectId الزامی است");
+    const b = req.body || {};
+    const docId = String(b.documentId || "").trim();
+    const depId = String(b.dependsOnDocumentId || "").trim();
+    if (!docId || !depId) return cntBad(req, res, "E-EDM-DEP-NO-DOC", "شناسه مدرک و پیش‌نیاز الزامی است", 400);
+    if (docId === depId) return cntBad(req, res, "E-EDM-DEP-SELF", "یک مدرک نمی‌تواند پیش‌نیاز خودش باشد", 400);
+    const r = await repo();
+    const [doc, prereq] = await Promise.all([
+      r.findOne("Document", [{ column: "Id", op: "eq", value: docId }]),
+      r.findOne("Document", [{ column: "Id", op: "eq", value: depId }]),
+    ]);
+    if (!doc || !prereq) return cntBad(req, res, "E-EDM-DOC-NOT-FOUND", "مدرک یا پیش‌نیاز یافت نشد", 404);
+    if (doc.ProjectId !== projectId || prereq.ProjectId !== projectId) return cntBad(req, res, "E-COM-PROJECT-MISMATCH", "مدارک به پروژه دیگری تعلق دارند", 400);
+    // cycle detection: check if prereq already depends on doc (direct or indirect via existing deps)
+    const allDeps = await r.list("DocumentDependency", { where: [{ column: "ProjectId", op: "eq", value: projectId }], limit: 2000 });
+    const graph = new Map();
+    for (const d of allDeps) {
+      const arr = graph.get(d.DocumentId) || [];
+      arr.push(d.DependsOnDocumentId);
+      graph.set(d.DocumentId, arr);
+    }
+    // DFS from prereq to see if doc is reachable
+    const visited = new Set();
+    const stack = [depId];
+    while (stack.length) {
+      const cur = stack.pop();
+      if (cur === docId) return cntBad(req, res, "E-EDM-DEP-CYCLE", "این وابستگی حلقه می‌سازد", 409);
+      if (visited.has(cur)) continue;
+      visited.add(cur);
+      for (const nb of graph.get(cur) || []) stack.push(nb);
+    }
+    const existing = await r.findOne("DocumentDependency", [{ column: "DocumentId", op: "eq", value: docId }, { column: "DependsOnDocumentId", op: "eq", value: depId }]);
+    if (existing) return cntBad(req, res, "E-EDM-DEP-DUP", "این پیش‌نیاز قبلاً ثبت شده است", 409);
+    const userId = req.headers["x-user-id"] || "system";
+    const id = crypto.randomUUID();
+    const row = {
+      Id: id,
+      ProjectId: projectId,
+      DocumentId: docId,
+      DependsOnDocumentId: depId,
+      DependencyType: b.dependencyType ? String(b.dependencyType) : "approval",
+      IsMandatory: b.isMandatory === false ? false : true,
+      NoteFa: b.noteFa ? String(b.noteFa).slice(0,600) : null,
+      CreatedBy: userId,
+      CreatedAt: new Date().toISOString(),
+    };
+    await r.upsert("DocumentDependency", { Id: id }, row, userId);
+    res.status(201).json(cntOk(req, { id, item: row }));
+  } catch (err) { next(err); }
+});
+
+app.get("/api/edms/:projectId/dependencies", comRequire("doc.document.view"), async (req, res, next) => {
+  try {
+    const projectId = String(req.params.projectId || "");
+    if (!projectId) return cntBad(req, res, "E-CNT-NO-PROJECT", "پارامتر projectId الزامی است");
+    const r = await repo();
+    const where = [{ column: "ProjectId", op: "eq", value: projectId }];
+    if (req.query.documentId) where.push({ column: "DocumentId", op: "eq", value: String(req.query.documentId) });
+    if (req.query.dependsOn) where.push({ column: "DependsOnDocumentId", op: "eq", value: String(req.query.dependsOn) });
+    const deps = await r.list("DocumentDependency", { where, limit: 1000 });
+    // enrich with doc info
+    const docIds = [...new Set([...deps.map(d=>d.DocumentId), ...deps.map(d=>d.DependsOnDocumentId)])];
+    const docs = await Promise.all(docIds.map(id=> r.findOne("Document", [{ column: "Id", op: "eq", value: id }])));
+    const byId = new Map(docs.filter(Boolean).map(d=> [d.Id, d]));
+    const items = deps.map(d=> ({
+      ...d,
+      document: byId.get(d.DocumentId) ? { docNo: byId.get(d.DocumentId).DocNo, revision: byId.get(d.DocumentId).Revision, titleFa: byId.get(d.DocumentId).TitleFa, status: byId.get(d.DocumentId).Status } : null,
+      prereq: byId.get(d.DependsOnDocumentId) ? { docNo: byId.get(d.DependsOnDocumentId).DocNo, revision: byId.get(d.DependsOnDocumentId).Revision, titleFa: byId.get(d.DependsOnDocumentId).TitleFa, status: byId.get(d.DependsOnDocumentId).Status } : null,
+    }));
+    res.json(cntOk(req, { count: deps.length, items }));
+  } catch (err) { next(err); }
+});
+
+app.delete("/api/edms/:projectId/dependencies/:depId", comRequire("doc.document.upload"), async (req, res, next) => {
+  try {
+    const r = await repo();
+    const dep = await r.findOne("DocumentDependency", [{ column: "Id", op: "eq", value: String(req.params.depId) }]);
+    if (!dep) return cntBad(req, res, "E-EDM-DEP-NOT-FOUND", "وابستگی یافت نشد", 404);
+    await r.delete("DocumentDependency", { Id: dep.Id });
+    res.json(cntOk(req, { deleted: true, id: dep.Id }));
+  } catch (err) { next(err); }
+});
+
+app.get("/api/edms/:projectId/documents/:docId/readiness", comRequire("doc.document.view"), async (req, res, next) => {
+  try {
+    const projectId = String(req.params.projectId || "");
+    const docId = String(req.params.docId || "");
+    const r = await repo();
+    const doc = await r.findOne("Document", [{ column: "Id", op: "eq", value: docId }]);
+    if (!doc) return cntBad(req, res, "E-EDM-DOC-NOT-FOUND", "مدرک یافت نشد", 404);
+    const deps = await r.list("DocumentDependency", { where: [{ column: "DocumentId", op: "eq", value: docId }], limit: 500 });
+    const prereqIds = deps.map(d=> d.DependsOnDocumentId);
+    const prereqs = await Promise.all(prereqIds.map(id=> r.findOne("Document", [{ column: "Id", op: "eq", value: id }])));
+    const byId = new Map(prereqs.filter(Boolean).map(d=> [d.Id, d]));
+    const blockers = [];
+    const warnings = [];
+    for (const dep of deps) {
+      const pre = byId.get(dep.DependsOnDocumentId);
+      if (!pre) { blockers.push(`پیش‌نیاز ${dep.DependsOnDocumentId} یافت نشد`); continue; }
+      if (dep.IsMandatory && pre.Status !== "approved") {
+        blockers.push(`${pre.DocNo} Rev ${pre.Revision} — وضعیت ${pre.Status} (باید approved باشد)`);
+      } else if (!dep.IsMandatory && pre.Status !== "approved") {
+        warnings.push(`${pre.DocNo} Rev ${pre.Revision} — وضعیت ${pre.Status}`);
+      }
+    }
+    // also check holds
+    const holds = await r.list("DocumentHold", { where: [{ column: "DocumentId", op: "eq", value: docId }, { column: "Status", op: "eq", value: "open" }], limit: 200 });
+    if (holds.length) blockers.push(`${holds.length} Hold باز دارد`);
+    res.json(cntOk(req, { document: { id: doc.Id, docNo: doc.DocNo, revision: doc.Revision, status: doc.Status }, totalDeps: deps.length, mandatory: deps.filter(d=> d.IsMandatory).length, blockers, warnings, canIssue: blockers.length===0 }));
+  } catch (err) { next(err); }
+});
+
+/* ══════════════ EDM-4 — Conclusion پایان چرخه Comment←Reply (d1) ══════════════ */
+app.post("/api/edms/:projectId/documents/:docId/comments", comRequire("doc.document.upload"), async (req, res, next) => {
+  try {
+    const projectId = String(req.params.projectId || "");
+    const docId = String(req.params.docId || "");
+    const b = req.body || {};
+    if (!b.commentText || !String(b.commentText).trim()) return cntBad(req, res, "E-EDM-COMMENT-NO-TEXT", "متن نظر الزامی است", 400);
+    const r = await repo();
+    const doc = await r.findOne("Document", [{ column: "Id", op: "eq", value: docId }]);
+    if (!doc) return cntBad(req, res, "E-EDM-DOC-NOT-FOUND", "مدرک یافت نشد", 404);
+    const existing = await r.list("DocumentComment", { where: [{ column: "DocumentId", op: "eq", value: docId }], limit: 1000 });
+    const nextNo = existing.length ? Math.max(...existing.map(x=> Number(x.CommentNo)||0)) + 1 : 1;
+    const userId = req.headers["x-user-id"] || "system";
+    const id = crypto.randomUUID();
+    const row = {
+      Id: id,
+      ProjectId: projectId,
+      DocumentId: docId,
+      DocNo: doc.DocNo,
+      Revision: doc.Revision,
+      CommentNo: nextNo,
+      CommentText: String(b.commentText).trim(),
+      CommentedBy: userId,
+      CommentedAt: new Date().toISOString(),
+      ReplyText: null,
+      RepliedBy: null,
+      RepliedAt: null,
+      ConclusionText: null,
+      ConcludedBy: null,
+      ConcludedAt: null,
+      ReviewCode: b.reviewCode ? String(b.reviewCode) : null,
+      Status: "open",
+    };
+    await r.upsert("DocumentComment", { Id: id }, row, userId);
+    await edmsNotify(r, { projectId, documentId: docId, docNo: doc.DocNo, eventType: 'comment_created', party: 'contractor', subjectFa: `نظر جدید #${nextNo} برای ${doc.DocNo}`, bodyFa: String(b.commentText).slice(0,500), channel: 'email' });
+    res.status(201).json(cntOk(req, { id, item: row }));
+  } catch (err) { next(err); }
+});
+
+app.get("/api/edms/:projectId/documents/:docId/comments", comRequire("doc.document.view"), async (req, res, next) => {
+  try {
+    const docId = String(req.params.docId || "");
+    const r = await repo();
+    const comments = await r.list("DocumentComment", { where: [{ column: "DocumentId", op: "eq", value: docId }], limit: 500 });
+    comments.sort((a,b)=> Number(a.CommentNo) - Number(b.CommentNo));
+    const open = comments.filter(c=> c.Status==="open").length;
+    const replied = comments.filter(c=> c.Status==="replied").length;
+    const concluded = comments.filter(c=> c.Status==="concluded").length;
+    res.json(cntOk(req, { count: comments.length, summary: { open, replied, concluded, total: comments.length }, items: comments }));
+  } catch (err) { next(err); }
+});
+
+app.post("/api/edms/:projectId/comments/:commentId/reply", comRequire("doc.document.upload"), async (req, res, next) => {
+  try {
+    const b = req.body || {};
+    if (!b.replyText || !String(b.replyText).trim()) return cntBad(req, res, "E-EDM-REPLY-NO-TEXT", "متن پاسخ الزامی است", 400);
+    const r = await repo();
+    const c = await r.findOne("DocumentComment", [{ column: "Id", op: "eq", value: String(req.params.commentId) }]);
+    if (!c) return cntBad(req, res, "E-EDM-COMMENT-NOT-FOUND", "نظر یافت نشد", 404);
+    if (c.Status !== "open") return cntBad(req, res, "E-EDM-COMMENT-NOT-OPEN", "نظر باز نیست", 409);
+    const userId = req.headers["x-user-id"] || "system";
+    const row = { ...c, ReplyText: String(b.replyText).trim(), RepliedBy: userId, RepliedAt: new Date().toISOString(), Status: "replied" };
+    await r.upsert("DocumentComment", { Id: c.Id }, row, userId);
+    res.json(cntOk(req, { item: row }));
+  } catch (err) { next(err); }
+});
+
+app.post("/api/edms/:projectId/comments/:commentId/conclude", comRequire("doc.document.approve"), async (req, res, next) => {
+  try {
+    const b = req.body || {};
+    if (!b.conclusionText || !String(b.conclusionText).trim()) return cntBad(req, res, "E-EDM-CONCLUSION-NO-TEXT", "متن جمع‌بندی الزامی است", 400);
+    const r = await repo();
+    const c = await r.findOne("DocumentComment", [{ column: "Id", op: "eq", value: String(req.params.commentId) }]);
+    if (!c) return cntBad(req, res, "E-EDM-COMMENT-NOT-FOUND", "نظر یافت نشد", 404);
+    if (c.Status !== "replied") return cntBad(req, res, "E-EDM-COMMENT-NOT-REPLIED", "ابتدا باید پاسخ داده شود", 409);
+    const userId = req.headers["x-user-id"] || "system";
+    const row = { ...c, ConclusionText: String(b.conclusionText).trim(), ConcludedBy: userId, ConcludedAt: new Date().toISOString(), ReviewCode: b.reviewCode ? String(b.reviewCode) : c.ReviewCode, Status: "concluded" };
+    await r.upsert("DocumentComment", { Id: c.Id }, row, userId);
+    res.json(cntOk(req, { item: row }));
+  } catch (err) { next(err); }
+});
+
+app.post("/api/edms/:projectId/comments/:commentId/void", comRequire("doc.document.upload"), async (req, res, next) => {
+  try {
+    const r = await repo();
+    const c = await r.findOne("DocumentComment", [{ column: "Id", op: "eq", value: String(req.params.commentId) }]);
+    if (!c) return cntBad(req, res, "E-EDM-COMMENT-NOT-FOUND", "نظر یافت نشد", 404);
+    const row = { ...c, Status: "void" };
+    await r.upsert("DocumentComment", { Id: c.Id }, row, req.headers["x-user-id"] || "system");
+    res.json(cntOk(req, { item: row }));
+  } catch (err) { next(err); }
+});
+
+
+/* ── MOD-15 EDM-5 DCI — فهرست کنترل و توزیع مدارک ── */
+app.get("/api/edms/:projectId/dci", comRequire("doc.document.view"), async (req, res, next) => {
+  try {
+    const projectId = String(req.params.projectId || "");
+    const r = await repo();
+    const docs = await r.list("Document", { where: [{ column: "ProjectId", op: "eq", value: projectId }], limit: 5000 });
+    const holds = await r.list("DocumentHold", { where: [{ column: "ProjectId", op: "eq", value: projectId }], limit: 5000 });
+    const deps = await r.list("DocumentDependency", { where: [{ column: "ProjectId", op: "eq", value: projectId }], limit: 5000 });
+    const comments = await r.list("DocumentComment", { where: [{ column: "ProjectId", op: "eq", value: projectId }], limit: 5000 });
+    const attachments = await r.list("DocumentAttachment", { where: [{ column: "ProjectId", op: "eq", value: projectId }], limit: 5000 });
+    const dists = await r.list("DocumentDistribution", { where: [{ column: "ProjectId", op: "eq", value: projectId }], limit: 5000 });
+    const efforts = await r.list("DocumentEffort", { where: [{ column: "ProjectId", op: "eq", value: projectId }], limit: 5000 });
+    const items = docs.map(d=>{
+      const docId = d.Id;
+      const openHolds = holds.filter(h=> h.DocumentId===docId && h.Status==="open").length;
+      const totalDeps = deps.filter(x=> x.DocumentId===docId).length;
+      const mandatoryDeps = deps.filter(x=> x.DocumentId===docId && x.IsMandatory).length;
+      const mandatoryNotApproved = deps.filter(x=>{
+        if(x.DocumentId!==docId || !x.IsMandatory) return false;
+        const prereq = docs.find(p=> p.Id===x.DependsOnDocumentId);
+        return !prereq || prereq.Status!=="approved";
+      }).length;
+      const cForDoc = comments.filter(c=> c.DocumentId===docId);
+      const files = attachments.filter(a=> a.DocumentId===docId).length;
+      const distCount = dists.filter(x=> x.DocumentId===docId).length;
+      const effortHours = efforts.filter(x=> x.DocumentId===docId).reduce((s,x)=> s + (Number(x.Hours)||0), 0);
+      const canIssue = openHolds===0 && mandatoryNotApproved===0;
+      return {
+        Id: d.Id,
+        DocNo: d.DocNo,
+        TitleFa: d.TitleFa,
+        Revision: d.Revision,
+        Status: d.Status,
+        Discipline: d.Discipline||null,
+        hasFile: files>0,
+        fileCount: files,
+        openHolds,
+        totalDeps,
+        mandatoryDeps,
+        mandatoryNotApproved,
+        canIssue,
+        comments: { total: cForDoc.length, open: cForDoc.filter(c=>c.Status==="open").length, replied: cForDoc.filter(c=>c.Status==="replied").length, concluded: cForDoc.filter(c=>c.Status==="concluded").length },
+        distCount,
+        effortHours,
+      };
+    });
+    items.sort((a,b)=> String(a.DocNo).localeCompare(String(b.DocNo)));
+    const summary = {
+      total: items.length,
+      canIssue: items.filter(x=>x.canIssue).length,
+      blocked: items.filter(x=>!x.canIssue).length,
+      withFile: items.filter(x=>x.hasFile).length,
+      openHolds: holds.filter(h=>h.Status==="open").length,
+      openComments: comments.filter(c=>c.Status==="open").length,
+    };
+    res.json(cntOk(req, { count: items.length, summary, items }));
+  } catch(err){ next(err); }
+});
+
+app.get("/api/edms/:projectId/distributions", comRequire("doc.document.view"), async (req, res, next) => {
+  try {
+    const projectId = String(req.params.projectId || "");
+    const r = await repo();
+    const where=[{ column: "ProjectId", op: "eq", value: projectId }];
+    if(req.query.documentId) where.push({ column: "DocumentId", op: "eq", value: String(req.query.documentId) });
+    if(req.query.party) where.push({ column: "Party", op: "eq", value: String(req.query.party) });
+    const rows = await r.list("DocumentDistribution", { where, limit: 1000 });
+    rows.sort((a,b)=> String(b.DistributedAt||"").localeCompare(String(a.DistributedAt||"")));
+    res.json(cntOk(req, { count: rows.length, items: rows }));
+  } catch(err){ next(err); }
+});
+
+app.get("/api/edms/:projectId/documents/:docId/distributions", comRequire("doc.document.view"), async (req, res, next) => {
+  try {
+    const docId = String(req.params.docId || "");
+    const r = await repo();
+    const rows = await r.list("DocumentDistribution", { where: [{ column: "DocumentId", op: "eq", value: docId }], limit: 500 });
+    rows.sort((a,b)=> String(b.DistributedAt||"").localeCompare(String(a.DistributedAt||"")));
+    res.json(cntOk(req, { count: rows.length, items: rows }));
+  } catch(err){ next(err); }
+});
+
+app.post("/api/edms/:projectId/documents/:docId/distribute", comRequire("doc.transmittal.issue"), async (req, res, next) => {
+  try {
+    const projectId = String(req.params.projectId || "");
+    const docId = String(req.params.docId || "");
+    const b = req.body || {};
+    if(!b.party) return cntBad(req, res, "E-EDM-DIST-NO-PARTY", "طرف توزیع الزامی است", 400);
+    const allowed=["client","consultant","contractor","subcontractor","vendor","other"];
+    if(!allowed.includes(String(b.party))) return cntBad(req, res, "E-EDM-DIST-BAD-PARTY", "طرف نامعتبر", 400);
+    const r = await repo();
+    const doc = await r.findOne("Document", [{ column: "Id", op: "eq", value: docId }]);
+    if(!doc) return cntBad(req, res, "E-EDM-DOC-NOT-FOUND", "مدرک یافت نشد", 404);
+    const userId = req.headers["x-user-id"] || "system";
+    const id = crypto.randomUUID();
+    const row = {
+      Id: id,
+      ProjectId: projectId,
+      DocumentId: docId,
+      DocNo: doc.DocNo,
+      Revision: doc.Revision,
+      Party: String(b.party),
+      TransmittalNo: b.transmittalNo ? String(b.transmittalNo) : null,
+      DistributedAt: new Date().toISOString(),
+      DistributedBy: userId,
+      NoteFa: b.noteFa ? String(b.noteFa) : null,
+    };
+    await r.upsert("DocumentDistribution", { Id: id }, row, userId);
+    await edmsNotify(r, { projectId, documentId: docId, docNo: doc.DocNo, eventType: 'distributed', party: String(b.party), subjectFa: `توزیع ${doc.DocNo} Rev ${doc.Revision} به ${b.party}`, bodyFa: `Transmittal ${b.transmittalNo||''} - ${b.noteFa||''}`, channel: 'email' });
+    res.status(201).json(cntOk(req, { id, item: row }));
+  } catch(err){ next(err); }
+});
+
+
+
+async function edmsNotify(r, { projectId, documentId, docNo, eventType, party, subjectFa, bodyFa, channel }) {
+  try {
+    const id = crypto.randomUUID();
+    const row = {
+      Id: id,
+      ProjectId: projectId,
+      DocumentId: documentId,
+      DocNo: docNo || '',
+      EventType: eventType,
+      RecipientParty: party || 'client',
+      RecipientEmail: null,
+      SubjectFa: subjectFa || eventType,
+      BodyFa: bodyFa || '',
+      Channel: channel || 'email',
+      Status: 'pending',
+      CreatedAt: new Date().toISOString(),
+      SentAt: null,
+      ErrorText: null,
+    };
+    await r.upsert("EdmsNotification", { Id: id }, row, "system");
+    return row;
+  } catch(e){
+    console.error('edmsNotify failed', e);
+    return null;
+  }
+}
+
+/* ── MOD-16 EDM-6 قالب‌های پروژه ── *//* ── MOD-16 EDM-6 قالب‌های پروژه ── */
+app.get("/api/edms/:projectId/templates", comRequire("doc.document.view"), async (req, res, next) => {
+  try {
+    const projectId = String(req.params.projectId || "");
+    const r = await repo();
+    const where=[{ column: "ProjectId", op: "eq", value: projectId }];
+    if(req.query.templateType) where.push({ column: "TemplateType", op: "eq", value: String(req.query.templateType) });
+    const rows = await r.list("DocumentTemplate", { where, limit: 500 });
+    rows.sort((a,b)=> String(a.NameFa).localeCompare(String(b.NameFa)));
+    res.json(cntOk(req, { count: rows.length, items: rows }));
+  } catch(err){ next(err); }
+});
+
+app.post("/api/edms/:projectId/templates", comRequire("doc.document.upload"), async (req, res, next) => {
+  try {
+    const projectId = String(req.params.projectId || "");
+    const b = req.body || {};
+    if(!b.templateType) return cntBad(req, res, "E-EDM-TPL-NO-TYPE", "نوع قالب الزامی است", 400);
+    if(!b.nameFa) return cntBad(req, res, "E-EDM-TPL-NO-NAME", "نام قالب الزامی است", 400);
+    const allowed=["doc","transmittal","checksheet","letter","other"];
+    if(!allowed.includes(String(b.templateType))) return cntBad(req, res, "E-EDM-TPL-BAD-TYPE", "نوع نامعتبر", 400);
+    const r = await repo();
+    const userId = req.headers["x-user-id"] || "system";
+    const id = crypto.randomUUID();
+    const row = {
+      Id: id,
+      ProjectId: projectId,
+      TemplateType: String(b.templateType),
+      NameFa: String(b.nameFa).slice(0,120),
+      Code: b.code ? String(b.code).slice(0,40) : null,
+      ContentJson: b.contentJson ? JSON.stringify(b.contentJson).slice(0,5000) : (b.content ? String(b.content).slice(0,5000) : null),
+      NoteFa: b.noteFa ? String(b.noteFa).slice(0,500) : null,
+      CreatedBy: userId,
+      CreatedAt: new Date().toISOString(),
+      UpdatedAt: null,
+    };
+    await r.upsert("DocumentTemplate", { Id: id }, row, userId);
+    res.status(201).json(cntOk(req, { id, item: row }));
+  } catch(err){ next(err); }
+});
+
+app.delete("/api/edms/:projectId/templates/:templateId", comRequire("doc.document.upload"), async (req, res, next) => {
+  try {
+    const r = await repo();
+    const tpl = await r.findOne("DocumentTemplate", [{ column: "Id", op: "eq", value: String(req.params.templateId) }]);
+    if(!tpl) return cntBad(req, res, "E-EDM-TPL-NOT-FOUND", "قالب یافت نشد", 404);
+    await r.delete("DocumentTemplate", String(req.params.templateId), req.headers["x-user-id"] || "system");
+    res.json(cntOk(req, { deleted: true, id: String(req.params.templateId) }));
+  } catch(err){ next(err); }
+});
+
+
+/* ── MOD-17 EDM-7 اعلان ایمیلی EDMS ── */
+app.get("/api/edms/:projectId/notifications", comRequire("doc.document.view"), async (req, res, next) => {
+  try {
+    const projectId = String(req.params.projectId || "");
+    const r = await repo();
+    const where=[{ column: "ProjectId", op: "eq", value: projectId }];
+    if(req.query.documentId) where.push({ column: "DocumentId", op: "eq", value: String(req.query.documentId) });
+    if(req.query.eventType) where.push({ column: "EventType", op: "eq", value: String(req.query.eventType) });
+    if(req.query.status) where.push({ column: "Status", op: "eq", value: String(req.query.status) });
+    const rows = await r.list("EdmsNotification", { where, limit: 500 });
+    rows.sort((a,b)=> String(b.CreatedAt||"").localeCompare(String(a.CreatedAt||"")));
+    const pending = rows.filter(x=> x.Status==="pending").length;
+    const sent = rows.filter(x=> x.Status==="sent").length;
+    res.json(cntOk(req, { count: rows.length, summary: { pending, sent, total: rows.length }, items: rows }));
+  } catch(err){ next(err); }
+});
+
+app.post("/api/edms/:projectId/notifications/:notifId/send", comRequire("doc.document.upload"), async (req, res, next) => {
+  try {
+    const r = await repo();
+    const n = await r.findOne("EdmsNotification", [{ column: "Id", op: "eq", value: String(req.params.notifId) }]);
+    if(!n) return cntBad(req, res, "E-EDM-NOTIF-NOT-FOUND", "اعلان یافت نشد", 404);
+    const userId = req.headers["x-user-id"] || "system";
+    let status='sent';
+    let sentAt=new Date().toISOString();
+    let errText=null;
+    try {
+      if(n.Channel==='email'){
+        if(smtpConfigured()){
+          // try real send if SMTP configured, else simulate
+          const transporter = (await import('nodemailer')).default.createTransport({
+            host: process.env.SMTP_HOST,
+            port: Number(process.env.SMTP_PORT || 587),
+            secure: process.env.SMTP_SECURE === 'true',
+            auth: process.env.SMTP_USER ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASSWORD || '' } : undefined,
+          });
+          await transporter.sendMail({
+            from: process.env.SMTP_FROM,
+            to: n.RecipientEmail || 'test@example.com',
+            subject: n.SubjectFa,
+            text: n.BodyFa || n.SubjectFa,
+          });
+        }
+      }
+    } catch(e){
+      status='failed';
+      errText=String(e.message||e).slice(0,1000);
+      sentAt=null;
+    }
+    const row = { ...n, Status: status, SentAt: sentAt, ErrorText: errText };
+    await r.upsert("EdmsNotification", { Id: n.Id }, row, userId);
+    res.json(cntOk(req, { item: row }));
+  } catch(err){ next(err); }
+});
+
+app.post("/api/edms/:projectId/notifications", comRequire("doc.document.upload"), async (req, res, next) => {
+  try {
+    const projectId = String(req.params.projectId || "");
+    const b = req.body || {};
+    if(!b.documentId) return cntBad(req, res, "E-EDM-NOTIF-NO-DOC", "شناسه مدرک الزامی است", 400);
+    if(!b.eventType) return cntBad(req, res, "E-EDM-NOTIF-NO-EVENT", "نوع رویداد الزامی است", 400);
+    const r = await repo();
+    const doc = await r.findOne("Document", [{ column: "Id", op: "eq", value: String(b.documentId) }]);
+    if(!doc) return cntBad(req, res, "E-EDM-DOC-NOT-FOUND", "مدرک یافت نشد", 404);
+    const row = await edmsNotify(r, { projectId, documentId: String(b.documentId), docNo: doc.DocNo, eventType: String(b.eventType), party: b.party||'client', subjectFa: b.subjectFa||String(b.eventType), bodyFa: b.bodyFa||'', channel: b.channel||'email' });
+    res.status(201).json(cntOk(req, { id: row.Id, item: row }));
+  } catch(err){ next(err); }
+});
+
+
+/* ── MOD-18 EDM-8 نفرساعت واقعی مدرک ── */
+app.get("/api/edms/:projectId/documents/:docId/effort", comRequire("doc.document.view"), async (req, res, next) => {
+  try {
+    const docId = String(req.params.docId || "");
+    const r = await repo();
+    const rows = await r.list("DocumentEffort", { where: [{ column: "DocumentId", op: "eq", value: docId }], limit: 1000 });
+    rows.sort((a,b)=> String(a.WorkDate||"").localeCompare(String(b.WorkDate||"")));
+    const totalHours = rows.reduce((s,x)=> s + (Number(x.Hours)||0), 0);
+    const totalCost = rows.reduce((s,x)=> s + (Number(x.Cost)||0), 0);
+    const byPerson = {};
+    for(const x of rows){
+      const key = x.PersonName || x.PersonId || 'unknown';
+      byPerson[key] = (byPerson[key]||0) + (Number(x.Hours)||0);
+    }
+    res.json(cntOk(req, { count: rows.length, summary: { totalHours, totalCost, byPerson }, items: rows }));
+  } catch(err){ next(err); }
+});
+
+app.get("/api/edms/:projectId/effort", comRequire("doc.document.view"), async (req, res, next) => {
+  try {
+    const projectId = String(req.params.projectId || "");
+    const r = await repo();
+    const where=[{ column: "ProjectId", op: "eq", value: projectId }];
+    if(req.query.documentId) where.push({ column: "DocumentId", op: "eq", value: String(req.query.documentId) });
+    const rows = await r.list("DocumentEffort", { where, limit: 2000 });
+    const totalHours = rows.reduce((s,x)=> s + (Number(x.Hours)||0), 0);
+    const totalCost = rows.reduce((s,x)=> s + (Number(x.Cost)||0), 0);
+    res.json(cntOk(req, { count: rows.length, summary: { totalHours, totalCost }, items: rows }));
+  } catch(err){ next(err); }
+});
+
+app.post("/api/edms/:projectId/documents/:docId/effort", comRequire("doc.document.upload"), async (req, res, next) => {
+  try {
+    const projectId = String(req.params.projectId || "");
+    const docId = String(req.params.docId || "");
+    const b = req.body || {};
+    if(!b.workDate) return cntBad(req, res, "E-EDM-EFFORT-NO-DATE", "تاریخ کار الزامی است", 400);
+    if(b.hours==null || isNaN(Number(b.hours)) || Number(b.hours)<=0) return cntBad(req, res, "E-EDM-EFFORT-NO-HOURS", "ساعت کار معتبر الزامی است", 400);
+    const r = await repo();
+    const doc = await r.findOne("Document", [{ column: "Id", op: "eq", value: docId }]);
+    if(!doc) return cntBad(req, res, "E-EDM-DOC-NOT-FOUND", "مدرک یافت نشد", 404);
+    const userId = req.headers["x-user-id"] || "system";
+    const id = crypto.randomUUID();
+    const row = {
+      Id: id,
+      ProjectId: projectId,
+      DocumentId: docId,
+      DocNo: doc.DocNo,
+      Revision: doc.Revision,
+      PersonId: b.personId ? String(b.personId) : null,
+      PersonName: b.personName ? String(b.personName).slice(0,120) : null,
+      WorkDate: String(b.workDate).slice(0,10),
+      Hours: Number(b.hours),
+      Cost: b.cost!=null ? Number(b.cost) : null,
+      Activity: b.activity ? String(b.activity).slice(0,40) : null,
+      NoteFa: b.noteFa ? String(b.noteFa).slice(0,500) : null,
+      CreatedBy: userId,
+      CreatedAt: new Date().toISOString(),
+    };
+    await r.upsert("DocumentEffort", { Id: id }, row, userId);
+    res.status(201).json(cntOk(req, { id, item: row }));
+  } catch(err){ next(err); }
+});
+
+app.delete("/api/edms/:projectId/effort/:effortId", comRequire("doc.document.upload"), async (req, res, next) => {
+  try {
+    const r = await repo();
+    const e = await r.findOne("DocumentEffort", [{ column: "Id", op: "eq", value: String(req.params.effortId) }]);
+    if(!e) return cntBad(req, res, "E-EDM-EFFORT-NOT-FOUND", "رکورد نفرساعت یافت نشد", 404);
+    await r.delete("DocumentEffort", String(req.params.effortId), req.headers["x-user-id"] || "system");
+    res.json(cntOk(req, { deleted: true, id: String(req.params.effortId) }));
+  } catch(err){ next(err); }
+});
+
+
+/* ── MOD-19 EDM-9 شفاف‌سازی فنی پیمانکار فرعی ── */
+app.get("/api/edms/:projectId/sub-reviews", comRequire("doc.document.view"), async (req, res, next) => {
+  try {
+    const projectId = String(req.params.projectId || "");
+    const r = await repo();
+    const where=[{ column: "ProjectId", op: "eq", value: projectId }];
+    if(req.query.documentId) where.push({ column: "DocumentId", op: "eq", value: String(req.query.documentId) });
+    if(req.query.status) where.push({ column: "Status", op: "eq", value: String(req.query.status) });
+    const rows = await r.list("DocumentSubReview", { where, limit: 500 });
+    rows.sort((a,b)=> String(b.AskedAt||"").localeCompare(String(a.AskedAt||"")));
+    const open = rows.filter(x=> x.Status==="open").length;
+    res.json(cntOk(req, { count: rows.length, summary: { open, total: rows.length }, items: rows }));
+  } catch(err){ next(err); }
+});
+
+app.get("/api/edms/:projectId/documents/:docId/sub-reviews", comRequire("doc.document.view"), async (req, res, next) => {
+  try {
+    const docId = String(req.params.docId || "");
+    const r = await repo();
+    const rows = await r.list("DocumentSubReview", { where: [{ column: "DocumentId", op: "eq", value: docId }], limit: 500 });
+    rows.sort((a,b)=> String(b.AskedAt||"").localeCompare(String(a.AskedAt||"")));
+    res.json(cntOk(req, { count: rows.length, items: rows }));
+  } catch(err){ next(err); }
+});
+
+app.post("/api/edms/:projectId/documents/:docId/sub-reviews", comRequire("doc.document.upload"), async (req, res, next) => {
+  try {
+    const projectId = String(req.params.projectId || "");
+    const docId = String(req.params.docId || "");
+    const b = req.body || {};
+    if(!b.questionFa) return cntBad(req, res, "E-EDM-SUB-NO-Q", "سوال فنی الزامی است", 400);
+    if(!b.subcontractorParty) return cntBad(req, res, "E-EDM-SUB-NO-PARTY", "طرف پیمانکار فرعی الزامی است", 400);
+    const r = await repo();
+    const doc = await r.findOne("Document", [{ column: "Id", op: "eq", value: docId }]);
+    if(!doc) return cntBad(req, res, "E-EDM-DOC-NOT-FOUND", "مدرک یافت نشد", 404);
+    const userId = req.headers["x-user-id"] || "system";
+    const id = crypto.randomUUID();
+    const row = {
+      Id: id,
+      ProjectId: projectId,
+      DocumentId: docId,
+      DocNo: doc.DocNo,
+      Revision: doc.Revision,
+      SubcontractorParty: String(b.subcontractorParty).slice(0,40),
+      QuestionFa: String(b.questionFa).slice(0,2000),
+      AnswerFa: null,
+      Status: "open",
+      AskedBy: userId,
+      AskedAt: new Date().toISOString(),
+      AnsweredBy: null,
+      AnsweredAt: null,
+      NoteFa: b.noteFa ? String(b.noteFa).slice(0,500) : null,
+    };
+    await r.upsert("DocumentSubReview", { Id: id }, row, userId);
+    await edmsNotify(r, { projectId, documentId: docId, docNo: doc.DocNo, eventType: 'sub_clarification', party: String(b.subcontractorParty), subjectFa: `شفاف‌سازی فنی ${doc.DocNo} از ${b.subcontractorParty}`, bodyFa: String(b.questionFa).slice(0,500), channel: 'email' });
+    res.status(201).json(cntOk(req, { id, item: row }));
+  } catch(err){ next(err); }
+});
+
+app.post("/api/edms/:projectId/sub-reviews/:reviewId/answer", comRequire("doc.document.upload"), async (req, res, next) => {
+  try {
+    const b = req.body || {};
+    if(!b.answerFa) return cntBad(req, res, "E-EDM-SUB-NO-A", "پاسخ الزامی است", 400);
+    const r = await repo();
+    const rev = await r.findOne("DocumentSubReview", [{ column: "Id", op: "eq", value: String(req.params.reviewId) }]);
+    if(!rev) return cntBad(req, res, "E-EDM-SUB-NOT-FOUND", "شفاف‌سازی یافت نشد", 404);
+    if(rev.Status!=="open") return cntBad(req, res, "E-EDM-SUB-NOT-OPEN", "فقط مورد باز قابل پاسخ است", 409);
+    const userId = req.headers["x-user-id"] || "system";
+    const row = { ...rev, AnswerFa: String(b.answerFa).slice(0,2000), AnsweredBy: userId, AnsweredAt: new Date().toISOString(), Status: "answered" };
+    await r.upsert("DocumentSubReview", { Id: rev.Id }, row, userId);
+    res.json(cntOk(req, { item: row }));
+  } catch(err){ next(err); }
+});
+
+app.post("/api/edms/:projectId/sub-reviews/:reviewId/close", comRequire("doc.document.approve"), async (req, res, next) => {
+  try {
+    const r = await repo();
+    const rev = await r.findOne("DocumentSubReview", [{ column: "Id", op: "eq", value: String(req.params.reviewId) }]);
+    if(!rev) return cntBad(req, res, "E-EDM-SUB-NOT-FOUND", "شفاف‌سازی یافت نشد", 404);
+    if(rev.Status!=="answered") return cntBad(req, res, "E-EDM-SUB-NOT-ANSWERED", "ابتدا باید پاسخ داده شود", 409);
+    const userId = req.headers["x-user-id"] || "system";
+    const row = { ...rev, Status: "closed" };
+    await r.upsert("DocumentSubReview", { Id: rev.Id }, row, userId);
+    res.json(cntOk(req, { item: row }));
+  } catch(err){ next(err); }
 });
 
 /* ── ۱۴٫۱ وضعیت ماژول ── */

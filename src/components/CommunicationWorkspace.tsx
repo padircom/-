@@ -29,9 +29,10 @@ import { CkmClient, type CkmResult, type CkmWorkspacePayload } from "../services
  * می‌شود؛ پنهان کردن دکمه فقط برای راحتی است. */
 
 /* شش تب = دقیقاً شش زیرماژول ماژول ارتباطات و دانش */
-export type CkmTab = "correspondence" | "meetings" | "stakeholders" | "notifications" | "knowledge" | "analytics";
+export type CkmTab = "inbox" | "correspondence" | "meetings" | "stakeholders" | "notifications" | "knowledge" | "analytics";
 
 const TABS: { id: CkmTab; fa: string; en: string; icon: string; proc: string }[] = [
+  { id: "inbox", fa: "کارتابل من", en: "My Inbox", icon: "📥", proc: "d11-p0" },
   { id: "correspondence", fa: "مکاتبات و اعلان قراردادی", en: "Correspondence & Notices", icon: "✉️", proc: "d11-p1" },
   { id: "meetings", fa: "جلسات و مصوبات", en: "Meetings & Actions", icon: "🗓", proc: "d11-p2" },
   { id: "stakeholders", fa: "ذی‌نفعان و برنامه ارتباطات", en: "Stakeholders & Comms Plan", icon: "🤝", proc: "d11-p3" },
@@ -349,7 +350,15 @@ function Tabs({ rtl, me, tab, ws, v, perm, busy, client, act, fmt }: {
 }) {
   const L = (b: { fa: string; en: string }) => (rtl ? b.fa : b.en);
   const [classFilter, setClassFilter] = useState<"all" | Letter["letterClass"]>("all");
+
   const [selectedMeeting, setSelectedMeeting] = useState<string>(ws.meetings[0]?.Code ?? "");
+  const [inboxData, setInboxData] = useState<{ count: number; summary: { unread: number; overdue: number; total: number }; items: any[] } | null>(null);
+  const [referralData, setReferralData] = useState<{ count: number; items: any[] } | null>(null);
+  const [referForm, setReferForm] = useState<{ letterNo: string; toUserId: string; instructionFa: string; deadline: string }>({ letterNo: "", toUserId: "", instructionFa: "", deadline: "" });
+  const [selectedLetterNo, setSelectedLetterNo] = useState<string>("");
+  const [sigData, setSigData] = useState<{ count: number; items: any[] } | null>(null);
+  const [linkData, setLinkData] = useState<{ count: number; items: any[] } | null>(null);
+  const [linkForm, setLinkForm] = useState<{ letterNo: string; linkType: string; targetId: string; noteFa: string }>({ letterNo: "", linkType: "edms", targetId: "", noteFa: "" });
   useEffect(() => {
     if (!ws.meetings.some((m) => m.Code === selectedMeeting)) setSelectedMeeting(ws.meetings[0]?.Code ?? "");
   }, [ws.meetings, selectedMeeting]);
@@ -364,9 +373,32 @@ function Tabs({ rtl, me, tab, ws, v, perm, busy, client, act, fmt }: {
   const stF = useForm({ Code: "", NameFa: "", Org: "", RoleFa: "", Power: "3", Interest: "3", CurrentLevel: "neutral", DesiredLevel: "supportive", Channels: "", Frequency: "monthly", OwnerRole: "" });
   const lessonF = useForm({ Code: "", TitleFa: "", Category: "technical", Impact: "medium", SourceRef: "", SituationFa: "", RecommendationFa: "", Tags: "" });
   const [reusing, setReusing] = useState<{ code: string; note: string } | null>(null);
+  const genLetterF = useForm({ TemplateId: "", Kind: "general", Direction: "outgoing", SubjectFa: "", FromParty: "", ToParty: "", OwnerRole: "", ResponseDays: "", RefLetterNo: "" });
   const ruleF = useForm({ Code: "", EventCode: "notice_due", NameFa: "", Channels: "in_app,email", AudienceRoles: "", EscalateAfterHours: "24", EscalateToRole: "" });
 
   const filteredLetters = classFilter === "all" ? v.letterRows : v.letterRows.filter((r) => r.l.letterClass === classFilter);
+
+  const loadInbox = async () => {
+    const r = await client.inbox({});
+    if (r.ok) setInboxData(r.data as any);
+  };
+  const loadSigs = async (no: string) => {
+    if(!no) { setSigData(null); return; }
+    const r = await client.signatures(no);
+    if(r.ok) setSigData(r.data as any);
+  };
+  const loadLinks = async (no: string) => {
+    if(!no) { setLinkData(null); return; }
+    const r = await client.letterLinks(no);
+    if(r.ok) setLinkData(r.data as any);
+  };
+
+  const loadReferrals = async () => {
+    const r = await client.referrals({});
+    if (r.ok) setReferralData(r.data as any);
+  };
+  useEffect(() => { void loadInbox(); void loadReferrals(); }, [ws]);
+  useEffect(() => { if(selectedLetterNo) { void loadSigs(selectedLetterNo); void loadLinks(selectedLetterNo); } }, [selectedLetterNo]);
   const selected = v.meetingRows.find((m) => m.row.Code === selectedMeeting) ?? null;
   const meetingActions = v.actionRows.filter((a) => a.row.MeetingCode === selectedMeeting);
   const maxCat = Math.max(...v.coverageByCat.map((c) => c.count), 1);
@@ -381,6 +413,85 @@ function Tabs({ rtl, me, tab, ws, v, perm, busy, client, act, fmt }: {
 
   return (
     <>
+      {/* ═══ تب ۰: کارتابل من — PAT-1/2 ═══ */}
+      {tab === "inbox" && (
+        <>
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+            <Kpi label={rtl ? "خوانده‌نشده" : "Unread"} value={inboxData ? fmt(inboxData.summary.unread) : "—"} tone={inboxData && inboxData.summary.unread ? "text-amber-300" : "text-emerald-300"} />
+            <Kpi label={rtl ? "معوق" : "Overdue"} value={inboxData ? fmt(inboxData.summary.overdue) : "—"} tone={inboxData && inboxData.summary.overdue ? "text-rose-300" : "tx1"} />
+            <Kpi label={rtl ? "کل کارتابل" : "Total inbox"} value={inboxData ? fmt(inboxData.count) : "—"} />
+            <Kpi label={rtl ? "ارجاعات باز" : "Open referrals"} value={referralData ? fmt(referralData.items.filter((x:any)=>x.Status==="open").length) : "—"} />
+          </div>
+
+          <Section title={rtl ? "کارتابل من — نامه‌ها و ارجاعات" : "My inbox — letters & referrals"} note={rtl ? "ارجاع با دستور، مهلت و سابقه — خوانده/انجام" : "referral with instruction, deadline, history — read/done"}>
+            <div className="thin-scroll max-h-[400px] overflow-auto">
+              <table className="w-full text-[9.5px]">
+                <thead className="tx3"><tr className="border-b b-line-soft"><Th>{rtl ? "نوع" : "Type"}</Th><Th>{rtl ? "مرجع" : "Ref"}</Th><Th>{rtl ? "عنوان" : "Title"}</Th><Th>{rtl ? "مهلت" : "Due"}</Th><Th>{rtl ? "اولویت" : "Prio"}</Th><Th>{rtl ? "وضعیت" : "Status"}</Th><Th>{rtl ? "اقدام" : "Action"}</Th></tr></thead>
+                <tbody>
+                  {(inboxData?.items ?? []).map((it:any)=>(
+                    <tr key={it.Id} className="border-b b-line-soft/50">
+                      <td className="px-2 py-1 tx2">{it.Type}</td>
+                      <td className="px-2 py-1 font-mono tx3" dir="ltr">{it.ReferenceId}</td>
+                      <td className="px-2 py-1 max-w-[300px] truncate tx1" title={it.TitleFa}>{it.TitleFa}</td>
+                      <td className="px-2 py-1 font-mono tx3" dir="ltr">{it.DueAt ? it.DueAt.slice(0,10) : "—"}</td>
+                      <td className="px-2 py-1"><span className={`rounded px-1.5 py-[1px] text-[8px] ${it.Priority==="high" ? "bg-rose-400/15 text-rose-300" : "bg-white/5 tx3"}`}>{it.Priority ?? "normal"}</span></td>
+                      <td className="px-2 py-1"><span className={`rounded px-1.5 py-[1px] text-[8px] ${it.Status==="unread" ? "bg-amber-400/15 text-amber-200" : it.Status==="done" ? "bg-emerald-400/15 text-emerald-300" : "bg-white/5 tx3"}`}>{it.Status}</span></td>
+                      <td className="px-2 py-1 whitespace-nowrap">
+                        <span className="flex items-center gap-1">
+                          {it.Status==="unread" && <button disabled={busy} className={rowBtn} onClick={()=>void act(()=>client.readInbox(it.Id), rtl ? "خوانده شد" : "Read")}>{rtl ? "خواندم" : "Read"}</button>}
+                          {it.Status!=="done" && it.Status!=="archived" && <button disabled={busy} className={rowBtn} onClick={()=>void act(()=>client.doneInbox(it.Id), rtl ? "انجام شد" : "Done")}>{rtl ? "انجام" : "Done"}</button>}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {!inboxData?.items.length && <p className="tx3 text-[11px] mt-2">{rtl ? "کارتابل خالی است" : "Inbox empty"}</p>}
+            </div>
+            <button className={btnPrimary+" mt-2"} onClick={()=>{ void loadInbox(); }}>{rtl ? "تازه‌سازی کارتابل" : "Refresh inbox"}</button>
+          </Section>
+
+          <Section title={rtl ? "ارجاعات مکاتبات — دستور، مهلت، سابقه" : "Referrals — instruction, deadline, history"} note={rtl ? "ارجاع نامه به کاربر با دستور و مهلت، سابقه در HistoryJson" : "refer letter to user with instruction & deadline, history in HistoryJson"}>
+            <div className="thin-scroll max-h-[300px] overflow-auto mb-2">
+              <table className="w-full text-[9.5px]">
+                <thead className="tx3"><tr className="border-b b-line-soft"><Th>{rtl ? "نامه" : "Letter"}</Th><Th>{rtl ? "از → به" : "From → To"}</Th><Th>{rtl ? "دستور" : "Instruction"}</Th><Th>{rtl ? "مهلت" : "Deadline"}</Th><Th>{rtl ? "وضعیت" : "Status"}</Th><Th>{rtl ? "اقدام" : "Action"}</Th></tr></thead>
+                <tbody>
+                  {(referralData?.items ?? []).map((rf:any)=>(
+                    <tr key={rf.Id} className="border-b b-line-soft/50">
+                      <td className="px-2 py-1 font-mono tx2" dir="ltr">{rf.LetterNo}</td>
+                      <td className="px-2 py-1 tx3" dir="ltr">{rf.FromUserId} → {rf.ToUserId}</td>
+                      <td className="px-2 py-1 max-w-[250px] truncate tx1" title={rf.InstructionFa}>{rf.InstructionFa}</td>
+                      <td className="px-2 py-1 font-mono tx3" dir="ltr">{rf.Deadline ?? "—"}</td>
+                      <td className="px-2 py-1"><span className={`rounded px-1.5 py-[1px] text-[8px] ${rf.Status==="open" ? "bg-amber-400/15 text-amber-200" : "bg-emerald-400/15 text-emerald-300"}`}>{rf.Status}</span></td>
+                      <td className="px-2 py-1">{rf.Status==="open" && <button disabled={busy} className={rowBtn} onClick={()=>void act(()=>client.doneReferral(rf.Id, { doneNoteFa: "انجام شد" }), rtl ? "ارجاع انجام شد" : "Referral done")}>{rtl ? "انجام" : "Done"}</button>}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="flex flex-wrap items-end gap-1.5 rounded-xl border b-line-soft bg-black/10 p-2">
+              <span className="w-full text-[9px] tx3">{rtl ? "ارجاع نامه — انتخاب نامه، گیرنده، دستور و مهلت" : "Refer letter — pick letter, recipient, instruction, deadline"}</span>
+              <select className={inputCls+" w-28"} value={referForm.letterNo} onChange={e=>setReferForm({...referForm, letterNo:e.target.value})} dir="ltr">
+                <option value="">{rtl ? "نامه" : "letter"}</option>
+                {ws.letters.map((l:any)=><option key={l.LetterNo} value={l.LetterNo}>{l.LetterNo}</option>)}
+              </select>
+              <select className={inputCls+" w-28"} value={referForm.toUserId} onChange={e=>setReferForm({...referForm, toUserId:e.target.value})} dir="ltr">
+                <option value="">{rtl ? "گیرنده" : "to user"}</option>
+                <option value="u-doc">u-doc</option><option value="u-pm">u-pm</option><option value="u-contracts">u-contracts</option><option value="u-site">u-site</option><option value="u-qc">u-qc</option>
+              </select>
+              <input className={inputCls+" w-56"} placeholder={rtl ? "دستور ارجاع" : "instruction"} value={referForm.instructionFa} onChange={e=>setReferForm({...referForm, instructionFa:e.target.value})} />
+              <input className={inputCls} type="date" value={referForm.deadline} onChange={e=>setReferForm({...referForm, deadline:e.target.value})} dir="ltr" />
+              <button disabled={busy || !referForm.letterNo || !referForm.toUserId || !referForm.instructionFa} className={btnPrimary} onClick={async ()=>{
+                if(await act(()=>client.referLetter(referForm.letterNo, { toUserId: referForm.toUserId, instructionFa: referForm.instructionFa, deadline: referForm.deadline || undefined }), rtl ? "ارجاع ثبت شد" : "Referred")){
+                  setReferForm({ letterNo:"", toUserId:"", instructionFa:"", deadline:"" });
+                }
+              }}>{rtl ? "ارجاع" : "Refer"}</button>
+            </div>
+          </Section>
+        </>
+      )}
+
       {/* ═══ تب ۱: مکاتبات ═══ */}
       {tab === "correspondence" && !perm.letters && (
         <Section title={rtl ? "مکاتبات محرمانه است" : "Correspondence is confidential"}>
@@ -515,7 +626,7 @@ function Tabs({ rtl, me, tab, ws, v, perm, busy, client, act, fmt }: {
                 <input className={`${inputCls} w-24`} placeholder={rtl ? "مالک پاسخ" : "owner"} value={letterF.v.OwnerRole} onChange={letterF.set("OwnerRole")} />
                 <input className={`${inputCls} w-20`} type="number" min={1} placeholder={`${rtl ? "مهلت" : "days"} ${DEFAULT_RESPONSE_DAYS[letterF.v.Kind as Letter["letterClass"]] ?? ""}`} value={letterF.v.ResponseDays} onChange={letterF.set("ResponseDays")} dir="ltr" />
                 <input className={`${inputCls} w-28`} placeholder={rtl ? "پیرو/عطف" : "ref letter"} value={letterF.v.RefLetterNo} onChange={letterF.set("RefLetterNo")} dir="ltr" />
-                <button disabled={busy || !letterF.v.LetterNo || !letterF.v.SubjectFa} className={btnPrimary}
+                <button disabled={busy || !letterF.v.SubjectFa} className={btnPrimary}
                   onClick={async () => {
                     const f = letterF.v;
                     const body = {
@@ -528,6 +639,93 @@ function Tabs({ rtl, me, tab, ws, v, perm, busy, client, act, fmt }: {
                 </button>
               </div>
             )}
+          </Section>
+
+          {perm.draft && (
+            <Section title={rtl ? "تولید نامه از قالب + شماره‌گذاری خودکار" : "Generate letter from template + auto numbering"} note={rtl ? "PAT-3/4 — شماره خودکار بر اساس Prefix پروژه-نوع، قالب از DocumentTemplate نوع letter" : "PAT-3/4 — auto number by prefix project-type, template from DocumentTemplate letter"}>
+              <div className="flex flex-wrap items-end gap-1.5 rounded-xl border b-line-soft bg-black/10 p-2">
+                <span className="w-full text-[9px] tx3">{rtl ? "اگر شماره خالی باشد، سرور خودکار c1-p1-GN-0001 می‌سازد — قالب اختیاری" : "If letter no empty, server auto-generates c1-p1-GN-0001 — template optional"}</span>
+                <select className={inputCls} value={genLetterF.v.Kind} onChange={genLetterF.set("Kind")}>
+                  {LETTER_CLASSES.map((c:any)=><option key={c} value={c}>{L(CLASS_LABEL[c])}</option>)}
+                </select>
+                <select className={inputCls} value={genLetterF.v.Direction} onChange={genLetterF.set("Direction")}>
+                  <option value="incoming">{rtl ? "وارده" : "incoming"}</option>
+                  <option value="outgoing">{rtl ? "صادره" : "outgoing"}</option>
+                </select>
+                <input className={inputCls+" w-56"} placeholder={rtl ? "موضوع" : "subject"} value={genLetterF.v.SubjectFa} onChange={genLetterF.set("SubjectFa")} />
+                <input className={inputCls+" w-24"} placeholder={rtl ? "فرستنده" : "from"} value={genLetterF.v.FromParty} onChange={genLetterF.set("FromParty")} />
+                <input className={inputCls+" w-24"} placeholder={rtl ? "گیرنده" : "to"} value={genLetterF.v.ToParty} onChange={genLetterF.set("ToParty")} />
+                <input className={inputCls+" w-24"} placeholder={rtl ? "مالک پاسخ" : "owner"} value={genLetterF.v.OwnerRole} onChange={genLetterF.set("OwnerRole")} />
+                <input className={inputCls+" w-28"} placeholder={rtl ? "قالب ID (اختیاری)" : "templateId opt"} value={genLetterF.v.TemplateId} onChange={genLetterF.set("TemplateId")} dir="ltr" />
+                <input className={inputCls+" w-20"} type="number" min={1} placeholder={rtl ? "مهلت" : "days"} value={genLetterF.v.ResponseDays} onChange={genLetterF.set("ResponseDays")} dir="ltr" />
+                <input className={inputCls+" w-28"} placeholder={rtl ? "پیرو/عطف" : "ref letter"} value={genLetterF.v.RefLetterNo} onChange={genLetterF.set("RefLetterNo")} dir="ltr" />
+                <button disabled={busy || !genLetterF.v.SubjectFa || !genLetterF.v.FromParty || !genLetterF.v.ToParty} className={btnPrimary}
+                  onClick={async ()=>{
+                    const f=genLetterF.v;
+                    const body={ Kind:f.Kind, Direction:f.Direction, SubjectFa:f.SubjectFa, FromParty:f.FromParty, ToParty:f.ToParty, OwnerRole:f.OwnerRole||undefined, ResponseDays: num(f.ResponseDays), RefLetterNo: f.RefLetterNo||undefined, templateId: f.TemplateId||undefined };
+                    if(await act(()=>client.generateLetter(body), rtl ? "نامه از قالب تولید شد" : "Letter generated from template", "CKM_LETTER_GENERATED")) genLetterF.reset();
+                  }}>{rtl ? "تولید خودکار" : "Generate auto"}</button>
+              </div>
+            </Section>
+          )}
+
+          <Section title={rtl ? "امضای الکترونیکی و پیوندها — PAT-5/6/7/8" : "E-signature & links — PAT-5/6/7/8"} note={rtl ? "امضا با hash SHA256، پیوند به EDMS/Tag/بسته خرید/نامه، رشته پیرو/عطف/پاسخ" : "signature with SHA256 hash, links to EDMS/Tag/package/letter, thread follow-up/ref/response"}>
+            <div className="flex flex-wrap items-end gap-1.5 rounded-xl border b-line-soft bg-black/10 p-2 mb-2">
+              <span className="w-full text-[9px] tx3">{rtl ? "انتخاب نامه برای دیدن امضا و پیوندها — کلیک روی شماره در جدول بالا" : "Select letter to view signatures & links — click number in table above"}</span>
+              <select className={inputCls+" w-40"} value={selectedLetterNo} onChange={e=>setSelectedLetterNo(e.target.value)} dir="ltr">
+                <option value="">{rtl ? "انتخاب نامه" : "select letter"}</option>
+                {ws.letters.map((l:any)=><option key={l.LetterNo} value={l.LetterNo}>{l.LetterNo} — {l.SubjectFa.slice(0,30)}</option>)}
+              </select>
+              <button disabled={busy || !selectedLetterNo} className={btnPrimary} onClick={()=>{ void loadSigs(selectedLetterNo); void loadLinks(selectedLetterNo); }}>{rtl ? "بارگذاری" : "Load"}</button>
+              {selectedLetterNo && perm.sign && <button disabled={busy} className={btnOk} onClick={()=>void act(()=>client.signLetter(selectedLetterNo, { method:"simple", noteFa:"امضای الکترونیکی" }), rtl ? "امضا ثبت شد" : "Signed")}>{rtl ? "امضای الکترونیکی" : "E-sign"}</button>}
+            </div>
+
+            {selectedLetterNo && (
+              <div className="grid gap-2 md:grid-cols-2">
+                <div>
+                  <div className="text-[9px] tx2 mb-1">{rtl ? "امضاها" : "Signatures"} ({sigData?.count ?? 0})</div>
+                  <div className="thin-scroll max-h-[200px] overflow-auto">
+                    <table className="w-full text-[9px]"><thead className="tx3"><tr className="border-b b-line-soft"><Th>{rtl ? "امضاکننده" : "Signer"}</Th><Th>{rtl ? "زمان" : "Time"}</Th><Th>Hash</Th><Th>{rtl ? "روش" : "Method"}</Th></tr></thead>
+                    <tbody>{(sigData?.items ?? []).map((sg:any)=><tr key={sg.Id} className="border-b b-line-soft/50"><td className="px-2 py-1 tx2" dir="ltr">{sg.SignedBy}</td><td className="px-2 py-1 font-mono tx3" dir="ltr">{sg.SignedAt.slice(0,16)}</td><td className="px-2 py-1 font-mono text-[7px] tx4" dir="ltr">{sg.SignatureHash.slice(0,16)}…</td><td className="px-2 py-1 tx3">{sg.Method}</td></tr>)}</tbody></table>
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[9px] tx2 mb-1">{rtl ? "پیوندها به EDMS/Tag/بسته/نامه" : "Links to EDMS/Tag/Package/Letter"} ({linkData?.count ?? 0})</div>
+                  <div className="thin-scroll max-h-[200px] overflow-auto mb-2">
+                    <table className="w-full text-[9px]"><thead className="tx3"><tr className="border-b b-line-soft"><Th>{rtl ? "نوع" : "Type"}</Th><Th>{rtl ? "هدف" : "Target"}</Th><Th>{rtl ? "یادداشت" : "Note"}</Th><Th /></tr></thead>
+                    <tbody>{(linkData?.items ?? []).map((lk:any)=><tr key={lk.Id} className="border-b b-line-soft/50"><td className="px-2 py-1 tx2">{lk.LinkType}</td><td className="px-2 py-1 font-mono tx3" dir="ltr">{lk.TargetId}</td><td className="px-2 py-1 tx3">{lk.NoteFa ?? "—"}</td><td className="px-2 py-1"><button disabled={busy} className="text-[9px] text-rose-300" onClick={()=>void act(()=>client.deleteLetterLink(selectedLetterNo, lk.Id), rtl ? "پیوند حذف شد" : "Link deleted")}>✕</button></td></tr>)}</tbody></table>
+                  </div>
+                  <div className="flex flex-wrap items-end gap-1.5 rounded-xl border b-line-soft bg-black/10 p-2">
+                    <select className={inputCls} value={linkForm.linkType} onChange={e=>setLinkForm({...linkForm, linkType:e.target.value})}>
+                      <option value="edms">edms</option><option value="tag">tag</option><option value="proc_package">proc_package</option><option value="letter">letter</option>
+                    </select>
+                    <input className={inputCls+" w-32"} placeholder={rtl ? "شناسه هدف" : "targetId"} value={linkForm.targetId} onChange={e=>setLinkForm({...linkForm, targetId:e.target.value})} dir="ltr" />
+                    <input className={inputCls+" w-32"} placeholder={rtl ? "یادداشت" : "note"} value={linkForm.noteFa} onChange={e=>setLinkForm({...linkForm, noteFa:e.target.value})} />
+                    <button disabled={busy || !selectedLetterNo || !linkForm.targetId} className={btnPrimary} onClick={async ()=>{
+                      if(await act(()=>client.createLetterLink(selectedLetterNo, { linkType: linkForm.linkType, targetId: linkForm.targetId, noteFa: linkForm.noteFa || undefined }), rtl ? "پیوند ثبت شد" : "Link created")){
+                        setLinkForm({ letterNo:"", linkType:"edms", targetId:"", noteFa:"" });
+                      }
+                    }}>{rtl ? "پیوند" : "Link"}</button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* رشته مکاتبه */}
+            <div className="mt-2">
+              <div className="text-[9px] tx2 mb-1">{rtl ? "رشته مکاتبه — پیرو، عطف، پاسخ (PAT-8)" : "Correspondence thread — follow-up, ref, response (PAT-8)"}</div>
+              <div className="thin-scroll max-h-[200px] overflow-auto">
+                <table className="w-full text-[9px]">
+                  <thead className="tx3"><tr className="border-b b-line-soft"><Th>{rtl ? "نامه" : "Letter"}</Th><Th>{rtl ? "پیرو/عطف" : "Ref"}</Th><Th>{rtl ? "موضوع" : "Subject"}</Th><Th>{rtl ? "وضعیت" : "Status"}</Th></tr></thead>
+                  <tbody>
+                    {ws.letters.filter((l:any)=> l.RefLetterNo).map((l:any)=>{
+                      const ref = ws.letters.find((x:any)=> x.LetterNo===l.RefLetterNo);
+                      return <tr key={l.LetterNo} className="border-b b-line-soft/50"><td className="px-2 py-1 font-mono tx2" dir="ltr">{l.LetterNo}</td><td className="px-2 py-1 font-mono tx3" dir="ltr">{l.RefLetterNo} {ref ? `→ ${ref.SubjectFa.slice(0,20)}` : ""}</td><td className="px-2 py-1 max-w-[200px] truncate tx1" title={l.SubjectFa}>{l.SubjectFa}</td><td className="px-2 py-1 tx3">{l.Status}</td></tr>;
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </Section>
 
           <Section title={rtl ? "مهلت پیش‌فرض پاسخ بر حسب نوع نامه" : "Default response window by letter class"} note={rtl ? "روز کاری · موارد نشان‌دار مهلت قراردادی الزام‌آور دارند · قابل تغییر برای هر نامه" : "working days · flagged classes are time-barred"}>

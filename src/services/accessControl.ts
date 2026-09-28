@@ -310,6 +310,17 @@ export const PERMISSION_CATALOG: PermissionDef[] = [
   P("fin.ipc.approve", "d5", "تأیید صورت‌وضعیت", "Approve payment certificate", "restricted", true),
   P("fin.rate.view", "d5", "مشاهده نرخ و قیمت واحد", "View unit rates", "restricted"),
   P("fin.invoice.issue", "d5", "صدور فاکتور", "Issue invoice", "restricted", true),
+  /* ── d5 خرید و تدارکات — SCM (P5) ── */
+  P("scm.vendor.view", "d5", "مشاهده فروشندگان", "View vendors", "internal"),
+  P("scm.vendor.manage", "d5", "مدیریت فروشندگان و AVL", "Manage vendors & AVL", "confidential", true),
+  P("scm.package.view", "d5", "مشاهده بسته خرید", "View procurement packages", "internal"),
+  P("scm.package.edit", "d5", "ایجاد و ویرایش بسته خرید و استعلام", "Edit procurement & inquiry packages", "confidential", true),
+  P("scm.bidder.view", "d5", "مشاهده مناقصه‌گران", "View bidders", "internal"),
+  P("scm.bidder.manage", "d5", "مدیریت LBL/SBL و دعوت‌نامه", "Manage LBL/SBL & invitations", "confidential", true),
+  P("scm.mr.view", "d5", "مشاهده تغییرات MR", "View MR changes", "internal"),
+  P("scm.mr.manage", "d5", "مدیریت MR و تغییرات", "Manage MR & changes", "confidential", true),
+  P("scm.mrr.view", "d5", "مشاهده رسید مواد", "View material receiving", "internal"),
+  P("scm.mrr.post", "d5", "ثبت رسید مواد و OPI", "Post MRR & OPI", "confidential", true),
 
   /* ── d6 حاکمیت ── */
   P("gov.process.view", "d6", "مشاهده فرآیندها", "View processes", "internal"),
@@ -554,7 +565,8 @@ export const ROLE_CATALOG: RoleDef[] = [
       "core.event.view",
       /* LIVE-1: ثبت هزینه، مطالبات، PR/PO و موجودی کار روزانهٔ اوست؛
        * تأیید PR و آزادسازی ذخیره دست مدیر پروژه است. */
-      "fin.cost.post", "fin.procure.edit"],
+      "fin.cost.post", "fin.procure.edit",
+      "scm.vendor.view", "scm.vendor.manage", "scm.package.view", "scm.package.edit", "scm.bidder.view", "scm.bidder.manage", "scm.mr.view", "scm.mr.manage", "scm.mrr.view", "scm.mrr.post"],
   },
   {
     code: "qc_inspector",
@@ -703,7 +715,7 @@ export const ROLE_CATALOG: RoleDef[] = [
       /* تأیید صورت‌وضعیت پیمانکار جزء با مدیر پروژه است نه مدیر
        * پیمان (SOD-14): تأییدکننده دارد نقدینگی پیمانکار اصلی را خرج
        * می‌کند و همان کسی باید باشد که پاسخ‌گوی آن است. */
-      "cnt.subipc.view", "cnt.subipc.approve", "cnt.progress.view",
+      "scm.vendor.view", "scm.vendor.manage", "scm.package.view", "scm.package.edit", "scm.bidder.view", "scm.bidder.manage", "scm.mr.view", "scm.mr.manage", "scm.mrr.view", "scm.mrr.post", "cnt.subipc.view", "cnt.subipc.approve", "cnt.progress.view",
       /* تنظیم آستانه با مدیر پروژه است نه مدیر پیمان: مدیر پیمان
        * سنجه‌شونده است و نباید بتواند معیار سنجش خودش را بازتعریف
        * کند. */
@@ -885,7 +897,8 @@ export const ROLE_CATALOG: RoleDef[] = [
     // core.ai.run داده شده چون همین نقش سرویس هوش مصنوعی را پیکربندی
     // می‌کند؛ بدون آن، مدیر سامانه کلید را وارد می‌کرد ولی خودش اجازهٔ
     // آزمودنش را نداشت و پنل دانش پروژه برایش قفل می‌ماند.
-    grants: ["sys.config.manage", "sys.user.manage", "sys.audit.purge", "sys.backup.export", "sys.backup.restore", "report.export.bulk", "core.portfolio.view", "core.project.view", "core.ai.run"],
+    grants: ["sys.config.manage", "sys.user.manage", "sys.audit.purge", "sys.backup.export", "sys.backup.restore", "report.export.bulk", "core.portfolio.view", "core.project.view", "core.ai.run",
+      "scm.vendor.view", "scm.vendor.manage", "scm.package.view", "scm.package.edit", "scm.bidder.view", "scm.bidder.manage", "scm.mr.view", "scm.mrr.view", "scm.mrr.post"],
   },
 ];
 

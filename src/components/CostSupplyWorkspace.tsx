@@ -7,6 +7,7 @@ import ContractsPanel from "./ContractsPanel";
 import { FIN_FORMULA_VERSION, agingBucket, needsAutoCr, progressInvoice, varianceSeverity, type CurveType } from "../services/finance";
 import { buildFinView, type FinView, type PrStatus } from "../services/finWorkspace";
 import { FinClient, type FinResult, type FinWorkspacePayload } from "../services/finApi";
+import { ScmClient, type ScmWorkspacePayload } from "../services/scmApi";
 import QuantityBalancePanel from "./QuantityBalancePanel";
 import ProfitLossPanel from "./ProfitLossPanel";
 
@@ -19,7 +20,7 @@ import ProfitLossPanel from "./ProfitLossPanel";
  * پرداخت) سمت سرور اجرا می‌شود؛ پنهان کردن دکمه فقط برای راحتی است. */
 
 /* نه تب = نه زیرماژول d5؛ نام‌ها تغییرناپذیرند (BC). */
-export type FinTab = "cost" | "control" | "cash" | "pr" | "po" | "inventory" | "quantities" | "balance" | "pnl";
+export type FinTab = "cost" | "control" | "cash" | "pr" | "po" | "inventory" | "quantities" | "balance" | "pnl" | "scm-vendors" | "scm-packages" | "scm-tender" | "scm-receiving" | "scm-warehouse" | "scm-mrlog";
 
 const TABS: { id: FinTab; fa: string; en: string; icon: string; proc: string }[] = [
   { id: "cost", fa: "مدیریت هزینه", en: "Cost Management", icon: "💰", proc: "d5-p1" },
@@ -28,6 +29,12 @@ const TABS: { id: FinTab; fa: string; en: string; icon: string; proc: string }[]
   { id: "pr", fa: "درخواست خرید", en: "Purchase Request", icon: "📝", proc: "d5-p4" },
   { id: "po", fa: "سفارش خرید", en: "Purchase Order", icon: "📦", proc: "d5-p5" },
   { id: "inventory", fa: "مدیریت کالا و انبار", en: "Material & Warehouse", icon: "🏗", proc: "d5-p6" },
+  { id: "scm-vendors", fa: "فروشندگان و AVL", en: "Vendors & AVL", icon: "🏭", proc: "d5-p10" },
+  { id: "scm-packages", fa: "بسته‌های خرید", en: "Proc Packages", icon: "📦", proc: "d5-p11" },
+  { id: "scm-tender", fa: "مناقصه و استعلام", en: "Tender & RFQ", icon: "📋", proc: "d5-p12" },
+  { id: "scm-receiving", fa: "رسید و OPI", en: "Receiving & OPI", icon: "🚚", proc: "d5-p13" },
+  { id: "scm-warehouse", fa: "انبار و موجودی", en: "Warehouse", icon: "🏗️", proc: "d5-p15" },
+  { id: "scm-mrlog", fa: "تغییرات MR", en: "MR Changes", icon: "🔄", proc: "d5-p14" },
   { id: "quantities", fa: "احجام و مقادیر فیزیکی", en: "Quantities", icon: "📐", proc: "d5-p7" },
   { id: "balance", fa: "بالانس مصالح", en: "Material Balance", icon: "⚖️", proc: "d5-p8" },
   { id: "pnl", fa: "سود و زیان پروژه", en: "Project P&L", icon: "📈", proc: "d5-p9" },
@@ -132,6 +139,7 @@ export default function CostSupplyWorkspace({
   const { user } = useAuth();
   const userId = user?.id ?? null;
   const client = useMemo(() => new FinClient(PROJECT_ID, userId), [userId]);
+  const scmClient = useMemo(() => new ScmClient(PROJECT_ID, userId), [userId]);
   const subject = useMemo(() => DEMO_SUBJECTS.find((s) => s.id === userId) ?? null, [userId]);
   const perm = useMemo(
     () => ({
@@ -148,10 +156,13 @@ export default function CostSupplyWorkspace({
   useEffect(() => setTab(initialTab), [initialTab]);
 
   const [ws, setWs] = useState<FinWorkspacePayload | null>(null);
+  const [scmWs, setScmWs] = useState<ScmWorkspacePayload | null>(null);
   const [loadErr, setLoadErr] = useState<{ status: number; message: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [scmBusy, setScmBusy] = useState(false);
   const [msg, setMsg] = useState<{ tone: "ok" | "err"; text: string } | null>(null);
+  const [scmMsg, setScmMsg] = useState<{ tone: "ok" | "err"; text: string } | null>(null);
   const [showSettings, setShowSettings] = useState(false);
 
   const reload = useCallback(async () => {
@@ -164,8 +175,10 @@ export default function CostSupplyWorkspace({
       setWs(null);
       setLoadErr({ status: r.status, message: r.message });
     }
+    const sr = await scmClient.workspace();
+    if (sr.ok) setScmWs(sr.data as any);
     setLoading(false);
-  }, [client]);
+  }, [client, scmClient]);
   useEffect(() => {
     void reload();
   }, [reload]);
@@ -182,6 +195,19 @@ export default function CostSupplyWorkspace({
       return true;
     }
     setMsg({ tone: "err", text: r.message });
+    return false;
+  };
+  const scmAct = async (fn: () => Promise<any>, okText: string, auditCode?: string): Promise<boolean> => {
+    setScmBusy(true);
+    const r = await fn();
+    setScmBusy(false);
+    if (r.ok) {
+      setScmMsg({ tone: "ok", text: okText });
+      if (auditCode) logAudit(auditCode, "SCM", okText);
+      await reload();
+      return true;
+    }
+    setScmMsg({ tone: "err", text: r.message });
     return false;
   };
 
@@ -296,7 +322,12 @@ export default function CostSupplyWorkspace({
             {perm.budget && <AccountForm rtl={rtl} ws={ws} busy={busy} onCreate={(a) => act(() => client.createAccount(a), rtl ? "حساب هزینه ثبت شد" : "Cost account created")} />}
           </EmptyState>
         ) : (
-          <Tabs rtl={rtl} lang={lang} tab={tab} ws={ws} v={view} perm={perm} busy={busy} client={client} act={act} />
+          <>
+            <Tabs rtl={rtl} lang={lang} tab={tab} ws={ws} v={view} perm={perm} busy={busy} client={client} act={act} />
+            {(tab.startsWith("scm-")) && (
+              <ScmTabs rtl={rtl} tab={tab} ws={ws} scmWs={scmWs} busy={scmBusy} msg={scmMsg} onClearMsg={()=>setScmMsg(null)} client={scmClient} act={scmAct} />
+            )}
+          </>
         )}
       </>
     );
@@ -1105,6 +1136,356 @@ function PrActions({ rtl, code, status, over, perm, busy, client, act, onMakePo 
         <button disabled={busy} className={`${link} tx4`} onClick={() => void act(() => client.prAction(code, "cancel"), rtl ? `${code} لغو شد` : `${code} cancelled`)}>{rtl ? "لغو" : "cancel"}</button>
       )}
     </span>
+  );
+}
+
+
+/* ═══════════════ SCM Tabs P5 ═══════════════ */
+function ScmTabs({ rtl, tab, ws, scmWs, busy, msg, onClearMsg, client, act }: { rtl: boolean; tab: string; ws: any; scmWs: any; busy: boolean; msg: any; onClearMsg: ()=>void; client: any; act: any }) {
+  const vendors = scmWs?.vendors ?? [];
+  const avls = scmWs?.avls ?? [];
+  const packages = scmWs?.packages ?? [];
+  const links = scmWs?.links ?? [];
+  const inquiries = scmWs?.inquiries ?? [];
+  const bidders = scmWs?.bidders ?? [];
+  const invitations = scmWs?.invitations ?? [];
+  const mrrs = scmWs?.mrrs ?? [];
+  const mrChanges = scmWs?.mrChanges ?? [];
+  const mrs = scmWs?.mrs ?? [];
+  const proposals = scmWs?.proposals ?? [];
+  const evaluations = scmWs?.evaluations ?? [];
+  const bidReports = scmWs?.bidReports ?? [];
+  const koms = scmWs?.koms ?? [];
+  const inspections = scmWs?.inspections ?? [];
+  const shipments = scmWs?.shipments ?? [];
+  const psrs = scmWs?.psrs ?? [];
+
+  const [vF, setVF] = useState({ Code:"", NameFa:"", Category:"", Disciplines:"", Email:"" });
+  const [avlF, setAvlF] = useState({ VendorCode:"", Discipline:"", Status:"approved", ApprovedAt:"" });
+  const [pkgF, setPkgF] = useState({ Code:"", TitleFa:"", Discipline:"", PurchaseType:"po", Status:"draft" });
+  const [inqF, setInqF] = useState({ InquiryNo:"", PackageCode:"", TitleFa:"", IssueDate:"", DueDate:"" });
+  const [bidF, setBidF] = useState({ InquiryCode:"", VendorCode:"", ListType:"lbl" });
+  const [invF, setInvF] = useState({ InquiryCode:"", VendorCode:"", InvitationNo:"" });
+  const [mrrF, setMrrF] = useState({ Code:"", PoNo:"", ReceivedAt:"", Quantity:"", AcceptedQty:"", OpiType:"none", Warehouse:"" });
+  const [mrChF, setMrChF] = useState({ MrCode:"", ChangeType:"quantity", OldValue:"", NewValue:"" });
+  const [propF, setPropF] = useState({ ProposalNo:"", InquiryCode:"", VendorCode:"", Type:"technical", Amount:"" });
+  const [evalF, setEvalF] = useState({ EvalNo:"", ProposalNo:"", Type:"tbe", Score:"", Result:"pass" });
+  const [bidRptF, setBidRptF] = useState({ ReportNo:"", InquiryCode:"", WinnerVendorCode:"", TotalAmount:"" });
+  const [komF, setKomF] = useState({ KomNo:"", PoNo:"", Type:"kom", MeetingDate:"" });
+  const [inspF, setInspF] = useState({ InspectionNo:"", PoNo:"", Type:"factory", InspectionDate:"", Result:"pass", ReleaseNoteNo:"" });
+  const [shipF, setShipF] = useState({ ShipmentNo:"", PoNo:"", Mode:"road", OriginFa:"", DestinationFa:"" });
+  const [psrF, setPsrF] = useState({ PsrNo:"", PoNo:"", ProgressPct:"", ReportDate:"", StatusFa:"" });
+  const warehouses = scmWs?.warehouses ?? [];
+  const catalog = scmWs?.catalog ?? [];
+  const mrcs = scmWs?.mrcs ?? [];
+  const mrcLines = scmWs?.mrcLines ?? [];
+  const mivs = scmWs?.mivs ?? [];
+  const mivLines = scmWs?.mivLines ?? [];
+  const mrvs = scmWs?.mrvs ?? [];
+  const transfers = scmWs?.transfers ?? [];
+  const balances = scmWs?.balances ?? [];
+  const [whF, setWhF] = useState({ Code:"", NameFa:"", LocationFa:"" });
+  const [catF, setCatF] = useState({ Code:"", NameFa:"", Category:"", Unit:"" });
+  const [mrcF, setMrcF] = useState({ MrcNo:"", RequiredDate:"", MaterialCode:"", Quantity:"" });
+  const [mivF, setMivF] = useState({ MivNo:"", WarehouseCode:"", IssuedAt:"", MaterialCode:"", Quantity:"" });
+  const [mrvF, setMrvF] = useState({ MrvNo:"", WarehouseCode:"", ReturnedAt:"", MivNo:"" });
+  const [trfF, setTrfF] = useState({ TransferNo:"", FromWarehouse:"", ToWarehouse:"", MaterialCode:"", Quantity:"", TransferredAt:"" });
+  const [balF, setBalF] = useState({ WarehouseCode:"", MaterialCode:"", OnHand:"" });
+
+  const inputCls = "rounded-lg border b-line-soft bg-black/20 px-2 py-1 text-[10px] tx1 placeholder:text-[9px] placeholder:tx4 focus:outline-none focus:border-amber-400/40";
+  const btnPrimary = "rounded-lg bg-amber-400/20 px-3 py-1.5 text-[10px] font-semibold text-amber-100 hover:bg-amber-400/30 disabled:opacity-40";
+  const btnCls = "rounded-lg border px-2 py-1 text-[9px]";
+
+  return (
+    <div className="space-y-3">
+      {msg && (
+        <div className={`flex items-center gap-2 rounded-lg px-2 py-1 text-[9.5px] ${msg.tone==='ok'?'bg-emerald-400/10 text-emerald-200':'bg-rose-400/10 text-rose-200'}`}>
+          <span className="flex-1">{msg.text}</span>
+          <button onClick={onClearMsg} className="tx3 hover:tx1">✕</button>
+        </div>
+      )}
+
+      {tab==='scm-vendors' && (
+        <>
+          <Section title={rtl?"فروشندگان":"Vendors"} note={rtl?` ${vendors.length} فروشنده`:`${vendors.length} vendors`}>
+            <div className="overflow-x-auto">
+              <table className="w-full text-[9.5px]"><thead className="tx3"><tr className="border-b b-line-soft"><Th>{rtl?"کد":"Code"}</Th><Th>{rtl?"نام":"Name"}</Th><Th>{rtl?"دسته":"Category"}</Th><Th>{rtl?"رشته":"Disc"}</Th><Th>{rtl?"وضعیت":"Status"}</Th><Th /></tr></thead>
+              <tbody>{vendors.map((v:any)=><tr key={v.Code} className="border-b b-line-soft/50"><td className="px-2 py-1 font-mono tx2" dir="ltr">{v.Code}</td><td className="px-2 py-1 tx1">{v.NameFa}</td><td className="px-2 py-1 tx3">{v.Category??'—'}</td><td className="px-2 py-1 tx3">{v.Disciplines??'—'}</td><td className="px-2 py-1 tx3">{v.Status??'active'}</td><td className="px-2 py-1"><button disabled={busy} onClick={()=>void act(()=>client.deleteVendor(v.Code), rtl?`فروشنده ${v.Code} حذف شد`:`Deleted ${v.Code}`)} className="text-[9px] text-rose-300">✕</button></td></tr>)}</tbody></table>
+            </div>
+            <div className="mt-2 flex flex-wrap items-end gap-1.5 rounded-xl border b-line-soft bg-black/10 p-2">
+              <input className={`${inputCls} w-24`} placeholder={rtl?"کد":"code"} value={vF.Code} onChange={e=>setVF({...vF, Code:e.target.value})} dir="ltr" />
+              <input className={`${inputCls} w-40`} placeholder={rtl?"نام فارسی":"name fa"} value={vF.NameFa} onChange={e=>setVF({...vF, NameFa:e.target.value})} />
+              <input className={`${inputCls} w-24`} placeholder={rtl?"دسته":"category"} value={vF.Category} onChange={e=>setVF({...vF, Category:e.target.value})} />
+              <input className={`${inputCls} w-32`} placeholder="disciplines piping,valve" value={vF.Disciplines} onChange={e=>setVF({...vF, Disciplines:e.target.value})} dir="ltr" />
+              <input className={`${inputCls} w-32`} placeholder="email" value={vF.Email} onChange={e=>setVF({...vF, Email:e.target.value})} dir="ltr" />
+              <button disabled={busy||!vF.Code||!vF.NameFa} className={btnPrimary} onClick={async()=>{ if(await act(()=>client.createVendor({Code:vF.Code, NameFa:vF.NameFa, Category:vF.Category||null, Disciplines:vF.Disciplines||null, Email:vF.Email||null}), rtl?"فروشنده ثبت شد":"Vendor created")) setVF({Code:"",NameFa:"",Category:"",Disciplines:"",Email:""}); }}>{rtl?"ثبت":"Add"}</button>
+            </div>
+          </Section>
+          <Section title="AVL — Approved Vendor List" note={rtl?`${avls.length} رکورد`:`${avls.length} records`}>
+            <div className="overflow-x-auto"><table className="w-full text-[9.5px]"><thead className="tx3"><tr className="border-b b-line-soft"><Th>Vendor</Th><Th>Discipline</Th><Th>Status</Th><Th /></tr></thead><tbody>{avls.map((a:any)=><tr key={a.Id} className="border-b b-line-soft/50"><td className="px-2 py-1 tx2">{a.VendorCode??a.VendorId}</td><td className="px-2 py-1 tx3">{a.Discipline}</td><td className="px-2 py-1 tx3">{a.Status}</td><td className="px-2 py-1"><button disabled={busy} onClick={()=>void act(()=>client.deleteAvl(a.Id), 'AVL deleted')} className="text-[9px] text-rose-300">✕</button></td></tr>)}</tbody></table></div>
+            <div className="mt-2 flex flex-wrap gap-1.5 rounded-xl border b-line-soft bg-black/10 p-2">
+              <input className={`${inputCls} w-24`} placeholder="VendorCode" value={avlF.VendorCode} onChange={e=>setAvlF({...avlF,VendorCode:e.target.value})} dir="ltr" />
+              <input className={`${inputCls} w-24`} placeholder="Discipline" value={avlF.Discipline} onChange={e=>setAvlF({...avlF,Discipline:e.target.value})} dir="ltr" />
+              <select className={inputCls} value={avlF.Status} onChange={e=>setAvlF({...avlF,Status:e.target.value})}><option value="approved">approved</option><option value="conditional">conditional</option><option value="blocked">blocked</option></select>
+              <input className={`${inputCls} w-32`} type="date" value={avlF.ApprovedAt} onChange={e=>setAvlF({...avlF,ApprovedAt:e.target.value})} dir="ltr" />
+              <button disabled={busy||!avlF.VendorCode||!avlF.Discipline} className={btnPrimary} onClick={async()=>{ if(await act(()=>client.createAvl({VendorCode:avlF.VendorCode, Discipline:avlF.Discipline, Status:avlF.Status, ApprovedAt:avlF.ApprovedAt||null}), 'AVL added')) setAvlF({VendorCode:"",Discipline:"",Status:"approved",ApprovedAt:""}); }}>{rtl?"افزودن AVL":"Add AVL"}</button>
+            </div>
+          </Section>
+        </>
+      )}
+
+      {tab==='scm-packages' && (
+        <>
+          <Section title={rtl?"بسته‌های خرید":"Procurement Packages"} note={`${packages.length} packages`}>
+            <div className="overflow-x-auto"><table className="w-full text-[9.5px]"><thead className="tx3"><tr className="border-b b-line-soft"><Th>Code</Th><Th>Title</Th><Th>Discipline</Th><Th>PurchaseType</Th><Th>Status</Th><Th>MRs</Th><Th /></tr></thead>
+            <tbody>{packages.map((p:any)=>{ const ms=links.filter((l:any)=>l.PackageId===p.Id||l.PackageCode===p.Code).map((l:any)=>l.MrCode).join(','); return <tr key={p.Code} className="border-b b-line-soft/50"><td className="px-2 py-1 font-mono tx2" dir="ltr">{p.Code}</td><td className="px-2 py-1 tx1">{p.TitleFa}</td><td className="px-2 py-1 tx3">{p.Discipline??'—'}</td><td className="px-2 py-1 tx3">{p.PurchaseType}</td><td className="px-2 py-1 tx3">{p.Status}</td><td className="px-2 py-1 tx3" dir="ltr">{ms||'—'}</td><td className="px-2 py-1"><button disabled={busy} onClick={()=>void act(()=>client.deletePackage(p.Code), 'Package deleted')} className="text-[9px] text-rose-300">✕</button></td></tr>; })}</tbody></table></div>
+            <div className="mt-2 flex flex-wrap gap-1.5 rounded-xl border b-line-soft bg-black/10 p-2">
+              <input className={`${inputCls} w-24`} placeholder="Code PKG-xxx" value={pkgF.Code} onChange={e=>setPkgF({...pkgF,Code:e.target.value})} dir="ltr" />
+              <input className={`${inputCls} w-40`} placeholder={rtl?"عنوان":"title"} value={pkgF.TitleFa} onChange={e=>setPkgF({...pkgF,TitleFa:e.target.value})} />
+              <input className={`${inputCls} w-24`} placeholder="discipline" value={pkgF.Discipline} onChange={e=>setPkgF({...pkgF,Discipline:e.target.value})} dir="ltr" />
+              <select className={inputCls} value={pkgF.PurchaseType} onChange={e=>setPkgF({...pkgF,PurchaseType:e.target.value})}><option value="po">po</option><option value="direct">direct</option><option value="invoice">invoice</option></select>
+              <button disabled={busy||!pkgF.Code||!pkgF.TitleFa} className={btnPrimary} onClick={async()=>{ if(await act(()=>client.createPackage({Code:pkgF.Code, TitleFa:pkgF.TitleFa, Discipline:pkgF.Discipline||null, PurchaseType:pkgF.PurchaseType}), 'Package created')) setPkgF({Code:"",TitleFa:"",Discipline:"",PurchaseType:"po",Status:"draft"}); }}>{rtl?"ثبت بسته":"Add pkg"}</button>
+            </div>
+          </Section>
+
+          <Section title={rtl?"ارتباط MR به بسته":"Link MR to Package"} note={rtl?"MRهای موجود از جدول MaterialRequest":"from MaterialRequest"}>
+            <div className="text-[9px] tx3 mb-2">{rtl?"MRهای موجود":"Available MRs"}: {(mrs.map((m:any)=>m.Code??m.MrNo??m.Id).join(', ')||'—')}</div>
+            <LinkMrForm rtl={rtl} busy={busy} packages={packages} mrs={mrs} client={client} act={act} inputCls={inputCls} btnPrimary={btnPrimary} />
+          </Section>
+          <Section title={rtl?"KOM/PIM و Expediting":"KOM/PIM & Expediting"} note={`${koms.length} koms`}>
+            <div className="overflow-x-auto"><table className="w-full text-[9.5px]"><thead className="tx3"><tr className="border-b b-line-soft"><Th>KomNo</Th><Th>PO</Th><Th>Type</Th><Th>Date</Th><Th>Status</Th></tr></thead><tbody>{koms.map((k:any)=><tr key={k.KomNo} className="border-b b-line-soft/50"><td className="px-2 py-1 font-mono tx2" dir="ltr">{k.KomNo}</td><td className="px-2 py-1 tx3" dir="ltr">{k.PoNo??'—'}</td><td className="px-2 py-1 tx3">{k.Type}</td><td className="px-2 py-1 tx3" dir="ltr">{k.MeetingDate??'—'}</td><td className="px-2 py-1 tx3">{k.Status}</td></tr>)}</tbody></table></div>
+            <div className="mt-2 flex flex-wrap gap-1.5 rounded-xl border b-line-soft bg-black/10 p-2">
+              <input className={`${inputCls} w-24`} placeholder="KOM-xxx" value={komF.KomNo} onChange={e=>setKomF({...komF,KomNo:e.target.value})} dir="ltr" />
+              <input className={`${inputCls} w-24`} placeholder="PO No" value={komF.PoNo} onChange={e=>setKomF({...komF,PoNo:e.target.value})} dir="ltr" />
+              <select className={inputCls} value={komF.Type} onChange={e=>setKomF({...komF,Type:e.target.value})}><option value="kom">KOM</option><option value="pim">PIM</option><option value="expediting">expediting</option></select>
+              <input className={`${inputCls} w-28`} type="date" value={komF.MeetingDate} onChange={e=>setKomF({...komF,MeetingDate:e.target.value})} dir="ltr" />
+              <button disabled={busy||!komF.KomNo||!komF.MeetingDate} className={btnPrimary} onClick={async()=>{ if(await act(()=>client.createKom({KomNo:komF.KomNo, PoNo:komF.PoNo||null, Type:komF.Type, MeetingDate:komF.MeetingDate}), 'KOM created')) setKomF({KomNo:"",PoNo:"",Type:"kom",MeetingDate:""}); }}>{rtl?"ثبت KOM":"Add KOM"}</button>
+            </div>
+          </Section>
+          <Section title={rtl?"پیشرفت خرید PSR":"Procurement PSR"} note={`${psrs.length} psrs`}>
+            <div className="overflow-x-auto"><table className="w-full text-[9.5px]"><thead className="tx3"><tr className="border-b b-line-soft"><Th>PsrNo</Th><Th>PO</Th><Th>Progress</Th><Th>Date</Th><Th>Status</Th></tr></thead><tbody>{psrs.map((ps:any)=><tr key={ps.PsrNo} className="border-b b-line-soft/50"><td className="px-2 py-1 font-mono tx2" dir="ltr">{ps.PsrNo}</td><td className="px-2 py-1 tx3" dir="ltr">{ps.PoNo??'—'}</td><td className="px-2 py-1 tx3">{ps.ProgressPct}%</td><td className="px-2 py-1 tx3" dir="ltr">{ps.ReportDate??'—'}</td><td className="px-2 py-1 tx3">{ps.StatusFa??'—'}</td></tr>)}</tbody></table></div>
+            <div className="mt-2 flex flex-wrap gap-1.5 rounded-xl border b-line-soft bg-black/10 p-2">
+              <input className={`${inputCls} w-24`} placeholder="PSR-xxx" value={psrF.PsrNo} onChange={e=>setPsrF({...psrF,PsrNo:e.target.value})} dir="ltr" />
+              <input className={`${inputCls} w-24`} placeholder="PO No" value={psrF.PoNo} onChange={e=>setPsrF({...psrF,PoNo:e.target.value})} dir="ltr" />
+              <input className={`${inputCls} w-16`} type="number" placeholder="%" value={psrF.ProgressPct} onChange={e=>setPsrF({...psrF,ProgressPct:e.target.value})} dir="ltr" />
+              <input className={`${inputCls} w-28`} type="date" value={psrF.ReportDate} onChange={e=>setPsrF({...psrF,ReportDate:e.target.value})} dir="ltr" />
+              <input className={`${inputCls} w-32`} placeholder="status fa" value={psrF.StatusFa} onChange={e=>setPsrF({...psrF,StatusFa:e.target.value})} />
+              <button disabled={busy||!psrF.PsrNo||!psrF.ReportDate} className={btnPrimary} onClick={async()=>{ if(await act(()=>client.createPsr({PsrNo:psrF.PsrNo, PoNo:psrF.PoNo||null, ProgressPct:psrF.ProgressPct?Number(psrF.ProgressPct):0, ReportDate:psrF.ReportDate, StatusFa:psrF.StatusFa||null}), 'PSR created')) setPsrF({PsrNo:"",PoNo:"",ProgressPct:"",ReportDate:"",StatusFa:""}); }}>{rtl?"ثبت PSR":"Add PSR"}</button>
+            </div>
+          </Section>
+        </>
+      )}
+
+      {tab==='scm-tender' && (
+        <>
+          <Section title={rtl?"استعلام‌ها":"Inquiries / RFQs"} note={`${inquiries.length} inquiries`}>
+            <div className="overflow-x-auto"><table className="w-full text-[9.5px]"><thead className="tx3"><tr className="border-b b-line-soft"><Th>InquiryNo</Th><Th>Package</Th><Th>Title</Th><Th>Status</Th><Th>Due</Th></tr></thead><tbody>{inquiries.map((i:any)=><tr key={i.InquiryNo} className="border-b b-line-soft/50"><td className="px-2 py-1 font-mono tx2" dir="ltr">{i.InquiryNo}</td><td className="px-2 py-1 tx3">{i.PackageCode??'—'}</td><td className="px-2 py-1 tx1">{i.TitleFa??'—'}</td><td className="px-2 py-1 tx3">{i.Status}</td><td className="px-2 py-1 tx3" dir="ltr">{i.DueDate??'—'}</td></tr>)}</tbody></table></div>
+            <div className="mt-2 flex flex-wrap gap-1.5 rounded-xl border b-line-soft bg-black/10 p-2">
+              <input className={`${inputCls} w-24`} placeholder="INQ-xxx" value={inqF.InquiryNo} onChange={e=>setInqF({...inqF,InquiryNo:e.target.value})} dir="ltr" />
+              <input className={`${inputCls} w-24`} placeholder="PKG code" value={inqF.PackageCode} onChange={e=>setInqF({...inqF,PackageCode:e.target.value})} dir="ltr" />
+              <input className={`${inputCls} w-32`} placeholder="title" value={inqF.TitleFa} onChange={e=>setInqF({...inqF,TitleFa:e.target.value})} />
+              <input className={`${inputCls} w-28`} type="date" value={inqF.IssueDate} onChange={e=>setInqF({...inqF,IssueDate:e.target.value})} dir="ltr" />
+              <input className={`${inputCls} w-28`} type="date" value={inqF.DueDate} onChange={e=>setInqF({...inqF,DueDate:e.target.value})} dir="ltr" />
+              <button disabled={busy||!inqF.InquiryNo} className={btnPrimary} onClick={async()=>{ if(await act(()=>client.createInquiry({InquiryNo:inqF.InquiryNo, PackageCode:inqF.PackageCode||null, TitleFa:inqF.TitleFa||null, IssueDate:inqF.IssueDate||null, DueDate:inqF.DueDate||null}), 'Inquiry created')) setInqF({InquiryNo:"",PackageCode:"",TitleFa:"",IssueDate:"",DueDate:""}); }}>{rtl?"ثبت استعلام":"Add inquiry"}</button>
+            </div>
+          </Section>
+          <Section title={rtl?"فهرست مناقصه LBL/SBL":"Bidder Lists LBL/SBL"} note={`${bidders.length} bidders`}>
+            <div className="overflow-x-auto"><table className="w-full text-[9.5px]"><thead className="tx3"><tr className="border-b b-line-soft"><Th>Inquiry</Th><Th>Vendor</Th><Th>ListType</Th><Th>Status</Th><Th /></tr></thead><tbody>{bidders.map((b:any)=><tr key={b.Id} className="border-b b-line-soft/50"><td className="px-2 py-1 tx2" dir="ltr">{b.InquiryCode??b.InquiryNo??'—'}</td><td className="px-2 py-1 tx2">{b.VendorCode??'—'}</td><td className="px-2 py-1 tx3">{b.ListType}</td><td className="px-2 py-1 tx3">{b.Status}</td><td className="px-2 py-1"><button disabled={busy} onClick={()=>void act(()=>client.removeBidder(b.InquiryCode, b.VendorCode), 'Bidder removed')} className="text-[9px] text-rose-300">✕</button></td></tr>)}</tbody></table></div>
+            <div className="mt-2 flex flex-wrap gap-1.5 rounded-xl border b-line-soft bg-black/10 p-2">
+              <input className={`${inputCls} w-24`} placeholder="INQ code" value={bidF.InquiryCode} onChange={e=>setBidF({...bidF,InquiryCode:e.target.value})} dir="ltr" />
+              <input className={`${inputCls} w-24`} placeholder="VEND code" value={bidF.VendorCode} onChange={e=>setBidF({...bidF,VendorCode:e.target.value})} dir="ltr" />
+              <select className={inputCls} value={bidF.ListType} onChange={e=>setBidF({...bidF,ListType:e.target.value})}><option value="lbl">LBL</option><option value="sbl">SBL</option></select>
+              <button disabled={busy||!bidF.InquiryCode||!bidF.VendorCode} className={btnPrimary} onClick={async()=>{ if(await act(()=>client.addBidder(bidF.InquiryCode, {VendorCode:bidF.VendorCode, ListType:bidF.ListType}), 'Bidder added')) setBidF({InquiryCode:"",VendorCode:"",ListType:"lbl"}); }}>{rtl?"افزودن":"Add"}</button>
+            </div>
+          </Section>
+          <Section title={rtl?"دعوت‌نامه و تأیید دریافت":"Invitations & Ack"} note={`${invitations.length} invitations`}>
+            <div className="overflow-x-auto"><table className="w-full text-[9.5px]"><thead className="tx3"><tr className="border-b b-line-soft"><Th>InvNo</Th><Th>Inquiry</Th><Th>Vendor</Th><Th>SentAt</Th><Th>Ack</Th><Th /></tr></thead><tbody>{invitations.map((iv:any)=><tr key={iv.InvitationNo} className="border-b b-line-soft/50"><td className="px-2 py-1 font-mono tx2" dir="ltr">{iv.InvitationNo}</td><td className="px-2 py-1 tx3">{iv.InquiryCode}</td><td className="px-2 py-1 tx3">{iv.VendorCode}</td><td className="px-2 py-1 tx3" dir="ltr">{iv.SentAt?String(iv.SentAt).slice(0,10):'—'}</td><td className="px-2 py-1 tx3">{iv.AckStatus??'—'}</td><td className="px-2 py-1 flex gap-1"><button disabled={busy} onClick={()=>void act(()=>client.ackInvitation(iv.InvitationNo,{AckStatus:'accepted'}), 'Ack accepted')} className="text-[8px] text-emerald-300">✔</button></td></tr>)}</tbody></table></div>
+            <div className="mt-2 flex flex-wrap gap-1.5 rounded-xl border b-line-soft bg-black/10 p-2">
+              <input className={`${inputCls} w-24`} placeholder="INQ code" value={invF.InquiryCode} onChange={e=>setInvF({...invF,InquiryCode:e.target.value})} dir="ltr" />
+              <input className={`${inputCls} w-24`} placeholder="VEND code" value={invF.VendorCode} onChange={e=>setInvF({...invF,VendorCode:e.target.value})} dir="ltr" />
+              <input className={`${inputCls} w-24`} placeholder="INV-xxx" value={invF.InvitationNo} onChange={e=>setInvF({...invF,InvitationNo:e.target.value})} dir="ltr" />
+              <button disabled={busy||!invF.InquiryCode||!invF.VendorCode||!invF.InvitationNo} className={btnPrimary} onClick={async()=>{ if(await act(()=>client.createInvitation({InquiryCode:invF.InquiryCode,VendorCode:invF.VendorCode,InvitationNo:invF.InvitationNo}), 'Invitation sent')) setInvF({InquiryCode:"",VendorCode:"",InvitationNo:""}); }}>{rtl?"ارسال دعوت‌نامه":"Send invite"}</button>
+            </div>
+
+          <Section title={rtl?"پیشنهاد فنی/بازرگانی و شفاف‌سازی":"Proposals & Clarifications"} note={`${proposals.length} proposals`}>
+            <div className="overflow-x-auto"><table className="w-full text-[9.5px]"><thead className="tx3"><tr className="border-b b-line-soft"><Th>ProposalNo</Th><Th>Inquiry</Th><Th>Vendor</Th><Th>Type</Th><Th>Amount</Th><Th>Status</Th></tr></thead><tbody>{proposals.map((pr:any)=><tr key={pr.ProposalNo} className="border-b b-line-soft/50"><td className="px-2 py-1 font-mono tx2" dir="ltr">{pr.ProposalNo}</td><td className="px-2 py-1 tx3">{pr.InquiryCode}</td><td className="px-2 py-1 tx3">{pr.VendorCode}</td><td className="px-2 py-1 tx3">{pr.Type}</td><td className="px-2 py-1 tx3" dir="ltr">{pr.Amount??'—'}</td><td className="px-2 py-1 tx3">{pr.Status}</td></tr>)}</tbody></table></div>
+            <div className="mt-2 flex flex-wrap gap-1.5 rounded-xl border b-line-soft bg-black/10 p-2">
+              <input className={`${inputCls} w-24`} placeholder="PROP-xxx" value={propF.ProposalNo} onChange={e=>setPropF({...propF,ProposalNo:e.target.value})} dir="ltr" />
+              <input className={`${inputCls} w-24`} placeholder="INQ code" value={propF.InquiryCode} onChange={e=>setPropF({...propF,InquiryCode:e.target.value})} dir="ltr" />
+              <input className={`${inputCls} w-24`} placeholder="VEND code" value={propF.VendorCode} onChange={e=>setPropF({...propF,VendorCode:e.target.value})} dir="ltr" />
+              <select className={inputCls} value={propF.Type} onChange={e=>setPropF({...propF,Type:e.target.value})}><option value="technical">technical</option><option value="commercial">commercial</option><option value="both">both</option></select>
+              <input className={`${inputCls} w-20`} type="number" placeholder="Amount" value={propF.Amount} onChange={e=>setPropF({...propF,Amount:e.target.value})} dir="ltr" />
+              <button disabled={busy||!propF.ProposalNo||!propF.InquiryCode||!propF.VendorCode} className={btnPrimary} onClick={async()=>{ if(await act(()=>client.createProposal({ProposalNo:propF.ProposalNo, InquiryCode:propF.InquiryCode, VendorCode:propF.VendorCode, Type:propF.Type, Amount:propF.Amount?Number(propF.Amount):undefined}), 'Proposal created')) setPropF({ProposalNo:"",InquiryCode:"",VendorCode:"",Type:"technical",Amount:""}); }}>{rtl?"ثبت پیشنهاد":"Add proposal"}</button>
+            </div>
+          </Section>
+          <Section title={rtl?"ارزیابی TBE/TBA/CBE":"Evaluations TBE/TBA/CBE"} note={`${evaluations.length} evals`}>
+            <div className="overflow-x-auto"><table className="w-full text-[9.5px]"><thead className="tx3"><tr className="border-b b-line-soft"><Th>EvalNo</Th><Th>Proposal</Th><Th>Type</Th><Th>Score</Th><Th>Result</Th></tr></thead><tbody>{evaluations.map((ev:any)=><tr key={ev.EvalNo} className="border-b b-line-soft/50"><td className="px-2 py-1 font-mono tx2" dir="ltr">{ev.EvalNo}</td><td className="px-2 py-1 tx3">{ev.ProposalNo}</td><td className="px-2 py-1 tx3">{ev.Type}</td><td className="px-2 py-1 tx3">{ev.Score??'—'}</td><td className="px-2 py-1 tx3">{ev.Result}</td></tr>)}</tbody></table></div>
+            <div className="mt-2 flex flex-wrap gap-1.5 rounded-xl border b-line-soft bg-black/10 p-2">
+              <input className={`${inputCls} w-24`} placeholder="TBE-xxx" value={evalF.EvalNo} onChange={e=>setEvalF({...evalF,EvalNo:e.target.value})} dir="ltr" />
+              <input className={`${inputCls} w-24`} placeholder="PROP code" value={evalF.ProposalNo} onChange={e=>setEvalF({...evalF,ProposalNo:e.target.value})} dir="ltr" />
+              <select className={inputCls} value={evalF.Type} onChange={e=>setEvalF({...evalF,Type:e.target.value})}><option value="tbe">TBE</option><option value="tba">TBA</option><option value="cbe">CBE</option></select>
+              <input className={`${inputCls} w-16`} type="number" placeholder="Score" value={evalF.Score} onChange={e=>setEvalF({...evalF,Score:e.target.value})} dir="ltr" />
+              <select className={inputCls} value={evalF.Result} onChange={e=>setEvalF({...evalF,Result:e.target.value})}><option value="pass">pass</option><option value="fail">fail</option><option value="conditional">conditional</option></select>
+              <button disabled={busy||!evalF.EvalNo||!evalF.ProposalNo} className={btnPrimary} onClick={async()=>{ if(await act(()=>client.createEvaluation({EvalNo:evalF.EvalNo, ProposalNo:evalF.ProposalNo, Type:evalF.Type, Score:evalF.Score?Number(evalF.Score):undefined, Result:evalF.Result}), 'Eval created')) setEvalF({EvalNo:"",ProposalNo:"",Type:"tbe",Score:"",Result:"pass"}); }}>{rtl?"ثبت ارزیابی":"Add eval"}</button>
+            </div>
+          </Section>
+          <Section title={rtl?"گزارش مناقصه و صدور PO":"Bid Report & PO Issue"} note={`${bidReports.length} reports`}>
+            <div className="overflow-x-auto"><table className="w-full text-[9.5px]"><thead className="tx3"><tr className="border-b b-line-soft"><Th>ReportNo</Th><Th>Inquiry</Th><Th>Winner</Th><Th>Amount</Th><Th>Status</Th></tr></thead><tbody>{bidReports.map((br:any)=><tr key={br.ReportNo} className="border-b b-line-soft/50"><td className="px-2 py-1 font-mono tx2" dir="ltr">{br.ReportNo}</td><td className="px-2 py-1 tx3">{br.InquiryCode}</td><td className="px-2 py-1 tx3">{br.WinnerVendorCode??'—'}</td><td className="px-2 py-1 tx3" dir="ltr">{br.TotalAmount??'—'}</td><td className="px-2 py-1 tx3">{br.Status}</td></tr>)}</tbody></table></div>
+            <div className="mt-2 flex flex-wrap gap-1.5 rounded-xl border b-line-soft bg-black/10 p-2">
+              <input className={`${inputCls} w-24`} placeholder="BIDR-xxx" value={bidRptF.ReportNo} onChange={e=>setBidRptF({...bidRptF,ReportNo:e.target.value})} dir="ltr" />
+              <input className={`${inputCls} w-24`} placeholder="INQ code" value={bidRptF.InquiryCode} onChange={e=>setBidRptF({...bidRptF,InquiryCode:e.target.value})} dir="ltr" />
+              <input className={`${inputCls} w-24`} placeholder="Winner VEND" value={bidRptF.WinnerVendorCode} onChange={e=>setBidRptF({...bidRptF,WinnerVendorCode:e.target.value})} dir="ltr" />
+              <input className={`${inputCls} w-20`} type="number" placeholder="Amount" value={bidRptF.TotalAmount} onChange={e=>setBidRptF({...bidRptF,TotalAmount:e.target.value})} dir="ltr" />
+              <button disabled={busy||!bidRptF.ReportNo||!bidRptF.InquiryCode} className={btnPrimary} onClick={async()=>{ if(await act(()=>client.createBidReport({ReportNo:bidRptF.ReportNo, InquiryCode:bidRptF.InquiryCode, WinnerVendorCode:bidRptF.WinnerVendorCode||null, TotalAmount:bidRptF.TotalAmount?Number(bidRptF.TotalAmount):undefined}), 'Bid report created')) setBidRptF({ReportNo:"",InquiryCode:"",WinnerVendorCode:"",TotalAmount:""}); }}>{rtl?"ثبت گزارش":"Add report"}</button>
+            </div>
+          </Section>
+
+          </Section>
+        </>
+      )}
+
+      {tab==='scm-receiving' && (
+        <>
+          <Section title={rtl?"رسید مواد و OPI/OSDU":"Material Receipt & OPI/OSDU"} note={`${mrrs.length} MRRs`}>
+            <div className="overflow-x-auto"><table className="w-full text-[9.5px]"><thead className="tx3"><tr className="border-b b-line-soft"><Th>Code</Th><Th>PO</Th><Th>Qty</Th><Th>Accepted</Th><Th>OPI</Th><Th>Status</Th><Th>Warehouse</Th></tr></thead><tbody>{mrrs.map((r:any)=><tr key={r.Code} className="border-b b-line-soft/50"><td className="px-2 py-1 font-mono tx2" dir="ltr">{r.Code}</td><td className="px-2 py-1 tx3" dir="ltr">{r.PoNo}</td><td className="px-2 py-1 tx3">{r.Quantity}</td><td className="px-2 py-1 tx3">{r.AcceptedQty}</td><td className="px-2 py-1 tx3">{r.OpiType}</td><td className="px-2 py-1 tx3">{r.Status}</td><td className="px-2 py-1 tx3">{r.Warehouse??'—'}</td></tr>)}</tbody></table></div>
+            <div className="mt-2 flex flex-wrap gap-1.5 rounded-xl border b-line-soft bg-black/10 p-2">
+              <input className={`${inputCls} w-24`} placeholder="MRR-xxx" value={mrrF.Code} onChange={e=>setMrrF({...mrrF,Code:e.target.value})} dir="ltr" />
+              <input className={`${inputCls} w-24`} placeholder="PO No" value={mrrF.PoNo} onChange={e=>setMrrF({...mrrF,PoNo:e.target.value})} dir="ltr" />
+              <input className={`${inputCls} w-28`} type="date" value={mrrF.ReceivedAt} onChange={e=>setMrrF({...mrrF,ReceivedAt:e.target.value})} dir="ltr" />
+              <input className={`${inputCls} w-16`} type="number" placeholder="Qty" value={mrrF.Quantity} onChange={e=>setMrrF({...mrrF,Quantity:e.target.value})} dir="ltr" />
+              <input className={`${inputCls} w-16`} type="number" placeholder="Acc" value={mrrF.AcceptedQty} onChange={e=>setMrrF({...mrrF,AcceptedQty:e.target.value})} dir="ltr" />
+              <select className={inputCls} value={mrrF.OpiType} onChange={e=>setMrrF({...mrrF,OpiType:e.target.value})}><option value="none">none</option><option value="over">over</option><option value="short">short</option><option value="damage">damage</option></select>
+              <input className={`${inputCls} w-20`} placeholder="WH" value={mrrF.Warehouse} onChange={e=>setMrrF({...mrrF,Warehouse:e.target.value})} dir="ltr" />
+
+              <button disabled={busy||!mrrF.Code||!mrrF.PoNo} className={btnPrimary} onClick={async()=>{ if(await act(()=>client.createMrr({Code:mrrF.Code, PoNo:mrrF.PoNo, ReceivedAt:mrrF.ReceivedAt||null, Quantity:Number(mrrF.Quantity||0), AcceptedQty:Number(mrrF.AcceptedQty||0), OpiType:mrrF.OpiType, Warehouse:mrrF.Warehouse||null}), 'MRR created')) setMrrF({Code:"",PoNo:"",ReceivedAt:"",Quantity:"",AcceptedQty:"",OpiType:"none",Warehouse:""}); }}>{rtl?"ثبت رسید":"Add MRR"}</button>
+            </div>
+          </Section>
+          <Section title={rtl?"بازرسی و Release Note":"Inspection & Release Note"} note={`${inspections.length} inspections`}>
+            <div className="overflow-x-auto"><table className="w-full text-[9.5px]"><thead className="tx3"><tr className="border-b b-line-soft"><Th>InspectionNo</Th><Th>PO</Th><Th>Type</Th><Th>Result</Th><Th>ReleaseNote</Th><Th>Date</Th></tr></thead><tbody>{inspections.map((ins:any)=><tr key={ins.InspectionNo} className="border-b b-line-soft/50"><td className="px-2 py-1 font-mono tx2" dir="ltr">{ins.InspectionNo}</td><td className="px-2 py-1 tx3" dir="ltr">{ins.PoNo??'—'}</td><td className="px-2 py-1 tx3">{ins.Type}</td><td className="px-2 py-1 tx3">{ins.Result}</td><td className="px-2 py-1 tx3" dir="ltr">{ins.ReleaseNoteNo??'—'}</td><td className="px-2 py-1 tx3" dir="ltr">{ins.InspectionDate??'—'}</td></tr>)}</tbody></table></div>
+            <div className="mt-2 flex flex-wrap gap-1.5 rounded-xl border b-line-soft bg-black/10 p-2">
+              <input className={`${inputCls} w-24`} placeholder="INSP-xxx" value={inspF.InspectionNo} onChange={e=>setInspF({...inspF,InspectionNo:e.target.value})} dir="ltr" />
+              <input className={`${inputCls} w-24`} placeholder="PO No" value={inspF.PoNo} onChange={e=>setInspF({...inspF,PoNo:e.target.value})} dir="ltr" />
+              <select className={inputCls} value={inspF.Type} onChange={e=>setInspF({...inspF,Type:e.target.value})}><option value="factory">factory</option><option value="site">site</option><option value="third_party">third_party</option></select>
+              <input className={`${inputCls} w-28`} type="date" value={inspF.InspectionDate} onChange={e=>setInspF({...inspF,InspectionDate:e.target.value})} dir="ltr" />
+              <select className={inputCls} value={inspF.Result} onChange={e=>setInspF({...inspF,Result:e.target.value})}><option value="pass">pass</option><option value="fail">fail</option><option value="conditional">conditional</option></select>
+              <input className={`${inputCls} w-24`} placeholder="RN-xxx" value={inspF.ReleaseNoteNo} onChange={e=>setInspF({...inspF,ReleaseNoteNo:e.target.value})} dir="ltr" />
+              <button disabled={busy||!inspF.InspectionNo||!inspF.InspectionDate} className={btnPrimary} onClick={async()=>{ if(await act(()=>client.createInspection({InspectionNo:inspF.InspectionNo, PoNo:inspF.PoNo||null, Type:inspF.Type, InspectionDate:inspF.InspectionDate, Result:inspF.Result, ReleaseNoteNo:inspF.ReleaseNoteNo||null}), 'Inspection created')) setInspF({InspectionNo:"",PoNo:"",Type:"factory",InspectionDate:"",Result:"pass",ReleaseNoteNo:""}); }}>{rtl?"ثبت بازرسی":"Add insp"}</button>
+            </div>
+          </Section>
+          <Section title={rtl?"حمل و ترخیص":"Shipment & Customs"} note={`${shipments.length} shipments`}>
+            <div className="overflow-x-auto"><table className="w-full text-[9.5px]"><thead className="tx3"><tr className="border-b b-line-soft"><Th>ShipmentNo</Th><Th>PO</Th><Th>Mode</Th><Th>Origin</Th><Th>Destination</Th><Th>Customs</Th></tr></thead><tbody>{shipments.map((sh:any)=><tr key={sh.ShipmentNo} className="border-b b-line-soft/50"><td className="px-2 py-1 font-mono tx2" dir="ltr">{sh.ShipmentNo}</td><td className="px-2 py-1 tx3" dir="ltr">{sh.PoNo??'—'}</td><td className="px-2 py-1 tx3">{sh.Mode}</td><td className="px-2 py-1 tx3">{sh.OriginFa??'—'}</td><td className="px-2 py-1 tx3">{sh.DestinationFa??'—'}</td><td className="px-2 py-1 tx3">{sh.CustomsStatus}</td></tr>)}</tbody></table></div>
+            <div className="mt-2 flex flex-wrap gap-1.5 rounded-xl border b-line-soft bg-black/10 p-2">
+              <input className={`${inputCls} w-24`} placeholder="SHIP-xxx" value={shipF.ShipmentNo} onChange={e=>setShipF({...shipF,ShipmentNo:e.target.value})} dir="ltr" />
+              <input className={`${inputCls} w-24`} placeholder="PO No" value={shipF.PoNo} onChange={e=>setShipF({...shipF,PoNo:e.target.value})} dir="ltr" />
+              <select className={inputCls} value={shipF.Mode} onChange={e=>setShipF({...shipF,Mode:e.target.value})}><option value="road">road</option><option value="sea">sea</option><option value="air">air</option><option value="rail">rail</option></select>
+              <input className={`${inputCls} w-24`} placeholder="origin" value={shipF.OriginFa} onChange={e=>setShipF({...shipF,OriginFa:e.target.value})} />
+              <input className={`${inputCls} w-24`} placeholder="dest" value={shipF.DestinationFa} onChange={e=>setShipF({...shipF,DestinationFa:e.target.value})} />
+              <button disabled={busy||!shipF.ShipmentNo} className={btnPrimary} onClick={async()=>{ if(await act(()=>client.createShipment({ShipmentNo:shipF.ShipmentNo, PoNo:shipF.PoNo||null, Mode:shipF.Mode, OriginFa:shipF.OriginFa||null, DestinationFa:shipF.DestinationFa||null}), 'Shipment created')) setShipF({ShipmentNo:"",PoNo:"",Mode:"road",OriginFa:"",DestinationFa:""}); }}>{rtl?"ثبت حمل":"Add ship"}</button>
+            </div>
+          </Section>
+        </>
+      )}
+
+      
+      {tab==='scm-warehouse' && (
+        <>
+          <Section title={rtl?"انبارها (چندانباری)":"Warehouses (Multi-WH)"} note={`${warehouses.length} warehouses`}>
+            <div className="overflow-x-auto"><table className="w-full text-[9.5px]"><thead className="tx3"><tr className="border-b b-line-soft"><Th>Code</Th><Th>Name</Th><Th>Location</Th><Th>Status</Th></tr></thead><tbody>{warehouses.map((w:any)=><tr key={w.Code} className="border-b b-line-soft/50"><td className="px-2 py-1 font-mono tx2" dir="ltr">{w.Code}</td><td className="px-2 py-1 tx1">{w.NameFa}</td><td className="px-2 py-1 tx3">{w.LocationFa??'—'}</td><td className="px-2 py-1 tx3">{w.Status}</td></tr>)}</tbody></table></div>
+            <div className="mt-2 flex flex-wrap gap-1.5 rounded-xl border b-line-soft bg-black/10 p-2">
+              <input className={`${inputCls} w-24`} placeholder="WH-xxx" value={whF.Code} onChange={e=>setWhF({...whF,Code:e.target.value})} dir="ltr" />
+              <input className={`${inputCls} w-32`} placeholder="نام انبار" value={whF.NameFa} onChange={e=>setWhF({...whF,NameFa:e.target.value})} />
+              <input className={`${inputCls} w-24`} placeholder="location" value={whF.LocationFa} onChange={e=>setWhF({...whF,LocationFa:e.target.value})} />
+              <button disabled={busy||!whF.Code||!whF.NameFa} className={btnPrimary} onClick={async()=>{ if(await act(()=>client.createWarehouse({Code:whF.Code, NameFa:whF.NameFa, LocationFa:whF.LocationFa||null}), 'Warehouse created')) setWhF({Code:"",NameFa:"",LocationFa:""}); }}>{rtl?"ثبت انبار":"Add WH"}</button>
+            </div>
+          </Section>
+          <Section title={rtl?"کاتالوگ کالا (WHS-1) و موجودی به تفکیک انبار (WHS-7)":"Catalog & Stock Balance"} note={`${catalog.length} items, ${balances.length} balances`}>
+            <div className="grid gap-2 md:grid-cols-2">
+              <div className="overflow-x-auto"><table className="w-full text-[9.5px]"><thead className="tx3"><tr className="border-b b-line-soft"><Th>Code</Th><Th>Name</Th><Th>Unit</Th><Th>OnHand (all WH)</Th></tr></thead><tbody>{catalog.map((c:any)=>{ const tot = balances.filter((b:any)=>b.MaterialCode===c.Code).reduce((s:any,b:any)=>s+Number(b.OnHand||0),0); return <tr key={c.Code} className="border-b b-line-soft/50"><td className="px-2 py-1 font-mono tx2" dir="ltr">{c.Code}</td><td className="px-2 py-1 tx1">{c.NameFa}</td><td className="px-2 py-1 tx3">{c.Unit??'—'}</td><td className="px-2 py-1 tx2" dir="ltr">{tot}</td></tr>; })}</tbody></table></div>
+              <div className="overflow-x-auto"><table className="w-full text-[9.5px]"><thead className="tx3"><tr className="border-b b-line-soft"><Th>WH</Th><Th>Material</Th><Th>OnHand</Th><Th>Reserved</Th></tr></thead><tbody>{balances.map((b:any)=><tr key={b.Id} className="border-b b-line-soft/50"><td className="px-2 py-1 tx2" dir="ltr">{b.WarehouseCode}</td><td className="px-2 py-1 tx2" dir="ltr">{b.MaterialCode}</td><td className="px-2 py-1 tx2" dir="ltr">{b.OnHand}</td><td className="px-2 py-1 tx3" dir="ltr">{b.Reserved}</td></tr>)}</tbody></table></div>
+            </div>
+            <div className="mt-2 flex flex-wrap gap-1.5 rounded-xl border b-line-soft bg-black/10 p-2">
+              <input className={`${inputCls} w-24`} placeholder="MAT-xxx" value={catF.Code} onChange={e=>setCatF({...catF,Code:e.target.value})} dir="ltr" />
+              <input className={`${inputCls} w-32`} placeholder="نام کالا" value={catF.NameFa} onChange={e=>setCatF({...catF,NameFa:e.target.value})} />
+              <input className={`${inputCls} w-16`} placeholder="unit" value={catF.Unit} onChange={e=>setCatF({...catF,Unit:e.target.value})} dir="ltr" />
+              <button disabled={busy||!catF.Code||!catF.NameFa} className={btnPrimary} onClick={async()=>{ if(await act(()=>client.createCatalog({Code:catF.Code, NameFa:catF.NameFa, Unit:catF.Unit||null}), 'Catalog created')) setCatF({Code:"",NameFa:"",Category:"",Unit:""}); }}>{rtl?"ثبت کالا":"Add item"}</button>
+              <span className="mx-2 h-6 w-px bg-white/10" />
+              <input className={`${inputCls} w-20`} placeholder="WH code" value={balF.WarehouseCode} onChange={e=>setBalF({...balF,WarehouseCode:e.target.value})} dir="ltr" />
+              <input className={`${inputCls} w-20`} placeholder="MAT code" value={balF.MaterialCode} onChange={e=>setBalF({...balF,MaterialCode:e.target.value})} dir="ltr" />
+              <input className={`${inputCls} w-16`} type="number" placeholder="OnHand" value={balF.OnHand} onChange={e=>setBalF({...balF,OnHand:e.target.value})} dir="ltr" />
+              <button disabled={busy||!balF.WarehouseCode||!balF.MaterialCode||!balF.OnHand} className={btnPrimary} onClick={async()=>{ if(await act(()=>client.upsertBalance({WarehouseCode:balF.WarehouseCode, MaterialCode:balF.MaterialCode, OnHand:Number(balF.OnHand)}), 'Balance updated')) setBalF({WarehouseCode:"",MaterialCode:"",OnHand:""}); }}>{rtl?"موجودی":"Set bal"}</button>
+            </div>
+          </Section>
+          <Section title={rtl?"درخواست رزرو MRC (WHS-3) — MTO انطباق (WHS-2)":"MRC & MTO"} note={`${mrcs.length} MRCs`}>
+            <div className="overflow-x-auto"><table className="w-full text-[9.5px]"><thead className="tx3"><tr className="border-b b-line-soft"><Th>MRC No</Th><Th>Required</Th><Th>Status</Th><Th>Lines</Th></tr></thead><tbody>{mrcs.map((m:any)=>{ const ls = mrcLines.filter((l:any)=>l.MrcNo===m.MrcNo); return <tr key={m.MrcNo} className="border-b b-line-soft/50"><td className="px-2 py-1 font-mono tx2" dir="ltr">{m.MrcNo}</td><td className="px-2 py-1 tx3" dir="ltr">{m.RequiredDate??'—'}</td><td className="px-2 py-1 tx3">{m.Status}</td><td className="px-2 py-1 tx3" dir="ltr">{ls.map((l:any)=>`${l.MaterialCode}:${l.Quantity}`).join(', ')||'—'}</td></tr>; })}</tbody></table></div>
+            <div className="mt-2 flex flex-wrap gap-1.5 rounded-xl border b-line-soft bg-black/10 p-2">
+              <input className={`${inputCls} w-24`} placeholder="MRC-xxx" value={mrcF.MrcNo} onChange={e=>setMrcF({...mrcF,MrcNo:e.target.value})} dir="ltr" />
+              <input className={`${inputCls} w-28`} type="date" value={mrcF.RequiredDate} onChange={e=>setMrcF({...mrcF,RequiredDate:e.target.value})} dir="ltr" />
+              <input className={`${inputCls} w-20`} placeholder="MAT code" value={mrcF.MaterialCode} onChange={e=>setMrcF({...mrcF,MaterialCode:e.target.value})} dir="ltr" />
+              <input className={`${inputCls} w-16`} type="number" placeholder="Qty" value={mrcF.Quantity} onChange={e=>setMrcF({...mrcF,Quantity:e.target.value})} dir="ltr" />
+              <button disabled={busy||!mrcF.MrcNo||!mrcF.RequiredDate} className={btnPrimary} onClick={async()=>{ const lines = mrcF.MaterialCode? [{MaterialCode:mrcF.MaterialCode, Quantity:Number(mrcF.Quantity||0)}]: []; if(await act(()=>client.createMrc({MrcNo:mrcF.MrcNo, RequiredDate:mrcF.RequiredDate, Lines:lines}), 'MRC created')) setMrcF({MrcNo:"",RequiredDate:"",MaterialCode:"",Quantity:""}); }}>{rtl?"ثبت MRC":"Add MRC"}</button>
+            </div>
+          </Section>
+          <Section title={rtl?"حواله خروج MIV (WHS-4) و عودت MRV (WHS-5)":"MIV & MRV"} note={`${mivs.length} MIVs, ${mrvs.length} MRVs`}>
+            <div className="grid gap-2 md:grid-cols-2">
+              <div className="overflow-x-auto"><table className="w-full text-[9.5px]"><thead className="tx3"><tr className="border-b b-line-soft"><Th>MIV No</Th><Th>WH</Th><Th>Date</Th><Th>Lines</Th></tr></thead><tbody>{mivs.map((m:any)=>{ const ls = mivLines.filter((l:any)=>l.MivNo===m.MivNo); return <tr key={m.MivNo} className="border-b b-line-soft/50"><td className="px-2 py-1 font-mono tx2" dir="ltr">{m.MivNo}</td><td className="px-2 py-1 tx3" dir="ltr">{m.WarehouseCode}</td><td className="px-2 py-1 tx3" dir="ltr">{m.IssuedAt??'—'}</td><td className="px-2 py-1 tx3" dir="ltr">{ls.map((l:any)=>`${l.MaterialCode}:${l.Quantity}`).join(', ')}</td></tr>; })}</tbody></table></div>
+              <div className="overflow-x-auto"><table className="w-full text-[9.5px]"><thead className="tx3"><tr className="border-b b-line-soft"><Th>MRV No</Th><Th>WH</Th><Th>MIV</Th><Th>Date</Th></tr></thead><tbody>{mrvs.map((r:any)=><tr key={r.MrvNo} className="border-b b-line-soft/50"><td className="px-2 py-1 font-mono tx2" dir="ltr">{r.MrvNo}</td><td className="px-2 py-1 tx3" dir="ltr">{r.WarehouseCode}</td><td className="px-2 py-1 tx3" dir="ltr">{r.MivNo??'—'}</td><td className="px-2 py-1 tx3" dir="ltr">{r.ReturnedAt??'—'}</td></tr>)}</tbody></table></div>
+            </div>
+            <div className="mt-2 flex flex-wrap gap-1.5 rounded-xl border b-line-soft bg-black/10 p-2">
+              <input className={`${inputCls} w-24`} placeholder="MIV-xxx" value={mivF.MivNo} onChange={e=>setMivF({...mivF,MivNo:e.target.value})} dir="ltr" />
+              <input className={`${inputCls} w-20`} placeholder="WH" value={mivF.WarehouseCode} onChange={e=>setMivF({...mivF,WarehouseCode:e.target.value})} dir="ltr" />
+              <input className={`${inputCls} w-28`} type="date" value={mivF.IssuedAt} onChange={e=>setMivF({...mivF,IssuedAt:e.target.value})} dir="ltr" />
+              <input className={`${inputCls} w-20`} placeholder="MAT" value={mivF.MaterialCode} onChange={e=>setMivF({...mivF,MaterialCode:e.target.value})} dir="ltr" />
+              <input className={`${inputCls} w-16`} type="number" placeholder="Qty" value={mivF.Quantity} onChange={e=>setMivF({...mivF,Quantity:e.target.value})} dir="ltr" />
+              <button disabled={busy||!mivF.MivNo||!mivF.WarehouseCode||!mivF.IssuedAt} className={btnPrimary} onClick={async()=>{ const lines = mivF.MaterialCode? [{MaterialCode:mivF.MaterialCode, Quantity:Number(mivF.Quantity||0)}]: []; if(await act(()=>client.createMiv({MivNo:mivF.MivNo, WarehouseCode:mivF.WarehouseCode, IssuedAt:mivF.IssuedAt, Lines:lines}), 'MIV created')) setMivF({MivNo:"",WarehouseCode:"",IssuedAt:"",MaterialCode:"",Quantity:""}); }}>{rtl?"ثبت MIV":"Add MIV"}</button>
+            </div>
+            <div className="mt-2 flex flex-wrap gap-1.5 rounded-xl border b-line-soft bg-black/10 p-2">
+              <input className={`${inputCls} w-24`} placeholder="MRV-xxx" value={mrvF.MrvNo} onChange={e=>setMrvF({...mrvF,MrvNo:e.target.value})} dir="ltr" />
+              <input className={`${inputCls} w-20`} placeholder="WH" value={mrvF.WarehouseCode} onChange={e=>setMrvF({...mrvF,WarehouseCode:e.target.value})} dir="ltr" />
+              <input className={`${inputCls} w-28`} type="date" value={mrvF.ReturnedAt} onChange={e=>setMrvF({...mrvF,ReturnedAt:e.target.value})} dir="ltr" />
+              <input className={`${inputCls} w-20`} placeholder="MIV ref" value={mrvF.MivNo} onChange={e=>setMrvF({...mrvF,MivNo:e.target.value})} dir="ltr" />
+              <button disabled={busy||!mrvF.MrvNo||!mrvF.WarehouseCode||!mrvF.ReturnedAt} className={btnPrimary} onClick={async()=>{ if(await act(()=>client.createMrv({MrvNo:mrvF.MrvNo, WarehouseCode:mrvF.WarehouseCode, ReturnedAt:mrvF.ReturnedAt, MivNo:mrvF.MivNo||null}), 'MRV created')) setMrvF({MrvNo:"",WarehouseCode:"",ReturnedAt:"",MivNo:""}); }}>{rtl?"ثبت MRV":"Add MRV"}</button>
+            </div>
+          </Section>
+          <Section title={rtl?"جابه‌جایی بین انبارها (WHS-6)":"Inter-Warehouse Transfer"} note={`${transfers.length} transfers`}>
+            <div className="overflow-x-auto"><table className="w-full text-[9.5px]"><thead className="tx3"><tr className="border-b b-line-soft"><Th>TransferNo</Th><Th>From</Th><Th>To</Th><Th>Material</Th><Th>Qty</Th><Th>Date</Th></tr></thead><tbody>{transfers.map((t:any)=><tr key={t.TransferNo} className="border-b b-line-soft/50"><td className="px-2 py-1 font-mono tx2" dir="ltr">{t.TransferNo}</td><td className="px-2 py-1 tx2" dir="ltr">{t.FromWarehouse}</td><td className="px-2 py-1 tx2" dir="ltr">{t.ToWarehouse}</td><td className="px-2 py-1 tx2" dir="ltr">{t.MaterialCode}</td><td className="px-2 py-1 tx2" dir="ltr">{t.Quantity}</td><td className="px-2 py-1 tx3" dir="ltr">{t.TransferredAt??'—'}</td></tr>)}</tbody></table></div>
+            <div className="mt-2 flex flex-wrap gap-1.5 rounded-xl border b-line-soft bg-black/10 p-2">
+              <input className={`${inputCls} w-24`} placeholder="TRF-xxx" value={trfF.TransferNo} onChange={e=>setTrfF({...trfF,TransferNo:e.target.value})} dir="ltr" />
+              <input className={`${inputCls} w-20`} placeholder="From WH" value={trfF.FromWarehouse} onChange={e=>setTrfF({...trfF,FromWarehouse:e.target.value})} dir="ltr" />
+              <input className={`${inputCls} w-20`} placeholder="To WH" value={trfF.ToWarehouse} onChange={e=>setTrfF({...trfF,ToWarehouse:e.target.value})} dir="ltr" />
+              <input className={`${inputCls} w-20`} placeholder="MAT" value={trfF.MaterialCode} onChange={e=>setTrfF({...trfF,MaterialCode:e.target.value})} dir="ltr" />
+              <input className={`${inputCls} w-16`} type="number" placeholder="Qty" value={trfF.Quantity} onChange={e=>setTrfF({...trfF,Quantity:e.target.value})} dir="ltr" />
+              <input className={`${inputCls} w-28`} type="date" value={trfF.TransferredAt} onChange={e=>setTrfF({...trfF,TransferredAt:e.target.value})} dir="ltr" />
+              <button disabled={busy||!trfF.TransferNo||!trfF.FromWarehouse||!trfF.ToWarehouse||!trfF.MaterialCode||!trfF.Quantity||!trfF.TransferredAt} className={btnPrimary} onClick={async()=>{ if(await act(()=>client.createTransfer({TransferNo:trfF.TransferNo, FromWarehouse:trfF.FromWarehouse, ToWarehouse:trfF.ToWarehouse, MaterialCode:trfF.MaterialCode, Quantity:Number(trfF.Quantity), TransferredAt:trfF.TransferredAt}), 'Transfer created')) setTrfF({TransferNo:"",FromWarehouse:"",ToWarehouse:"",MaterialCode:"",Quantity:"",TransferredAt:""}); }}>{rtl?"ثبت انتقال":"Add transfer"}</button>
+            </div>
+          </Section>
+        </>
+      )}
+
+      {tab==='scm-mrlog' && (
+        <Section title={rtl?"اعلان تغییرات MR":"MR Change Log"} note={`${mrChanges.length} changes`}>
+          <div className="overflow-x-auto"><table className="w-full text-[9.5px]"><thead className="tx3"><tr className="border-b b-line-soft"><Th>MR</Th><Th>Type</Th><Th>Old</Th><Th>New</Th><Th>Notify</Th><Th>At</Th><Th /></tr></thead><tbody>{mrChanges.map((c:any)=><tr key={c.Id} className="border-b b-line-soft/50"><td className="px-2 py-1 tx2" dir="ltr">{c.MrCode}</td><td className="px-2 py-1 tx3">{c.ChangeType}</td><td className="px-2 py-1 tx3" dir="ltr">{c.OldValue??'—'}</td><td className="px-2 py-1 tx3" dir="ltr">{c.NewValue??'—'}</td><td className="px-2 py-1 tx3">{c.NotifyStatus}</td><td className="px-2 py-1 tx3" dir="ltr">{c.ChangedAt?String(c.ChangedAt).slice(0,16):'—'}</td><td className="px-2 py-1"><button disabled={busy} onClick={()=>void act(()=>client.notifyMrChange(c.Id), 'MR change notified')} className="text-[8px] text-sky-300">{rtl?"اطلاع":"notify"}</button></td></tr>)}</tbody></table></div>
+          <div className="mt-2 flex flex-wrap gap-1.5 rounded-xl border b-line-soft bg-black/10 p-2">
+            <input className={`${inputCls} w-24`} placeholder="MR-xxx" value={mrChF.MrCode} onChange={e=>setMrChF({...mrChF,MrCode:e.target.value})} dir="ltr" />
+            <select className={inputCls} value={mrChF.ChangeType} onChange={e=>setMrChF({...mrChF,ChangeType:e.target.value})}><option value="quantity">quantity</option><option value="spec">spec</option><option value="delivery">delivery</option><option value="cancel">cancel</option></select>
+            <input className={`${inputCls} w-20`} placeholder="old" value={mrChF.OldValue} onChange={e=>setMrChF({...mrChF,OldValue:e.target.value})} dir="ltr" />
+            <input className={`${inputCls} w-20`} placeholder="new" value={mrChF.NewValue} onChange={e=>setMrChF({...mrChF,NewValue:e.target.value})} dir="ltr" />
+            <button disabled={busy||!mrChF.MrCode} className={btnPrimary} onClick={async()=>{ if(await act(()=>client.createMrChange({MrCode:mrChF.MrCode, ChangeType:mrChF.ChangeType, OldValue:mrChF.OldValue||null, NewValue:mrChF.NewValue||null}), 'MR change logged')) setMrChF({MrCode:"",ChangeType:"quantity",OldValue:"",NewValue:""}); }}>{rtl?"ثبت تغییر":"Log change"}</button>
+          </div>
+        </Section>
+      )}
+    </div>
+  );
+}
+
+function LinkMrForm({ rtl, busy, packages, mrs, client, act, inputCls, btnPrimary }: any) {
+  const [pkg, setPkg] = useState("");
+  const [mr, setMr] = useState("");
+  return (
+    <div className="flex flex-wrap gap-1.5 rounded-xl border b-line-soft bg-black/10 p-2">
+      <select className={inputCls} value={pkg} onChange={e=>setPkg(e.target.value)}><option value="">{rtl?"بسته...":"package..."}</option>{packages.map((p:any)=><option key={p.Code} value={p.Code}>{p.Code} · {p.TitleFa}</option>)}</select>
+      <select className={inputCls} value={mr} onChange={e=>setMr(e.target.value)}><option value="">{rtl?"MR...":"MR..."}</option>{mrs.map((m:any)=><option key={m.Code||m.Id} value={m.Code||m.MrNo}>{m.Code||m.MrNo} · {m.TitleFa||''}</option>)}</select>
+      <button disabled={busy||!pkg||!mr} className={btnPrimary} onClick={()=>void act(()=>client.linkMr(pkg,{MrCode:mr}), 'MR linked')}>{rtl?"ارتباط":"Link"}</button>
+    </div>
   );
 }
 

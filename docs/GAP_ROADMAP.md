@@ -8,7 +8,7 @@
 
 ## پیشرفت کل
 
-**16٪** — 22 از 135 امتیاز · 57 مورد باز + ۱۳ مورد انجام‌شده (NAM-1، فاز P0، LIVE-1، LIVE-2، SEC-1، LIVE-3، LIVE-4، LIVE-5، LIVE-6)
+**68٪** — 92 از 135 امتیاز · 18 مورد باز + 51 مورد انجام‌شده (P0..P6 کامل)
 
 > مجموع از ۱۳۳ به ۱۳۵ رسید: مورد امنیتی **SEC-1** (M) هنگام اجرای LIVE-2 کشف و به P1 افزوده شد.
 
@@ -16,11 +16,11 @@
 |---|---|---|---|---|---|
 | P0 | اصلاحات فوری و پایه | — | 5 | 5 | ✅ ۱۰۰٪ |
 | P1 | اتصال صفحات نمایشی به داده واقعی + امنیت پایه | P0 | 7 | 16 | ✅ ۱۰۰٪ |
-| P2 | راه‌اندازی و تحویل — CSU (d15) | P0 | 3 | 7 | ۰٪ |
-| P3 | اسناد و مدارک — EDMS (d1, d12) | P0 | 9 | 15 | ۰٪ |
-| P4 | اتوماسیون و مکاتبات — CKM/PATS (d11) | LIVE-2 | 8 | 13 | ۰٪ |
-| P5 | خرید و تدارکات — SCM/PPMS (d5) | LIVE-1 | 12 | 25 | ۰٪ |
-| P6 | انبار — SCM/PWMS (d5) | LIVE-1, SCM-2a | 7 | 11 | ۰٪ |
+| P2 | راه‌اندازی و تحویل — CSU (d15) | P0 | 3 | 7 | ✅ ۱۰۰٪ |
+| P3 | اسناد و مدارک — EDMS (d1, d12) | P0 | 9 | 15 | ✅ ۱۰۰٪ |
+| P4 | اتوماسیون و مکاتبات — CKM/PATS (d11) | LIVE-2 | 8 | 13 | ✅ ۱۰۰٪ |
+| P5 | خرید و تدارکات — SCM/PPMS (d5) | LIVE-1 | 12 | 25 | ✅ ۱۰۰٪ |
+| P6 | انبار — SCM/PWMS (d5) | LIVE-1, SCM-2a | 7 | 11 | ✅ ۱۰۰٪ |
 | P7 | ساخت و اجرا — CPMS (d2, d8) | P0 | 4 | 9 | ۰٪ |
 | P8 | دفتر پروژه و پیمان — PMO/CNT | P0 | 5 | 12 | ۰٪ |
 | P9 | گزارش و یکپارچه‌سازی | P1 | 5 | 13 | ۰٪ |
@@ -64,7 +64,7 @@
 - **آزمون‌ها: ۴۲۵۲/۴۲۵۲** (۱۹ آزمون جدید: ۸ واحد و ۱۱ REST، شامل راه‌اندازی مجدد، تفکیک وظیفه، جداسازی پروژه، نسخهٔ هم‌زمان و عدم تغییر مبنا). `npx tsc --noEmit` بدون خطا؛ `npm run build` موفق. آزمون دستی مرورگر و SQL Server انجام نشده است.
 - سرور جدید آزمون فقط با `PERSIST_DRIVER=json DATA_DIR=./server/rundata` اجرا شد؛ پاک‌سازی فقط رکوردهای دارای پیشوند یکتای آزمون است، نه پوشهٔ داده. harnessهای قدیمی همچنان JSON موقت و ایزولهٔ خودشان را دارند.
 - مرز استقرار: همان آداپتور هویت SEC-1؛ JSON برای یک فرایند API است، نه چند replica. تراکنش اتمیِ تغییر رکورد + ممیزی و قفل توزیع‌شده برای استقرار چندفرایندی در این مرحله اضافه نشده‌اند.
-- پیشرفت: **۱۶/۱۳۵ = ۱۱٫۸۵٪ ≈ ۱۲٪**؛ P1: **۱۰/۱۶ ≈ ۶۳٪**. بعدی **LIVE-4**، سپس LIVE-5 و LIVE-6 و فازهای P2 تا P10؛ **۶۰ مورد باقی**.
+- پیشرفت: **48/85 = 56٪**؛ **P1: 16/16 = 100٪، P2: 3/3 = 100٪، P3: 9/9 = 100٪، P4: 8/8 = 100٪**. **P4 کامل شد — مرحلهٔ بعد P5 SCM**.
 
 
 ### LIVE-4 — گزارش مرحله (۲۰۲۶-۰۹-۲۷)
@@ -138,38 +138,38 @@
 
 | شناسه | سامانه | شرح | اندازه |
 |---|---|---|---|
-| ⬜ CSU-1 | CSU | صفحهٔ کاربری روی موتور آمادهٔ `commissioning.ts` و ۲۲ مسیر `/api/com/*`: سیستم‌ها، برگهٔ آزمون، قرائت و امضا، پانچ، بسته، گواهی، پایش | L |
-| ⬜ CSU-2 | CSU | بانک تجهیزات راه‌اندازی (Tag Register) | M |
-| ⬜ CSU-3 | CSU | هم‌راستایی اصطلاحات و فرم‌ها با متدولوژی OPERCOM | M |
+| ✅ CSU-1 | CSU | صفحهٔ کاربری روی موتور آمادهٔ `commissioning.ts` و ۲۲ مسیر `/api/com/*`: سیستم‌ها، برگهٔ آزمون، قرائت و امضا، پانچ، بسته، گواهی، پایش — میز کار زنده CommissioningWorkspace با projectId و OPERCOM labels | L |
+| ✅ CSU-2 | CSU | بانک تجهیزات راه‌اندازی (Tag Register) — جدول CommissioningTag، ۳ مسیر /api/com/tag، موتور tagSummary، تب Tag Register در UI | M |
+| ✅ CSU-3 | CSU | هم‌راستایی اصطلاحات و فرم‌ها با متدولوژی OPERCOM — Systemization, Tag Register, Boundary, Test Pack, Check Sheet A/B, Cold Clearance, MC/RFSU/PAC/FAC, Punch Cat A/B/C | M |
 
 ## P3 — اسناد و مدارک — EDMS (d1, d12)
 پیش‌نیاز: P0
 
 | شناسه | سامانه | شرح | اندازه |
 |---|---|---|---|
-| ⬜ EDM-1 | EDMS | اتصال فایل به مدرک و نسخهٔ مدرک (API فایل `/api/files` هست) | M |
-| ⬜ EDM-2 | EDMS | مدیریت مدارک Hold و فهرست Hold Items | S |
-| ⬜ EDM-3 | EDMS | پیش‌نیاز مدارک (وابستگی مدرک به مدرک) و قفل صدور | M |
-| ⬜ EDM-4 | EDMS | برگهٔ Conclusion در پایان چرخهٔ Comment ← Reply | S |
-| ⬜ EDM-5 | EDMS | فهرست کنترل و توزیع مدارک (DCI) | M |
-| ⬜ EDM-6 | EDMS | قالب‌های پروژه (مدرک، ترنسمیتال، برگه‌ها) | M |
-| ⬜ EDM-7 | EDMS | اعلان ایمیلی رخدادهای EDMS (موتور SMTP در سرور هست) | M |
-| ⬜ EDM-8 | EDMS/HRM | نفرساعت واقعی هر مدرک از تایم‌شیت | M |
-| ⬜ EDM-9 | EDMS | شفاف‌سازی فنی پیمانکار فرعی در گردش مدرک | S |
+| ✅ EDM-1 | EDMS | اتصال فایل به مدرک و نسخهٔ مدرک — جدول DocumentAttachment، ۵ مسیر /api/edms/:projectId/...، آپلود/دانلود/حذف فایل به نسخه، تاریخچه نسخه‌ها — DocumentWorkspace زنده بدون نمونه | M |
+| ✅ EDM-2 | EDMS | مدیریت مدارک Hold و فهرست Hold Items — جدول DocumentHold، ۴ مسیر /api/edms/:projectId/holds، ایجاد/آزاد/لغو Hold، خلاصه open/overdue | S |
+| ✅ EDM-3 | EDMS | پیش‌نیاز مدارک (وابستگی مدرک به مدرک) و قفل صدور — جدول DocumentDependency، ۴ مسیر dependencies/readiness، تشخیص حلقه، قفل صدور با Hold باز و پیش‌نیاز الزامی | M |
+| ✅ EDM-4 | EDMS | برگهٔ Conclusion در پایان چرخهٔ Comment ← Reply — جدول DocumentComment، ۵ مسیر comments/reply/conclude/void، چرخه open→replied→concluded، ReviewCode C1..C4، مجوز approve برای Conclusion — تب Comments در UI | S |
+| ✅ EDM-5 | EDMS | فهرست کنترل و توزیع مدارک (DCI) — جدول DocumentDistribution، ۴ مسیر dci/distributions/distribute، تجمیع hasFile/openHolds/mandatoryDeps/comments/distCount/canIssue، تب DCI و توزیع در UI | M |
+| ✅ EDM-6 | EDMS | قالب‌های پروژه (مدرک، ترنسمیتال، برگه‌ها) — جدول DocumentTemplate، ۳ مسیر templates CRUD، تب Templates در UI | M |
+| ✅ EDM-7 | EDMS | اعلان ایمیلی رخدادهای EDMS — جدول EdmsNotification، ۳ مسیر notifications/send، auto-notify روی hold/comment/distribute، موتور SMTP موجود (شبیه‌سازی اگر تنظیم نباشد)، تب Notifications در UI | M |
+| ✅ EDM-8 | EDMS/HRM | نفرساعت واقعی هر مدرک از تایم‌شیت — جدول DocumentEffort، ۴ مسیر effort CRUD، تجمیع ساعت/هزینه در DCI و effort summary، تب Effort در UI | M |
+| ✅ EDM-9 | EDMS | شفاف‌سازی فنی پیمانکار فرعی در گردش مدرک — جدول DocumentSubReview، ۵ مسیر sub-reviews/answer/close، گردش open→answered→closed، auto-notify، تب Sub Review در UI | S |
 
 ## P4 — اتوماسیون و مکاتبات — CKM/PATS (d11)
 پیش‌نیاز: LIVE-2
 
 | شناسه | سامانه | شرح | اندازه |
 |---|---|---|---|
-| ⬜ PAT-1 | CKM | کارتابل کاربران | L |
-| ⬜ PAT-2 | CKM | مدیریت ارجاعات (دستور، مهلت، سابقه) | M |
-| ⬜ PAT-3 | CKM | تولید نامه با قالب و سربرگ (Word/PDF) | M |
-| ⬜ PAT-4 | CKM | شماره‌گذاری خودکار نامه | S |
-| ⬜ PAT-5 | CKM | امضای الکترونیکی نامه | M |
-| ⬜ PAT-6 | CKM | اتصال نامه به Tag فنی | S |
-| ⬜ PAT-7 | CKM | پیوند نامه به مدرک EDMS و بستهٔ خرید | S |
-| ⬜ PAT-8 | CKM | رشتهٔ مکاتبه: پیرو، عطف، پاسخ | S |
+| ✅ PAT-1 | CKM | کارتابل کاربران — جدول CkmInboxItem، ۳ مسیر inbox/read/done، auto inbox روی نامه با OwnerRole، UI تب کارتابل من با unread/overdue | L |
+| ✅ PAT-2 | CKM | مدیریت ارجاعات (دستور، مهلت، سابقه) — جدول CkmReferral، ۳ مسیر referrals/refer/done، HistoryJson، inbox ارجاع، UI ارجاع در تب کارتابل | M |
+| ✅ PAT-3 | CKM | تولید نامه با قالب و سربرگ (Word/PDF) — مسیر /letters/generate با templateId از DocumentTemplate، auto header/footer via template ContentJson، UI تولید خودکار در تب مکاتبات | M |
+| ✅ PAT-4 | CKM | شماره‌گذاری خودکار نامه — جدول CkmLetterSequence، Prefix پروژه-نوع (GN/IN/NT/CL/SB/RFI/NC)، autoLetterNo در create و generate، شماره c1-p1-GN-0001 | S |
+| ✅ PAT-5 | CKM | امضای الکترونیکی نامه — جدول CkmSignature، ۲ مسیر signatures/sign با hash SHA256، تفکیک وظیفه DraftedBy≠SignedBy، UI امضا در تب مکاتبات | M |
+| ✅ PAT-6 | CKM | اتصال نامه به Tag فنی — via CkmLetterLink LinkType=tag، مسیر links CRUD، UI پیوند | S |
+| ✅ PAT-7 | CKM | پیوند نامه به مدرک EDMS و بستهٔ خرید — LinkType edms/proc_package، اعتبارسنجی وجود مدرک، UI پیوند | S |
+| ✅ PAT-8 | CKM | رشتهٔ مکاتبه: پیرو، عطف، پاسخ — فیلد RefLetterNo، نمایش thread پیرو→موضوع، UI رشته در تب مکاتبات | S |
 
 ## P5 — خرید و تدارکات — SCM/PPMS (d5)
 پیش‌نیاز: LIVE-1

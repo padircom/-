@@ -1,615 +1,859 @@
-import { useEffect, useMemo, useState } from "react";
-import { t, type Bi, type Lang } from "../data/framework";
-import { useSystem } from "../context/SystemContext";
-import { useAuth } from "../context/AuthContext";
-import { createRow, deleteRow, docToRow, listRows, rowToDoc, type UiDoc } from "../services/edmsApi";
+/**
+ * EDM-1 + EDM-2 + EDM-3 — میز کار زنده اسناد و مدارک (d1) با اتصال فایل، Hold و پیش‌نیاز.
+ * هیچ دادهٔ نمونه ندارد؛ همه از /api/edms/:projectId/... می‌آید.
+ */
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { Lang } from '../data/framework';
+import { useAuth } from '../context/AuthContext';
+import { useSystem } from '../context/SystemContext';
+import { EdmsClient, type EdmsDocumentList, type EdmsFileList, type EdmsHoldList, type EdmsDependencyList, type EdmsReadiness, type EdmsCommentList, type EdmsDciList, type EdmsDistributionList, type EdmsTemplateList, type EdmsNotificationList, type EdmsEffortList, type EdmsSubReviewList } from '../services/edmsWorkspace';
+import { createRow, listRows } from '../services/edmsApi';
 
-export type EdmsTab =
-  | "overview"
-  | "mdr"
-  | "revision"
-  | "correspondence"
-  | "transmittal"
-  | "workflow"
-  | "excel"
-  | "numbering"
-  | "lessons";
-
-type DocumentRow = {
-  id: string;
-  code: string;
-  title: Bi;
-  revision: string;
-  discipline: string;
-  status: "approved" | "under_review" | "rejected" | "draft";
-  reviewCode: "C1" | "C2" | "C3" | "C4" | "—";
-  slaHours: number;
-  updatedAt: string;
-};
-
-type LetterRow = {
-  id: string;
-  letterNo: string;
-  subject: Bi;
-  sender: Bi;
-  receiver: Bi;
-  date: string;
-  actionRequired: boolean;
-  dueDate: string;
-};
-
-type TransmittalRow = {
-  id: string;
-  transmittalNo: string;
-  purpose: Bi;
-  recipient: Bi;
-  docCount: number;
-  date: string;
-  status: "sent" | "received" | "ack";
-};
-
-type LessonRow = {
-  id: string;
-  title: Bi;
-  category: Bi;
-  impact: Bi;
-  lesson: Bi;
-  author: string;
-};
-
-type WfTask = {
-  id: string;
-  doc: string;
-  step: Bi;
-  owner: Bi;
-  sla: string;
-  code: string;
-};
-
-const sampleDocs: DocumentRow[] = [
-  { id: "doc1", code: "OG-2401-CIV-DR-001", title: { fa: "نقشه تفصیلی فونداسیون مخازن", en: "Foundation Detailed Drawing" }, revision: "Rev-02", discipline: "Civil", status: "approved", reviewCode: "C1", slaHours: 18, updatedAt: "1403/02/10" },
-  { id: "doc2", code: "OG-2401-MEC-DS-004", title: { fa: "برگ مشخصات فنی پمپ‌های سانتریفیوژ", en: "Centrifugal Pump Data Sheet" }, revision: "Rev-01", discipline: "Mechanical", status: "under_review", reviewCode: "C2", slaHours: 42, updatedAt: "1403/02/15" },
-  { id: "doc3", code: "OG-2401-PIP-ISO-012", title: { fa: "نقشه ایزومتریک خطوط لوله‌کشی فاز ۱", en: "Piping Isometric Line 012" }, revision: "Rev-00", discipline: "Piping", status: "draft", reviewCode: "—", slaHours: 0, updatedAt: "1403/02/18" },
-  { id: "doc4", code: "OG-2401-ELE-SLD-007", title: { fa: "دیاگرام تک‌خطی پست برق", en: "Electrical Single Line Diagram" }, revision: "Rev-03", discipline: "Electrical", status: "rejected", reviewCode: "C3", slaHours: 96, updatedAt: "1403/02/08" },
-];
-
-const sampleLetters: LetterRow[] = [
-  { id: "let1", letterNo: "LTR-2401-104", subject: { fa: "درخواست ابلاغ نقشه‌های اصلاحی کیلومتر ۲۴", en: "Request for revised drawings KM24" }, sender: { fa: "پیمانکار", en: "Contractor" }, receiver: { fa: "مشاور", en: "Consultant" }, date: "1403/02/12", actionRequired: true, dueDate: "1403/02/20" },
-  { id: "let2", letterNo: "LTR-2401-089", subject: { fa: "پاسخ به ادعای شرایط نامساعد جوی", en: "Response to weather claim" }, sender: { fa: "کارفرما", en: "Employer" }, receiver: { fa: "پیمانکار", en: "Contractor" }, date: "1403/02/05", actionRequired: false, dueDate: "-" },
-];
-
-const sampleTransmittals: TransmittalRow[] = [
-  { id: "tr1", transmittalNo: "TR-OG-2401-042", purpose: { fa: "جهت بررسی و تأیید", en: "For Review & Approval" }, recipient: { fa: "دستگاه نظارت", en: "Supervision Team" }, docCount: 6, date: "1403/02/14", status: "sent" },
-  { id: "tr2", transmittalNo: "TR-OG-2401-038", purpose: { fa: "جهت ساخت و اجرا", en: "For Construction (IFC)" }, recipient: { fa: "پیمانکار اجرایی", en: "Contractor" }, docCount: 12, date: "1403/02/01", status: "ack" },
-];
-
-const sampleLessons: LessonRow[] = [
-  { id: "ls1", title: { fa: "تأخیر در تأیید نقشه‌های شاپ قالب‌بندی", en: "Delay in shop drawing approvals" }, category: { fa: "مهندسی", en: "Engineering" }, impact: { fa: "تأخیر ۲ هفته‌ای در بتن‌ریزی", en: "2-week delay in concreting" }, lesson: { fa: "ارسال همزمان نسخه‌های الکترونیکی جهت تسریع بررسی پیش از جلسه حضوری", en: "Parallel electronic submission prior to formal review" }, author: "مهندس احمدی" },
-  { id: "ls2", title: { fa: "تعارض خطوط لوله زیرزمینی با کابل فشار قوی", en: "Underground pipe & HV cable conflict" }, category: { fa: "اجرا / سایت", en: "Construction" }, impact: { fa: "توقف ۲ روزه حفاری", en: "2-day excavation stoppage" }, lesson: { fa: "انجام اسکن سونار کارگاهی قبل از گودبرداری در زون‌های صنعتی قدیمی", en: "Perform site sonar scan prior to excavation in old zones" }, author: "مهندس رضایی" },
-];
-
-const wfTasks: WfTask[] = [
-  { id: "w1", doc: "OG-2401-MEC-DS-004", step: { fa: "بررسی مشاور", en: "Consultant review" }, owner: { fa: "ناظر مکانیک", en: "Mech. Supervisor" }, sla: "36h", code: "C2" },
-  { id: "w2", doc: "OG-2401-ELE-SLD-007", step: { fa: "بازگشت برای اصلاح", en: "Return for comment" }, owner: { fa: "طراح برق", en: "Elec. Designer" }, sla: "SLA+12h", code: "C3" },
-];
-
-const statusMetaDoc = {
-  approved: { fa: "تأییدشده", en: "Approved", color: "#34D399" },
-  under_review: { fa: "در حال بررسی", en: "Under Review", color: "#FBBF24" },
-  rejected: { fa: "ردشده", en: "Rejected", color: "#F87171" },
-  draft: { fa: "پیش‌نویس", en: "Draft", color: "#94A3B8" },
-};
+export type EdmsTab = 'overview' | 'mdr' | 'revision' | 'files' | 'holds' | 'deps' | 'comments' | 'dci' | 'templates' | 'notifications' | 'effort' | 'subreview' | 'workflow' | 'excel' | 'numbering' | 'correspondence' | 'transmittal' | 'lessons';
 
 const TABS: { id: EdmsTab; fa: string; en: string }[] = [
-  { id: "overview", fa: "نمای کلی", en: "Overview" },
-  { id: "mdr", fa: "MDR", en: "MDR" },
-  { id: "revision", fa: "نسخه", en: "Revision" },
-  { id: "workflow", fa: "گردش کار", en: "Workflow" },
-  { id: "excel", fa: "اکسل", en: "Excel" },
-  { id: "numbering", fa: "شماره", en: "Numbering" },
-  { id: "correspondence", fa: "مکاتبات", en: "Letters" },
-  { id: "transmittal", fa: "ترانسمیتال", en: "Transmittal" },
-  { id: "lessons", fa: "دانش", en: "Lessons" },
+  { id: 'overview', fa: 'نمای کلی', en: 'Overview' },
+  { id: 'mdr', fa: 'MDR', en: 'MDR' },
+  { id: 'revision', fa: 'نسخه‌ها', en: 'Revisions' },
+  { id: 'files', fa: 'پیوست فایل', en: 'Files' },
+  { id: 'holds', fa: 'Hold Items', en: 'Holds' },
+  { id: 'deps', fa: 'پیش‌نیاز و قفل', en: 'Prereq & Gate' },
+  { id: 'comments', fa: 'نظر و Conclusion', en: 'Comments' },
+  { id: 'dci', fa: 'DCI و توزیع', en: 'DCI & Dist' },
+  { id: 'templates', fa: 'قالب‌ها', en: 'Templates' },
+  { id: 'notifications', fa: 'اعلان‌ها', en: 'Notifications' },
+  { id: 'effort', fa: 'نفرساعت', en: 'Effort' },
+  { id: 'subreview', fa: 'پیمانکار فرعی', en: 'Sub Review' },
+  { id: 'workflow', fa: 'گردش کار', en: 'Workflow' },
+  { id: 'excel', fa: 'اکسل', en: 'Excel' },
+  { id: 'numbering', fa: 'شماره‌گذاری', en: 'Numbering' },
 ];
 
-export default function DocumentWorkspace({
-  lang,
-  initialTab = "overview",
-  hideTabs = false,
-}: {
-  lang: Lang;
-  initialTab?: EdmsTab;
-  hideTabs?: boolean;
-}) {
-  const rtl = lang === "fa";
-  const [tab, setTab] = useState<EdmsTab>(initialTab);
-  const [docs, setDocs] = useState<DocumentRow[]>(sampleDocs);
-  const [live, setLive] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [pendingDelete, setPendingDelete] = useState<string | null>(null);
-  const [deleting, setDeleting] = useState<string | null>(null);
-  const [query, setQuery] = useState("");
-  const [newDocCode, setNewDocCode] = useState("");
-  const [newDocTitle, setNewDocTitle] = useState("");
-  const [newDocDiscipline, setNewDocDiscipline] = useState("Civil");
-  const [reserved, setReserved] = useState("OG-2401-CIV-DR-005");
+const inputCls = 'rounded-lg border b-line-soft bg-black/20 px-2.5 py-1.5 text-[11px] tx1 placeholder:text-[10px] placeholder:tx4 w-full';
+const btnCls = 'rounded-lg border px-3 py-1.5 text-[11px] transition disabled:opacity-40';
+const btnPrimary = `${btnCls} border-sky-400/40 bg-sky-400/10 text-sky-200 hover:bg-sky-400/20`;
+const btnOk = `${btnCls} border-emerald-400/40 bg-emerald-400/10 text-emerald-200 hover:bg-emerald-400/20`;
+const btnGhost = `${btnCls} border b-line-soft tx2 hover:bg-white/5`;
 
-  /* دادهٔ واقعی از سرور؛ اگر سرور یا پایگاه در دسترس نباشد، همان دادهٔ
-     نمونه می‌ماند و نشانهٔ «نمایشی» بالای پنل روشن می‌شود. */
-  const { projectScope } = useSystem();
-  const { can } = useAuth();
-  const projectId = projectScope?.projectId ?? "";
-  /* مدیرِ سیستم در کنارِ نقش‌های صاحبِ مجوزِ مدرک (همان الگویِ پنلِ اعلان‌ها) —
-     وگرنه کاربرِ پیش‌فرض که نقشِ admin دارد پنل را فقط-نمایش می‌دید. */
-  const canEdit = can("system.manage") || can("document.edit", projectScope?.projectId ?? null);
-
-  useEffect(() => {
-    let alive = true;
-    void (async () => {
-      const res = await listRows("Document", projectId || undefined);
-      if (!alive || !res) return;
-      const rows = (res.items ?? []).map(rowToDoc).filter((d) => d.code);
-      if (!rows.length) {
-        /* جدول خالی است: با دادهٔ نمونه بذرپاشی نمی‌کنیم — کاربر خودش ثبت می‌کند */
-        setLive(true);
-        return;
-      }
-      setDocs(rows as DocumentRow[]);
-      setLive(true);
-    })();
-    return () => {
-      alive = false;
-    };
-  }, [projectId]);
-
-  useEffect(() => {
-    setTab(initialTab);
-  }, [initialTab]);
-
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return docs;
-    return docs.filter(
-      (d) =>
-        d.code.toLowerCase().includes(q) ||
-        t(d.title, lang).toLowerCase().includes(q) ||
-        d.discipline.toLowerCase().includes(q)
-    );
-  }, [docs, query, lang]);
-
-  const kpis = useMemo(() => {
-    const total = docs.length;
-    const approved = docs.filter((d) => d.status === "approved").length;
-    const rejected = docs.filter((d) => d.status === "rejected").length;
-    const cycle = Math.round(docs.reduce((a, d) => a + d.slaHours, 0) / Math.max(total, 1));
-    return { total, approved, rejected, cycle, rejectRate: total ? Math.round((rejected / total) * 100) : 0, slaBreach: docs.filter((d) => d.slaHours > 48).length };
-  }, [docs]);
-
-  /* حذف: ابتدا از پایگاه (اگر ردیف آنجاست)، بعد از نمای محلی.
-     ردیف‌های نمونه در پایگاه نیستند، پس پاسخِ ناموفقِ سرور به معنای
-     حذفِ محلی است — نه اینکه کاربر فکر کند نشد. */
-  const deleteDocument = async (doc: DocumentRow) => {
-    setDeleting(doc.id);
-    let removed = false;
-    if (live) removed = await deleteRow("Document", doc.id);
-    if (removed) {
-      const res = await listRows("Document", projectId || undefined);
-      setDocs(res ? ((res.items ?? []).map(rowToDoc).filter((d) => d.code) as DocumentRow[]) : []);
-    } else {
-      setDocs((prev) => prev.filter((d) => d.id !== doc.id));
-    }
-    setDeleting(null);
-    setPendingDelete(null);
-  };
-
-  const addDocument = async () => {
-    if (!newDocCode.trim()) return;
-    const candidate: UiDoc = {
-      id: `doc-${Date.now()}`,
-      code: newDocCode.trim(),
-      title: { fa: newDocTitle || "مدرک جدید", en: newDocTitle || "New Document" },
-      revision: "Rev-00",
-      discipline: newDocDiscipline,
-      status: "under_review",
-      reviewCode: "C4",
-      slaHours: 24,
-      updatedAt: new Date().toLocaleDateString(rtl ? "fa-IR" : "en-GB"),
-    };
-    setNewDocCode("");
-    setNewDocTitle("");
-
-    if (live) {
-      setSaving(true);
-      const saved = await createRow("Document", docToRow(candidate, projectId || "OG-2401"));
-      setSaving(false);
-      if (saved) {
-        const res = await listRows("Document", projectId || undefined);
-        if (res) {
-          const rows = (res.items ?? []).map(rowToDoc).filter((d) => d.code);
-          setDocs(rows.length ? (rows as DocumentRow[]) : []);
-          return;
-        }
-      }
-      /* نشد: به حالتِ محلی برمی‌گردیم تا ورودِ کاربر از دست نرود */
-    }
-
-    setDocs((prev) => [
-      candidate as DocumentRow,
-      ...prev,
-    ]);
-  };
-
+function Section({ title, note, children }: { title: string; note?: string; children: React.ReactNode }) {
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden" dir={rtl ? "rtl" : "ltr"}>
-      <section className="glass-dark shrink-0 rounded-2xl p-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="grid h-8 w-8 place-items-center rounded-lg border border-sky-400/40 bg-sky-400/10 text-[15px]">🗂</span>
-          <div className="min-w-0 flex-1">
-            <h3 className="text-[12px] font-semibold tx1">
-              {rtl ? "مدیریت اطلاعات و مستندات پروژه (PIM / EDMS)" : "Project Information & Document Management"}
-            </h3>
-            <p className="text-[8.5px] font-extralight tx3">
-              {rtl
-                ? "منبع حقیقت: پایگاه‌داده · اکسل فقط ظرف بازتولید · کنترل نسخه، گردش کار Code 1–4، ترانسمیتال، آفلاین"
-                : "Database is source of truth · Excel is a rendered vessel · revision, Code 1–4 workflow, transmittal, offline"}
-            </p>
-          </div>
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder={rtl ? "جستجو کد / عنوان / دیسپلین…" : "Search code / title / discipline…"}
-            className="w-52 rounded-lg border b-line-soft bg-black/20 px-2 py-1 text-[10px] tx1 outline-none"
-          />
-        </div>
-      </section>
-
-      {!hideTabs && (
-      <nav className="flex shrink-0 flex-wrap items-center gap-1 rounded-xl bg-black/15 p-1">
-        {TABS.map((item) => (
-          <button
-            key={item.id}
-            onClick={() => setTab(item.id)}
-            className={`rounded-lg px-2.5 py-1.5 text-[10px] font-light transition ${
-              tab === item.id ? "toggle-on tx1 shadow-sm" : "tx3 hover:tx2"
-            }`}
-          >
-            {rtl ? item.fa : item.en}
-          </button>
-        ))}
-      </nav>
-      )}
-
-      <div className="thin-scroll min-h-0 flex-1 overflow-y-auto pr-1">
-        {tab === "overview" && (
-          <div className="fade-rise grid gap-2 sm:grid-cols-4">
-            {[
-              { k: rtl ? "مدارک MDR" : "MDR docs", v: kpis.total, c: "#7FB2FF" },
-              { k: rtl ? "تأییدشده" : "Approved", v: kpis.approved, c: "#34D399" },
-              { k: rtl ? "نرخ رد" : "Rejection", v: `${kpis.rejectRate}%`, c: "#F87171" },
-              { k: rtl ? "میانگین چرخه (ساعت)" : "Avg cycle (h)", v: kpis.cycle, c: "#FBBF24" },
-            ].map((card) => (
-              <div key={card.k} className="glass-dark rounded-2xl p-3">
-                <div className="text-[8.5px] font-extralight tx3">{card.k}</div>
-                <div className="mt-1 text-[18px] font-semibold tabular-nums" style={{ color: card.c }}>{card.v}</div>
-              </div>
-            ))}
-            <div className="glass-dark sm:col-span-4 rounded-2xl p-3">
-              <div className="text-[10.5px] font-normal tx1">{rtl ? "منحنی پیشرفت MDR (نمونه)" : "MDR S-curve (sample)"}</div>
-              <div className="mt-2 flex h-16 items-end gap-1">
-                {[22, 28, 35, 41, 48, 55, 61, 68].map((h, i) => (
-                  <div key={i} className="flex-1 rounded-t-sm bg-sky-400/35" style={{ height: `${h}%` }} />
-                ))}
-              </div>
-              <p className="mt-2 text-[8.5px] tx4">
-                {rtl ? "KPI: Cycle Time · Rejection Rate · MDR S-Curve · SLA Breach" : "KPIs: Cycle Time · Rejection Rate · MDR S-Curve · SLA Breach"}
-              </p>
-            </div>
-          </div>
-        )}
-
-        {tab === "mdr" && (
-          <div className="fade-rise space-y-3">
-            <div className="glass-dark flex flex-wrap items-center gap-2 rounded-xl p-2.5">
-              {canEdit ? (
-                <span className="text-[10px] font-normal tx1">{rtl ? "ثبت مدرک در MDR:" : "Register in MDR:"}</span>
-              ) : (
-                <span className="text-[10px] font-light text-amber-300/80">
-                  {rtl ? "فقط نمایش — شما مجوزِ ثبت و حذفِ مدرک ندارید" : "Read-only — no document edit permission"}
-                </span>
-              )}
-              <input value={newDocCode} onChange={(e) => setNewDocCode(e.target.value)} disabled={!canEdit} placeholder="OG-2401-ELE-DS-002" dir="ltr" className="w-48 rounded-lg border b-line-soft bg-black/20 px-2 py-1 text-[10px] tx1 outline-none" />
-              <input value={newDocTitle} onChange={(e) => setNewDocTitle(e.target.value)} disabled={!canEdit} placeholder={rtl ? "عنوان مدرک…" : "Title…"} className="w-56 rounded-lg border b-line-soft bg-black/20 px-2 py-1 text-[10px] tx1 outline-none" />
-              <select value={newDocDiscipline} onChange={(e) => setNewDocDiscipline(e.target.value)} disabled={!canEdit} className="rounded-lg border b-line-soft bg-black/20 px-2 py-1 text-[10px] tx1 outline-none" style={{ colorScheme: "dark" }}>
-                {["Civil", "Mechanical", "Piping", "Electrical", "Instrumentation", "Process"].map((d) => (
-                  <option key={d} value={d}>{d}</option>
-                ))}
-              </select>
-              <button
-                onClick={() => void addDocument()}
-                disabled={saving || !canEdit}
-                className="rounded-lg border border-sky-400/50 bg-sky-400/15 px-3 py-1 text-[10px] font-light text-sky-200 hover:bg-sky-400/25 disabled:opacity-50"
-              >
-                {saving ? (rtl ? "در حال ذخیره…" : "Saving…") : `+ ${rtl ? "ثبت" : "Add"}`}
-              </button>
-              <span
-                className="ms-auto rounded-full border px-2 py-0.5 text-[9px] font-light"
-                style={{
-                  borderColor: live ? "#34D39966" : "#FBBF2466",
-                  color: live ? "#34D399" : "#FBBF24",
-                }}
-                title={
-                  live
-                    ? rtl
-                      ? "مدارک از پایگاه داده خوانده و در آن ذخیره می‌شوند"
-                      : "Documents are read from and written to the database"
-                    : rtl
-                      ? "سرور در دسترس نیست — ورودی‌ها فقط در همین نشست می‌مانند"
-                      : "Server unreachable — entries stay in this session only"
-                }
-              >
-                {live ? (rtl ? "ذخیره در پایگاه" : "Persisted") : rtl ? "حالت نمایشی" : "Demo mode"}
-              </span>
-            </div>
-            <DocTable
-              lang={lang}
-              rtl={rtl}
-              rows={filtered}
-              canDelete={canEdit}
-              pendingId={pendingDelete}
-              busyId={deleting}
-              onRequestDelete={(id) => setPendingDelete(id)}
-              onCancelDelete={() => setPendingDelete(null)}
-              onConfirmDelete={(row) => void deleteDocument(row)}
-            />
-          </div>
-        )}
-
-        {tab === "revision" && (
-          <div className="fade-rise glass-dark rounded-2xl p-3 space-y-2">
-            <div className="text-[11px] font-normal tx1">{rtl ? "تاریخچه نسخه — فایل اصلی به‌عنوان Evidence" : "Revision history — original file kept as evidence"}</div>
-            <table className="w-full border-collapse text-[10px]">
-              <thead>
-                <tr className="border-b b-line-soft text-[9px] tx3">
-                  <th className="px-2 py-2 text-start">{rtl ? "کد" : "Code"}</th>
-                  <th className="px-2 py-2 text-center">{rtl ? "از" : "From"}</th>
-                  <th className="px-2 py-2 text-center">{rtl ? "به" : "To"}</th>
-                  <th className="px-2 py-2 text-start">{rtl ? "تغییر" : "Change"}</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y b-line-soft">
-                <tr>
-                  <td className="px-2 py-1.5 font-mono tx2" dir="ltr">OG-2401-CIV-DR-001</td>
-                  <td className="px-2 py-1.5 text-center text-sky-300">Rev-01</td>
-                  <td className="px-2 py-1.5 text-center text-emerald-300">Rev-02</td>
-                  <td className="px-2 py-1.5 tx1">{rtl ? "اصلاح تراز فونداسیون پس از Code 2" : "Foundation level after Code 2"}</td>
-                </tr>
-                <tr>
-                  <td className="px-2 py-1.5 font-mono tx2" dir="ltr">OG-2401-ELE-SLD-007</td>
-                  <td className="px-2 py-1.5 text-center text-sky-300">Rev-02</td>
-                  <td className="px-2 py-1.5 text-center text-amber-300">Rev-03</td>
-                  <td className="px-2 py-1.5 tx1">{rtl ? "بازگشت Code 3 — مسیر کابل" : "Code 3 return — cable route"}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {tab === "workflow" && (
-          <div className="fade-rise space-y-2">
-            <div className="glass-dark rounded-2xl p-3 text-[10px] tx2">
-              {rtl ? "ماشین وضعیت: Draft → Issued → C1/C2/C3/C4 → Approved / IFC · SLA و تشدید پیکربندی‌پذیر" : "State: Draft → Issued → C1/C2/C3/C4 → Approved / IFC · configurable SLA & escalation"}
-            </div>
-            {wfTasks.map((w) => (
-              <div key={w.id} className="glass-dark flex flex-wrap items-center gap-3 rounded-xl p-3">
-                <span className="font-mono text-[10px] text-sky-300" dir="ltr">{w.doc}</span>
-                <span className="text-[10.5px] tx1">{t(w.step, lang)}</span>
-                <span className="text-[9.5px] tx3">{t(w.owner, lang)}</span>
-                <span className="ms-auto rounded bg-amber-400/15 px-2 py-0.5 text-[8.5px] text-amber-300">{w.sla}</span>
-                <span className="rounded bg-sky-400/15 px-2 py-0.5 text-[8.5px] text-sky-200">{w.code}</span>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {tab === "excel" && (
-          <div className="fade-rise grid gap-2 md:grid-cols-3">
-            {[
-              { id: "A", fa: "A · ورود قالب", en: "A · Template onboarding", d: { fa: "قالب Excel → FormTemplate + MappingSchema. شیت مخفی _META.", en: "Excel template → FormTemplate + MappingSchema. Hidden _META sheet." } },
-              { id: "B", fa: "B · ورود انبوه", en: "B · Bulk import", d: { fa: "اعتبارسنجی سلول‌محور. خطا در Import_Error. فایل اصلی Evidence.", en: "Cell-level validation. Errors in Import_Error. Original kept as evidence." } },
-              { id: "C", fa: "C · بازتولید", en: "C · Render / export", d: { fa: "داده از DB رندر می‌شود. Round-Trip بدون از دست رفتن فرمت.", en: "Data rendered from DB. Round-trip keeps formatting." } },
-            ].map((s) => (
-              <div key={s.id} className="glass-dark rounded-2xl p-3">
-                <div className="text-[11px] font-medium text-sky-300">{rtl ? s.fa : s.en}</div>
-                <p className="mt-2 text-[10px] font-light leading-5 tx2">{t(s.d, lang)}</p>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {tab === "numbering" && (
-          <div className="fade-rise glass-dark rounded-2xl p-3 space-y-3">
-            <div className="text-[11px] tx1">{rtl ? "قانون: {PROJ}-{DISC}-{TYPE}-{SEQ:3}" : "Rule: {PROJ}-{DISC}-{TYPE}-{SEQ:3}"}</div>
-            <p className="text-[10px] tx3" dir="ltr">PROJ=OG-2401 · DISC=CIV · TYPE=DR · SEQ locked (no race)</p>
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded-lg border b-line-soft px-3 py-1.5 font-mono text-[12px] text-sky-200" dir="ltr">{reserved}</span>
-              <button
-                onClick={() => setReserved((c) => {
-                  const n = Number(c.slice(-3)) + 1;
-                  return `OG-2401-CIV-DR-${String(n).padStart(3, "0")}`;
-                })}
-                className="rounded-lg border border-sky-400/50 bg-sky-400/15 px-3 py-1 text-[10px] text-sky-200"
-              >
-                {rtl ? "رزرو شماره بعدی" : "Reserve next"}
-              </button>
-            </div>
-          </div>
-        )}
-
-        {tab === "correspondence" && (
-          <div className="fade-rise glass-dark overflow-x-auto rounded-2xl p-3">
-            <table className="w-full min-w-[720px] border-collapse text-[10px]">
-              <thead>
-                <tr className="border-b b-line-soft bg-black/25 text-[9px] tx3">
-                  <th className="px-2 py-2 text-start">{rtl ? "شماره" : "No"}</th>
-                  <th className="px-2 py-2 text-start">{rtl ? "موضوع" : "Subject"}</th>
-                  <th className="px-2 py-2 text-center">{rtl ? "از / به" : "From / To"}</th>
-                  <th className="px-2 py-2 text-center">{rtl ? "اقدام" : "Action"}</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y b-line-soft">
-                {sampleLetters.map((row) => (
-                  <tr key={row.id}>
-                    <td className="px-2 py-1.5 font-mono tx2" dir="ltr">{row.letterNo}</td>
-                    <td className="px-2 py-1.5 tx1">{t(row.subject, lang)}</td>
-                    <td className="px-2 py-1.5 text-center tx3">{t(row.sender, lang)} → {t(row.receiver, lang)}</td>
-                    <td className="px-2 py-1.5 text-center">
-                      {row.actionRequired
-                        ? <span className="text-amber-300">{rtl ? "مهلت" : "Due"} {row.dueDate}</span>
-                        : <span className="tx4">{rtl ? "اطلاعی" : "Info"}</span>}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {tab === "transmittal" && (
-          <div className="fade-rise glass-dark overflow-x-auto rounded-2xl p-3">
-            <table className="w-full min-w-[640px] border-collapse text-[10px]">
-              <thead>
-                <tr className="border-b b-line-soft bg-black/25 text-[9px] tx3">
-                  <th className="px-2 py-2 text-start">{rtl ? "ترانسمیتال" : "Transmittal"}</th>
-                  <th className="px-2 py-2 text-start">{rtl ? "هدف" : "Purpose"}</th>
-                  <th className="px-2 py-2 text-center">{rtl ? "تعداد" : "Count"}</th>
-                  <th className="px-2 py-2 text-center">{rtl ? "وضعیت" : "Status"}</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y b-line-soft">
-                {sampleTransmittals.map((tr) => (
-                  <tr key={tr.id}>
-                    <td className="px-2 py-1.5 font-mono tx2" dir="ltr">{tr.transmittalNo}</td>
-                    <td className="px-2 py-1.5 tx1">{t(tr.purpose, lang)}</td>
-                    <td className="px-2 py-1.5 text-center text-sky-300">{tr.docCount}</td>
-                    <td className="px-2 py-1.5 text-center">
-                      <span className={tr.status === "ack" ? "text-emerald-300" : "text-sky-300"}>
-                        {tr.status === "ack" ? (rtl ? "رسید" : "Ack") : (rtl ? "ارسال" : "Sent")}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {tab === "lessons" && (
-          <div className="fade-rise space-y-2.5">
-            {sampleLessons.map((ls) => (
-              <div key={ls.id} className="glass-dark rounded-2xl p-3.5 space-y-1.5">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[11.5px] font-medium text-sky-300">{t(ls.title, lang)}</span>
-                  <span className="rounded bg-sky-400/10 px-2 py-0.5 text-[8.5px] text-sky-200">{t(ls.category, lang)}</span>
-                </div>
-                <div className="text-[10px] tx3">{rtl ? "اثر:" : "Impact:"} {t(ls.impact, lang)}</div>
-                <div className="rounded-xl border b-line-soft bg-black/15 p-2.5 text-[10.5px] font-light tx1 leading-5">
-                  {t(ls.lesson, lang)}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+    <section className="glass-dark rounded-2xl p-3 space-y-3">
+      <div>
+        <h4 className="text-[12px] font-semibold tx1">{title}</h4>
+        {note && <p className="text-[10px] tx3 mt-1">{note}</p>}
       </div>
+      {children}
+    </section>
+  );
+}
+
+function Kpi({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border b-line-soft bg-black/15 px-3 py-2">
+      <div className="text-[9px] tx3">{label}</div>
+      <div className="text-[14px] font-semibold tx1 tabular-nums" dir="ltr">{value}</div>
     </div>
   );
 }
 
-function DocTable({
+export default function DocumentWorkspace({
   lang,
-  rtl,
-  rows,
-  canDelete,
-  pendingId,
-  busyId,
-  onRequestDelete,
-  onCancelDelete,
-  onConfirmDelete,
+  projectId: propProjectId,
+  initialTab = 'overview',
+  hideTabs = false,
 }: {
   lang: Lang;
-  rtl: boolean;
-  rows: DocumentRow[];
-  canDelete: boolean;
-  pendingId: string | null;
-  busyId: string | null;
-  onRequestDelete: (id: string) => void;
-  onCancelDelete: () => void;
-  onConfirmDelete: (row: DocumentRow) => void;
+  projectId?: string;
+  initialTab?: EdmsTab;
+  hideTabs?: boolean;
 }) {
+  const { user } = useAuth();
+  const { projectScope } = useSystem();
+  const projectId = propProjectId ?? projectScope?.projectId ?? '';
+  return <LiveEdms key={`${projectId}:${user?.id ?? ''}`} lang={lang} projectId={projectId} initialTab={initialTab} hideTabs={hideTabs} userId={user?.id ?? null} />;
+}
+
+function LiveEdms({
+  lang,
+  projectId,
+  initialTab,
+  hideTabs,
+  userId,
+}: {
+  lang: Lang;
+  projectId: string;
+  initialTab: EdmsTab;
+  hideTabs: boolean;
+  userId: string | null;
+}) {
+  const fa = lang === 'fa';
+  const t = (a: string, b: string) => (fa ? a : b);
+  const client = useMemo(() => (projectId ? new EdmsClient(projectId, userId) : null), [projectId, userId]);
+
+  const [tab, setTab] = useState<EdmsTab>(initialTab);
+  useEffect(() => setTab(initialTab), [initialTab]);
+
+  const [docsData, setDocsData] = useState<EdmsDocumentList | null>(null);
+  const [filesData, setFilesData] = useState<EdmsFileList | null>(null);
+  const [holdsData, setHoldsData] = useState<EdmsHoldList | null>(null);
+  const [depsData, setDepsData] = useState<EdmsDependencyList | null>(null);
+  const [readiness, setReadiness] = useState<EdmsReadiness | null>(null);
+  const [commentsData, setCommentsData] = useState<EdmsCommentList | null>(null);
+  const [dciData, setDciData] = useState<EdmsDciList | null>(null);
+  const [distData, setDistData] = useState<EdmsDistributionList | null>(null);
+  const [tplData, setTplData] = useState<EdmsTemplateList | null>(null);
+  const [notifData, setNotifData] = useState<EdmsNotificationList | null>(null);
+  const [effortData, setEffortData] = useState<EdmsEffortList | null>(null);
+  const [subData, setSubData] = useState<EdmsSubReviewList | null>(null);
+  const [selDocId, setSelDocId] = useState<string>('');
+  const [selDocNo, setSelDocNo] = useState<string>('');
+  const [loading, setLoading] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [msg, setMsg] = useState<{ tone: 'ok' | 'err'; text: string } | null>(null);
+  const [query, setQuery] = useState('');
+  const gen = useRef(0);
+
+  const [docForm, setDocForm] = useState({ docNo: '', titleFa: '', revision: 'A', discipline: 'Civil', status: 'draft', reviewCode: '—', slaHours: '0' });
+  const [fileNote, setFileNote] = useState('');
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [holdForm, setHoldForm] = useState({ documentId: '', titleFa: '', holdType: 'other', dueAt: '', noteFa: '' });
+  const [holdFilter, setHoldFilter] = useState({ status: '', holdType: '' });
+  const [depForm, setDepForm] = useState({ documentId: '', dependsOnDocumentId: '', dependencyType: 'approval', isMandatory: true, noteFa: '' });
+  const [commentForm, setCommentForm] = useState({ documentId: '', commentText: '', reviewCode: '' });
+  const [replyForm, setReplyForm] = useState({ commentId: '', replyText: '' });
+  const [concludeForm, setConcludeForm] = useState({ commentId: '', conclusionText: '', reviewCode: '' });
+  const [distForm, setDistForm] = useState({ documentId: '', party: 'client', transmittalNo: '', noteFa: '' });
+  const [tplForm, setTplForm] = useState({ templateType: 'doc', nameFa: '', code: '', noteFa: '' });
+  const [effortForm, setEffortForm] = useState({ documentId: '', workDate: new Date().toISOString().slice(0,10), hours: '4', personName: '', activity: 'design', cost: '', noteFa: '' });
+  const [subForm, setSubForm] = useState({ documentId: '', subcontractorParty: '', questionFa: '', noteFa: '' });
+  const [subAnswerForm, setSubAnswerForm] = useState({ reviewId: '', answerFa: '' });
+
+  const loadDocs = useCallback(async () => {
+    if (!client) return;
+    const seq = ++gen.current;
+    setLoading(true);
+    setError('');
+    try {
+      const r = await client.documents();
+      if (seq !== gen.current) return;
+      if (!r.ok) throw new Error(r.message);
+      setDocsData(r.data);
+      if (r.data.items.length && !selDocId) {
+        const first = r.data.items[0];
+        setSelDocId(first.Id);
+        setSelDocNo(first.DocNo);
+        setHoldForm(f => ({ ...f, documentId: first.Id }));
+        setDepForm(f => ({ ...f, documentId: first.Id }));
+        setCommentForm(f => ({ ...f, documentId: first.Id }));
+        setDistForm(f => ({ ...f, documentId: first.Id }));
+        setEffortForm(f => ({ ...f, documentId: first.Id }));
+        setSubForm(f => ({ ...f, documentId: first.Id }));
+      }
+    } catch (e: any) {
+      if (seq !== gen.current) return;
+      setError(e?.message ?? t('خطا در دریافت', 'Fetch error'));
+    } finally {
+      if (seq === gen.current) setLoading(false);
+    }
+  }, [client, selDocId, t]);
+
+  const loadFiles = useCallback(async (docId: string) => {
+    if (!client || !docId) { setFilesData(null); return; }
+    const r = await client.files(docId);
+    if (r.ok) setFilesData(r.data); else setFilesData(null);
+  }, [client]);
+
+  const loadHolds = useCallback(async () => {
+    if (!client) return;
+    const r = await client.holds({ status: holdFilter.status || undefined, holdType: holdFilter.holdType || undefined });
+    if (r.ok) setHoldsData(r.data);
+  }, [client, holdFilter]);
+
+  const loadDeps = useCallback(async (docId?: string) => {
+    if (!client) return;
+    const r = await client.dependencies({ documentId: docId || undefined });
+    if (r.ok) setDepsData(r.data);
+  }, [client]);
+
+  const loadReadiness = useCallback(async (docId: string) => {
+    if (!client || !docId) { setReadiness(null); return; }
+    const r = await client.readiness(docId);
+    if (r.ok) setReadiness(r.data); else setReadiness(null);
+  }, [client]);
+
+  const loadDci = useCallback(async () => {
+    if (!client) return;
+    const r = await client.dci();
+    if (r.ok) setDciData(r.data);
+  }, [client]);
+
+  const loadSub = useCallback(async (docId?: string) => {
+    if (!client) return;
+    if (docId) {
+      const r = await client.docSubReviews(docId);
+      if (r.ok) setSubData(r.data);
+    } else {
+      const r = await client.subReviews({});
+      if (r.ok) setSubData(r.data);
+    }
+  }, [client]);
+
+  const loadEffort = useCallback(async (docId?: string) => {
+    if (!client) return;
+    if (docId) {
+      const r = await client.effort(docId);
+      if (r.ok) setEffortData(r.data);
+    } else {
+      const r = await client.allEffort({});
+      if (r.ok) setEffortData(r.data);
+    }
+  }, [client]);
+
+  const loadNotif = useCallback(async () => {
+    if (!client) return;
+    const r = await client.notifications({});
+    if (r.ok) setNotifData(r.data);
+  }, [client]);
+
+  const loadTpl = useCallback(async (type?: string) => {
+    if (!client) return;
+    const r = await client.templates({ templateType: type || undefined });
+    if (r.ok) setTplData(r.data);
+  }, [client]);
+
+  const loadDist = useCallback(async (docId?: string) => {
+    if (!client) return;
+    if (docId) {
+      const r = await client.docDistributions(docId);
+      if (r.ok) setDistData(r.data);
+    } else {
+      const r = await client.distributions({});
+      if (r.ok) setDistData(r.data);
+    }
+  }, [client]);
+
+  const loadComments = useCallback(async (docId: string) => {
+    if (!client || !docId) { setCommentsData(null); return; }
+    const r = await client.comments(docId);
+    if (r.ok) setCommentsData(r.data); else setCommentsData(null);
+  }, [client]);
+
+  useEffect(() => { void loadDocs(); return () => { gen.current++; }; }, [loadDocs]);
+  useEffect(() => { if (selDocId) { void loadFiles(selDocId); void loadReadiness(selDocId); void loadDeps(selDocId); void loadComments(selDocId); void loadDist(selDocId); void loadEffort(selDocId); void loadSub(selDocId); } }, [selDocId, loadFiles, loadReadiness, loadDeps, loadComments, loadDist, loadEffort, loadSub]);
+  useEffect(() => { void loadHolds(); void loadDci(); void loadDist(); void loadTpl(); void loadNotif(); void loadEffort(); void loadSub(); }, [loadHolds, loadDci, loadDist, loadTpl, loadNotif, loadEffort, loadSub]);
+
+  const filtered = useMemo(() => {
+    if (!docsData) return [];
+    const q = query.trim().toLowerCase();
+    if (!q) return docsData.items;
+    return docsData.items.filter(d => d.DocNo.toLowerCase().includes(q) || d.TitleFa.toLowerCase().includes(q) || (d.Discipline ?? '').toLowerCase().includes(q));
+  }, [docsData, query]);
+
+  const kpis = useMemo(() => {
+    if (!docsData) return { total: 0, approved: 0, withFile: 0, withoutFile: 0, versions: 0 };
+    const total = docsData.count;
+    const approved = docsData.items.filter(d => d.Status === 'approved').length;
+    const withFile = docsData.items.filter(d => d.hasFile).length;
+    const versions = Object.values(docsData.byDocNo).reduce((acc, arr) => acc + arr.length, 0);
+    return { total, approved, withFile, withoutFile: total - withFile, versions };
+  }, [docsData]);
+
+  const act = async (fn: () => Promise<{ ok: boolean; message?: string }>, okText: string) => {
+    setBusy(true);
+    setMsg(null);
+    const r = await fn();
+    setBusy(false);
+    if (r.ok) {
+      setMsg({ tone: 'ok', text: okText });
+      await loadDocs();
+      if (selDocId) { await loadFiles(selDocId); await loadReadiness(selDocId); await loadDeps(selDocId); await loadComments(selDocId); await loadDist(selDocId); }
+      await loadDci();
+      await loadTpl();
+      await loadNotif();
+      if (selDocId) { await loadEffort(selDocId); await loadSub(selDocId); } else { await loadEffort(); await loadSub(); }
+      await loadHolds();
+      return true;
+    }
+    setMsg({ tone: 'err', text: (r as any).message ?? t('خطا', 'Error') });
+    return false;
+  };
+
+  if (!projectId) return <div className="tx3 text-[11px] p-3">{t('پروژه انتخاب نشده است', 'No project selected')}</div>;
+
   return (
-    <div className="glass-dark overflow-x-auto rounded-2xl p-3">
-      <table className="w-full min-w-[780px] border-collapse text-[10px]">
-        <thead>
-          <tr className="border-b b-line-soft bg-black/25 text-[9px] font-extralight tx3">
-            <th className="px-2 py-2 text-start">{rtl ? "کد مدرک" : "Doc Code"}</th>
-            <th className="px-2 py-2 text-start">{rtl ? "عنوان" : "Title"}</th>
-            <th className="px-2 py-2 text-center">{rtl ? "دیسپلین" : "Disc."}</th>
-            <th className="px-2 py-2 text-center">{rtl ? "نسخه" : "Rev"}</th>
-            <th className="px-2 py-2 text-center">Code</th>
-            <th className="px-2 py-2 text-center">{rtl ? "وضعیت" : "Status"}</th>
-            {canDelete && (
-              <th className="px-2 py-2 text-center">{rtl ? "عملیات" : "Action"}</th>
+    <div dir={fa ? 'rtl' : 'ltr'} className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-1">
+      <header className="glass-dark rounded-xl p-3 flex flex-wrap items-center gap-3">
+        <div className="flex-1">
+          <h3 className="tx1 font-semibold text-[13px]">{t('اسناد — فایل + Hold + پیش‌نیاز + نظر/Conclusion (EDM-1..4)', 'EDMS — file + Hold + prereq + comments')}</h3>
+          <p className="text-[10px] tx3" dir="ltr">{projectId} · {kpis.total} docs · {kpis.versions} vers · {kpis.withFile} with file · {holdsData?.summary.open ?? 0} open holds · {depsData?.count ?? 0} deps · {readiness ? (readiness.canIssue ? 'Can Issue' : `${readiness.blockers.length} blockers`) : ''}</p>
+        </div>
+        <button className={btnGhost} disabled={loading || busy} onClick={() => void loadDocs()}>{t('تازه‌سازی', 'Refresh')}</button>
+      </header>
+
+      {!hideTabs && (
+        <nav className="flex flex-wrap gap-1.5">
+          {TABS.map(tb => (
+            <button key={tb.id} className={`${btnCls} ${tab === tb.id ? 'toggle-on' : 'border b-line-soft tx3'}`} onClick={() => setTab(tb.id)}>
+              {fa ? tb.fa : tb.en}
+            </button>
+          ))}
+        </nav>
+      )}
+
+      {error && <p role="alert" className="rounded-xl p-3 bg-rose-500/10 text-rose-300 text-[11px]">{error}</p>}
+      {msg && <p className={`rounded-xl p-2 text-[11px] ${msg.tone === 'ok' ? 'bg-emerald-500/10 text-emerald-300' : 'bg-rose-500/10 text-rose-300'}`}>{msg.text}</p>}
+      {loading && <p className="tx3 text-[11px]">{t('در حال دریافت…', 'Fetching…')}</p>}
+
+      {tab === 'overview' && (
+        <div className="grid gap-3">
+          <Section title={t('KPI اسناد و Hold و پیش‌نیاز', 'Docs & Hold & Prereq KPI')}>
+            <div className="grid grid-cols-2 lg:grid-cols-5 gap-2">
+              <Kpi label={t('کل مدارک', 'Total docs')} value={String(kpis.total)} />
+              <Kpi label={t('تأییدشده', 'Approved')} value={String(kpis.approved)} />
+              <Kpi label={t('دارای فایل', 'With file')} value={String(kpis.withFile)} />
+              <Kpi label={t('Hold باز', 'Open holds')} value={String(holdsData?.summary.open ?? 0)} />
+              <Kpi label={t('وابستگی‌ها', 'Deps')} value={String(depsData?.count ?? 0)} />
+            </div>
+          </Section>
+          <Section title={t('آمادگی صدور مدرک انتخاب‌شده', 'Readiness of selected doc')} note={t('قفل صدور: Hold باز یا پیش‌نیاز الزامی تأییدنشده', 'Gate: open Hold or mandatory prereq not approved')}>
+            {readiness ? (
+              <div className="text-[11px] tx2 space-y-1">
+                <p>{readiness.document.docNo} Rev {readiness.document.revision} — {readiness.document.status} — {readiness.canIssue ? t('قابل صدور', 'Can issue') : t('مسدود', 'Blocked')}</p>
+                {readiness.blockers.length > 0 && <ul className="list-disc ps-4 text-rose-300">{readiness.blockers.map((b,i)=><li key={i}>{b}</li>)}</ul>}
+                {readiness.warnings.length > 0 && <ul className="list-disc ps-4 text-amber-300">{readiness.warnings.map((w,i)=><li key={i}>{w}</li>)}</ul>}
+              </div>
+            ) : <p className="tx3 text-[11px]">{t('مدرکی انتخاب نشده', 'No doc selected')}</p>}
+          </Section>
+        </div>
+      )}
+
+      {tab === 'mdr' && (
+        <div className="grid gap-3">
+          <Section title={t('ایجاد مدرک جدید', 'Create document')}>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+              <input className={inputCls} placeholder="DocNo" value={docForm.docNo} onChange={e => setDocForm({ ...docForm, docNo: e.target.value })} />
+              <input className={inputCls} placeholder={t('عنوان فارسی', 'Title Fa')} value={docForm.titleFa} onChange={e => setDocForm({ ...docForm, titleFa: e.target.value })} />
+              <input className={inputCls} placeholder="Revision" value={docForm.revision} onChange={e => setDocForm({ ...docForm, revision: e.target.value })} />
+              <input className={inputCls} placeholder="Discipline" value={docForm.discipline} onChange={e => setDocForm({ ...docForm, discipline: e.target.value })} />
+              <select className={inputCls} value={docForm.status} onChange={e => setDocForm({ ...docForm, status: e.target.value })}>
+                {['draft','under_review','approved','rejected'].map(s=><option key={s} value={s}>{s}</option>)}
+              </select>
+              <input className={inputCls} placeholder="ReviewCode" value={docForm.reviewCode} onChange={e => setDocForm({ ...docForm, reviewCode: e.target.value })} />
+            </div>
+            <button className={btnPrimary} disabled={busy || !docForm.docNo || !docForm.titleFa} onClick={() => void act(async () => {
+              const res = await listRows('Document', projectId);
+              if (res?.items?.some((r:any)=> r.DocNo===docForm.docNo && r.Revision===docForm.revision)) return { ok:false, message: t('تکراری است','Duplicate') };
+              const row = { ProjectId: projectId, DocNo: docForm.docNo.trim(), TitleFa: docForm.titleFa.trim(), TitleEn: docForm.titleFa.trim(), Revision: docForm.revision.trim(), Discipline: docForm.discipline.trim(), Status: docForm.status, ReviewCode: docForm.reviewCode.trim(), SlaHours: Number(docForm.slaHours)||0, IssuedAt: new Date().toISOString().slice(0,10) };
+              const created = await createRow('Document', row);
+              return created ? { ok:true } : { ok:false, message: t('ثبت ناموفق','Create failed') };
+            }, t('مدرک ایجاد شد','Document created'))}>{t('ثبت مدرک','Create')}</button>
+          </Section>
+          <Section title={t('MDR — فهرست مدارک', 'MDR — documents')}>
+            <div className="flex gap-2 mb-2"><input className={inputCls} style={{maxWidth:'300px'}} placeholder={t('جستجو','Search')} value={query} onChange={e=>setQuery(e.target.value)} /></div>
+            <div className="overflow-x-auto max-h-[500px]">
+              <table className="w-full text-[11px] tx2">
+                <thead><tr><th className="p-1 text-start">DocNo</th><th className="p-1 text-start">{t('عنوان','Title')}</th><th className="p-1">Rev</th><th className="p-1">Status</th><th className="p-1">Disc</th><th className="p-1">{t('فایل','File')}</th><th className="p-1">{t('نسخه‌ها','Vers')}</th><th className="p-1">{t('اقدام','Action')}</th></tr></thead>
+                <tbody>
+                  {filtered.map(d=>(
+                    <tr key={d.Id} className={`border-t b-line-soft ${selDocId===d.Id?'bg-white/5':''}`}>
+                      <td className="p-1" dir="ltr">{d.DocNo}</td><td className="p-1">{d.TitleFa}</td><td className="p-1" dir="ltr">{d.Revision}</td><td className="p-1">{d.Status}</td><td className="p-1">{d.Discipline ?? '—'}</td><td className="p-1">{d.hasFile?'✓':'—'}</td><td className="p-1">{d.versions}</td>
+                      <td className="p-1 flex gap-1"><button className={btnGhost} onClick={()=>{setSelDocId(d.Id); setSelDocNo(d.DocNo); setTab('files');}}>{t('فایل‌ها','Files')}</button><button className={btnGhost} onClick={()=>{setSelDocId(d.Id); setHoldForm(f=>({...f,documentId:d.Id})); setTab('holds');}}>{t('Hold','Hold')}</button><button className={btnGhost} onClick={()=>{setSelDocId(d.Id); setDepForm(f=>({...f,documentId:d.Id})); setTab('deps');}}>{t('پیش‌نیاز','Prereq')}</button></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {!filtered.length && <p className="tx3 text-[11px] mt-2">{t('مدرکی نیست','No docs')}</p>}
+            </div>
+          </Section>
+        </div>
+      )}
+
+      {tab === 'revision' && (
+        <Section title={t('تاریخچه نسخه‌ها','Version history')}>
+          <div className="grid gap-2">
+            <select className={inputCls} value={selDocNo} onChange={e=>setSelDocNo(e.target.value)}>
+              <option value="">{t('انتخاب DocNo','Select DocNo')}</option>
+              {Object.keys(docsData?.byDocNo ?? {}).map(dn=><option key={dn} value={dn}>{dn}</option>)}
+            </select>
+            {selDocNo && docsData?.byDocNo[selDocNo] && (
+              <table className="w-full text-[11px] tx2">
+                <thead><tr><th className="p-1">Revision</th><th className="p-1">Status</th><th className="p-1">IssuedAt</th><th className="p-1">FilePath</th><th className="p-1">Id</th></tr></thead>
+                <tbody>
+                  {docsData.byDocNo[selDocNo].map(v=>(
+                    <tr key={v.id} className="border-t b-line-soft"><td className="p-1" dir="ltr">{v.revision}</td><td className="p-1">{v.status}</td><td className="p-1" dir="ltr">{v.issuedAt ?? '—'}</td><td className="p-1" dir="ltr">{v.filePath ?? '—'}</td><td className="p-1" dir="ltr">{v.id.slice(0,8)}</td></tr>
+                  ))}
+                </tbody>
+              </table>
             )}
-          </tr>
-        </thead>
-        <tbody className="divide-y b-line-soft">
-          {rows.map((doc) => {
-            const st = statusMetaDoc[doc.status];
-            return (
-              <tr key={doc.id} className="hover:bg-white/[0.02]">
-                <td className="px-2 py-1.5 font-mono text-[9.5px] tx2" dir="ltr">{doc.code}</td>
-                <td className="px-2 py-1.5 tx1">{t(doc.title, lang)}</td>
-                <td className="px-2 py-1.5 text-center tx3">{doc.discipline}</td>
-                <td className="px-2 py-1.5 text-center font-mono text-sky-300" dir="ltr">{doc.revision}</td>
-                <td className="px-2 py-1.5 text-center font-mono text-[9px] tx2">{doc.reviewCode}</td>
-                <td className="px-2 py-1.5 text-center">
-                  <span className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-[8.5px]" style={{ background: `${st.color}18`, color: st.color }}>
-                    {t({ fa: st.fa, en: st.en }, lang)}
-                  </span>
-                </td>
-                {canDelete && (
-                  <td className="px-2 py-1.5 text-center">
-                    {pendingId === doc.id ? (
-                      <span className="inline-flex items-center gap-1">
-                        <button
-                          onClick={() => onConfirmDelete(doc)}
-                          disabled={busyId === doc.id}
-                          className="rounded border border-rose-400/50 bg-rose-400/15 px-2 py-0.5 text-[8.5px] font-light text-rose-200 hover:bg-rose-400/25 disabled:opacity-50"
-                        >
-                          {busyId === doc.id ? (rtl ? "…" : "…") : rtl ? "تأیید حذف" : "Confirm"}
-                        </button>
-                        <button
-                          onClick={onCancelDelete}
-                          className="rounded border b-line-soft px-2 py-0.5 text-[8.5px] font-light tx3 hover:bg-white/[0.04]"
-                        >
-                          {rtl ? "انصراف" : "Cancel"}
-                        </button>
-                      </span>
-                    ) : (
-                      <button
-                        onClick={() => onRequestDelete(doc.id)}
-                        title={rtl ? "حذف این مدرک" : "Delete this document"}
-                        className="rounded border border-rose-400/30 px-2 py-0.5 text-[8.5px] font-light text-rose-300/80 hover:border-rose-400/60 hover:bg-rose-400/10"
-                      >
-                        {rtl ? "حذف" : "Delete"}
-                      </button>
-                    )}
-                  </td>
-                )}
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+          </div>
+        </Section>
+      )}
+
+      {tab === 'files' && (
+        <div className="grid gap-3">
+          <Section title={t('انتخاب مدرک','Select document')}>
+            <select className={inputCls} value={selDocId} onChange={e=>{setSelDocId(e.target.value); const doc=docsData?.items.find(x=>x.Id===e.target.value); if(doc) setSelDocNo(doc.DocNo);}}>
+              <option value="">{t('انتخاب مدرک','Select doc')}</option>
+              {(docsData?.items ?? []).map(d=><option key={d.Id} value={d.Id}>{d.DocNo} Rev {d.Revision} — {d.TitleFa}</option>)}
+            </select>
+          </Section>
+          <Section title={t('آپلود فایل به نسخه','Upload file to revision')}>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+              <input type="file" className={inputCls} onChange={e=>setUploadFile(e.target.files?.[0] ?? null)} />
+              <input className={inputCls} placeholder={t('یادداشت','Note')} value={fileNote} onChange={e=>setFileNote(e.target.value)} />
+              <button className={btnPrimary} disabled={busy || !uploadFile || !selDocId} onClick={()=>void act(async ()=>{
+                if(!client || !uploadFile || !selDocId) return {ok:false, message:'No file'};
+                const r=await client.uploadFile(selDocId, uploadFile, fileNote||undefined);
+                if(r.ok){setUploadFile(null); setFileNote(''); return {ok:true};}
+                return {ok:false, message:r.message};
+              }, t('فایل آپلود شد','File uploaded'))}>{t('آپلود','Upload')}</button>
+            </div>
+          </Section>
+          <Section title={t('پیوست‌های این نسخه','Attachments')}>
+            <div className="overflow-x-auto">
+              <table className="w-full text-[11px] tx2">
+                <thead><tr><th className="p-1">{t('FileName','نام فایل')}</th><th className="p-1">Mime</th><th className="p-1">Size</th><th className="p-1">UploadedAt</th><th className="p-1">By</th><th className="p-1">{t('دانلود','Download')}</th><th className="p-1">{t('حذف','Delete')}</th></tr></thead>
+                <tbody>
+                  {(filesData?.items ?? []).map(f=>(
+                    <tr key={f.Id} className="border-t b-line-soft"><td className="p-1" dir="ltr">{f.FileName}</td><td className="p-1">{f.MimeType}</td><td className="p-1">{(f.SizeBytes/1024).toFixed(1)} KB</td><td className="p-1" dir="ltr">{new Date(f.UploadedAt).toLocaleString(fa?'fa-IR':'en-US')}</td><td className="p-1" dir="ltr">{f.UploadedBy.slice(0,8)}</td><td className="p-1"><a className={btnGhost} href={f.downloadUrl} target="_blank" rel="noreferrer">{t('دانلود','Download')}</a></td><td className="p-1"><button className={btnGhost} disabled={busy} onClick={()=>void act(async ()=>{
+                    if(!client) return {ok:false, message:'No client'};
+                    const r=await client.deleteFile(f.Id);
+                    return r.ok ? {ok:true} : {ok:false, message:r.message};
+                  }, t('حذف شد','Deleted'))}>{t('حذف','Delete')}</button></td></tr>
+                  ))}
+                </tbody>
+              </table>
+              {!filesData?.items.length && <p className="tx3 text-[11px] mt-2">{t('پیوستی نیست','No attachments')}</p>}
+            </div>
+          </Section>
+        </div>
+      )}
+
+      {tab === 'holds' && (
+        <div className="grid gap-3">
+          <Section title={t('ایجاد Hold','Create Hold')}>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+              <select className={inputCls} value={holdForm.documentId} onChange={e=>setHoldForm({...holdForm, documentId:e.target.value})}>
+                <option value="">{t('انتخاب مدرک','Select doc')}</option>
+                {(docsData?.items ?? []).map(d=><option key={d.Id} value={d.Id}>{d.DocNo} Rev {d.Revision}</option>)}
+              </select>
+              <input className={inputCls} placeholder={t('دلیل Hold','Hold reason')} value={holdForm.titleFa} onChange={e=>setHoldForm({...holdForm, titleFa:e.target.value})} />
+              <select className={inputCls} value={holdForm.holdType} onChange={e=>setHoldForm({...holdForm, holdType:e.target.value})}>
+                {['vendor','client','engineering','procurement','other'].map(v=><option key={v} value={v}>{v}</option>)}
+              </select>
+              <input className={inputCls} type="date" value={holdForm.dueAt} onChange={e=>setHoldForm({...holdForm, dueAt:e.target.value})} />
+              <input className={inputCls} placeholder={t('یادداشت','Note')} value={holdForm.noteFa} onChange={e=>setHoldForm({...holdForm, noteFa:e.target.value})} />
+              <button className={btnPrimary} disabled={busy || !holdForm.documentId || !holdForm.titleFa} onClick={()=>void act(async ()=>{
+                if(!client) return {ok:false, message:'No client'};
+                const r=await client.createHold({documentId:holdForm.documentId, titleFa:holdForm.titleFa, holdType:holdForm.holdType, dueAt:holdForm.dueAt||undefined, noteFa:holdForm.noteFa||undefined});
+                return r.ok ? {ok:true} : {ok:false, message:r.message};
+              }, t('Hold ثبت شد','Hold created'))}>{t('ثبت Hold','Create Hold')}</button>
+            </div>
+          </Section>
+          <Section title={t('فیلتر Hold','Hold filter')}>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+              <select className={inputCls} value={holdFilter.status} onChange={e=>setHoldFilter({...holdFilter, status:e.target.value})}>
+                <option value="">{t('همه وضعیت‌ها','All statuses')}</option><option value="open">open</option><option value="released">released</option><option value="cancelled">cancelled</option>
+              </select>
+              <select className={inputCls} value={holdFilter.holdType} onChange={e=>setHoldFilter({...holdFilter, holdType:e.target.value})}>
+                <option value="">{t('همه نوع‌ها','All types')}</option>{['vendor','client','engineering','procurement','other'].map(v=><option key={v} value={v}>{v}</option>)}
+              </select>
+              <button className={btnGhost} onClick={()=>void loadHolds()}>{t('اعمال','Apply')}</button>
+            </div>
+            {holdsData?.summary && <div className="grid grid-cols-3 gap-2 mt-2"><Kpi label={t('باز','Open')} value={String(holdsData.summary.open)} /><Kpi label={t('معوق','Overdue')} value={String(holdsData.summary.overdue)} /><Kpi label={t('آزادشده','Released')} value={String(holdsData.summary.released)} /></div>}
+          </Section>
+          <Section title={t('فهرست Hold Items','Hold Items list')}>
+            <div className="overflow-x-auto max-h-[500px]">
+              <table className="w-full text-[11px] tx2">
+                <thead><tr><th className="p-1">HoldNo</th><th className="p-1">DocNo</th><th className="p-1">Rev</th><th className="p-1">{t('دلیل','Reason')}</th><th className="p-1">Type</th><th className="p-1">Status</th><th className="p-1">DueAt</th><th className="p-1">{t('اقدام','Action')}</th></tr></thead>
+                <tbody>
+                  {(holdsData?.items ?? []).map(h=>(
+                    <tr key={h.Id} className="border-t b-line-soft"><td className="p-1" dir="ltr">{h.HoldNo}</td><td className="p-1" dir="ltr">{h.DocNo}</td><td className="p-1" dir="ltr">{h.Revision}</td><td className="p-1">{h.TitleFa}</td><td className="p-1">{h.HoldType}</td><td className="p-1">{h.Status}</td><td className="p-1" dir="ltr">{h.DueAt ?? '—'}</td><td className="p-1 flex gap-1">{h.Status==='open' && <><button className={btnOk} disabled={busy} onClick={()=>void act(async ()=>{
+                      if(!client) return {ok:false, message:'No client'};
+                      const r=await client.releaseHold(h.Id);
+                      return r.ok ? {ok:true} : {ok:false, message:r.message};
+                    }, t('آزاد شد','Released'))}>{t('آزاد','Release')}</button><button className={btnGhost} disabled={busy} onClick={()=>void act(async ()=>{
+                      if(!client) return {ok:false, message:'No client'};
+                      const r=await client.cancelHold(h.Id);
+                      return r.ok ? {ok:true} : {ok:false, message:r.message};
+                    }, t('لغو شد','Cancelled'))}>{t('لغو','Cancel')}</button></>}</td></tr>
+                  ))}
+                </tbody>
+              </table>
+              {!holdsData?.items.length && <p className="tx3 text-[11px] mt-2">{t('Hold باز نیست','No open holds')}</p>}
+            </div>
+          </Section>
+        </div>
+      )}
+
+      {tab === 'deps' && (
+        <div className="grid gap-3">
+          <Section title={t('ایجاد پیش‌نیاز (وابستگی مدرک به مدرک)','Create prerequisite')} note={t('IsMandatory=true = قفل صدور — حلقه ممنوع', 'Mandatory = gate lock — cycle forbidden')}>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+              <select className={inputCls} value={depForm.documentId} onChange={e=>setDepForm({...depForm, documentId:e.target.value})}>
+                <option value="">{t('مدرک وابسته','Dependent doc')}</option>
+                {(docsData?.items ?? []).map(d=><option key={d.Id} value={d.Id}>{d.DocNo} Rev {d.Revision}</option>)}
+              </select>
+              <select className={inputCls} value={depForm.dependsOnDocumentId} onChange={e=>setDepForm({...depForm, dependsOnDocumentId:e.target.value})}>
+                <option value="">{t('پیش‌نیاز','Prerequisite doc')}</option>
+                {(docsData?.items ?? []).map(d=><option key={d.Id} value={d.Id}>{d.DocNo} Rev {d.Revision} — {d.Status}</option>)}
+              </select>
+              <select className={inputCls} value={depForm.dependencyType} onChange={e=>setDepForm({...depForm, dependencyType:e.target.value})}>
+                {['approval','info','hold'].map(v=><option key={v} value={v}>{v}</option>)}
+              </select>
+              <label className="flex items-center gap-2 text-[11px] tx2"><input type="checkbox" checked={depForm.isMandatory} onChange={e=>setDepForm({...depForm, isMandatory:e.target.checked})} />{t('الزامی (قفل صدور)','Mandatory (gate lock)')}</label>
+              <input className={inputCls} placeholder={t('یادداشت','Note')} value={depForm.noteFa} onChange={e=>setDepForm({...depForm, noteFa:e.target.value})} />
+              <button className={btnPrimary} disabled={busy || !depForm.documentId || !depForm.dependsOnDocumentId} onClick={()=>void act(async ()=>{
+                if(!client) return {ok:false, message:'No client'};
+                const r=await client.createDependency({documentId:depForm.documentId, dependsOnDocumentId:depForm.dependsOnDocumentId, dependencyType:depForm.dependencyType, isMandatory:depForm.isMandatory, noteFa:depForm.noteFa||undefined});
+                return r.ok ? {ok:true} : {ok:false, message:r.message};
+              }, t('پیش‌نیاز ثبت شد','Dependency created'))}>{t('ثبت پیش‌نیاز','Create prereq')}</button>
+            </div>
+          </Section>
+
+          <Section title={t('آمادگی صدور مدرک انتخاب‌شده','Readiness of selected doc')} note={t('Hold باز یا پیش‌نیاز الزامی تأییدنشده = مسدود', 'Open Hold or mandatory prereq not approved = blocked')}>
+            {readiness ? (
+              <div className="text-[11px] tx2 space-y-1">
+                <p>{readiness.document.docNo} Rev {readiness.document.revision} — {readiness.document.status} — {readiness.canIssue ? t('قابل صدور','Can issue') : t('مسدود','Blocked')} — {readiness.totalDeps} deps ({readiness.mandatory} mandatory)</p>
+                {readiness.blockers.length>0 && <ul className="list-disc ps-4 text-rose-300">{readiness.blockers.map((b,i)=><li key={i}>{b}</li>)}</ul>}
+                {readiness.warnings.length>0 && <ul className="list-disc ps-4 text-amber-300">{readiness.warnings.map((w,i)=><li key={i}>{w}</li>)}</ul>}
+                <button className={btnGhost} onClick={()=> selDocId && void loadReadiness(selDocId)}>{t('بررسی مجدد','Recheck')}</button>
+              </div>
+            ) : <p className="tx3 text-[11px]">{t('مدرکی انتخاب نشده','No doc selected')}</p>}
+          </Section>
+
+          <Section title={t('فهرست وابستگی‌ها','Dependency list')}>
+            <div className="overflow-x-auto max-h-[500px]">
+              <table className="w-full text-[11px] tx2">
+                <thead><tr><th className="p-1">DocNo</th><th className="p-1">Rev</th><th className="p-1">→ {t('پیش‌نیاز','Prereq')}</th><th className="p-1">Rev</th><th className="p-1">Type</th><th className="p-1">Mandatory</th><th className="p-1">Prereq Status</th><th className="p-1">{t('حذف','Delete')}</th></tr></thead>
+                <tbody>
+                  {(depsData?.items ?? []).map(d=>(
+                    <tr key={d.Id} className="border-t b-line-soft"><td className="p-1" dir="ltr">{d.document?.docNo ?? d.DocumentId.slice(0,8)}</td><td className="p-1" dir="ltr">{d.document?.revision ?? '—'}</td><td className="p-1" dir="ltr">{d.prereq?.docNo ?? d.DependsOnDocumentId.slice(0,8)}</td><td className="p-1" dir="ltr">{d.prereq?.revision ?? '—'}</td><td className="p-1">{d.DependencyType}</td><td className="p-1">{d.IsMandatory?'✓':''}</td><td className="p-1">{d.prereq?.status ?? '—'}</td><td className="p-1"><button className={btnGhost} disabled={busy} onClick={()=>void act(async ()=>{
+                      if(!client) return {ok:false, message:'No client'};
+                      const r=await client.deleteDependency(d.Id);
+                      return r.ok ? {ok:true} : {ok:false, message:r.message};
+                    }, t('حذف شد','Deleted'))}>{t('حذف','Delete')}</button></td></tr>
+                  ))}
+                </tbody>
+              </table>
+              {!depsData?.items.length && <p className="tx3 text-[11px] mt-2">{t('وابستگی ثبت نشده','No dependencies')}</p>}
+            </div>
+          </Section>
+        </div>
+      )}
+
+      {tab === 'comments' && (
+        <div className="grid gap-3">
+          <Section title={t('ثبت نظر (Comment)','Create comment')} note={t('CommentNo خودکار — ReviewCode C1..C4 — Status open→replied→concluded','Auto CommentNo — ReviewCode C1..C4 — open→replied→concluded')}>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+              <select className={inputCls} value={commentForm.documentId} onChange={e=>setCommentForm({...commentForm, documentId:e.target.value})}>
+                <option value="">{t('انتخاب مدرک','Select doc')}</option>
+                {(docsData?.items ?? []).map(d=><option key={d.Id} value={d.Id}>{d.DocNo} Rev {d.Revision}</option>)}
+              </select>
+              <input className={inputCls} placeholder={t('متن نظر','Comment text')} value={commentForm.commentText} onChange={e=>setCommentForm({...commentForm, commentText:e.target.value})} />
+              <select className={inputCls} value={commentForm.reviewCode} onChange={e=>setCommentForm({...commentForm, reviewCode:e.target.value})}>
+                <option value="">{t('بدون ReviewCode','No code')}</option>
+                <option value="C1">C1 — Rejected</option><option value="C2">C2 — Major</option><option value="C3">C3 — Minor</option><option value="C4">C4 — Approved</option>
+              </select>
+              <button className={btnPrimary} disabled={busy || !commentForm.documentId || !commentForm.commentText} onClick={()=>void act(async ()=>{
+                if(!client) return {ok:false, message:'No client'};
+                const r=await client.createComment({documentId:commentForm.documentId, commentText:commentForm.commentText, reviewCode:commentForm.reviewCode||undefined});
+                if(r.ok) setCommentForm(f=>({...f, commentText:''}));
+                return r.ok ? {ok:true} : {ok:false, message:r.message};
+              }, t('نظر ثبت شد','Comment created'))}>{t('ثبت نظر','Create comment')}</button>
+            </div>
+          </Section>
+
+          <Section title={t('فهرست نظرات مدرک انتخاب‌شده + برگه Conclusion','Comments of selected doc + Conclusion sheet')}>
+            {commentsData?.summary && <div className="grid grid-cols-4 gap-2 mb-2"><Kpi label={t('باز','Open')} value={String(commentsData.summary.open)} /><Kpi label={t('پاسخ‌داده','Replied')} value={String(commentsData.summary.replied)} /><Kpi label={t('جمع‌بندی','Concluded')} value={String(commentsData.summary.concluded)} /><Kpi label={t('کل','Total')} value={String(commentsData.summary.total)} /></div>}
+            <div className="overflow-x-auto max-h-[600px]">
+              <table className="w-full text-[11px] tx2">
+                <thead><tr><th className="p-1">#</th><th className="p-1">DocNo</th><th className="p-1">Rev</th><th className="p-1">{t('نظر','Comment')}</th><th className="p-1">Code</th><th className="p-1">Status</th><th className="p-1">{t('پاسخ','Reply')}</th><th className="p-1">{t('Conclusion','Conclusion')}</th><th className="p-1">{t('اقدام','Action')}</th></tr></thead>
+                <tbody>
+                  {(commentsData?.items ?? []).map(c=>(
+                    <tr key={c.Id} className="border-t b-line-soft">
+                      <td className="p-1" dir="ltr">{c.CommentNo}</td><td className="p-1" dir="ltr">{c.DocNo}</td><td className="p-1" dir="ltr">{c.Revision}</td>
+                      <td className="p-1 max-w-[200px] truncate" title={c.CommentText}>{c.CommentText}</td><td className="p-1">{c.ReviewCode ?? '—'}</td><td className="p-1">{c.Status}</td>
+                      <td className="p-1 max-w-[150px] truncate" title={c.ReplyText ?? ''}>{c.ReplyText ?? '—'}</td><td className="p-1 max-w-[150px] truncate" title={c.ConclusionText ?? ''}>{c.ConclusionText ?? '—'}</td>
+                      <td className="p-1 flex gap-1 flex-wrap">
+                        {c.Status==='open' && <button className={btnOk} onClick={()=>setReplyForm({commentId:c.Id, replyText:''})}>{t('پاسخ','Reply')}</button>}
+                        {c.Status==='replied' && <button className={btnOk} onClick={()=>setConcludeForm({commentId:c.Id, conclusionText:'', reviewCode:c.ReviewCode ?? ''})}>{t('Conclusion','Conclude')}</button>}
+                        {c.Status!=='void' && c.Status!=='concluded' && <button className={btnGhost} disabled={busy} onClick={()=>void act(async ()=>{
+                          if(!client) return {ok:false, message:'No client'};
+                          const r=await client.voidComment(c.Id);
+                          return r.ok ? {ok:true} : {ok:false, message:r.message};
+                        }, t('باطل شد','Voided'))}>{t('باطل','Void')}</button>}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {!commentsData?.items.length && <p className="tx3 text-[11px] mt-2">{t('نظری ثبت نشده','No comments')}</p>}
+            </div>
+          </Section>
+
+          <Section title={t('ثبت پاسخ (Reply)','Reply')}>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+              <select className={inputCls} value={replyForm.commentId} onChange={e=>setReplyForm({...replyForm, commentId:e.target.value})}>
+                <option value="">{t('انتخاب Comment','Select comment')}</option>
+                {(commentsData?.items ?? []).filter(c=>c.Status==='open').map(c=><option key={c.Id} value={c.Id}>#{c.CommentNo} — {c.CommentText.slice(0,40)}</option>)}
+              </select>
+              <input className={inputCls} placeholder={t('متن پاسخ','Reply text')} value={replyForm.replyText} onChange={e=>setReplyForm({...replyForm, replyText:e.target.value})} />
+              <button className={btnPrimary} disabled={busy || !replyForm.commentId || !replyForm.replyText} onClick={()=>void act(async ()=>{
+                if(!client) return {ok:false, message:'No client'};
+                const r=await client.replyComment(replyForm.commentId, replyForm.replyText);
+                if(r.ok) setReplyForm({commentId:'', replyText:''});
+                return r.ok ? {ok:true} : {ok:false, message:r.message};
+              }, t('پاسخ ثبت شد','Reply saved'))}>{t('ثبت پاسخ','Save reply')}</button>
+            </div>
+          </Section>
+
+          <Section title={t('ثبت Conclusion — نیاز مجوز approve','Conclude — requires approve permission')} note={t('فقط replied → concluded','Only replied → concluded')}>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+              <select className={inputCls} value={concludeForm.commentId} onChange={e=>setConcludeForm({...concludeForm, commentId:e.target.value})}>
+                <option value="">{t('انتخاب Comment','Select comment')}</option>
+                {(commentsData?.items ?? []).filter(c=>c.Status==='replied').map(c=><option key={c.Id} value={c.Id}>#{c.CommentNo} — {c.CommentText.slice(0,40)}</option>)}
+              </select>
+              <input className={inputCls} placeholder={t('متن Conclusion','Conclusion text')} value={concludeForm.conclusionText} onChange={e=>setConcludeForm({...concludeForm, conclusionText:e.target.value})} />
+              <select className={inputCls} value={concludeForm.reviewCode} onChange={e=>setConcludeForm({...concludeForm, reviewCode:e.target.value})}>
+                <option value="">{t('بدون تغییر Code','Keep code')}</option>
+                <option value="C1">C1</option><option value="C2">C2</option><option value="C3">C3</option><option value="C4">C4</option>
+              </select>
+              <button className={btnPrimary} disabled={busy || !concludeForm.commentId || !concludeForm.conclusionText} onClick={()=>void act(async ()=>{
+                if(!client) return {ok:false, message:'No client'};
+                const r=await client.concludeComment(concludeForm.commentId, {conclusionText:concludeForm.conclusionText, reviewCode:concludeForm.reviewCode||undefined});
+                if(r.ok) setConcludeForm({commentId:'', conclusionText:'', reviewCode:''});
+                return r.ok ? {ok:true} : {ok:false, message:r.message};
+              }, t('Conclusion ثبت شد','Concluded'))}>{t('ثبت Conclusion','Conclude')}</button>
+            </div>
+          </Section>
+        </div>
+      )}
+
+      {tab === 'dci' && (
+        <div className="grid gap-3">
+          <Section title={t('فهرست کنترل مدارک (DCI)','Document Control Index (DCI)')} note={t('تجمیع فایل، Hold، پیش‌نیاز، نظر و آمادگی صدور','Aggregated file, Hold, prereq, comments, readiness')}>
+            {dciData?.summary && <div className="grid grid-cols-3 md:grid-cols-6 gap-2 mb-2"><Kpi label={t('کل','Total')} value={String(dciData.summary.total)} /><Kpi label={t('قابل صدور','Can Issue')} value={String(dciData.summary.canIssue)} /><Kpi label={t('مسدود','Blocked')} value={String(dciData.summary.blocked)} /><Kpi label={t('با فایل','With File')} value={String(dciData.summary.withFile)} /><Kpi label={t('Hold باز','Open Holds')} value={String(dciData.summary.openHolds)} /><Kpi label={t('نظر باز','Open Comments')} value={String(dciData.summary.openComments)} /></div>}
+            <div className="overflow-x-auto max-h-[500px]">
+              <table className="w-full text-[11px] tx2">
+                <thead><tr><th className="p-1">DocNo</th><th className="p-1">Rev</th><th className="p-1">Status</th><th className="p-1">Disc</th><th className="p-1">File</th><th className="p-1">Holds</th><th className="p-1">Deps</th><th className="p-1">Mand Block</th><th className="p-1">CanIssue</th><th className="p-1">Comments</th><th className="p-1">Dist</th><th className="p-1">Effort h</th></tr></thead>
+                <tbody>
+                  {(dciData?.items ?? []).map(d=>(
+                    <tr key={d.Id} className="border-t b-line-soft"><td className="p-1" dir="ltr">{d.DocNo}</td><td className="p-1" dir="ltr">{d.Revision}</td><td className="p-1">{d.Status}</td><td className="p-1">{d.Discipline ?? '—'}</td><td className="p-1">{d.fileCount}</td><td className="p-1">{d.openHolds}</td><td className="p-1">{d.totalDeps} ({d.mandatoryDeps} mand)</td><td className="p-1">{d.mandatoryNotApproved}</td><td className="p-1">{d.canIssue?'✓':'✗'}</td><td className="p-1">{d.comments.open}/{d.comments.total}</td><td className="p-1">{d.distCount}</td><td className="p-1">{d.effortHours}</td></tr>
+                  ))}
+                </tbody>
+              </table>
+              {!dciData?.items.length && <p className="tx3 text-[11px] mt-2">{t('مدرکی نیست','No docs')}</p>}
+            </div>
+            <button className={btnGhost} onClick={()=>void loadDci()}>{t('تازه‌سازی DCI','Refresh DCI')}</button>
+          </Section>
+
+          <Section title={t('ثبت توزیع مدرک','Distribute document')} note={t('Party: client/consultant/contractor/subcontractor/vendor — نیاز مجوز transmittal.issue','Party needs transmittal.issue permission')}>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+              <select className={inputCls} value={distForm.documentId} onChange={e=>setDistForm({...distForm, documentId:e.target.value})}>
+                <option value="">{t('انتخاب مدرک','Select doc')}</option>
+                {(docsData?.items ?? []).map(d=><option key={d.Id} value={d.Id}>{d.DocNo} Rev {d.Revision}</option>)}
+              </select>
+              <select className={inputCls} value={distForm.party} onChange={e=>setDistForm({...distForm, party:e.target.value})}>
+                {['client','consultant','contractor','subcontractor','vendor','other'].map(v=><option key={v} value={v}>{v}</option>)}
+              </select>
+              <input className={inputCls} placeholder={t('شماره ترنسمیتال','Transmittal No')} value={distForm.transmittalNo} onChange={e=>setDistForm({...distForm, transmittalNo:e.target.value})} />
+              <input className={inputCls} placeholder={t('یادداشت','Note')} value={distForm.noteFa} onChange={e=>setDistForm({...distForm, noteFa:e.target.value})} />
+              <button className={btnPrimary} disabled={busy || !distForm.documentId || !distForm.party} onClick={()=>void act(async ()=>{
+                if(!client) return {ok:false, message:'No client'};
+                const r=await client.distribute(distForm.documentId, {party:distForm.party, transmittalNo:distForm.transmittalNo||undefined, noteFa:distForm.noteFa||undefined});
+                return r.ok ? {ok:true} : {ok:false, message:r.message};
+              }, t('توزیع ثبت شد','Distributed'))}>{t('ثبت توزیع','Distribute')}</button>
+            </div>
+          </Section>
+
+          <Section title={t('تاریخچه توزیع','Distribution history')}>
+            <div className="overflow-x-auto max-h-[400px]">
+              <table className="w-full text-[11px] tx2">
+                <thead><tr><th className="p-1">DocNo</th><th className="p-1">Rev</th><th className="p-1">Party</th><th className="p-1">Transmittal</th><th className="p-1">At</th><th className="p-1">By</th><th className="p-1">Note</th></tr></thead>
+                <tbody>
+                  {(distData?.items ?? []).map(x=>(
+                    <tr key={x.Id} className="border-t b-line-soft"><td className="p-1" dir="ltr">{x.DocNo}</td><td className="p-1" dir="ltr">{x.Revision}</td><td className="p-1">{x.Party}</td><td className="p-1" dir="ltr">{x.TransmittalNo ?? '—'}</td><td className="p-1" dir="ltr">{(x.DistributedAt||'').slice(0,16)}</td><td className="p-1" dir="ltr">{x.DistributedBy.slice(0,12)}</td><td className="p-1">{x.NoteFa ?? '—'}</td></tr>
+                  ))}
+                </tbody>
+              </table>
+              {!distData?.items.length && <p className="tx3 text-[11px] mt-2">{t('توزیعی ثبت نشده','No distributions')}</p>}
+            </div>
+            <button className={btnGhost} onClick={()=>void loadDist()}>{t('تازه‌سازی','Refresh')}</button>
+          </Section>
+        </div>
+      )}
+
+      {tab === 'templates' && (
+        <div className="grid gap-3">
+          <Section title={t('ایجاد قالب پروژه','Create project template')} note={t('نوع: doc/transmittal/checksheet/letter','Type: doc/transmittal/checksheet/letter')}>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+              <select className={inputCls} value={tplForm.templateType} onChange={e=>setTplForm({...tplForm, templateType:e.target.value})}>
+                {['doc','transmittal','checksheet','letter','other'].map(v=><option key={v} value={v}>{v}</option>)}
+              </select>
+              <input className={inputCls} placeholder={t('نام قالب','Template name')} value={tplForm.nameFa} onChange={e=>setTplForm({...tplForm, nameFa:e.target.value})} />
+              <input className={inputCls} placeholder={t('کد قالب','Code')} value={tplForm.code} onChange={e=>setTplForm({...tplForm, code:e.target.value})} />
+              <input className={inputCls} placeholder={t('یادداشت','Note')} value={tplForm.noteFa} onChange={e=>setTplForm({...tplForm, noteFa:e.target.value})} />
+              <button className={btnPrimary} disabled={busy || !tplForm.nameFa || !tplForm.templateType} onClick={()=>void act(async ()=>{
+                if(!client) return {ok:false, message:'No client'};
+                const r=await client.createTemplate({templateType:tplForm.templateType, nameFa:tplForm.nameFa, code:tplForm.code||undefined, noteFa:tplForm.noteFa||undefined, contentJson:{fields:['DocNo','TitleFa','Revision']}});
+                if(r.ok) setTplForm(f=>({...f, nameFa:'', code:''}));
+                return r.ok ? {ok:true} : {ok:false, message:r.message};
+              }, t('قالب ثبت شد','Template created'))}>{t('ثبت قالب','Create template')}</button>
+            </div>
+          </Section>
+          <Section title={t('فهرست قالب‌ها','Template list')}>
+            <div className="overflow-x-auto max-h-[500px]">
+              <table className="w-full text-[11px] tx2">
+                <thead><tr><th className="p-1">Type</th><th className="p-1">NameFa</th><th className="p-1">Code</th><th className="p-1">CreatedBy</th><th className="p-1">At</th><th className="p-1">{t('حذف','Delete')}</th></tr></thead>
+                <tbody>
+                  {(tplData?.items ?? []).map(x=>(
+                    <tr key={x.Id} className="border-t b-line-soft"><td className="p-1">{x.TemplateType}</td><td className="p-1">{x.NameFa}</td><td className="p-1" dir="ltr">{x.Code ?? '—'}</td><td className="p-1" dir="ltr">{x.CreatedBy.slice(0,12)}</td><td className="p-1" dir="ltr">{(x.CreatedAt||'').slice(0,16)}</td><td className="p-1"><button className={btnGhost} disabled={busy} onClick={()=>void act(async ()=>{
+                      if(!client) return {ok:false, message:'No client'};
+                      const r=await client.deleteTemplate(x.Id);
+                      return r.ok ? {ok:true} : {ok:false, message:r.message};
+                    }, t('حذف شد','Deleted'))}>{t('حذف','Delete')}</button></td></tr>
+                  ))}
+                </tbody>
+              </table>
+              {!tplData?.items.length && <p className="tx3 text-[11px] mt-2">{t('قالبی ثبت نشده','No templates')}</p>}
+            </div>
+          </Section>
+        </div>
+      )}
+
+      {tab === 'notifications' && (
+        <div className="grid gap-3">
+          <Section title={t('اعلان‌های ایمیلی EDMS','EDMS email notifications')} note={t('خودکار: hold_created, comment_created, distributed — موتور SMTP موجود، در صورت عدم تنظیم شبیه‌سازی می‌شود','Auto: hold_created, comment_created, distributed — SMTP engine existing, simulated if not configured')}>
+            {notifData?.summary && <div className="grid grid-cols-3 gap-2 mb-2"><Kpi label={t('در انتظار','Pending')} value={String(notifData.summary.pending)} /><Kpi label={t('ارسال‌شده','Sent')} value={String(notifData.summary.sent)} /><Kpi label={t('کل','Total')} value={String(notifData.summary.total)} /></div>}
+            <div className="overflow-x-auto max-h-[500px]">
+              <table className="w-full text-[11px] tx2">
+                <thead><tr><th className="p-1">DocNo</th><th className="p-1">Event</th><th className="p-1">Party</th><th className="p-1">Subject</th><th className="p-1">Channel</th><th className="p-1">Status</th><th className="p-1">At</th><th className="p-1">{t('ارسال','Send')}</th></tr></thead>
+                <tbody>
+                  {(notifData?.items ?? []).map(n=>(
+                    <tr key={n.Id} className="border-t b-line-soft"><td className="p-1" dir="ltr">{n.DocNo}</td><td className="p-1">{n.EventType}</td><td className="p-1">{n.RecipientParty}</td><td className="p-1 max-w-[200px] truncate" title={n.SubjectFa}>{n.SubjectFa}</td><td className="p-1">{n.Channel}</td><td className="p-1">{n.Status}</td><td className="p-1" dir="ltr">{(n.CreatedAt||'').slice(0,16)}</td><td className="p-1">{n.Status==='pending' && <button className={btnOk} disabled={busy} onClick={()=>void act(async ()=>{
+                      if(!client) return {ok:false, message:'No client'};
+                      const r=await client.sendNotification(n.Id);
+                      return r.ok ? {ok:true} : {ok:false, message:r.message};
+                    }, t('ارسال شد','Sent'))}>{t('ارسال','Send')}</button>}</td></tr>
+                  ))}
+                </tbody>
+              </table>
+              {!notifData?.items.length && <p className="tx3 text-[11px] mt-2">{t('اعلانی نیست','No notifications')}</p>}
+            </div>
+            <button className={btnGhost} onClick={()=>void loadNotif()}>{t('تازه‌سازی','Refresh')}</button>
+          </Section>
+        </div>
+      )}
+
+      {tab === 'effort' && (
+        <div className="grid gap-3">
+          <Section title={t('ثبت نفرساعت واقعی مدرک','Log document effort')} note={t('اتصال به تایم‌شیت — از HRM یا ثبت دستی — ساعت واقعی هر مدرک','Linked to timesheet — from HRM or manual — real hours per doc')}>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+              <select className={inputCls} value={effortForm.documentId} onChange={e=>setEffortForm({...effortForm, documentId:e.target.value})}>
+                <option value="">{t('انتخاب مدرک','Select doc')}</option>
+                {(docsData?.items ?? []).map(d=><option key={d.Id} value={d.Id}>{d.DocNo} Rev {d.Revision}</option>)}
+              </select>
+              <input className={inputCls} type="date" value={effortForm.workDate} onChange={e=>setEffortForm({...effortForm, workDate:e.target.value})} />
+              <input className={inputCls} type="number" step="0.5" placeholder={t('ساعت','Hours')} value={effortForm.hours} onChange={e=>setEffortForm({...effortForm, hours:e.target.value})} />
+              <input className={inputCls} placeholder={t('نام شخص','Person name')} value={effortForm.personName} onChange={e=>setEffortForm({...effortForm, personName:e.target.value})} />
+              <select className={inputCls} value={effortForm.activity} onChange={e=>setEffortForm({...effortForm, activity:e.target.value})}>
+                {['design','review','check','approval','other'].map(v=><option key={v} value={v}>{v}</option>)}
+              </select>
+              <input className={inputCls} type="number" step="0.01" placeholder={t('هزینه (اختیاری)','Cost opt')} value={effortForm.cost} onChange={e=>setEffortForm({...effortForm, cost:e.target.value})} />
+              <input className={inputCls} placeholder={t('یادداشت','Note')} value={effortForm.noteFa} onChange={e=>setEffortForm({...effortForm, noteFa:e.target.value})} />
+              <button className={btnPrimary} disabled={busy || !effortForm.documentId || !effortForm.workDate || !effortForm.hours} onClick={()=>void act(async ()=>{
+                if(!client) return {ok:false, message:'No client'};
+                const r=await client.createEffort(effortForm.documentId, {workDate:effortForm.workDate, hours:Number(effortForm.hours), personName:effortForm.personName||undefined, activity:effortForm.activity||undefined, cost:effortForm.cost?Number(effortForm.cost):undefined, noteFa:effortForm.noteFa||undefined});
+                return r.ok ? {ok:true} : {ok:false, message:r.message};
+              }, t('نفرساعت ثبت شد','Effort logged'))}>{t('ثبت نفرساعت','Log effort')}</button>
+            </div>
+          </Section>
+          <Section title={t('خلاصه نفرساعت مدرک انتخاب‌شده','Effort summary of selected doc')}>
+            {effortData?.summary && <div className="grid grid-cols-3 gap-2 mb-2"><Kpi label={t('کل ساعت','Total Hours')} value={String(effortData.summary.totalHours)} /><Kpi label={t('کل هزینه','Total Cost')} value={String(effortData.summary.totalCost)} /><Kpi label={t('تعداد رکورد','Records')} value={String(effortData.count)} /></div>}
+            {effortData?.summary?.byPerson && <div className="text-[11px] tx2 mb-2">{Object.entries(effortData.summary.byPerson).map(([k,v])=><span key={k} className="me-3">{k}: {v}h</span>)}</div>}
+            <div className="overflow-x-auto max-h-[400px]">
+              <table className="w-full text-[11px] tx2">
+                <thead><tr><th className="p-1">DocNo</th><th className="p-1">Date</th><th className="p-1">Person</th><th className="p-1">Hours</th><th className="p-1">Activity</th><th className="p-1">Cost</th><th className="p-1">Note</th><th className="p-1">{t('حذف','Delete')}</th></tr></thead>
+                <tbody>
+                  {(effortData?.items ?? []).map(e=>(
+                    <tr key={e.Id} className="border-t b-line-soft"><td className="p-1" dir="ltr">{e.DocNo}</td><td className="p-1" dir="ltr">{e.WorkDate}</td><td className="p-1">{e.PersonName ?? e.PersonId ?? '—'}</td><td className="p-1">{e.Hours}</td><td className="p-1">{e.Activity ?? '—'}</td><td className="p-1">{e.Cost ?? '—'}</td><td className="p-1">{e.NoteFa ?? '—'}</td><td className="p-1"><button className={btnGhost} disabled={busy} onClick={()=>void act(async ()=>{
+                      if(!client) return {ok:false, message:'No client'};
+                      const r=await client.deleteEffort(e.Id);
+                      return r.ok ? {ok:true} : {ok:false, message:r.message};
+                    }, t('حذف شد','Deleted'))}>{t('حذف','Delete')}</button></td></tr>
+                  ))}
+                </tbody>
+              </table>
+              {!effortData?.items.length && <p className="tx3 text-[11px] mt-2">{t('نفرساعتی ثبت نشده','No effort')}</p>}
+            </div>
+          </Section>
+        </div>
+      )}
+
+      {tab === 'subreview' && (
+        <div className="grid gap-3">
+          <Section title={t('ثبت شفاف‌سازی فنی پیمانکار فرعی','Create subcontractor technical clarification')} note={t('گردش: open→answered→closed — نیاز approve برای بستن','Flow: open→answered→closed — approve needed to close')}>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+              <select className={inputCls} value={subForm.documentId} onChange={e=>setSubForm({...subForm, documentId:e.target.value})}>
+                <option value="">{t('انتخاب مدرک','Select doc')}</option>
+                {(docsData?.items ?? []).map(d=><option key={d.Id} value={d.Id}>{d.DocNo} Rev {d.Revision}</option>)}
+              </select>
+              <input className={inputCls} placeholder={t('نام پیمانکار فرعی','Subcontractor party')} value={subForm.subcontractorParty} onChange={e=>setSubForm({...subForm, subcontractorParty:e.target.value})} />
+              <input className={inputCls} placeholder={t('سوال فنی','Technical question')} value={subForm.questionFa} onChange={e=>setSubForm({...subForm, questionFa:e.target.value})} />
+              <input className={inputCls} placeholder={t('یادداشت','Note')} value={subForm.noteFa} onChange={e=>setSubForm({...subForm, noteFa:e.target.value})} />
+              <button className={btnPrimary} disabled={busy || !subForm.documentId || !subForm.subcontractorParty || !subForm.questionFa} onClick={()=>void act(async ()=>{
+                if(!client) return {ok:false, message:'No client'};
+                const r=await client.createSubReview(subForm.documentId, {subcontractorParty:subForm.subcontractorParty, questionFa:subForm.questionFa, noteFa:subForm.noteFa||undefined});
+                if(r.ok) setSubForm(f=>({...f, questionFa:'', noteFa:''}));
+                return r.ok ? {ok:true} : {ok:false, message:r.message};
+              }, t('شفاف‌سازی ثبت شد','Clarification created'))}>{t('ثبت شفاف‌سازی','Create clarification')}</button>
+            </div>
+          </Section>
+
+          <Section title={t('پاسخ به شفاف‌سازی','Answer clarification')}>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+              <select className={inputCls} value={subAnswerForm.reviewId} onChange={e=>setSubAnswerForm({...subAnswerForm, reviewId:e.target.value})}>
+                <option value="">{t('انتخاب مورد باز','Select open')}</option>
+                {(subData?.items ?? []).filter(x=>x.Status==='open').map(x=><option key={x.Id} value={x.Id}>{x.DocNo} — {x.SubcontractorParty} — {x.QuestionFa.slice(0,40)}</option>)}
+              </select>
+              <input className={inputCls} placeholder={t('پاسخ فنی','Technical answer')} value={subAnswerForm.answerFa} onChange={e=>setSubAnswerForm({...subAnswerForm, answerFa:e.target.value})} />
+              <button className={btnPrimary} disabled={busy || !subAnswerForm.reviewId || !subAnswerForm.answerFa} onClick={()=>void act(async ()=>{
+                if(!client) return {ok:false, message:'No client'};
+                const r=await client.answerSubReview(subAnswerForm.reviewId, subAnswerForm.answerFa);
+                if(r.ok) setSubAnswerForm({reviewId:'', answerFa:''});
+                return r.ok ? {ok:true} : {ok:false, message:r.message};
+              }, t('پاسخ ثبت شد','Answered'))}>{t('ثبت پاسخ','Answer')}</button>
+            </div>
+          </Section>
+
+          <Section title={t('فهرست شفاف‌سازی‌های فنی','Technical clarifications list')}>
+            {subData?.summary && <div className="grid grid-cols-2 gap-2 mb-2"><Kpi label={t('باز','Open')} value={String(subData.summary.open)} /><Kpi label={t('کل','Total')} value={String(subData.summary.total)} /></div>}
+            <div className="overflow-x-auto max-h-[500px]">
+              <table className="w-full text-[11px] tx2">
+                <thead><tr><th className="p-1">DocNo</th><th className="p-1">Rev</th><th className="p-1">Sub</th><th className="p-1">{t('سوال','Question')}</th><th className="p-1">{t('پاسخ','Answer')}</th><th className="p-1">Status</th><th className="p-1">{t('اقدام','Action')}</th></tr></thead>
+                <tbody>
+                  {(subData?.items ?? []).map(x=>(
+                    <tr key={x.Id} className="border-t b-line-soft"><td className="p-1" dir="ltr">{x.DocNo}</td><td className="p-1" dir="ltr">{x.Revision}</td><td className="p-1">{x.SubcontractorParty}</td><td className="p-1 max-w-[200px] truncate" title={x.QuestionFa}>{x.QuestionFa}</td><td className="p-1 max-w-[200px] truncate" title={x.AnswerFa ?? ''}>{x.AnswerFa ?? '—'}</td><td className="p-1">{x.Status}</td><td className="p-1 flex gap-1">{x.Status==='answered' && <button className={btnOk} disabled={busy} onClick={()=>void act(async ()=>{
+                      if(!client) return {ok:false, message:'No client'};
+                      const r=await client.closeSubReview(x.Id);
+                      return r.ok ? {ok:true} : {ok:false, message:r.message};
+                    }, t('بسته شد','Closed'))}>{t('بستن','Close')}</button>}</td></tr>
+                  ))}
+                </tbody>
+              </table>
+              {!subData?.items.length && <p className="tx3 text-[11px] mt-2">{t('شفاف‌سازی ثبت نشده','No clarifications')}</p>}
+            </div>
+          </Section>
+        </div>
+      )}
+
+      {['workflow','excel','numbering','correspondence','transmittal','lessons'].includes(tab) && (
+        <Section title={t('این تب در مراحل بعدی P3 تکمیل می‌شود','This tab in next P3 steps')}>
+          <p className="tx3 text-[11px]">{t('باقی: EDM-4..9','Remaining: EDM-4..9')}</p>
+        </Section>
+      )}
     </div>
   );
 }
