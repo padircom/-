@@ -508,7 +508,7 @@ export default function ModuleDetail({ lang, target, onBack, onOpenFlowNet, onNa
 
         <div dir="ltr" className="flex min-h-0 flex-1 gap-3 overflow-hidden">
           <div dir={rtl ? "rtl" : "ltr"} className="glass flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl p-3">
-            <DocumentWorkspace lang={lang} initialTab={d1Tab} hideTabs />
+            <DocumentWorkspace lang={lang} projectId={target.projectId} initialTab={d1Tab} hideTabs />
           </div>
           <aside dir={rtl ? "rtl" : "ltr"} className="glass-dark flex w-[300px] shrink-0 flex-col overflow-hidden rounded-2xl">
             <div className="b-line border-b px-3 py-2.5">

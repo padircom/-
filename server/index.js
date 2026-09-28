@@ -8388,6 +8388,113 @@ app.post("/api/com/tag/:id", comRequire("com.system.edit"), async (req, res, nex
 });
 
 
+/* ══════════════ EDM-1 — اتصال فایل به مدرک و نسخه (d1) ══════════════ */
+const edmsStorageDir = path.join(storageRoot, "edms");
+fs.mkdirSync(edmsStorageDir, { recursive: true });
+const edmsUpload = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, edmsStorageDir),
+    filename: (_req, _file, cb) => cb(null, `${Date.now()}-${crypto.randomUUID()}.bin`),
+  }),
+  limits: { fileSize: maxFileBytes, files: 1 },
+});
+
+app.post("/api/edms/:projectId/documents/:docId/files", edmsUpload.single("file"), comRequire("doc.document.upload"), async (req, res, next) => {
+  try {
+    const projectId = String(req.params.projectId || "");
+    const docId = String(req.params.docId || "");
+    if (!projectId) return cntBad(req, res, "E-CNT-NO-PROJECT", "پارامتر projectId الزامی است");
+    const r = await repo();
+    const doc = await r.findOne("Document", [{ column: "Id", op: "eq", value: docId }]);
+    if (!doc) return cntBad(req, res, "E-EDM-DOC-NOT-FOUND", "مدرک یافت نشد", 404);
+    if (doc.ProjectId !== projectId) return cntBad(req, res, "E-COM-PROJECT-MISMATCH", "مدرک به پروژه دیگری تعلق دارد", 400);
+    const file = req.file;
+    if (!file) return cntBad(req, res, "E-EDM-NO-FILE", "فایل ارسال نشده است", 400);
+    const userId = req.headers["x-user-id"] || "system";
+    const checksum = (() => { try { return crypto.createHash("sha256").update(fs.readFileSync(file.path)).digest("hex"); } catch { return null; } })();
+    const id = crypto.randomUUID();
+    const row = {
+      Id: id,
+      ProjectId: projectId,
+      DocumentId: docId,
+      DocNo: doc.DocNo,
+      Revision: doc.Revision,
+      FileName: file.originalname,
+      MimeType: file.mimetype,
+      SizeBytes: file.size,
+      StorageKey: path.basename(file.path),
+      ChecksumSha256: checksum,
+      UploadedBy: userId,
+      UploadedAt: new Date().toISOString(),
+      NoteFa: req.body.noteFa ? String(req.body.noteFa).slice(0,600) : null,
+    };
+    await r.upsert("DocumentAttachment", { Id: id }, row, userId);
+    // update Document FilePath for quick reference (optional)
+    try { await r.upsert("Document", { Id: docId }, { ...doc, FilePath: row.StorageKey }, userId); } catch {}
+    res.status(201).json(cntOk(req, { id, item: row, downloadUrl: `/api/edms/${encodeURIComponent(projectId)}/files/${encodeURIComponent(id)}/download` }));
+  } catch (err) { next(err); }
+});
+
+app.get("/api/edms/:projectId/documents/:docId/files", comRequire("doc.document.view"), async (req, res, next) => {
+  try {
+    const projectId = String(req.params.projectId || "");
+    const docId = String(req.params.docId || "");
+    const r = await repo();
+    const doc = await r.findOne("Document", [{ column: "Id", op: "eq", value: docId }]);
+    if (!doc) return cntBad(req, res, "E-EDM-DOC-NOT-FOUND", "مدرک یافت نشد", 404);
+    const atts = await r.list("DocumentAttachment", { where: [{ column: "DocumentId", op: "eq", value: docId }], limit: 200 });
+    atts.sort((a,b)=> new Date(b.UploadedAt) - new Date(a.UploadedAt));
+    const items = atts.map(a=> ({ ...a, downloadUrl: `/api/edms/${encodeURIComponent(projectId)}/files/${encodeURIComponent(a.Id)}/download` }));
+    res.json(cntOk(req, { count: atts.length, document: { id: doc.Id, docNo: doc.DocNo, revision: doc.Revision, titleFa: doc.TitleFa }, items }));
+  } catch (err) { next(err); }
+});
+
+app.get("/api/edms/:projectId/documents", comRequire("doc.document.view"), async (req, res, next) => {
+  try {
+    const projectId = String(req.params.projectId || "");
+    if (!projectId) return cntBad(req, res, "E-CNT-NO-PROJECT", "پارامتر projectId الزامی است");
+    const r = await repo();
+    const where = [{ column: "ProjectId", op: "eq", value: projectId }];
+    if (req.query.docNo) where.push({ column: "DocNo", op: "eq", value: String(req.query.docNo) });
+    if (req.query.discipline) where.push({ column: "Discipline", op: "eq", value: String(req.query.discipline) });
+    if (req.query.status) where.push({ column: "Status", op: "eq", value: String(req.query.status) });
+    const docs = await r.list("Document", { where, limit: 500 });
+    // group by DocNo for version history
+    const byDocNo = new Map();
+    for (const d of docs) {
+      const arr = byDocNo.get(d.DocNo) || [];
+      arr.push(d);
+      byDocNo.set(d.DocNo, arr);
+    }
+    for (const arr of byDocNo.values()) arr.sort((a,b)=> String(a.Revision).localeCompare(String(b.Revision)));
+    const items = docs.slice(0,200).map(d=> ({ ...d, versions: (byDocNo.get(d.DocNo)||[]).length, hasFile: Boolean(d.FilePath) }));
+    res.json(cntOk(req, { count: docs.length, items, byDocNo: Object.fromEntries([...byDocNo.entries()].map(([k,v])=> [k, v.map(x=> ({ id: x.Id, revision: x.Revision, status: x.Status, issuedAt: x.IssuedAt, filePath: x.FilePath }))])) }));
+  } catch (err) { next(err); }
+});
+
+app.get("/api/edms/:projectId/files/:fileId/download", comRequire("doc.document.view"), async (req, res, next) => {
+  try {
+    const r = await repo();
+    const att = await r.findOne("DocumentAttachment", [{ column: "Id", op: "eq", value: String(req.params.fileId) }]);
+    if (!att) return cntBad(req, res, "E-EDM-FILE-NOT-FOUND", "پیوست یافت نشد", 404);
+    const filePath = path.join(edmsStorageDir, path.basename(att.StorageKey));
+    if (!fs.existsSync(filePath)) return cntBad(req, res, "E-EDM-FILE-MISSING", "فایل روی دیسک موجود نیست", 404);
+    res.download(filePath, att.FileName || "document");
+  } catch (err) { next(err); }
+});
+
+app.delete("/api/edms/:projectId/files/:fileId", comRequire("doc.document.upload"), async (req, res, next) => {
+  try {
+    const r = await repo();
+    const att = await r.findOne("DocumentAttachment", [{ column: "Id", op: "eq", value: String(req.params.fileId) }]);
+    if (!att) return cntBad(req, res, "E-EDM-FILE-NOT-FOUND", "پیوست یافت نشد", 404);
+    const filePath = path.join(edmsStorageDir, path.basename(att.StorageKey));
+    try { if (fs.existsSync(filePath)) fs.unlinkSync(filePath); } catch {}
+    await r.delete("DocumentAttachment", { Id: att.Id });
+    res.json(cntOk(req, { deleted: true, id: att.Id }));
+  } catch (err) { next(err); }
+});
+
 /* ── ۱۴٫۱ وضعیت ماژول ── */
 app.get("/api/cnt/status", (req, res) => {
   res.json(cntOk(req, {

@@ -2790,7 +2790,35 @@ export const SCHEMA: TableDef[] = [
     ],
   },
 
-  /* ══════════════ d16 — بهداشت، ایمنی و محیط زیست (HSE) ══════════════
+  /* ══════════════ MOD-14 · EDM-1 اتصال فایل به مدرک و نسخه (d1) ══════════════ */
+  {
+    name: "DocumentAttachment",
+    module: "d1",
+    title: { fa: "پیوست مدرک", en: "Document attachment" },
+    pk: "Id",
+    columns: [
+      id(),
+      req("ProjectId", "text", { len: 60 }),
+      req("DocumentId", "text", { len: 60, comment: "مدرک والد — نسخه مشخص" }),
+      req("DocNo", "text", { len: 80 }),
+      req("Revision", "text", { len: 10 }),
+      req("FileName", "text", { len: 300 }),
+      req("MimeType", "text", { len: 120 }),
+      req("SizeBytes", "int"),
+      req("StorageKey", "text", { len: 400 }),
+      c("ChecksumSha256", "text", { len: 80 }),
+      req("UploadedBy", "text", { len: 60 }),
+      req("UploadedAt", "datetime"),
+      c("NoteFa", "text", { len: 600 }),
+    ],
+    indexes: [
+      { name: "IX_DocAttach_Doc", columns: ["DocumentId"] },
+      { name: "IX_DocAttach_DocNoRev", columns: ["ProjectId", "DocNo", "Revision"] },
+      { name: "IX_DocAttach_Project", columns: ["ProjectId", "UploadedAt"] },
+    ],
+  },
+
+    /* ══════════════ d16 — بهداشت، ایمنی و محیط زیست (HSE) ══════════════
    * پروانهٔ کار پیش‌نیاز دروازهٔ RFSU در ماژول راه‌اندازی است؛ تا پیش از
    * این جداول، آن پیش‌نیاز فقط رشتهٔ آزاد بود و قابل کنترل نبود. */
   {
