@@ -1,4 +1,5 @@
 import { registerStrategyExcellenceRoutes } from "./strategyExcellenceWorkspaceApi.js";
+import { registerCpmWorkspaceRoutes, CPM_DEDICATED_ROUTES } from "./cpmWorkspaceApi.js";
 import { registerMonitoringWorkspaceRoutes } from "./monitoringWorkspaceApi.js";
 import { registerEqmWorkspaceRoutes, EQM_TABLES } from "./eqmWorkspaceApi.js";
 import { authorizeData, scopeData } from "./dataAccess.js";
@@ -600,6 +601,8 @@ const DEDICATED_TABLE_ROUTES = {
   LessonReuse: "/api/ckm/:projectId/lessons/:code/reuse",
   Stakeholder: "/api/ckm/:projectId/stakeholders",
   NotificationRule: "/api/ckm/:projectId/rules",
+  /* P7/CPMS — جدول‌های ساخت و اجرا فقط از مسیر پروژه‌ای خودشان. */
+  ...CPM_DEDICATED_ROUTES,
 };
 
 /** جدول‌هایی که از راه REST عمومی قابل دسترسی‌اند — بقیه فقط از مسیر اختصاصی خودشان. */
@@ -824,6 +827,8 @@ registerRccWorkspaceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: r
 registerEqmWorkspaceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
 registerMonitoringWorkspaceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
 registerStrategyExcellenceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
+/* P7/CPMS: میز کار ساخت و اجرا — پروژه‌ای، مجوز مستقل، پیوست واقعی. */
+registerCpmWorkspaceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate, storageRoot, acceptedMimeTypes, maxFileBytes });
 
 const sanitizeFileName = (name) => path.basename(name).replace(/[^a-zA-Z0-9._-]/g, "_").slice(-180) || "upload.bin";
 const uploadStorage = multer.diskStorage({

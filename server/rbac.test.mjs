@@ -69,7 +69,15 @@ test("کاتالوگ: نسخه موتور و اندازه‌ها", () => {
      ۲۰ نقش پیشین + افسر ایمنی و بهداشت. */
   // LIVE-4 adds three explicit machinery permissions; existing roles are not made superusers.
   // LIVE-6: four explicit strategy/excellence view/edit permissions.
-  assert.equal(PERMISSION_CATALOG.length, 202);
+  // P5 SCM adds ten explicit procurement permissions: scm.vendor.view/manage,
+  // scm.package.view/edit, scm.bidder.view/manage, scm.mr.view/manage,
+  // scm.mrr.view/post — manage/post are the confidential write gates.
+  // P7 CPMS adds eleven construction-execution permissions:
+  // cpm.workarea.view/edit, cpm.dpr.view/record/approve,
+  // cpm.discipline.view/record/approve, cpm.inspection.view/request/release;
+  // the three write gates of DPR/discipline are confidential, and inspection
+  // release — the QC decision — is restricted to the QC role.
+  assert.equal(PERMISSION_CATALOG.length, 214);
   assert.equal(ROLE_CATALOG.length, 21);
 });
 
@@ -280,9 +288,10 @@ test("SOD: بیست‌وهشت قاعده تعریف شده و شناسه‌ها
    *   نفر≠ثبت‌کنندهٔ ساعت او)
    * + یک تحلیل نیرو (SOD-27 ثبت‌کنندهٔ مبنا≠صادرکنندهٔ گزارش رسمی
    *   انحراف از همان مبنا). */
-  assert.equal(SOD_RULES.length, 28);
-  assert.equal(new Set(SOD_RULES.map((r) => r.id)).size, 28);
-  for (const id of ["SOD-01", "SOD-07", "SOD-08", "SOD-10", "SOD-11", "SOD-12", "SOD-13", "SOD-14", "SOD-15", "SOD-21", "SOD-22", "SOD-23", "SOD-24", "SOD-25", "SOD-26", "SOD-27", "SOD-28"]) {
+  /* + P7 CPMS: SOD-29 — درخواست‌دهندهٔ بازرسی ≠ آزادکنندهٔ آن (QC). */
+  assert.equal(SOD_RULES.length, 29);
+  assert.equal(new Set(SOD_RULES.map((r) => r.id)).size, 29);
+  for (const id of ["SOD-01", "SOD-07", "SOD-08", "SOD-10", "SOD-11", "SOD-12", "SOD-13", "SOD-14", "SOD-15", "SOD-21", "SOD-22", "SOD-23", "SOD-24", "SOD-25", "SOD-26", "SOD-27", "SOD-28", "SOD-29"]) {
     assert.ok(SOD_RULES.some((r) => r.id === id), `${id} نیست`);
   }
 });

@@ -322,6 +322,20 @@ export const PERMISSION_CATALOG: PermissionDef[] = [
   P("scm.mrr.view", "d5", "مشاهده رسید مواد", "View material receiving", "internal"),
   P("scm.mrr.post", "d5", "ثبت رسید مواد و OPI", "Post MRR & OPI", "confidential", true),
 
+  /* ── d2+d8 ساخت و اجرا — CPMS (P7) ── */
+  P("cpm.workarea.view", "d2", "مشاهده حوزهٔ کاری پیمانکار", "View contractor work areas", "internal"),
+  P("cpm.workarea.edit", "d2", "تخصیص و ویرایش حوزهٔ کاری پیمانکار", "Assign & edit contractor work areas", "confidential", true),
+  P("cpm.dpr.view", "d2", "مشاهده گزارش روزانهٔ پیمانکار", "View contractor daily reports", "internal"),
+  P("cpm.dpr.record", "d2", "ثبت گزارش روزانهٔ پیمانکار", "Record contractor daily report", "internal", true),
+  P("cpm.dpr.approve", "d2", "تأیید گزارش روزانهٔ پیمانکار", "Approve contractor daily report", "confidential", true),
+  P("cpm.discipline.view", "d2", "مشاهده گزارش دیسیپلینی", "View discipline reports", "internal"),
+  P("cpm.discipline.record", "d2", "ثبت گزارش دیسیپلینی (Fit-up/Weld/NDT/…)",
+    "Record discipline reports", "internal", true),
+  P("cpm.discipline.approve", "d2", "تأیید گزارش دیسیپلینی", "Approve discipline reports", "confidential", true),
+  P("cpm.inspection.view", "d8", "مشاهده درخواست بازرسی", "View inspection requests", "internal"),
+  P("cpm.inspection.request", "d8", "ثبت درخواست بازرسی (IR/RFI)", "Raise inspection request", "internal", true),
+  P("cpm.inspection.release", "d8", "آزادسازی/رد درخواست بازرسی توسط QC", "QC release/reject inspection request", "internal", true),
+
   /* ── d6 حاکمیت ── */
   P("gov.process.view", "d6", "مشاهده فرآیندها", "View processes", "internal"),
   P("gov.gate.review", "d6", "بازبینی دروازه مرحله", "Review stage gate", "confidential", true),
@@ -524,7 +538,12 @@ export const ROLE_CATALOG: RoleDef[] = [
       "hrm.device.monitor",
       /* تصمیم تخصیص نیرو در کارگاه گرفته می‌شود؛ بدون دیدن هیستوگرام
        * رستهٔ خودش، آن تصمیم کور است. */
-      "hrm.analytics.view"],
+      "hrm.analytics.view",
+      /* P7/CPMS: ثبت گزارش روزانه و دیسیپلینی و درخواست بازرسی کار کارگاه
+       * است؛ تأیید گزارش و آزادسازی QC دست او نیست. */
+      "cpm.workarea.view", "cpm.dpr.view", "cpm.dpr.record",
+      "cpm.discipline.view", "cpm.discipline.record",
+      "cpm.inspection.view", "cpm.inspection.request"],
   },
   {
     code: "planner",
@@ -545,7 +564,11 @@ export const ROLE_CATALOG: RoleDef[] = [
       "hrm.mob.request",
       /* هیستوگرام و منحنی S ابزار اصلی برنامه‌ریز است، و مبنای نیرو
        * محصول کار خود اوست. */
-      "hrm.analytics.view", "hrm.plan.baseline", "hrm.device.monitor"],
+      "hrm.analytics.view", "hrm.plan.baseline", "hrm.device.monitor",
+      /* P7/CPMS: تخصیص WBS به پیمانکار کار برنامه‌ریزی است؛ ثبت گزارش
+       * روزانه و آزادسازی QC سمت کارگاه و کیفیت است. */
+      "cpm.workarea.view", "cpm.workarea.edit", "cpm.dpr.view",
+      "cpm.discipline.view", "cpm.inspection.view"],
   },
   {
     code: "cost_controller",
@@ -575,6 +598,10 @@ export const ROLE_CATALOG: RoleDef[] = [
     clearance: "internal",
     party: "any",
     grants: ["qms.itp.view", "qms.inspection.record", "qms.ncr.raise", "com.checksheet.record", "com.checksheet.sign",
+      /* P7/CPMS: آزادسازی و رد درخواست بازرسی فقط با بازرس کیفیت است و
+       * موتور، ثبت‌کنندهٔ درخواست را از آزادسازی همان درخواست منع می‌کند. */
+      "cpm.workarea.view", "cpm.dpr.view", "cpm.discipline.view",
+      "cpm.inspection.view", "cpm.inspection.release",
       /* گیت کیفیت در زنجیرهٔ کارکرد: تطبیق ساعت ثبت‌شده با پیشرفت
        * تأییدشده. بدون این، ساعت روی فعالیتی می‌نشیند که اصلاً اجرا
        * نشده است. */
@@ -680,6 +707,10 @@ export const ROLE_CATALOG: RoleDef[] = [
     clearance: "restricted",
     party: "contractor",
     grants: ["spm.plan.view", "oex.assessment.view", "eqm.workspace.view", "eqm.dispatch.approve",
+      /* P7/CPMS: مدیر پروژه گزارش پیمانکار و دیسیپلینی را تأیید می‌کند،
+       * ولی آزادسازی QC سمت خودش نیست. */
+      "cpm.workarea.view", "cpm.dpr.view", "cpm.dpr.approve",
+      "cpm.discipline.view", "cpm.discipline.approve", "cpm.inspection.view",
       "core.project.edit", "core.ai.run",
       "plan.baseline.set", "plan.progress.approve",
       "pex.evm.view", "pex.kpi.edit", "pex.forecast.edit",
@@ -836,7 +867,11 @@ export const ROLE_CATALOG: RoleDef[] = [
       "hrm.cost.post",
       /* PMO ارسال را می‌زند، پس باید ببیند به مقصد رسیده یا نه و
        * بتواند دوباره تلاش کند (D13). */
-      "core.event.view", "core.event.replay"]
+      "core.event.view", "core.event.replay",
+      /* P7/CPMS: PMO تأییدکنندهٔ گزارش روزانه و دیسیپلینی است و حوزهٔ
+       * کاری پیمانکار را تعریف می‌کند؛ آزادسازی QC سمت بازرس است. */
+      "cpm.workarea.view", "cpm.workarea.edit", "cpm.dpr.view", "cpm.dpr.approve",
+      "cpm.discipline.view", "cpm.discipline.approve", "cpm.inspection.view"]
   },
   {
     code: "executive",
@@ -876,7 +911,12 @@ export const ROLE_CATALOG: RoleDef[] = [
     inherits: [],
     clearance: "internal",
     party: "subcontractor",
-    grants: ["core.project.view", "plan.schedule.view", "plan.progress.report", "doc.document.view", "hrm.timesheet.enter", "qms.itp.view"],
+    grants: ["core.project.view", "plan.schedule.view", "plan.progress.report", "doc.document.view", "hrm.timesheet.enter", "qms.itp.view",
+      /* P7/CPMS: پیمانکار جزء گزارش روزانه و دیسیپلینی خودش را ثبت می‌کند،
+       * ولی تأیید و آزادسازی با کارفرما/QC است. */
+      "cpm.workarea.view", "cpm.dpr.view", "cpm.dpr.record",
+      "cpm.discipline.view", "cpm.discipline.record",
+      "cpm.inspection.view", "cpm.inspection.request"],
   },
   {
     code: "auditor",
@@ -972,6 +1012,20 @@ export type SodRule = {
  * منطق: «تهیه‌کننده نباید تأییدکننده باشد» و «صادرکنندهٔ ایراد نباید بستن آن را امضا کند».
  */
 export const SOD_RULES: SodRule[] = [
+  {
+    /* P7/CPMS: کسی که درخواست بازرسی را می‌زند نمی‌تواند همان را آزاد
+     * کند. موتور CPMS این را در زمان اجرا هم کنترل می‌کند؛ این قاعده
+     * جلوی طراحی نقشی را می‌گیرد که از پیش هر دو کلید را به یک نفر
+     * می‌دهد و کنترل زمان اجرا را به تلهٔ «همیشه رد» تبدیل می‌کند. */
+    id: "SOD-29",
+    a: "cpm.inspection.request",
+    b: "cpm.inspection.release",
+    severity: "high",
+    reason: {
+      fa: "ثبت‌کنندهٔ درخواست بازرسی نباید آزادکنندهٔ QC همان درخواست باشد",
+      en: "The inspection requester must not be its QC releaser",
+    },
+  },
   {
     id: "SOD-01",
     a: "fin.ipc.prepare",

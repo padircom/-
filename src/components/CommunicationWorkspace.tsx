@@ -646,7 +646,7 @@ function Tabs({ rtl, me, tab, ws, v, perm, busy, client, act, fmt }: {
               <div className="flex flex-wrap items-end gap-1.5 rounded-xl border b-line-soft bg-black/10 p-2">
                 <span className="w-full text-[9px] tx3">{rtl ? "اگر شماره خالی باشد، سرور خودکار c1-p1-GN-0001 می‌سازد — قالب اختیاری" : "If letter no empty, server auto-generates c1-p1-GN-0001 — template optional"}</span>
                 <select className={inputCls} value={genLetterF.v.Kind} onChange={genLetterF.set("Kind")}>
-                  {LETTER_CLASSES.map((c:any)=><option key={c} value={c}>{L(CLASS_LABEL[c])}</option>)}
+                  {LETTER_CLASSES.map((c)=><option key={c} value={c}>{L(CLASS_LABEL[c])}</option>)}
                 </select>
                 <select className={inputCls} value={genLetterF.v.Direction} onChange={genLetterF.set("Direction")}>
                   <option value="incoming">{rtl ? "وارده" : "incoming"}</option>

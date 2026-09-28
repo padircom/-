@@ -2862,8 +2862,6 @@ export const SCHEMA: TableDef[] = [
       req("DependencyType", "text", { len: 20, comment: "approval|info|hold" }),
       req("IsMandatory", "bool", { default: "1", comment: "الزامی = قفل صدور" }),
       c("NoteFa", "text", { len: 600 }),
-      req("CreatedBy", "text", { len: 60 }),
-      req("CreatedAt", "datetime"),
     ],
     indexes: [
       { name: "UX_DocDep", columns: ["DocumentId", "DependsOnDocumentId"], unique: true },
@@ -2943,9 +2941,6 @@ export const SCHEMA: TableDef[] = [
       c("Code", "text", { len: 40 }),
       c("ContentJson", "text", { len: 5000, comment: "JSON template fields" }),
       c("NoteFa", "text", { len: 500 }),
-      req("CreatedBy", "text", { len: 60 }),
-      req("CreatedAt", "datetime"),
-      c("UpdatedAt", "datetime"),
     ],
     indexes: [
       { name: "UX_DocTpl_Id", columns: ["Id"], unique: true },
@@ -2971,7 +2966,6 @@ export const SCHEMA: TableDef[] = [
       c("BodyFa", "text", { len: 2000 }),
       req("Channel", "text", { len: 20, comment: "email|in_app" }),
       req("Status", "text", { len: 20, comment: "pending|sent|failed" }),
-      req("CreatedAt", "datetime"),
       c("SentAt", "datetime"),
       c("ErrorText", "text", { len: 1000 }),
     ],
@@ -2997,12 +2991,10 @@ export const SCHEMA: TableDef[] = [
       c("PersonId", "text", { len: 60 }),
       c("PersonName", "text", { len: 120 }),
       req("WorkDate", "text", { len: 20, comment: "YYYY-MM-DD" }),
-      req("Hours", "number", { comment: "ساعت کار" }),
-      c("Cost", "number"),
+      req("Hours", "decimal", { precision: 18, scale: 2, comment: "ساعت کار" }),
+      c("Cost", "decimal", { precision: 18, scale: 2 }),
       c("Activity", "text", { len: 40, comment: "design|review|check|etc" }),
       c("NoteFa", "text", { len: 500 }),
-      req("CreatedBy", "text", { len: 60 }),
-      req("CreatedAt", "datetime"),
     ],
     indexes: [
       { name: "UX_DocEffort_Id", columns: ["Id"], unique: true },
@@ -3055,7 +3047,6 @@ export const SCHEMA: TableDef[] = [
       req("TitleFa", "text", { len: 500 }),
       c("DueAt", "text", { len: 20 }),
       req("Status", "text", { len: 20, comment: "unread|read|done|archived" }),
-      req("CreatedAt", "datetime"),
       c("ReadAt", "datetime"),
       c("DoneAt", "datetime"),
       c("Priority", "text", { len: 20 }),
@@ -3080,7 +3071,6 @@ export const SCHEMA: TableDef[] = [
       req("InstructionFa", "text", { len: 1000 }),
       c("Deadline", "text", { len: 20 }),
       req("Status", "text", { len: 20, comment: "open|done|cancelled" }),
-      req("CreatedAt", "datetime"),
       c("DoneAt", "datetime"),
       c("DoneNoteFa", "text", { len: 1000 }),
       c("HistoryJson", "text", { len: 5000 }),
@@ -3103,7 +3093,6 @@ export const SCHEMA: TableDef[] = [
       req("ProjectId", "text", { len: 60 }),
       req("Prefix", "text", { len: 20, comment: "e.g. OG2401-GN" }),
       req("LastNumber", "int"),
-      req("UpdatedAt", "datetime"),
     ],
     indexes: [
       { name: "UX_CkmSeq_Id", columns: ["Id"], unique: true },
@@ -3144,8 +3133,6 @@ export const SCHEMA: TableDef[] = [
       req("LinkType", "text", { len: 20, comment: "edms|tag|proc_package|letter" }),
       req("TargetId", "text", { len: 80 }),
       c("NoteFa", "text", { len: 500 }),
-      req("CreatedBy", "text", { len: 60 }),
-      req("CreatedAt", "datetime"),
     ],
     indexes: [
       { name: "UX_CkmLink_Id", columns: ["Id"], unique: true },
@@ -3454,7 +3441,6 @@ export const SCHEMA: TableDef[] = [
       c("Currency", "text", { len: 10 }),
       c("RecommendationFa", "text", { len: 2000 }),
       req("Status", "text", { len: 20, default: "'draft'" }),
-      c("CreatedBy", "text", { len: 60 }),
     ],
     indexes: [
       { name: "UX_ScmBidReport_No", columns: ["ProjectId", "ReportNo"], unique: true },
@@ -3707,9 +3693,9 @@ export const SCHEMA: TableDef[] = [
       req("ProjectId", "text", { len: 60 }),
       req("WarehouseCode", "text", { len: 40 }),
       req("MaterialCode", "text", { len: 40 }),
-      req("OnHand", "decimal", { precision: 18, scale: 3, default: 0 }),
-      c("Reserved", "decimal", { precision: 18, scale: 3, default: 0 }),
-      c("OnOrder", "decimal", { precision: 18, scale: 3, default: 0 }),
+      req("OnHand", "decimal", { precision: 18, scale: 3, default: "0" }),
+      c("Reserved", "decimal", { precision: 18, scale: 3, default: "0" }),
+      c("OnOrder", "decimal", { precision: 18, scale: 3, default: "0" }),
     ],
     indexes: [
       { name: "UX_ScmStockBal", columns: ["ProjectId", "WarehouseCode", "MaterialCode"], unique: true },
@@ -4841,6 +4827,202 @@ export const SCHEMA: TableDef[] = [
       { name: "IX_BreakdownValue_Project", columns: ["ProjectId", "ColumnKey"] },
     ],
   },
+
+  /* ══════════════ MOD-30 · CPMS ساخت و اجرا — P7/d2+d8 ══════════════ */
+
+  {
+    /* CPM-1: تخصیص حوزهٔ WBS به پیمانکار. کد پیمانکار به قرارداد فرعی همان
+     * پروژه (HrmSubContract.ContractNo) و کد WBS به WbsNode همان پروژه
+     * کنترل می‌شود؛ اینجا فقط شکل رکورد تعریف می‌شود. */
+    name: "CpmWorkArea",
+    module: "d2",
+    title: { fa: "حوزهٔ کاری پیمانکار", en: "Contractor work area" },
+    pk: "Id",
+    columns: [
+      id(),
+      req("ProjectId", "text", { len: 60 }),
+      req("Code", "text", { len: 40 }),
+      req("WbsCode", "text", { len: 60, comment: "کد WBS همان پروژه" }),
+      req("ContractorCode", "text", { len: 60, comment: "ContractNo قرارداد فرعی همان پروژه" }),
+      req("Discipline", "text", { len: 20, comment: "piping|electrical|instrument|civil" }),
+      req("ScopeFa", "text", { len: 1000 }),
+      c("PackageNo", "text", { len: 40 }),
+      c("StartDate", "date"),
+      c("EndDate", "date"),
+      c("WeightPct", "decimal", { precision: 9, scale: 2 }),
+      req("Status", "text", { len: 20, default: "'planned'" }),
+      c("NoteFa", "text", { len: 1000 }),
+      c("ModelVersion", "text", { len: 40, comment: "cpm-cpms-v1" }),
+    ],
+    indexes: [
+      { name: "UX_CpmWorkArea_Code", columns: ["ProjectId", "Code"], unique: true },
+      { name: "IX_CpmWorkArea_Wbs", columns: ["ProjectId", "WbsCode"] },
+      { name: "IX_CpmWorkArea_Contractor", columns: ["ProjectId", "ContractorCode"] },
+    ],
+  },
+  {
+    /* CPM-2: سربرگ گزارش روزانهٔ پیمانکار. عکس/پیوست در CpmDprAttachment
+     * با فایل واقعی زیر storage/cpm-dpr ذخیره می‌شود. */
+    name: "CpmDprEntry",
+    module: "d2",
+    title: { fa: "گزارش روزانهٔ پیمانکار", en: "Contractor daily report" },
+    pk: "Id",
+    columns: [
+      id(),
+      req("ProjectId", "text", { len: 60 }),
+      req("ReportNo", "text", { len: 40 }),
+      req("ReportDate", "date"),
+      req("Shift", "text", { len: 10, default: "'day'" }),
+      req("ContractorCode", "text", { len: 60 }),
+      req("Discipline", "text", { len: 20 }),
+      c("WorkAreaCode", "text", { len: 40 }),
+      req("LocationFa", "text", { len: 200 }),
+      c("WeatherFa", "text", { len: 120 }),
+      req("ManpowerCount", "int"),
+      c("EquipmentCount", "int"),
+      req("WorkDoneFa", "text", { len: 3000 }),
+      req("Status", "text", { len: 20, default: "'draft'" }),
+      c("NoteFa", "text", { len: 1000 }),
+      c("SubmittedAt", "datetime"),
+      c("SubmittedBy", "text", { len: 60 }),
+      c("ApprovedAt", "datetime"),
+      c("ApprovedBy", "text", { len: 60 }),
+      c("ReturnNoteFa", "text", { len: 1000 }),
+      c("ModelVersion", "text", { len: 40, comment: "cpm-cpms-v1" }),
+    ],
+    indexes: [
+      { name: "UX_CpmDpr_No", columns: ["ProjectId", "ReportNo"], unique: true },
+      { name: "IX_CpmDpr_Date", columns: ["ProjectId", "ReportDate"] },
+    ],
+  },
+  {
+    /* CPM-3: سربرگ گزارش دیسیپلینی. `LineCount`, `RejectedCount` و
+     * `NdtPassRate` محاسبهٔ سرور و فقط‌خواندنی‌اند (از بدنه پذیرفته نمی‌شوند). */
+    name: "CpmDisciplineReport",
+    module: "d2",
+    title: { fa: "گزارش دیسیپلینی", en: "Discipline report" },
+    pk: "Id",
+    columns: [
+      id(),
+      req("ProjectId", "text", { len: 60 }),
+      req("ReportNo", "text", { len: 40 }),
+      req("ReportDate", "date"),
+      req("Discipline", "text", { len: 20 }),
+      req("ContractorCode", "text", { len: 60 }),
+      c("WorkAreaCode", "text", { len: 40 }),
+      req("Status", "text", { len: 20, default: "'draft'" }),
+      c("NoteFa", "text", { len: 1000 }),
+      c("LineCount", "int", { comment: "محاسبهٔ سرور" }),
+      c("RejectedCount", "int", { comment: "محاسبهٔ سرور" }),
+      c("NdtPassRate", "decimal", { precision: 9, scale: 4, comment: "محاسبهٔ سرور؛ نبود داده = تهی" }),
+      c("SubmittedAt", "datetime"),
+      c("SubmittedBy", "text", { len: 60 }),
+      c("ApprovedAt", "datetime"),
+      c("ApprovedBy", "text", { len: 60 }),
+      c("ReturnNoteFa", "text", { len: 1000 }),
+      c("ModelVersion", "text", { len: 40, comment: "cpm-cpms-v1" }),
+    ],
+    indexes: [
+      { name: "UX_CpmDiscReport_No", columns: ["ProjectId", "ReportNo"], unique: true },
+      { name: "IX_CpmDiscReport_Date", columns: ["ProjectId", "ReportDate"] },
+    ],
+  },
+  {
+    /* CPM-3: خطوط گزارش دیسیپلینی — Fit-up/Weld/NDT/PWHT لوله‌کشی،
+     * کابل‌کشی/ترمینال/مگر/ارتینگ برق، لوپ‌چک/کالیبراسیون نصب ابزار دقیق،
+     * بتن‌ریزی/تراکم/نمونه مکعبی/قالب سیویل. */
+    name: "CpmDisciplineLine",
+    module: "d2",
+    title: { fa: "خط گزارش دیسیپلینی", en: "Discipline report line" },
+    pk: "Id",
+    columns: [
+      id(),
+      req("ProjectId", "text", { len: 60 }),
+      req("ReportNo", "text", { len: 40 }),
+      req("ItemRef", "text", { len: 60, comment: "LineNo/WeldNo/CableNo/LoopNo/PourId" }),
+      req("ItemType", "text", { len: 30 }),
+      c("SizeInch", "decimal", { precision: 9, scale: 2 }),
+      req("Quantity", "decimal", { precision: 18, scale: 3 }),
+      req("Unit", "text", { len: 12, default: "'ea'" }),
+      req("ResultCode", "text", { len: 20, default: "'na'" }),
+      c("NdtMethod", "text", { len: 10, comment: "RT|UT|PT|MT|VT — فقط برای آیتم NDT" }),
+      c("TestDate", "date"),
+      c("NoteFa", "text", { len: 500 }),
+    ],
+    indexes: [
+      { name: "UX_CpmDiscLine_Ref", columns: ["ProjectId", "ReportNo", "ItemRef"], unique: true },
+      { name: "IX_CpmDiscLine_Type", columns: ["ProjectId", "ItemType"] },
+    ],
+  },
+  {
+    /* CPM-4: درخواست بازرسی IR/RFI و آزادسازی QC. فیلدهای تصمیم فقط از
+     * گردش کار سرور پر می‌شوند؛ از بدنهٔ درخواست پذیرفته نمی‌شوند. */
+    name: "CpmInspectionRequest",
+    module: "d8",
+    title: { fa: "درخواست بازرسی و آزادسازی QC", en: "Inspection request & QC release" },
+    pk: "Id",
+    columns: [
+      id(),
+      req("ProjectId", "text", { len: 60 }),
+      req("RequestNo", "text", { len: 40 }),
+      req("RequestType", "text", { len: 10, default: "'ir'", comment: "ir|rfi" }),
+      req("ActivityCode", "text", { len: 60 }),
+      c("WorkAreaCode", "text", { len: 40 }),
+      req("Discipline", "text", { len: 20 }),
+      req("ContractorCode", "text", { len: 60 }),
+      req("LocationFa", "text", { len: 200 }),
+      req("ScopeFa", "text", { len: 1500 }),
+      req("RequestedAt", "date"),
+      c("TargetDate", "date"),
+      req("WitnessRequired", "bool", { default: "0" }),
+      req("Status", "text", { len: 20, default: "'draft'" }),
+      c("NcrRef", "text", { len: 40 }),
+      c("NoteFa", "text", { len: 1000 }),
+      c("RequestedBy", "text", { len: 60 }),
+      c("SubmittedAt", "datetime"),
+      c("SubmittedBy", "text", { len: 60 }),
+      c("ReleasedAt", "datetime"),
+      c("ReleasedBy", "text", { len: 60 }),
+      c("RejectedAt", "datetime"),
+      c("RejectedBy", "text", { len: 60 }),
+      c("CancelledAt", "datetime"),
+      c("CancelledBy", "text", { len: 60 }),
+      c("DecisionNoteFa", "text", { len: 1000 }),
+      c("InspectionRecordId", "text", { len: 60, comment: "سند InspectionRecord ساخته‌شده هنگام آزادسازی" }),
+      c("ModelVersion", "text", { len: 40, comment: "cpm-cpms-v1" }),
+    ],
+    indexes: [
+      { name: "UX_CpmInspection_No", columns: ["ProjectId", "RequestNo"], unique: true },
+      { name: "IX_CpmInspection_Status", columns: ["ProjectId", "Status"] },
+      { name: "IX_CpmInspection_Activity", columns: ["ProjectId", "ActivityCode"] },
+    ],
+  },
+  {
+    /* CPM-2 پیوست‌ها: فراداده در پایگاه داده، فایل واقعی زیر storage/cpm-dpr.
+     * نام ذخیره تولیدی است؛ نام کاربر فقط برای دانلود نگه داشته می‌شود. */
+    name: "CpmDprAttachment",
+    module: "d2",
+    title: { fa: "پیوست گزارش روزانه", en: "DPR attachment" },
+    pk: "Id",
+    columns: [
+      id(),
+      req("ProjectId", "text", { len: 60 }),
+      req("ReportNo", "text", { len: 40 }),
+      req("Kind", "text", { len: 20, default: "'attachment'", comment: "photo|attachment|test_report" }),
+      req("FileName", "text", { len: 200 }),
+      req("MimeType", "text", { len: 120 }),
+      req("SizeBytes", "int"),
+      c("Checksum", "text", { len: 80 }),
+      req("StoredName", "text", { len: 200 }),
+      c("NoteFa", "text", { len: 500 }),
+      c("UploadedBy", "text", { len: 60 }),
+      c("UploadedAt", "datetime"),
+    ],
+    indexes: [
+      { name: "UX_CpmDprAtt_Stored", columns: ["StoredName"], unique: true },
+      { name: "IX_CpmDprAtt_Report", columns: ["ProjectId", "ReportNo"] },
+    ],
+  },
 ];
 
 const TABLE_BY_NAME = new Map(SCHEMA.map((t) => [t.name, t]));
@@ -4876,6 +5058,14 @@ export function validateSchema(tables: TableDef[] = SCHEMA): string[] {
       if (!isSafeIdentifier(col.name)) errs.push(`${t.name}: نام ستون ناامن ${col.name}`);
     }
     if (!cols.has(t.pk)) errs.push(`${t.name}: کلید اصلی ${t.pk} ستون نیست`);
+
+    /* ستون‌های حسابرسی از `AUDIT_COLUMNS` می‌آیند؛ اعلام دستی‌شان در تعریف جدول
+     * باعث ستون تکراری و DDL نامعتبر می‌شود. این بررسی جلوی تکرار آن را می‌گیرد. */
+    for (const col of t.columns) {
+      if (AUDIT_COLUMN_NAMES.includes(col.name)) {
+        errs.push(`${t.name}: ستون حسابرسی ${col.name} نباید در تعریف جدول اعلام شود (خودکار افزوده می‌شود)`);
+      }
+    }
 
     for (const idx of t.indexes ?? []) {
       if (!isSafeIdentifier(idx.name)) errs.push(`${t.name}: نام ایندکس ناامن ${idx.name}`);
@@ -5448,6 +5638,27 @@ export const MIGRATIONS: Migration[] = [
   {
     version: "0038", name: "scm_procurement_base",
     statements: ["ScmVendor", "ScmAvlEntry", "ScmProcPackage", "ScmPackageMrLink", "ScmInquiryPackage", "ScmBidderList", "ScmInvitation", "ScmMrChangeLog", "ScmMrr", "ScmProposal", "ScmClarification", "ScmEvaluation", "ScmBidReport", "ScmKom", "ScmInspection", "ScmShipment", "ScmPsr", "ScmWarehouse", "ScmMaterialCatalog", "ScmMrc", "ScmMrcLine", "ScmMiv", "ScmMivLine", "ScmMrv", "ScmStockTransfer", "ScmStockBalance"].flatMap(n => {
+      const t = TABLE_BY_NAME.get(n)!;
+      return [tableDdl(t, "mssql"), ...(t.indexes ?? []).map(i => indexDdl(t, i, "mssql"))];
+    }),
+  },
+  {
+    /* CSU-2 + EDM-1..9 + PAT-1..8: جدول‌های میز کار راه‌اندازی (Tag Register)،
+     * اسناد و مدارک و کارتابل/ارجاع/امضا/پیوند مکاتبات. بدون این مهاجرت،
+     * نصب تازه روی SQL Server این ۱۵ جدول را ندارد و مسیرهای اختصاصی
+     * آن‌ها با خطای «جدول وجود ندارد» شکست می‌خورند. */
+    version: "0039", name: "csu_edms_pats_live",
+    statements: ["CommissioningTag", "DocumentAttachment", "DocumentHold", "DocumentDependency", "DocumentComment", "DocumentDistribution", "DocumentTemplate", "EdmsNotification", "DocumentEffort", "DocumentSubReview", "CkmInboxItem", "CkmReferral", "CkmLetterSequence", "CkmSignature", "CkmLetterLink"].flatMap(n => {
+      const t = TABLE_BY_NAME.get(n)!;
+      return [tableDdl(t, "mssql"), ...(t.indexes ?? []).map(i => indexDdl(t, i, "mssql"))];
+    }),
+  },
+  {
+    /* P7/CPMS: میز کار ساخت و اجرا — حوزهٔ کاری پیمانکار، DPR پیمانکار،
+     * گزارش‌های دیسیپلینی با خطوط، درخواست بازرسی/آزادسازی QC و پیوست‌ها.
+     * بدون این مهاجرت، نصب تازه روی SQL Server این ۶ جدول را ندارد. */
+    version: "0040", name: "cpm_execution_live",
+    statements: ["CpmWorkArea", "CpmDprEntry", "CpmDisciplineReport", "CpmDisciplineLine", "CpmInspectionRequest", "CpmDprAttachment"].flatMap(n => {
       const t = TABLE_BY_NAME.get(n)!;
       return [tableDdl(t, "mssql"), ...(t.indexes ?? []).map(i => indexDdl(t, i, "mssql"))];
     }),

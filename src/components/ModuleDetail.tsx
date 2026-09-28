@@ -52,7 +52,9 @@ const D2_PAGE_SUBS: Record<string, { id: string; title: Bi; tab: PexTab; sql: st
      * زمینهٔ کارش را از دست می‌داد. */
   ],
   "d2-p4": [
-    { id: "d2-p4-reg", title: { fa: "ثبت DPR (گردش تأیید)", en: "DPR Register" }, tab: "dprReg", sql: ["pex_dpr"] },
+    { id: "d2-p4-wa", title: { fa: "حوزهٔ کاری پیمانکاران (WBS → پیمانکار)", en: "Contractor Work Areas" }, tab: "workAreas", sql: ["cpm_work_area"] },
+    { id: "d2-p4-reg", title: { fa: "ثبت DPR (گردش تأیید)", en: "DPR Register" }, tab: "dprReg", sql: ["cpm_dpr_entry", "cpm_dpr_attachment"] },
+    { id: "d2-p4-dis", title: { fa: "گزارش‌های دیسیپلینی", en: "Discipline Reports" }, tab: "discipline", sql: ["cpm_discipline_report", "cpm_discipline_line"] },
   ],
   "d2-p6": [
     { id: "d2-p6-rep", title: { fa: "تولید گزارش", en: "Report Generator" }, tab: "reports", sql: ["pex_report_template"] },
@@ -69,6 +71,8 @@ const D2_TAB_BY_SUB: Record<string, PexTab> = {
   "d2-p2-s1": "baseline",
   "d2-p4-s1": "dpr",
   "d2-p4-reg": "dprReg",
+  "d2-p4-wa": "workAreas",
+  "d2-p4-dis": "discipline",
   "d2-p5-s1": "weekly",
   "d2-p6-s1": "mpr",
   "d2-p6-rep": "reports",

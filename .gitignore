@@ -62,3 +62,8 @@ server/monitoringWsLogic.js
 
 # Generated LIVE-6 strategy / excellence logic
 server/sxWsLogic.js
+
+# Generated P7 CPMS shared logic (بازتولید: npm run build:cpmws)
+server/cpmWsLogic.js
+# پیوست‌های DPR/CPMS زمان اجرا — داده است، نه کد
+server/storage/cpm-dpr/

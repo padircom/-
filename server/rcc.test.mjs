@@ -1,7 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  applyGuardian,
   ccbEscalate,
   daysLeft,
   depletionAlert,
@@ -12,14 +11,17 @@ import {
 
 const d = (iso) => new Date(iso + "T00:00:00Z");
 
+/* LIVE-3: `applyGuardian` (اعمال درون‌حافظه‌ای روی آرایهٔ نمونهٔ صفحه) حذف شد؛
+ * مسیر زندهٔ ادعا مهلت را سمت سرور از تاریخ رویداد محاسبه و رکورد را قفل
+ * می‌کند. موتور خالص `guardianTick` همان طبقه‌بندی EWS را می‌دهد و اینجا
+ * فقط رفتار همان تابع آزمون می‌شود. */
 test("overdue notice is time-barred (G5 false-negative)", () => {
   const now = d("2026-09-05");
   const notices = [{ id: "n3", dueAt: "2026-09-04" }];
   const ev = guardianTick(notices, now);
   assert.equal(ev[0].action, "mark_time_barred");
   assert.equal(ev[0].ews, "EWS-CLM-05");
-  const applied = applyGuardian(notices, now);
-  assert.equal(applied.notices[0].timeBarred, true);
+  assert.equal(ev[0].daysLeft, -1);
 });
 
 test("due yesterday vs today daysLeft negative", () => {
