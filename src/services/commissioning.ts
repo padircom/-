@@ -1003,3 +1003,90 @@ export function preCommSummary(systems: SystemNode[], packs: PackRow[], sheets: 
     systemsWithoutPack: systems.filter((s) => !withPack.has(s.Id)).map((s) => s.SystemCode),
   };
 }
+
+/* ══════════════════════════ بخش ۳ (CSU-2) — بانک تگ راه‌اندازی ══════════════════════════ */
+
+export const TAG_TYPES = ["equipment", "instrument", "electrical", "piping", "hvac", "civil", "safety", "other"] as const;
+export type TagType = (typeof TAG_TYPES)[number];
+
+export const TAG_STATUSES = ["planned", "installed", "tested", "handed_over", "closed"] as const;
+export type TagStatus = (typeof TAG_STATUSES)[number];
+
+export const TAG_TYPE_FA: Record<TagType, string> = {
+  equipment: "تجهیز فرآیندی",
+  instrument: "ابزار دقیق",
+  electrical: "برق",
+  piping: "لوله‌کشی",
+  hvac: "تهویه",
+  civil: "سیویل",
+  safety: "ایمنی",
+  other: "سایر",
+};
+
+export const TAG_STATUS_FA: Record<TagStatus, string> = {
+  planned: "برنامه‌ریزی‌شده",
+  installed: "نصب‌شده",
+  tested: "آزمون‌شده",
+  handed_over: "تحویل‌شده",
+  closed: "بسته",
+};
+
+export type TagRow = {
+  Id: string;
+  ProjectId: string;
+  SystemId?: string | null;
+  TagNo: string;
+  TitleFa: string;
+  TagType: string;
+  DisciplineCode?: string | null;
+  LocationFa?: string | null;
+  Status: string;
+  CriticalityFa?: string | null;
+  LoopNo?: string | null;
+  ManufacturerFa?: string | null;
+  ModelFa?: string | null;
+};
+
+export function validateTagInput(input: {
+  tagNo?: string;
+  titleFa?: string;
+  tagType?: string;
+  status?: string;
+  criticalityFa?: string | null;
+  systemId?: string | null;
+}): ComError[] {
+  const errors: ComError[] = [];
+  if (!(input.tagNo ?? "").trim()) errors.push({ code: "E-COM-TAG-NO-REQUIRED", message: "شماره تگ الزامی است" });
+  else if (!CODE_RE.test((input.tagNo ?? "").trim())) errors.push({ code: "E-COM-TAG-NO-INVALID", message: "شماره تگ فقط حرف لاتین، رقم، خط تیره، زیرخط و نقطه می‌پذیرد" });
+  if (!(input.titleFa ?? "").trim()) errors.push({ code: "E-COM-TAG-TITLE-REQUIRED", message: "عنوان فارسی تگ الزامی است" });
+  if (!TAG_TYPES.includes(input.tagType as TagType)) errors.push({ code: "E-COM-TAG-TYPE", message: `نوع تگ باید یکی از ${TAG_TYPES.join("، ")} باشد` });
+  if (input.status !== undefined && !TAG_STATUSES.includes(input.status as TagStatus)) errors.push({ code: "E-COM-TAG-STATUS", message: `وضعیت تگ باید یکی از ${TAG_STATUSES.join("، ")} باشد` });
+  if (input.criticalityFa != null && input.criticalityFa !== "" && !CRITICALITIES.includes(input.criticalityFa as Criticality))
+    errors.push({ code: "E-COM-TAG-CRITICALITY", message: "بحرانیت تگ باید high یا medium یا low باشد" });
+  return errors;
+}
+
+export type TagSummary = {
+  total: number;
+  byType: Record<string, number>;
+  byStatus: Record<string, number>;
+  bySystem: Record<string, number>;
+  withoutSystem: number;
+  withoutDiscipline: number;
+};
+
+export function tagSummary(tags: TagRow[]): TagSummary {
+  const byType: Record<string, number> = {};
+  const byStatus: Record<string, number> = {};
+  const bySystem: Record<string, number> = {};
+  let withoutSystem = 0;
+  let withoutDiscipline = 0;
+  for (const t of tags) {
+    byType[t.TagType] = (byType[t.TagType] ?? 0) + 1;
+    byStatus[t.Status] = (byStatus[t.Status] ?? 0) + 1;
+    if (t.SystemId) bySystem[t.SystemId] = (bySystem[t.SystemId] ?? 0) + 1;
+    else withoutSystem++;
+    if (!t.DisciplineCode) withoutDiscipline++;
+  }
+  return { total: tags.length, byType, byStatus, bySystem, withoutSystem, withoutDiscipline };
+}

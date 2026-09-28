@@ -554,6 +554,51 @@ function preCommSummary(systems, packs, sheets) {
     systemsWithoutPack: systems.filter((s) => !withPack.has(s.Id)).map((s) => s.SystemCode)
   };
 }
+var TAG_TYPES = ["equipment", "instrument", "electrical", "piping", "hvac", "civil", "safety", "other"];
+var TAG_STATUSES = ["planned", "installed", "tested", "handed_over", "closed"];
+var TAG_TYPE_FA = {
+  equipment: "\u062A\u062C\u0647\u06CC\u0632 \u0641\u0631\u0622\u06CC\u0646\u062F\u06CC",
+  instrument: "\u0627\u0628\u0632\u0627\u0631 \u062F\u0642\u06CC\u0642",
+  electrical: "\u0628\u0631\u0642",
+  piping: "\u0644\u0648\u0644\u0647\u200C\u06A9\u0634\u06CC",
+  hvac: "\u062A\u0647\u0648\u06CC\u0647",
+  civil: "\u0633\u06CC\u0648\u06CC\u0644",
+  safety: "\u0627\u06CC\u0645\u0646\u06CC",
+  other: "\u0633\u0627\u06CC\u0631"
+};
+var TAG_STATUS_FA = {
+  planned: "\u0628\u0631\u0646\u0627\u0645\u0647\u200C\u0631\u06CC\u0632\u06CC\u200C\u0634\u062F\u0647",
+  installed: "\u0646\u0635\u0628\u200C\u0634\u062F\u0647",
+  tested: "\u0622\u0632\u0645\u0648\u0646\u200C\u0634\u062F\u0647",
+  handed_over: "\u062A\u062D\u0648\u06CC\u0644\u200C\u0634\u062F\u0647",
+  closed: "\u0628\u0633\u062A\u0647"
+};
+function validateTagInput(input) {
+  const errors = [];
+  if (!(input.tagNo ?? "").trim()) errors.push({ code: "E-COM-TAG-NO-REQUIRED", message: "\u0634\u0645\u0627\u0631\u0647 \u062A\u06AF \u0627\u0644\u0632\u0627\u0645\u06CC \u0627\u0633\u062A" });
+  else if (!CODE_RE.test((input.tagNo ?? "").trim())) errors.push({ code: "E-COM-TAG-NO-INVALID", message: "\u0634\u0645\u0627\u0631\u0647 \u062A\u06AF \u0641\u0642\u0637 \u062D\u0631\u0641 \u0644\u0627\u062A\u06CC\u0646\u060C \u0631\u0642\u0645\u060C \u062E\u0637 \u062A\u06CC\u0631\u0647\u060C \u0632\u06CC\u0631\u062E\u0637 \u0648 \u0646\u0642\u0637\u0647 \u0645\u06CC\u200C\u067E\u0630\u06CC\u0631\u062F" });
+  if (!(input.titleFa ?? "").trim()) errors.push({ code: "E-COM-TAG-TITLE-REQUIRED", message: "\u0639\u0646\u0648\u0627\u0646 \u0641\u0627\u0631\u0633\u06CC \u062A\u06AF \u0627\u0644\u0632\u0627\u0645\u06CC \u0627\u0633\u062A" });
+  if (!TAG_TYPES.includes(input.tagType)) errors.push({ code: "E-COM-TAG-TYPE", message: `\u0646\u0648\u0639 \u062A\u06AF \u0628\u0627\u06CC\u062F \u06CC\u06A9\u06CC \u0627\u0632 ${TAG_TYPES.join("\u060C ")} \u0628\u0627\u0634\u062F` });
+  if (input.status !== void 0 && !TAG_STATUSES.includes(input.status)) errors.push({ code: "E-COM-TAG-STATUS", message: `\u0648\u0636\u0639\u06CC\u062A \u062A\u06AF \u0628\u0627\u06CC\u062F \u06CC\u06A9\u06CC \u0627\u0632 ${TAG_STATUSES.join("\u060C ")} \u0628\u0627\u0634\u062F` });
+  if (input.criticalityFa != null && input.criticalityFa !== "" && !CRITICALITIES.includes(input.criticalityFa))
+    errors.push({ code: "E-COM-TAG-CRITICALITY", message: "\u0628\u062D\u0631\u0627\u0646\u06CC\u062A \u062A\u06AF \u0628\u0627\u06CC\u062F high \u06CC\u0627 medium \u06CC\u0627 low \u0628\u0627\u0634\u062F" });
+  return errors;
+}
+function tagSummary(tags) {
+  const byType = {};
+  const byStatus = {};
+  const bySystem = {};
+  let withoutSystem = 0;
+  let withoutDiscipline = 0;
+  for (const t of tags) {
+    byType[t.TagType] = (byType[t.TagType] ?? 0) + 1;
+    byStatus[t.Status] = (byStatus[t.Status] ?? 0) + 1;
+    if (t.SystemId) bySystem[t.SystemId] = (bySystem[t.SystemId] ?? 0) + 1;
+    else withoutSystem++;
+    if (!t.DisciplineCode) withoutDiscipline++;
+  }
+  return { total: tags.length, byType, byStatus, bySystem, withoutSystem, withoutDiscipline };
+}
 export {
   ALL_TEST_KINDS,
   BOUNDARY_KINDS,
@@ -574,6 +619,10 @@ export {
   SYSTEM_STATUS_FA,
   SYSTEM_TYPES,
   SYSTEM_TYPE_FA,
+  TAG_STATUSES,
+  TAG_STATUS_FA,
+  TAG_TYPES,
+  TAG_TYPE_FA,
   TEST_KINDS_BY_TYPE,
   TEST_KIND_FA,
   assertSinglePrimary,
@@ -594,6 +643,7 @@ export {
   subtreeIds,
   systemizationMatrix,
   systemizationSummary,
+  tagSummary,
   validateBoundary,
   validateGateSequence,
   validateMilestone,
@@ -601,5 +651,6 @@ export {
   validateSheetInput,
   validateSheetLines,
   validateSystemCode,
-  validateSystemInput
+  validateSystemInput,
+  validateTagInput
 };

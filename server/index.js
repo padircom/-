@@ -486,6 +486,12 @@ import {
   packProgress,
   coldTestClearance,
   preCommSummary,
+  TAG_TYPE_FA,
+  TAG_STATUS_FA,
+  TAG_TYPES,
+  TAG_STATUSES,
+  validateTagInput,
+  tagSummary,
 } from "./comLogic.js";
 
 import {
@@ -8271,6 +8277,116 @@ app.get("/api/com/precomm", comRequire("com.system.view"), async (req, res, next
     }));
   } catch (err) { next(err); }
 });
+
+/* ══════════════ CSU-2 — بانک تگ راه‌اندازی (Tag Register) ══════════════ */
+app.post("/api/com/tag", comRequire("com.system.edit"), async (req, res, next) => {
+  try {
+    const projectId = String(req.query.projectId || "");
+    if (!projectId) return cntBad(req, res, "E-CNT-NO-PROJECT", "پارامتر projectId الزامی است");
+    const b = req.body || {};
+    const errors = validateTagInput({ tagNo: b.tagNo, titleFa: b.titleFa, tagType: b.tagType, status: b.status, criticalityFa: b.criticalityFa, systemId: b.systemId });
+    if (errors.length) return res.status(400).json({ ok: false, error: { code: errors[0].code, message: errors[0].message, details: errors, traceId: req.requestId } });
+    const r = await repo();
+    const existing = await r.findOne("CommissioningTag", [{ column: "ProjectId", op: "eq", value: projectId }, { column: "TagNo", op: "eq", value: String(b.tagNo).trim() }]);
+    if (existing) return cntBad(req, res, "E-COM-TAG-DUP", "شماره تگ در این پروژه تکراری است", 409);
+    if (b.systemId) {
+      const sys = await r.findOne("SystemSubsystem", [{ column: "Id", op: "eq", value: String(b.systemId) }]);
+      if (!sys) return cntBad(req, res, "E-COM-SYSTEM-NOT-FOUND", "سیستم یافت نشد", 404);
+      if (sys.ProjectId !== projectId) return cntBad(req, res, "E-COM-PROJECT-MISMATCH", "سیستم به پروژه دیگری تعلق دارد", 400);
+    }
+    const userId = req.headers["x-user-id"] || "system";
+    const id = b.id ? String(b.id) : (globalThis.crypto?.randomUUID?.() || require('crypto').randomUUID());
+    const row = {
+      Id: id,
+      ProjectId: projectId,
+      SystemId: b.systemId ? String(b.systemId) : null,
+      TagNo: String(b.tagNo).trim(),
+      TitleFa: String(b.titleFa).trim(),
+      TitleEn: b.titleEn ? String(b.titleEn).trim() : null,
+      TagType: String(b.tagType),
+      DisciplineCode: b.disciplineCode ? String(b.disciplineCode).trim() : null,
+      LocationFa: b.locationFa ? String(b.locationFa).trim() : null,
+      LoopNo: b.loopNo ? String(b.loopNo).trim() : null,
+      ManufacturerFa: b.manufacturerFa ? String(b.manufacturerFa).trim() : null,
+      ModelFa: b.modelFa ? String(b.modelFa).trim() : null,
+      SerialNo: b.serialNo ? String(b.serialNo).trim() : null,
+      CriticalityFa: b.criticalityFa ? String(b.criticalityFa).trim() : null,
+      NoteFa: b.noteFa ? String(b.noteFa).trim() : null,
+      Status: b.status ? String(b.status) : "planned",
+    };
+    const saved = await r.upsert("CommissioningTag", { Id: id }, row, userId);
+    res.status(201).json(cntOk(req, { id, item: { ...row, typeFa: TAG_TYPE_FA[row.TagType] ?? row.TagType, statusFa: TAG_STATUS_FA[row.Status] ?? row.Status } }));
+  } catch (err) { next(err); }
+});
+
+app.get("/api/com/tag", comRequire("com.system.view"), async (req, res, next) => {
+  try {
+    const projectId = String(req.query.projectId || "");
+    if (!projectId) return cntBad(req, res, "E-CNT-NO-PROJECT", "پارامتر projectId الزامی است");
+    const r = await repo();
+    const where = [{ column: "ProjectId", op: "eq", value: projectId }];
+    if (req.query.systemId) where.push({ column: "SystemId", op: "eq", value: String(req.query.systemId) });
+    if (req.query.tagType) where.push({ column: "TagType", op: "eq", value: String(req.query.tagType) });
+    if (req.query.status) where.push({ column: "Status", op: "eq", value: String(req.query.status) });
+    if (req.query.q) {
+      // simple contains on TagNo/TitleFa via list then filter (json driver has no like)
+      const all = await r.list("CommissioningTag", { where, limit: 5000 });
+      const q = String(req.query.q).toLowerCase();
+      const filtered = all.filter(t => String(t.TagNo).toLowerCase().includes(q) || String(t.TitleFa).toLowerCase().includes(q));
+      const items = filtered.slice(0, 500).map(t => ({ ...t, typeFa: TAG_TYPE_FA[t.TagType] ?? t.TagType, statusFa: TAG_STATUS_FA[t.Status] ?? t.Status }));
+      return res.json(cntOk(req, { count: filtered.length, summary: tagSummary(filtered), items }));
+    }
+    const tags = await r.list("CommissioningTag", { where, limit: 5000 });
+    const items = tags.slice(0, 500).map(t => ({ ...t, typeFa: TAG_TYPE_FA[t.TagType] ?? t.TagType, statusFa: TAG_STATUS_FA[t.Status] ?? t.Status }));
+    res.json(cntOk(req, { count: tags.length, summary: tagSummary(tags), items }));
+  } catch (err) { next(err); }
+});
+
+app.post("/api/com/tag/:id", comRequire("com.system.edit"), async (req, res, next) => {
+  try {
+    const projectId = String(req.query.projectId || "");
+    const b = req.body || {};
+    const r = await repo();
+    const existing = await r.findOne("CommissioningTag", [{ column: "Id", op: "eq", value: String(req.params.id) }]);
+    if (!existing) return cntBad(req, res, "E-COM-TAG-NOT-FOUND", "تگ یافت نشد", 404);
+    if (projectId && existing.ProjectId !== projectId) return cntBad(req, res, "E-COM-PROJECT-MISMATCH", "تگ به پروژه دیگری تعلق دارد", 400);
+    const merged = {
+      tagNo: b.tagNo ?? existing.TagNo,
+      titleFa: b.titleFa ?? existing.TitleFa,
+      tagType: b.tagType ?? existing.TagType,
+      status: b.status ?? existing.Status,
+      criticalityFa: b.criticalityFa ?? existing.CriticalityFa,
+      systemId: b.systemId !== undefined ? b.systemId : existing.SystemId,
+    };
+    const errors = validateTagInput(merged);
+    if (errors.length) return res.status(400).json({ ok: false, error: { code: errors[0].code, message: errors[0].message, details: errors, traceId: req.requestId } });
+    if (b.systemId) {
+      const sys = await r.findOne("SystemSubsystem", [{ column: "Id", op: "eq", value: String(b.systemId) }]);
+      if (!sys) return cntBad(req, res, "E-COM-SYSTEM-NOT-FOUND", "سیستم یافت نشد", 404);
+    }
+    const userId = req.headers["x-user-id"] || "system";
+    const row = {
+      ...existing,
+      SystemId: b.systemId !== undefined ? (b.systemId ? String(b.systemId) : null) : existing.SystemId,
+      TagNo: b.tagNo ? String(b.tagNo).trim() : existing.TagNo,
+      TitleFa: b.titleFa ? String(b.titleFa).trim() : existing.TitleFa,
+      TitleEn: b.titleEn !== undefined ? (b.titleEn ? String(b.titleEn).trim() : null) : existing.TitleEn,
+      TagType: b.tagType ? String(b.tagType) : existing.TagType,
+      DisciplineCode: b.disciplineCode !== undefined ? (b.disciplineCode ? String(b.disciplineCode).trim() : null) : existing.DisciplineCode,
+      LocationFa: b.locationFa !== undefined ? (b.locationFa ? String(b.locationFa).trim() : null) : existing.LocationFa,
+      LoopNo: b.loopNo !== undefined ? (b.loopNo ? String(b.loopNo).trim() : null) : existing.LoopNo,
+      ManufacturerFa: b.manufacturerFa !== undefined ? (b.manufacturerFa ? String(b.manufacturerFa).trim() : null) : existing.ManufacturerFa,
+      ModelFa: b.modelFa !== undefined ? (b.modelFa ? String(b.modelFa).trim() : null) : existing.ModelFa,
+      SerialNo: b.serialNo !== undefined ? (b.serialNo ? String(b.serialNo).trim() : null) : existing.SerialNo,
+      CriticalityFa: b.criticalityFa !== undefined ? (b.criticalityFa ? String(b.criticalityFa).trim() : null) : existing.CriticalityFa,
+      NoteFa: b.noteFa !== undefined ? (b.noteFa ? String(b.noteFa).trim() : null) : existing.NoteFa,
+      Status: b.status ? String(b.status) : existing.Status,
+    };
+    const saved = await r.upsert("CommissioningTag", { Id: existing.Id }, row, userId);
+    res.json(cntOk(req, { item: { ...row, typeFa: TAG_TYPE_FA[row.TagType] ?? row.TagType, statusFa: TAG_STATUS_FA[row.Status] ?? row.Status } }));
+  } catch (err) { next(err); }
+});
+
 
 /* ── ۱۴٫۱ وضعیت ماژول ── */
 app.get("/api/cnt/status", (req, res) => {

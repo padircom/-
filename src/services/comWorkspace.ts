@@ -1,5 +1,5 @@
 /**
- * CSU-1 — کلاینت REST فضای کاری راه‌اندازی و تحویل (d15).
+ * CSU-1 + CSU-2 — کلاینت REST فضای کاری راه‌اندازی و تحویل (d15).
  * مسیرها نسبی `/api/com/...?projectId=` هستند تا از پراکسی Vite عبور کنند.
  * هیچ دادهٔ نمونه‌ای در کلاینت وجود ندارد؛ همه از سرور می‌آید.
  */
@@ -21,6 +21,10 @@ import {
   BOUNDARY_KIND_FA,
   CRITICALITY_FA,
   SHEET_RESULT_FA,
+  TAG_TYPES,
+  TAG_STATUSES,
+  TAG_TYPE_FA,
+  TAG_STATUS_FA,
 } from './commissioning';
 
 export {
@@ -40,6 +44,10 @@ export {
   BOUNDARY_KIND_FA,
   CRITICALITY_FA,
   SHEET_RESULT_FA,
+  TAG_TYPES,
+  TAG_STATUSES,
+  TAG_TYPE_FA,
+  TAG_STATUS_FA,
 };
 
 export type ComResult<T> = ApiResult<T>;
@@ -297,6 +305,40 @@ export type ColdClearancePayload = {
   };
 };
 
+export type TagItem = {
+  Id: string;
+  ProjectId: string;
+  SystemId: string | null;
+  TagNo: string;
+  TitleFa: string;
+  TitleEn?: string | null;
+  TagType: string;
+  DisciplineCode?: string | null;
+  LocationFa?: string | null;
+  LoopNo?: string | null;
+  ManufacturerFa?: string | null;
+  ModelFa?: string | null;
+  SerialNo?: string | null;
+  CriticalityFa?: string | null;
+  NoteFa?: string | null;
+  Status: string;
+  typeFa: string;
+  statusFa: string;
+};
+
+export type TagPayload = {
+  count: number;
+  summary: {
+    total: number;
+    byType: Record<string, number>;
+    byStatus: Record<string, number>;
+    bySystem: Record<string, number>;
+    withoutSystem: number;
+    withoutDiscipline: number;
+  };
+  items: TagItem[];
+};
+
 export class ComClient {
   constructor(private readonly projectId: string, private readonly userId: string | null) {}
 
@@ -360,4 +402,17 @@ export class ComClient {
   // ── certificates
   certificates = () => this.req<CertificatePayload>('GET', '/api/com/certificate');
   createCertificate = (body: unknown) => this.req<{ id: string; certificateType: string; certificateNo: string; punch: unknown; warrantyEndDate: string | null }>('POST', '/api/com/certificate', body);
+
+  // ── tags (CSU-2)
+  tags = (params: { systemId?: string; tagType?: string; status?: string; q?: string } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.systemId) qs.set('systemId', params.systemId);
+    if (params.tagType) qs.set('tagType', params.tagType);
+    if (params.status) qs.set('status', params.status);
+    if (params.q) qs.set('q', params.q);
+    const extra = qs.toString() ? `&${qs.toString()}` : '';
+    return this.req<TagPayload>('GET', `/api/com/tag${extra}`);
+  };
+  createTag = (body: unknown) => this.req<{ id: string; item: TagItem }>('POST', '/api/com/tag', body);
+  updateTag = (id: string, body: unknown) => this.req<{ item: TagItem }>('POST', `/api/com/tag/${encodeURIComponent(id)}`, body);
 }

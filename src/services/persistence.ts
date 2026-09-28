@@ -2759,6 +2759,36 @@ export const SCHEMA: TableDef[] = [
       { name: "IX_CheckSheetLine_Sheet", columns: ["SheetId", "IsMandatory"] },
     ],
   },
+  /* ══════════════ MOD-13 · CSU-2 بانک تگ راه‌اندازی (Tag Register) ══════════════ */
+  {
+    name: "CommissioningTag",
+    module: "d15",
+    title: { fa: "بانک تگ راه‌اندازی", en: "Commissioning tag register" },
+    pk: "Id",
+    columns: [
+      id(),
+      req("ProjectId", "text", { len: 60 }),
+      c("SystemId", "text", { len: 60, comment: "سیستم والد — می‌تواند خالی باشد تا تگ یتیم دیده شود" }),
+      req("TagNo", "text", { len: 80 }),
+      req("TitleFa", "text", { len: 400 }),
+      c("TitleEn", "text", { len: 400 }),
+      req("TagType", "text", { len: 20, comment: "equipment|instrument|electrical|piping|hvac|civil|safety|other" }),
+      c("DisciplineCode", "text", { len: 20 }),
+      c("LocationFa", "text", { len: 300 }),
+      c("LoopNo", "text", { len: 60 }),
+      c("ManufacturerFa", "text", { len: 200 }),
+      c("ModelFa", "text", { len: 200 }),
+      c("SerialNo", "text", { len: 120 }),
+      c("CriticalityFa", "text", { len: 10, comment: "high|medium|low" }),
+      c("NoteFa", "text", { len: 1000 }),
+      req("Status", "text", { len: 20, comment: "planned|installed|tested|handed_over|closed" }),
+    ],
+    indexes: [
+      { name: "UX_CommissioningTag_No", columns: ["ProjectId", "TagNo"], unique: true },
+      { name: "IX_CommissioningTag_System", columns: ["SystemId", "TagType", "Status"] },
+      { name: "IX_CommissioningTag_Type", columns: ["ProjectId", "TagType", "Status"] },
+    ],
+  },
 
   /* ══════════════ d16 — بهداشت، ایمنی و محیط زیست (HSE) ══════════════
    * پروانهٔ کار پیش‌نیاز دروازهٔ RFSU در ماژول راه‌اندازی است؛ تا پیش از
