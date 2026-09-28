@@ -77,7 +77,7 @@ export function registerItgOutboundRoutes(app, { repo, subjects, evaluate } = {}
   const fail = (req, res, err) => {
     if (err instanceof ItgError) return res.status(err.status).json({ ok: false, error: { code: err.code, message: err.message, ...err.extra, traceId: req.requestId } });
     if (err?.code === "ROW_VALIDATION_FAILED") return res.status(400).json({ ok: false, error: { code: "E-ITG-VALIDATION", message: err.message, traceId: req.requestId } });
-    console.error(`[${req.requestId}] itg error:`, err);
+    console.error("[%s] itg error:", req.requestId, err);
     return res.status(500).json({ ok: false, error: { code: "E-ITG-INTERNAL", message: "خطای داخلی سرور", traceId: req.requestId } });
   };
   const subjectOf = (req) => {
@@ -155,7 +155,7 @@ export function registerItgOutboundRoutes(app, { repo, subjects, evaluate } = {}
       }, actor(req), "itgrun");
       return row;
     } catch (err) {
-      console.error(`[${req.requestId}] itg run record failed:`, err?.message ?? err);
+      console.error("[%s] itg run record failed:", req.requestId, err?.message ?? err);
       return null;
     }
   };
@@ -172,7 +172,7 @@ export function registerItgOutboundRoutes(app, { repo, subjects, evaluate } = {}
         Details: { traceId: req.requestId, ...details },
       }, actor(req));
     } catch {
-      console.error(`[${req.requestId}] itg audit failed ${action}`);
+      console.error("[%s] itg audit failed %s", req.requestId, action);
     }
   };
   const p6Env = () => ({
@@ -235,7 +235,7 @@ export function registerItgOutboundRoutes(app, { repo, subjects, evaluate } = {}
       activityCount = await r.count("Activity", byProject(project.Id));
       wbsCount = await r.count("WbsNode", byProject(project.Id));
     } catch (err) {
-      console.error(`[${req.requestId}] itg counts failed:`, err?.message ?? err);
+      console.error("[%s] itg counts failed:", req.requestId, err?.message ?? err);
       activityCount = null;
       wbsCount = null;
     }

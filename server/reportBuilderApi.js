@@ -65,7 +65,7 @@ export function registerReportBuilderRoutes(app, { repo, subjects, evaluate } = 
     if (err instanceof RbError) return res.status(400).json({ ok: false, error: { code: err.code, message: err.message, traceId: req.requestId } });
     if (err?.code === "ROW_VALIDATION_FAILED") return res.status(400).json({ ok: false, error: { code: "E-RPT-VALIDATION", message: err.message, traceId: req.requestId } });
     if (err?.code === "UNIQUE_VIOLATION" || err?.code === "DUPLICATE_KEY") return res.status(409).json({ ok: false, error: { code: "E-RPT-DUPLICATE", message: "کد قالب در همین پروژه تکراری است", traceId: req.requestId } });
-    console.error(`[${req.requestId}] rpt error:`, err);
+    console.error("[%s] rpt error:", req.requestId, err);
     return res.status(500).json({ ok: false, error: { code: "E-RPT-INTERNAL", message: "خطای داخلی سرور", traceId: req.requestId } });
   };
   const subjectOf = (req) => {
@@ -115,7 +115,7 @@ export function registerReportBuilderRoutes(app, { repo, subjects, evaluate } = 
         Details: { traceId: req.requestId, ...details },
       }, actor(req));
     } catch {
-      console.error(`[${req.requestId}] rpt audit failed ${action}`);
+      console.error("[%s] rpt audit failed %s", req.requestId, action);
     }
   };
   const bodyOf = (req) => {

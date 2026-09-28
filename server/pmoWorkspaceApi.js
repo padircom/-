@@ -68,7 +68,7 @@ export function registerPmoWorkspaceRoutes(app, { repo, subjects, evaluate } = {
     if (err instanceof PmoValidationError) return res.status(400).json({ ok: false, error: { code: "E-PMO-VALIDATION", message: err.message, traceId: req.requestId } });
     if (err?.code === "ROW_VALIDATION_FAILED") return res.status(400).json({ ok: false, error: { code: "E-PMO-VALIDATION", message: err.message, traceId: req.requestId } });
     if (err?.code === "UNIQUE_VIOLATION" || err?.code === "DUPLICATE_KEY") return res.status(409).json({ ok: false, error: { code: "E-PMO-DUPLICATE", message: "کد در همین پروژه تکراری است", traceId: req.requestId } });
-    console.error(`[${req.requestId}] pmo error:`, err);
+    console.error("[%s] pmo error:", req.requestId, err);
     return res.status(500).json({ ok: false, error: { code: "E-PMO-INTERNAL", message: "خطای داخلی سرور", traceId: req.requestId } });
   };
   const subjectOf = (req) => {
@@ -135,7 +135,7 @@ export function registerPmoWorkspaceRoutes(app, { repo, subjects, evaluate } = {
         Details: { traceId: req.requestId, ...details },
       }, actor(req));
     } catch {
-      console.error(`[${req.requestId}] pmo audit failed ${action}`);
+      console.error("[%s] pmo audit failed %s", req.requestId, action);
     }
   };
   const bodyOf = (req) => {

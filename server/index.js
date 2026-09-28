@@ -844,7 +844,12 @@ function buildDegradedResponse(req, reason) {
 
 
 app.use((req, res, next) => {
-  const requestId = req.headers["x-request-id"] || `req-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  /* شناسهٔ درخواست از سربرگ کاربر می‌آید؛ پیش از استفاده در سربرگ پاسخ و سیاههٔ
+   * سرور پاک‌سازی می‌شود تا نویسهٔ کنترل، قالب‌بندی (%s/%o) یا مقدار بلند نشت نکند. */
+  const rawRequestId = String(req.headers["x-request-id"] || "").trim();
+  const requestId = /^[A-Za-z0-9._-]{1,64}$/.test(rawRequestId)
+    ? rawRequestId
+    : `req-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   req.requestId = requestId;
   res.setHeader("X-Request-Id", requestId);
   next();
@@ -18317,7 +18322,7 @@ async function hrmAudit(r, req, action, details) {
   } catch {
     /* شکست ممیزی نباید پاسخ کاربر را بیندازد، ولی سکوت هم نمی‌کند:
      * در سیاههٔ سرور دیده می‌شود. */
-    console.error(`[${req.requestId}] hrmAudit failed for ${action}`);
+    console.error("[%s] hrmAudit failed for %s", req.requestId, action);
   }
 }
 
@@ -19986,7 +19991,7 @@ app.use((req, res) => {
 
 app.use((err, req, res, next) => {
   if (res.headersSent) return next(err);
-  console.error(`[${req.requestId}]`, err);
+  console.error("[%s]", req.requestId, err);
   if (err instanceof multer.MulterError) {
     return res.status(400).json({ ok: false, error: { code: "FILE_UPLOAD_ERROR", message: err.message, traceId: req.requestId } });
   }

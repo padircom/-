@@ -142,7 +142,7 @@ export function registerCkmWorkspaceRoutes(app, { repo, subjects, evaluate }) {
     if (err?.code === "UNIQUE_VIOLATION" || err?.code === "DUPLICATE_KEY") {
       return res.status(409).json({ ok: false, error: { code: "E-CKM-DUPLICATE", message: "کد/شماره تکراری است", traceId: req.requestId } });
     }
-    console.error(`[${req.requestId}] ckm error:`, err);
+    console.error("[%s] ckm error:", req.requestId, err);
     return res.status(500).json({ ok: false, error: { code: "E-CKM-INTERNAL", message: "خطای داخلی سرور", traceId: req.requestId } });
   };
 
@@ -185,7 +185,7 @@ export function registerCkmWorkspaceRoutes(app, { repo, subjects, evaluate }) {
         Details: { traceId: req.requestId, ...details },
       }, actor(req));
     } catch {
-      console.error(`[${req.requestId}] ckmAudit failed for ${action}`);
+      console.error("[%s] ckmAudit failed for %s", req.requestId, action);
     }
   };
 

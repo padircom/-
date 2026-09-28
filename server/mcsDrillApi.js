@@ -38,7 +38,7 @@ export function registerDrillRoutes(app, { repo, subjects, evaluate } = {}) {
   const ok = (req, res, data, status = 200) => res.status(status).json({ ok: true, data, meta: { traceId: req.requestId } });
   const fail = (req, res, err) => {
     if (err instanceof DrillError) return res.status(err.status).json({ ok: false, error: { code: err.code, message: err.message, ...err.extra, traceId: req.requestId } });
-    console.error(`[${req.requestId}] drill error:`, err);
+    console.error("[%s] drill error:", req.requestId, err);
     return res.status(500).json({ ok: false, error: { code: "E-DRILL-INTERNAL", message: "خطای داخلی سرور", traceId: req.requestId } });
   };
   const subjectOf = (req) => {

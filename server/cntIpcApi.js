@@ -57,7 +57,7 @@ export function registerCntIpcRoutes(app, { repo, subjects, evaluate } = {}) {
     if (err instanceof CntValidationError) return res.status(400).json({ ok: false, error: { code: "E-CNT-IPC-VALIDATION", message: err.message, traceId: req.requestId } });
     if (err?.code === "ROW_VALIDATION_FAILED") return res.status(400).json({ ok: false, error: { code: "E-CNT-IPC-VALIDATION", message: err.message, traceId: req.requestId } });
     if (err?.code === "UNIQUE_VIOLATION" || err?.code === "DUPLICATE_KEY") return res.status(409).json({ ok: false, error: { code: "E-CNT-IPC-DUPLICATE", message: "کد/دورهٔ تکراری در همین پروژه", traceId: req.requestId } });
-    console.error(`[${req.requestId}] cnt-ipc error:`, err);
+    console.error("[%s] cnt-ipc error:", req.requestId, err);
     return res.status(500).json({ ok: false, error: { code: "E-CNT-IPC-INTERNAL", message: "خطای داخلی سرور", traceId: req.requestId } });
   };
   const subjectOf = (req) => {
@@ -118,7 +118,7 @@ export function registerCntIpcRoutes(app, { repo, subjects, evaluate } = {}) {
         Details: { traceId: req.requestId, ...details },
       }, actor(req));
     } catch {
-      console.error(`[${req.requestId}] cnt-ipc audit failed ${action}`);
+      console.error("[%s] cnt-ipc audit failed %s", req.requestId, action);
     }
   };
   const bodyOf = (req) => {

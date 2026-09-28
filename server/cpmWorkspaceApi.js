@@ -89,7 +89,7 @@ export function registerCpmWorkspaceRoutes(app, { repo, subjects, evaluate, stor
     if (err?.code === "ROW_VALIDATION_FAILED") return res.status(400).json({ ok: false, error: { code: "E-CPM-VALIDATION", message: err.message, traceId: req.requestId } });
     if (err?.code === "UNIQUE_VIOLATION" || err?.code === "DUPLICATE_KEY") return res.status(409).json({ ok: false, error: { code: "E-CPM-DUPLICATE", message: "کد در همین پروژه تکراری است", traceId: req.requestId } });
     if (err?.code === "LIMIT_FILE_SIZE") return res.status(413).json({ ok: false, error: { code: "E-CPM-FILE-SIZE", message: "حجم فایل بیش از سقف مجاز است", traceId: req.requestId } });
-    console.error(`[${req.requestId}] cpm error:`, err);
+    console.error("[%s] cpm error:", req.requestId, err);
     return res.status(500).json({ ok: false, error: { code: "E-CPM-INTERNAL", message: "خطای داخلی سرور", traceId: req.requestId } });
   };
   const subjectOf = (req) => {
@@ -141,7 +141,7 @@ export function registerCpmWorkspaceRoutes(app, { repo, subjects, evaluate, stor
         Details: { traceId: req.requestId, ...details },
       }, actor(req));
     } catch {
-      console.error(`[${req.requestId}] cpm audit failed ${action}`);
+      console.error("[%s] cpm audit failed %s", req.requestId, action);
     }
   };
   const bodyOf = (req) => {
