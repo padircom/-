@@ -152,6 +152,19 @@ export type EdmsDistribution = {
 };
 export type EdmsDistributionList = { count: number; items: EdmsDistribution[] };
 
+export type EdmsTemplate = {
+  Id: string;
+  ProjectId: string;
+  TemplateType: string;
+  NameFa: string;
+  Code?: string | null;
+  ContentJson?: string | null;
+  NoteFa?: string | null;
+  CreatedBy: string;
+  CreatedAt: string;
+};
+export type EdmsTemplateList = { count: number; items: EdmsTemplate[] };
+
 export type EdmsCommentList = {
   count: number;
   summary: { open: number; replied: number; concluded: number; total: number };
@@ -262,6 +275,15 @@ export class EdmsClient {
     return this.req<EdmsDistributionList>('GET', `/api/edms/${encodeURIComponent(this.projectId)}/distributions${extra}`);
   };
   docDistributions = (docId: string) => this.req<EdmsDistributionList>('GET', `/api/edms/${encodeURIComponent(this.projectId)}/documents/${encodeURIComponent(docId)}/distributions`);
+  templates = (params: { templateType?: string } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.templateType) qs.set('templateType', params.templateType);
+    const extra = qs.toString() ? `&${qs.toString()}` : '';
+    return this.req<EdmsTemplateList>('GET', `/api/edms/${encodeURIComponent(this.projectId)}/templates${extra}`);
+  };
+  createTemplate = (body: { templateType: string; nameFa: string; code?: string; contentJson?: unknown; noteFa?: string }) => this.req<{ id: string; item: EdmsTemplate }>('POST', `/api/edms/${encodeURIComponent(this.projectId)}/templates`, body);
+  deleteTemplate = (templateId: string) => this.req<{ deleted: boolean; id: string }>('DELETE', `/api/edms/${encodeURIComponent(this.projectId)}/templates/${encodeURIComponent(templateId)}`);
+
   distribute = (docId: string, body: { party: string; transmittalNo?: string; noteFa?: string }) => this.req<{ id: string; item: EdmsDistribution }>('POST', `/api/edms/${encodeURIComponent(this.projectId)}/documents/${encodeURIComponent(docId)}/distribute`, body);
 
   voidComment = (commentId: string) => this.req<{ item: EdmsComment }>('POST', `/api/edms/${encodeURIComponent(this.projectId)}/comments/${encodeURIComponent(commentId)}/void`, {});

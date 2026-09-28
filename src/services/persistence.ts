@@ -2929,6 +2929,30 @@ export const SCHEMA: TableDef[] = [
     ],
   },
 
+        /* ══════════════ MOD-16 · EDM-6 قالب‌های پروژه (d1) ══════════════ */
+  {
+    name: "DocumentTemplate",
+    module: "d1",
+    title: { fa: "قالب مدرک/ترنسمیتال", en: "Document template" },
+    pk: "Id",
+    columns: [
+      id(),
+      req("ProjectId", "text", { len: 60 }),
+      req("TemplateType", "text", { len: 30, comment: "doc|transmittal|checksheet|letter" }),
+      req("NameFa", "text", { len: 120 }),
+      c("Code", "text", { len: 40 }),
+      c("ContentJson", "text", { len: 5000, comment: "JSON template fields" }),
+      c("NoteFa", "text", { len: 500 }),
+      req("CreatedBy", "text", { len: 60 }),
+      req("CreatedAt", "datetime"),
+      c("UpdatedAt", "datetime"),
+    ],
+    indexes: [
+      { name: "UX_DocTpl_Id", columns: ["Id"], unique: true },
+      { name: "IX_DocTpl_ProjectType", columns: ["ProjectId", "TemplateType"] },
+    ],
+  },
+
     /* ══════════════ d16 — بهداشت، ایمنی و محیط زیست (HSE) ══════════════
    * پروانهٔ کار پیش‌نیاز دروازهٔ RFSU در ماژول راه‌اندازی است؛ تا پیش از
    * این جداول، آن پیش‌نیاز فقط رشتهٔ آزاد بود و قابل کنترل نبود. */

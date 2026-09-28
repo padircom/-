@@ -6,10 +6,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Lang } from '../data/framework';
 import { useAuth } from '../context/AuthContext';
 import { useSystem } from '../context/SystemContext';
-import { EdmsClient, type EdmsDocumentList, type EdmsFileList, type EdmsHoldList, type EdmsDependencyList, type EdmsReadiness, type EdmsCommentList, type EdmsDciList, type EdmsDistributionList } from '../services/edmsWorkspace';
+import { EdmsClient, type EdmsDocumentList, type EdmsFileList, type EdmsHoldList, type EdmsDependencyList, type EdmsReadiness, type EdmsCommentList, type EdmsDciList, type EdmsDistributionList, type EdmsTemplateList } from '../services/edmsWorkspace';
 import { createRow, listRows } from '../services/edmsApi';
 
-export type EdmsTab = 'overview' | 'mdr' | 'revision' | 'files' | 'holds' | 'deps' | 'comments' | 'dci' | 'workflow' | 'excel' | 'numbering' | 'correspondence' | 'transmittal' | 'lessons';
+export type EdmsTab = 'overview' | 'mdr' | 'revision' | 'files' | 'holds' | 'deps' | 'comments' | 'dci' | 'templates' | 'workflow' | 'excel' | 'numbering' | 'correspondence' | 'transmittal' | 'lessons';
 
 const TABS: { id: EdmsTab; fa: string; en: string }[] = [
   { id: 'overview', fa: 'نمای کلی', en: 'Overview' },
@@ -20,6 +20,7 @@ const TABS: { id: EdmsTab; fa: string; en: string }[] = [
   { id: 'deps', fa: 'پیش‌نیاز و قفل', en: 'Prereq & Gate' },
   { id: 'comments', fa: 'نظر و Conclusion', en: 'Comments' },
   { id: 'dci', fa: 'DCI و توزیع', en: 'DCI & Dist' },
+  { id: 'templates', fa: 'قالب‌ها', en: 'Templates' },
   { id: 'workflow', fa: 'گردش کار', en: 'Workflow' },
   { id: 'excel', fa: 'اکسل', en: 'Excel' },
   { id: 'numbering', fa: 'شماره‌گذاری', en: 'Numbering' },
@@ -97,6 +98,7 @@ function LiveEdms({
   const [commentsData, setCommentsData] = useState<EdmsCommentList | null>(null);
   const [dciData, setDciData] = useState<EdmsDciList | null>(null);
   const [distData, setDistData] = useState<EdmsDistributionList | null>(null);
+  const [tplData, setTplData] = useState<EdmsTemplateList | null>(null);
   const [selDocId, setSelDocId] = useState<string>('');
   const [selDocNo, setSelDocNo] = useState<string>('');
   const [loading, setLoading] = useState(false);
@@ -116,6 +118,7 @@ function LiveEdms({
   const [replyForm, setReplyForm] = useState({ commentId: '', replyText: '' });
   const [concludeForm, setConcludeForm] = useState({ commentId: '', conclusionText: '', reviewCode: '' });
   const [distForm, setDistForm] = useState({ documentId: '', party: 'client', transmittalNo: '', noteFa: '' });
+  const [tplForm, setTplForm] = useState({ templateType: 'doc', nameFa: '', code: '', noteFa: '' });
 
   const loadDocs = useCallback(async () => {
     if (!client) return;
@@ -174,6 +177,12 @@ function LiveEdms({
     if (r.ok) setDciData(r.data);
   }, [client]);
 
+  const loadTpl = useCallback(async (type?: string) => {
+    if (!client) return;
+    const r = await client.templates({ templateType: type || undefined });
+    if (r.ok) setTplData(r.data);
+  }, [client]);
+
   const loadDist = useCallback(async (docId?: string) => {
     if (!client) return;
     if (docId) {
@@ -193,7 +202,7 @@ function LiveEdms({
 
   useEffect(() => { void loadDocs(); return () => { gen.current++; }; }, [loadDocs]);
   useEffect(() => { if (selDocId) { void loadFiles(selDocId); void loadReadiness(selDocId); void loadDeps(selDocId); void loadComments(selDocId); void loadDist(selDocId); } }, [selDocId, loadFiles, loadReadiness, loadDeps, loadComments, loadDist]);
-  useEffect(() => { void loadHolds(); void loadDci(); void loadDist(); }, [loadHolds, loadDci, loadDist]);
+  useEffect(() => { void loadHolds(); void loadDci(); void loadDist(); void loadTpl(); }, [loadHolds, loadDci, loadDist, loadTpl]);
 
   const filtered = useMemo(() => {
     if (!docsData) return [];
@@ -221,6 +230,7 @@ function LiveEdms({
       await loadDocs();
       if (selDocId) { await loadFiles(selDocId); await loadReadiness(selDocId); await loadDeps(selDocId); await loadComments(selDocId); await loadDist(selDocId); }
       await loadDci();
+      await loadTpl();
       await loadHolds();
       return true;
     }
@@ -630,6 +640,44 @@ function LiveEdms({
               {!distData?.items.length && <p className="tx3 text-[11px] mt-2">{t('توزیعی ثبت نشده','No distributions')}</p>}
             </div>
             <button className={btnGhost} onClick={()=>void loadDist()}>{t('تازه‌سازی','Refresh')}</button>
+          </Section>
+        </div>
+      )}
+
+      {tab === 'templates' && (
+        <div className="grid gap-3">
+          <Section title={t('ایجاد قالب پروژه','Create project template')} note={t('نوع: doc/transmittal/checksheet/letter','Type: doc/transmittal/checksheet/letter')}>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+              <select className={inputCls} value={tplForm.templateType} onChange={e=>setTplForm({...tplForm, templateType:e.target.value})}>
+                {['doc','transmittal','checksheet','letter','other'].map(v=><option key={v} value={v}>{v}</option>)}
+              </select>
+              <input className={inputCls} placeholder={t('نام قالب','Template name')} value={tplForm.nameFa} onChange={e=>setTplForm({...tplForm, nameFa:e.target.value})} />
+              <input className={inputCls} placeholder={t('کد قالب','Code')} value={tplForm.code} onChange={e=>setTplForm({...tplForm, code:e.target.value})} />
+              <input className={inputCls} placeholder={t('یادداشت','Note')} value={tplForm.noteFa} onChange={e=>setTplForm({...tplForm, noteFa:e.target.value})} />
+              <button className={btnPrimary} disabled={busy || !tplForm.nameFa || !tplForm.templateType} onClick={()=>void act(async ()=>{
+                if(!client) return {ok:false, message:'No client'};
+                const r=await client.createTemplate({templateType:tplForm.templateType, nameFa:tplForm.nameFa, code:tplForm.code||undefined, noteFa:tplForm.noteFa||undefined, contentJson:{fields:['DocNo','TitleFa','Revision']}});
+                if(r.ok) setTplForm(f=>({...f, nameFa:'', code:''}));
+                return r.ok ? {ok:true} : {ok:false, message:r.message};
+              }, t('قالب ثبت شد','Template created'))}>{t('ثبت قالب','Create template')}</button>
+            </div>
+          </Section>
+          <Section title={t('فهرست قالب‌ها','Template list')}>
+            <div className="overflow-x-auto max-h-[500px]">
+              <table className="w-full text-[11px] tx2">
+                <thead><tr><th className="p-1">Type</th><th className="p-1">NameFa</th><th className="p-1">Code</th><th className="p-1">CreatedBy</th><th className="p-1">At</th><th className="p-1">{t('حذف','Delete')}</th></tr></thead>
+                <tbody>
+                  {(tplData?.items ?? []).map(x=>(
+                    <tr key={x.Id} className="border-t b-line-soft"><td className="p-1">{x.TemplateType}</td><td className="p-1">{x.NameFa}</td><td className="p-1" dir="ltr">{x.Code ?? '—'}</td><td className="p-1" dir="ltr">{x.CreatedBy.slice(0,12)}</td><td className="p-1" dir="ltr">{(x.CreatedAt||'').slice(0,16)}</td><td className="p-1"><button className={btnGhost} disabled={busy} onClick={()=>void act(async ()=>{
+                      if(!client) return {ok:false, message:'No client'};
+                      const r=await client.deleteTemplate(x.Id);
+                      return r.ok ? {ok:true} : {ok:false, message:r.message};
+                    }, t('حذف شد','Deleted'))}>{t('حذف','Delete')}</button></td></tr>
+                  ))}
+                </tbody>
+              </table>
+              {!tplData?.items.length && <p className="tx3 text-[11px] mt-2">{t('قالبی ثبت نشده','No templates')}</p>}
+            </div>
           </Section>
         </div>
       )}

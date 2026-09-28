@@ -8895,6 +8895,58 @@ app.post("/api/edms/:projectId/documents/:docId/distribute", comRequire("doc.tra
   } catch(err){ next(err); }
 });
 
+
+/* ── MOD-16 EDM-6 قالب‌های پروژه ── */
+app.get("/api/edms/:projectId/templates", comRequire("doc.document.view"), async (req, res, next) => {
+  try {
+    const projectId = String(req.params.projectId || "");
+    const r = await repo();
+    const where=[{ column: "ProjectId", op: "eq", value: projectId }];
+    if(req.query.templateType) where.push({ column: "TemplateType", op: "eq", value: String(req.query.templateType) });
+    const rows = await r.list("DocumentTemplate", { where, limit: 500 });
+    rows.sort((a,b)=> String(a.NameFa).localeCompare(String(b.NameFa)));
+    res.json(cntOk(req, { count: rows.length, items: rows }));
+  } catch(err){ next(err); }
+});
+
+app.post("/api/edms/:projectId/templates", comRequire("doc.document.upload"), async (req, res, next) => {
+  try {
+    const projectId = String(req.params.projectId || "");
+    const b = req.body || {};
+    if(!b.templateType) return cntBad(req, res, "E-EDM-TPL-NO-TYPE", "نوع قالب الزامی است", 400);
+    if(!b.nameFa) return cntBad(req, res, "E-EDM-TPL-NO-NAME", "نام قالب الزامی است", 400);
+    const allowed=["doc","transmittal","checksheet","letter","other"];
+    if(!allowed.includes(String(b.templateType))) return cntBad(req, res, "E-EDM-TPL-BAD-TYPE", "نوع نامعتبر", 400);
+    const r = await repo();
+    const userId = req.headers["x-user-id"] || "system";
+    const id = crypto.randomUUID();
+    const row = {
+      Id: id,
+      ProjectId: projectId,
+      TemplateType: String(b.templateType),
+      NameFa: String(b.nameFa).slice(0,120),
+      Code: b.code ? String(b.code).slice(0,40) : null,
+      ContentJson: b.contentJson ? JSON.stringify(b.contentJson).slice(0,5000) : (b.content ? String(b.content).slice(0,5000) : null),
+      NoteFa: b.noteFa ? String(b.noteFa).slice(0,500) : null,
+      CreatedBy: userId,
+      CreatedAt: new Date().toISOString(),
+      UpdatedAt: null,
+    };
+    await r.upsert("DocumentTemplate", { Id: id }, row, userId);
+    res.status(201).json(cntOk(req, { id, item: row }));
+  } catch(err){ next(err); }
+});
+
+app.delete("/api/edms/:projectId/templates/:templateId", comRequire("doc.document.upload"), async (req, res, next) => {
+  try {
+    const r = await repo();
+    const tpl = await r.findOne("DocumentTemplate", [{ column: "Id", op: "eq", value: String(req.params.templateId) }]);
+    if(!tpl) return cntBad(req, res, "E-EDM-TPL-NOT-FOUND", "قالب یافت نشد", 404);
+    await r.delete("DocumentTemplate", String(req.params.templateId), req.headers["x-user-id"] || "system");
+    res.json(cntOk(req, { deleted: true, id: String(req.params.templateId) }));
+  } catch(err){ next(err); }
+});
+
 /* ── ۱۴٫۱ وضعیت ماژول ── */
 app.get("/api/cnt/status", (req, res) => {
   res.json(cntOk(req, {
