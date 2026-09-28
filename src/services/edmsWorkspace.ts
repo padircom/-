@@ -1,5 +1,5 @@
 /**
- * EDM-1 — کلاینت REST فضای کاری اسناد و مدارک (d1) با اتصال فایل به نسخه.
+ * EDM-1 + EDM-2 — کلاینت REST فضای کاری اسناد و مدارک (d1) با اتصال فایل به نسخه و Hold.
  * مسیرها نسبی هستند تا از پروکسی Vite عبور کنند.
  */
 import { jsonRequest, type ApiResult } from './apiClient';
@@ -51,6 +51,30 @@ export type EdmsFileList = {
   items: EdmsAttachment[];
 };
 
+export type EdmsHold = {
+  Id: string;
+  ProjectId: string;
+  DocumentId: string;
+  DocNo: string;
+  Revision: string;
+  HoldNo: string;
+  TitleFa: string;
+  HoldType: string;
+  RaisedBy: string;
+  RaisedAt: string;
+  DueAt?: string | null;
+  ReleasedBy?: string | null;
+  ReleasedAt?: string | null;
+  NoteFa?: string | null;
+  Status: string;
+};
+
+export type EdmsHoldList = {
+  count: number;
+  summary: { open: number; overdue: number; released: number };
+  items: EdmsHold[];
+};
+
 export class EdmsClient {
   constructor(private readonly projectId: string, private readonly userId: string | null) {}
 
@@ -72,9 +96,7 @@ export class EdmsClient {
     return this.req<EdmsDocumentList>('GET', `/api/edms/${encodeURIComponent(this.projectId)}/documents${extra}`);
   };
 
-  // generic document CRUD via /api/data still exists for now, but we provide direct create via same endpoint as before? Use /api/data/Document for creation
   createDocument = (body: unknown) => {
-    // uses generic data endpoint with projectId in body, but we go through /api/data/Document
     return jsonRequest<{ row?: any } | any>(`/api/data/Document`, this.userId, 'POST', { ProjectId: this.projectId, ...(body as object) });
   };
 
@@ -87,9 +109,7 @@ export class EdmsClient {
       if (noteFa) form.append('noteFa', noteFa);
       const res = await fetch(this.q(`/api/edms/${encodeURIComponent(this.projectId)}/documents/${encodeURIComponent(docId)}/files`), {
         method: 'POST',
-        headers: {
-          ...(this.userId ? { 'x-user-id': this.userId } : {}),
-        },
+        headers: { ...(this.userId ? { 'x-user-id': this.userId } : {}) },
         body: form,
       });
       const ct = res.headers.get('content-type') ?? '';
@@ -106,4 +126,18 @@ export class EdmsClient {
   }
 
   deleteFile = (fileId: string) => this.req<{ deleted: boolean; id: string }>('DELETE', `/api/edms/${encodeURIComponent(this.projectId)}/files/${encodeURIComponent(fileId)}`);
+
+  // holds EDM-2
+  holds = (params: { documentId?: string; status?: string; holdType?: string } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.documentId) qs.set('documentId', params.documentId);
+    if (params.status) qs.set('status', params.status);
+    if (params.holdType) qs.set('holdType', params.holdType);
+    const extra = qs.toString() ? `&${qs.toString()}` : '';
+    return this.req<EdmsHoldList>('GET', `/api/edms/${encodeURIComponent(this.projectId)}/holds${extra}`);
+  };
+
+  createHold = (body: unknown) => this.req<{ id: string; item: EdmsHold }>('POST', `/api/edms/${encodeURIComponent(this.projectId)}/holds`, body);
+  releaseHold = (holdId: string, noteFa?: string) => this.req<{ item: EdmsHold }>('POST', `/api/edms/${encodeURIComponent(this.projectId)}/holds/${encodeURIComponent(holdId)}/release`, { noteFa });
+  cancelHold = (holdId: string) => this.req<{ item: EdmsHold }>('POST', `/api/edms/${encodeURIComponent(this.projectId)}/holds/${encodeURIComponent(holdId)}/cancel`, {});
 }

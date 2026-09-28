@@ -1,22 +1,22 @@
 /**
- * EDM-1 — میز کار زنده اسناد و مدارک (d1) با اتصال فایل به نسخه.
+ * EDM-1 + EDM-2 — میز کار زنده اسناد و مدارک (d1) با اتصال فایل به نسخه و Hold.
  * هیچ دادهٔ نمونه ندارد؛ همه از /api/edms/:projectId/... می‌آید.
- * OPERCOM/EDMS: DocNo + Revision یکتا، هر نسخه می‌تواند چند پیوست داشته باشد.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Lang } from '../data/framework';
 import { useAuth } from '../context/AuthContext';
 import { useSystem } from '../context/SystemContext';
-import { EdmsClient, type EdmsDocumentList, type EdmsFileList } from '../services/edmsWorkspace';
+import { EdmsClient, type EdmsDocumentList, type EdmsFileList, type EdmsHoldList } from '../services/edmsWorkspace';
 import { createRow, listRows } from '../services/edmsApi';
 
-export type EdmsTab = 'overview' | 'mdr' | 'revision' | 'files' | 'workflow' | 'excel' | 'numbering' | 'correspondence' | 'transmittal' | 'lessons';
+export type EdmsTab = 'overview' | 'mdr' | 'revision' | 'files' | 'holds' | 'workflow' | 'excel' | 'numbering' | 'correspondence' | 'transmittal' | 'lessons';
 
 const TABS: { id: EdmsTab; fa: string; en: string }[] = [
   { id: 'overview', fa: 'نمای کلی', en: 'Overview' },
   { id: 'mdr', fa: 'MDR', en: 'MDR' },
   { id: 'revision', fa: 'نسخه‌ها', en: 'Revisions' },
   { id: 'files', fa: 'پیوست فایل', en: 'Files' },
+  { id: 'holds', fa: 'Hold Items', en: 'Holds' },
   { id: 'workflow', fa: 'گردش کار', en: 'Workflow' },
   { id: 'excel', fa: 'اکسل', en: 'Excel' },
   { id: 'numbering', fa: 'شماره‌گذاری', en: 'Numbering' },
@@ -25,6 +25,7 @@ const TABS: { id: EdmsTab; fa: string; en: string }[] = [
 const inputCls = 'rounded-lg border b-line-soft bg-black/20 px-2.5 py-1.5 text-[11px] tx1 placeholder:text-[10px] placeholder:tx4 w-full';
 const btnCls = 'rounded-lg border px-3 py-1.5 text-[11px] transition disabled:opacity-40';
 const btnPrimary = `${btnCls} border-sky-400/40 bg-sky-400/10 text-sky-200 hover:bg-sky-400/20`;
+const btnOk = `${btnCls} border-emerald-400/40 bg-emerald-400/10 text-emerald-200 hover:bg-emerald-400/20`;
 const btnGhost = `${btnCls} border b-line-soft tx2 hover:bg-white/5`;
 
 function Section({ title, note, children }: { title: string; note?: string; children: React.ReactNode }) {
@@ -87,6 +88,7 @@ function LiveEdms({
 
   const [docsData, setDocsData] = useState<EdmsDocumentList | null>(null);
   const [filesData, setFilesData] = useState<EdmsFileList | null>(null);
+  const [holdsData, setHoldsData] = useState<EdmsHoldList | null>(null);
   const [selDocId, setSelDocId] = useState<string>('');
   const [selDocNo, setSelDocNo] = useState<string>('');
   const [loading, setLoading] = useState(false);
@@ -100,6 +102,9 @@ function LiveEdms({
   const [docForm, setDocForm] = useState({ docNo: '', titleFa: '', revision: 'A', discipline: 'Civil', status: 'draft', reviewCode: '—', slaHours: '0' });
   const [fileNote, setFileNote] = useState('');
   const [uploadFile, setUploadFile] = useState<File | null>(null);
+  // hold form
+  const [holdForm, setHoldForm] = useState({ documentId: '', titleFa: '', holdType: 'other', dueAt: '', noteFa: '' });
+  const [holdFilter, setHoldFilter] = useState({ status: '', holdType: '' });
 
   const loadDocs = useCallback(async () => {
     if (!client) return;
@@ -115,6 +120,7 @@ function LiveEdms({
         const first = r.data.items[0];
         setSelDocId(first.Id);
         setSelDocNo(first.DocNo);
+        setHoldForm(f => ({ ...f, documentId: first.Id }));
       }
     } catch (e: any) {
       if (seq !== gen.current) return;
@@ -131,8 +137,15 @@ function LiveEdms({
     else setFilesData(null);
   }, [client]);
 
+  const loadHolds = useCallback(async () => {
+    if (!client) return;
+    const r = await client.holds({ status: holdFilter.status || undefined, holdType: holdFilter.holdType || undefined });
+    if (r.ok) setHoldsData(r.data);
+  }, [client, holdFilter]);
+
   useEffect(() => { void loadDocs(); return () => { gen.current++; }; }, [loadDocs]);
   useEffect(() => { if (selDocId) void loadFiles(selDocId); }, [selDocId, loadFiles]);
+  useEffect(() => { void loadHolds(); }, [loadHolds]);
 
   const filtered = useMemo(() => {
     if (!docsData) return [];
@@ -159,6 +172,7 @@ function LiveEdms({
       setMsg({ tone: 'ok', text: okText });
       await loadDocs();
       if (selDocId) await loadFiles(selDocId);
+      await loadHolds();
       return true;
     }
     setMsg({ tone: 'err', text: (r as any).message ?? t('خطا', 'Error') });
@@ -173,9 +187,8 @@ function LiveEdms({
     <div dir={fa ? 'rtl' : 'ltr'} className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-1">
       <header className="glass-dark rounded-xl p-3 flex flex-wrap items-center gap-3">
         <div className="flex-1">
-          <h3 className="tx1 font-semibold text-[13px]">{t('اسناد و مدارک — اتصال فایل به نسخه (EDM-1)', 'EDMS — file to revision (EDM-1)')}</h3>
-          <p className="text-[10px] tx3" dir="ltr">{projectId} · {kpis.total} docs · {kpis.versions} versions · {kpis.withFile} with file</p>
-          <p className="text-[9px] tx4 mt-1">{t('هر نسخه (DocNo+Revision) یک ردیف جدا و می‌تواند چند پیوست داشته باشد — فایل‌ها روی دیسک server/storage/edms ذخیره می‌شوند، متادیتا در DocumentAttachment', 'Each revision is separate row and can have multiple attachments — files on disk, metadata in DocumentAttachment')}</p>
+          <h3 className="tx1 font-semibold text-[13px]">{t('اسناد و مدارک — فایل به نسخه + Hold (EDM-1/2)', 'EDMS — file to revision + Holds')}</h3>
+          <p className="text-[10px] tx3" dir="ltr">{projectId} · {kpis.total} docs · {kpis.versions} versions · {kpis.withFile} with file · {holdsData?.summary.open ?? 0} open holds</p>
         </div>
         <button className={btnGhost} disabled={loading || busy} onClick={() => void loadDocs()}>{t('تازه‌سازی', 'Refresh')}</button>
       </header>
@@ -196,12 +209,13 @@ function LiveEdms({
 
       {tab === 'overview' && (
         <div className="grid gap-3">
-          <Section title={t('KPI اسناد', 'Docs KPI')} note={t('بدون دادهٔ نمونه — فقط دادهٔ واقعی پروژه', 'No sample data — live project data only')}>
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+          <Section title={t('KPI اسناد و Hold', 'Docs & Hold KPI')} note={t('بدون نمونه — فقط دادهٔ واقعی', 'No sample — live only')}>
+            <div className="grid grid-cols-2 lg:grid-cols-5 gap-2">
               <Kpi label={t('کل مدارک', 'Total docs')} value={String(kpis.total)} />
               <Kpi label={t('تأییدشده', 'Approved')} value={String(kpis.approved)} />
               <Kpi label={t('دارای فایل', 'With file')} value={String(kpis.withFile)} />
-              <Kpi label={t('بدون فایل', 'Without file')} value={String(kpis.withoutFile)} />
+              <Kpi label={t('Hold باز', 'Open holds')} value={String(holdsData?.summary.open ?? 0)} />
+              <Kpi label={t('Hold معوق', 'Overdue holds')} value={String(holdsData?.summary.overdue ?? 0)} />
             </div>
           </Section>
           <Section title={t('نسخه‌ها به تفکیک DocNo', 'Versions by DocNo')}>
@@ -221,23 +235,21 @@ function LiveEdms({
 
       {tab === 'mdr' && (
         <div className="grid gap-3">
-          <Section title={t('ایجاد مدرک جدید', 'Create document')} note={t('DocNo + Revision یکتا در پروژه — FilePath بعداً با آپلود پر می‌شود', 'DocNo+Revision unique — FilePath filled via upload')}>
+          <Section title={t('ایجاد مدرک جدید', 'Create document')} note={t('DocNo + Revision یکتا', 'DocNo+Revision unique')}>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-              <input className={inputCls} placeholder="DocNo (مثل OG-2401-CIV-DR-001)" value={docForm.docNo} onChange={e => setDocForm({ ...docForm, docNo: e.target.value })} />
+              <input className={inputCls} placeholder="DocNo" value={docForm.docNo} onChange={e => setDocForm({ ...docForm, docNo: e.target.value })} />
               <input className={inputCls} placeholder={t('عنوان فارسی', 'Title Fa')} value={docForm.titleFa} onChange={e => setDocForm({ ...docForm, titleFa: e.target.value })} />
-              <input className={inputCls} placeholder="Revision (A, B, 0, 1...)" value={docForm.revision} onChange={e => setDocForm({ ...docForm, revision: e.target.value })} />
+              <input className={inputCls} placeholder="Revision" value={docForm.revision} onChange={e => setDocForm({ ...docForm, revision: e.target.value })} />
               <input className={inputCls} placeholder="Discipline" value={docForm.discipline} onChange={e => setDocForm({ ...docForm, discipline: e.target.value })} />
               <select className={inputCls} value={docForm.status} onChange={e => setDocForm({ ...docForm, status: e.target.value })}>
                 {['draft', 'under_review', 'approved', 'rejected'].map(s => <option key={s} value={s}>{s}</option>)}
               </select>
-              <input className={inputCls} placeholder="ReviewCode (C1..C4)" value={docForm.reviewCode} onChange={e => setDocForm({ ...docForm, reviewCode: e.target.value })} />
+              <input className={inputCls} placeholder="ReviewCode" value={docForm.reviewCode} onChange={e => setDocForm({ ...docForm, reviewCode: e.target.value })} />
             </div>
             <button className={btnPrimary} disabled={busy || !docForm.docNo || !docForm.titleFa} onClick={() => void act(async () => {
-              // use generic data API for Document creation (since we have not yet built edms workspace create)
               const res = await listRows('Document', projectId);
-              // check duplicate
               if (res?.items?.some((r: any) => r.DocNo === docForm.docNo && r.Revision === docForm.revision)) {
-                return { ok: false, message: t('این DocNo+Revision تکراری است', 'Duplicate DocNo+Revision') };
+                return { ok: false, message: t('تکراری است', 'Duplicate') };
               }
               const row = {
                 ProjectId: projectId,
@@ -252,13 +264,13 @@ function LiveEdms({
                 IssuedAt: new Date().toISOString().slice(0, 10),
               };
               const created = await createRow('Document', row);
-              return created ? { ok: true } : { ok: false, message: t('ثبت ناموفق — مجوز یا اتصال', 'Create failed') };
+              return created ? { ok: true } : { ok: false, message: t('ثبت ناموفق', 'Create failed') };
             }, t('مدرک ایجاد شد', 'Document created'))}>{t('ثبت مدرک', 'Create')}</button>
           </Section>
 
           <Section title={t('MDR — فهرست مدارک', 'MDR — documents')}>
             <div className="flex gap-2 mb-2">
-              <input className={inputCls} style={{ maxWidth: '300px' }} placeholder={t('جستجو DocNo/Title', 'Search DocNo/Title')} value={query} onChange={e => setQuery(e.target.value)} />
+              <input className={inputCls} style={{ maxWidth: '300px' }} placeholder={t('جستجو DocNo/Title', 'Search')} value={query} onChange={e => setQuery(e.target.value)} />
             </div>
             <div className="overflow-x-auto max-h-[500px]">
               <table className="w-full text-[11px] tx2">
@@ -273,19 +285,19 @@ function LiveEdms({
                       <td className="p-1">{d.Discipline ?? '—'}</td>
                       <td className="p-1">{d.hasFile ? '✓' : '—'}</td>
                       <td className="p-1">{d.versions}</td>
-                      <td className="p-1"><button className={btnGhost} onClick={() => { setSelDocId(d.Id); setSelDocNo(d.DocNo); setTab('files'); }}>{t('پیوست‌ها', 'Files')}</button></td>
+                      <td className="p-1 flex gap-1"><button className={btnGhost} onClick={() => { setSelDocId(d.Id); setSelDocNo(d.DocNo); setTab('files'); }}>{t('فایل‌ها', 'Files')}</button><button className={btnGhost} onClick={() => { setSelDocId(d.Id); setHoldForm(f=>({...f,documentId:d.Id})); setTab('holds'); }}>{t('Hold', 'Hold')}</button></td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-              {!filtered.length && <p className="tx3 text-[11px] mt-2">{t('مدرکی نیست — ابتدا ایجاد کن', 'No documents — create first')}</p>}
+              {!filtered.length && <p className="tx3 text-[11px] mt-2">{t('مدرکی نیست', 'No docs')}</p>}
             </div>
           </Section>
         </div>
       )}
 
       {tab === 'revision' && (
-        <Section title={t('تاریخچه نسخه‌ها (DocNo → Revisions)', 'Version history')} note={t('هر DocNo می‌تواند چند Revision داشته باشد — هر Revision یک ردیف جدا', 'Each DocNo can have multiple revisions')}>
+        <Section title={t('تاریخچه نسخه‌ها', 'Version history')}>
           <div className="grid gap-2">
             <select className={inputCls} value={selDocNo} onChange={e => setSelDocNo(e.target.value)}>
               <option value="">{t('انتخاب DocNo', 'Select DocNo')}</option>
@@ -307,17 +319,17 @@ function LiveEdms({
 
       {tab === 'files' && (
         <div className="grid gap-3">
-          <Section title={t('انتخاب مدرک برای پیوست', 'Select document for attachment')}>
+          <Section title={t('انتخاب مدرک', 'Select document')}>
             <select className={inputCls} value={selDocId} onChange={e => { setSelDocId(e.target.value); const doc = docsData?.items.find(x => x.Id === e.target.value); if (doc) setSelDocNo(doc.DocNo); }}>
               <option value="">{t('انتخاب مدرک', 'Select doc')}</option>
               {(docsData?.items ?? []).map(d => <option key={d.Id} value={d.Id}>{d.DocNo} Rev {d.Revision} — {d.TitleFa}</option>)}
             </select>
           </Section>
 
-          <Section title={t('آپلود فایل به نسخه', 'Upload file to revision')} note={t('فایل روی دیسک server/storage/edms ذخیره و متادیتا در DocumentAttachment ثبت می‌شود — اتصال فایل به نسخه', 'File on disk, metadata in DocumentAttachment — file to revision link')}>
+          <Section title={t('آپلود فایل به نسخه', 'Upload file to revision')} note={t('اتصال فایل به نسخه — FilePath در Document هم به‌روز می‌شود', 'File to revision link')}>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
               <input type="file" className={inputCls} onChange={e => setUploadFile(e.target.files?.[0] ?? null)} />
-              <input className={inputCls} placeholder={t('یادداشت فارسی (اختیاری)', 'Note Fa optional')} value={fileNote} onChange={e => setFileNote(e.target.value)} />
+              <input className={inputCls} placeholder={t('یادداشت (اختیاری)', 'Note optional')} value={fileNote} onChange={e => setFileNote(e.target.value)} />
               <button className={btnPrimary} disabled={busy || !uploadFile || !selDocId} onClick={() => void act(async () => {
                 if (!client || !uploadFile || !selDocId) return { ok: false, message: 'No file' };
                 const r = await client.uploadFile(selDocId, uploadFile, fileNote || undefined);
@@ -327,7 +339,7 @@ function LiveEdms({
             </div>
           </Section>
 
-          <Section title={t('پیوست‌های این نسخه', 'Attachments of this revision')}>
+          <Section title={t('پیوست‌های این نسخه', 'Attachments')}>
             <div className="overflow-x-auto">
               <table className="w-full text-[11px] tx2">
                 <thead><tr><th className="p-1">{t('FileName', 'نام فایل')}</th><th className="p-1">Mime</th><th className="p-1">Size</th><th className="p-1">UploadedAt</th><th className="p-1">By</th><th className="p-1">{t('دانلود', 'Download')}</th><th className="p-1">{t('حذف', 'Delete')}</th></tr></thead>
@@ -341,15 +353,78 @@ function LiveEdms({
                   ))}
                 </tbody>
               </table>
-              {!filesData?.items.length && <p className="tx3 text-[11px] mt-2">{t('پیوستی نیست — فایل آپلود کن', 'No attachments — upload file')}</p>}
+              {!filesData?.items.length && <p className="tx3 text-[11px] mt-2">{t('پیوستی نیست', 'No attachments')}</p>}
+            </div>
+          </Section>
+        </div>
+      )}
+
+      {tab === 'holds' && (
+        <div className="grid gap-3">
+          <Section title={t('ایجاد Hold برای مدرک', 'Create Hold for document')} note={t('HoldNo خودکار — DueAt تاریخ رفع مورد انتظار', 'HoldNo auto — DueAt expected release')}>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+              <select className={inputCls} value={holdForm.documentId} onChange={e => setHoldForm({ ...holdForm, documentId: e.target.value })}>
+                <option value="">{t('انتخاب مدرک', 'Select doc')}</option>
+                {(docsData?.items ?? []).map(d => <option key={d.Id} value={d.Id}>{d.DocNo} Rev {d.Revision}</option>)}
+              </select>
+              <input className={inputCls} placeholder={t('دلیل Hold', 'Hold reason')} value={holdForm.titleFa} onChange={e => setHoldForm({ ...holdForm, titleFa: e.target.value })} />
+              <select className={inputCls} value={holdForm.holdType} onChange={e => setHoldForm({ ...holdForm, holdType: e.target.value })}>
+                {['vendor','client','engineering','procurement','other'].map(v => <option key={v} value={v}>{v}</option>)}
+              </select>
+              <input className={inputCls} type="date" value={holdForm.dueAt} onChange={e => setHoldForm({ ...holdForm, dueAt: e.target.value })} />
+              <input className={inputCls} placeholder={t('یادداشت', 'Note')} value={holdForm.noteFa} onChange={e => setHoldForm({ ...holdForm, noteFa: e.target.value })} />
+              <button className={btnPrimary} disabled={busy || !holdForm.documentId || !holdForm.titleFa} onClick={() => void act(async () => {
+                if (!client) return { ok: false, message: 'No client' };
+                const r = await client.createHold({ documentId: holdForm.documentId, titleFa: holdForm.titleFa, holdType: holdForm.holdType, dueAt: holdForm.dueAt || undefined, noteFa: holdForm.noteFa || undefined });
+                return r.ok ? { ok: true } : { ok: false, message: r.message };
+              }, t('Hold ثبت شد', 'Hold created'))}>{t('ثبت Hold', 'Create Hold')}</button>
+            </div>
+          </Section>
+
+          <Section title={t('فیلتر Hold', 'Hold filter')}>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+              <select className={inputCls} value={holdFilter.status} onChange={e => setHoldFilter({ ...holdFilter, status: e.target.value })}>
+                <option value="">{t('همه وضعیت‌ها', 'All statuses')}</option>
+                <option value="open">open</option>
+                <option value="released">released</option>
+                <option value="cancelled">cancelled</option>
+              </select>
+              <select className={inputCls} value={holdFilter.holdType} onChange={e => setHoldFilter({ ...holdFilter, holdType: e.target.value })}>
+                <option value="">{t('همه نوع‌ها', 'All types')}</option>
+                {['vendor','client','engineering','procurement','other'].map(v => <option key={v} value={v}>{v}</option>)}
+              </select>
+              <button className={btnGhost} onClick={() => void loadHolds()}>{t('اعمال', 'Apply')}</button>
+            </div>
+            {holdsData?.summary && <div className="grid grid-cols-3 gap-2 mt-2"><Kpi label={t('باز', 'Open')} value={String(holdsData.summary.open)} /><Kpi label={t('معوق', 'Overdue')} value={String(holdsData.summary.overdue)} /><Kpi label={t('آزادشده', 'Released')} value={String(holdsData.summary.released)} /></div>}
+          </Section>
+
+          <Section title={t('فهرست Hold Items', 'Hold Items list')}>
+            <div className="overflow-x-auto max-h-[500px]">
+              <table className="w-full text-[11px] tx2">
+                <thead><tr><th className="p-1">HoldNo</th><th className="p-1">DocNo</th><th className="p-1">Rev</th><th className="p-1">{t('دلیل', 'Reason')}</th><th className="p-1">Type</th><th className="p-1">Status</th><th className="p-1">DueAt</th><th className="p-1">{t('اقدام', 'Action')}</th></tr></thead>
+                <tbody>
+                  {(holdsData?.items ?? []).map(h => (
+                    <tr key={h.Id} className="border-t b-line-soft"><td className="p-1" dir="ltr">{h.HoldNo}</td><td className="p-1" dir="ltr">{h.DocNo}</td><td className="p-1" dir="ltr">{h.Revision}</td><td className="p-1">{h.TitleFa}</td><td className="p-1">{h.HoldType}</td><td className="p-1">{h.Status}</td><td className="p-1" dir="ltr">{h.DueAt ?? '—'}</td><td className="p-1 flex gap-1">{h.Status==='open' && <><button className={btnOk} disabled={busy} onClick={() => void act(async () => {
+                      if (!client) return { ok: false, message: 'No client' };
+                      const r = await client.releaseHold(h.Id);
+                      return r.ok ? { ok: true } : { ok: false, message: r.message };
+                    }, t('آزاد شد', 'Released'))}>{t('آزاد', 'Release')}</button><button className={btnGhost} disabled={busy} onClick={() => void act(async () => {
+                      if (!client) return { ok: false, message: 'No client' };
+                      const r = await client.cancelHold(h.Id);
+                      return r.ok ? { ok: true } : { ok: false, message: r.message };
+                    }, t('لغو شد', 'Cancelled'))}>{t('لغو', 'Cancel')}</button></>}</td></tr>
+                  ))}
+                </tbody>
+              </table>
+              {!holdsData?.items.length && <p className="tx3 text-[11px] mt-2">{t('Hold باز نیست', 'No open holds')}</p>}
             </div>
           </Section>
         </div>
       )}
 
       {['workflow','excel','numbering','correspondence','transmittal','lessons'].includes(tab) && (
-        <Section title={t('این تب در P3 بعدی تکمیل می‌شود', 'This tab will be completed in next P3 steps')} note={t('فعلاً تمرکز EDM-1: اتصال فایل به مدرک و نسخه', 'Current focus EDM-1: file to doc & revision')}>
-          <p className="tx3 text-[11px]">{t('برای تکمیل کامل EDMS، مراحل EDM-2 تا EDM-9 باقی است', 'Remaining EDMS steps EDM-2..9 for full EDMS')}</p>
+        <Section title={t('این تب در مراحل بعدی P3 تکمیل می‌شود', 'This tab in next P3 steps')} note={t('تمرکز فعلی EDM-1/2', 'Current focus EDM-1/2')}>
+          <p className="tx3 text-[11px]">{t('باقی: EDM-3..9', 'Remaining: EDM-3..9')}</p>
         </Section>
       )}
     </div>

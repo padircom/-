@@ -8495,6 +8495,88 @@ app.delete("/api/edms/:projectId/files/:fileId", comRequire("doc.document.upload
   } catch (err) { next(err); }
 });
 
+/* ══════════════ EDM-2 — مدیریت Hold و Hold Items (d1) ══════════════ */
+app.post("/api/edms/:projectId/holds", comRequire("doc.document.upload"), async (req, res, next) => {
+  try {
+    const projectId = String(req.params.projectId || "");
+    if (!projectId) return cntBad(req, res, "E-CNT-NO-PROJECT", "پارامتر projectId الزامی است");
+    const b = req.body || {};
+    if (!b.documentId || !String(b.documentId).trim()) return cntBad(req, res, "E-EDM-HOLD-NO-DOC", "شناسه مدرک الزامی است", 400);
+    if (!b.titleFa || !String(b.titleFa).trim()) return cntBad(req, res, "E-EDM-HOLD-NO-TITLE", "دلیل هولد الزامی است", 400);
+    const r = await repo();
+    const doc = await r.findOne("Document", [{ column: "Id", op: "eq", value: String(b.documentId) }]);
+    if (!doc) return cntBad(req, res, "E-EDM-DOC-NOT-FOUND", "مدرک یافت نشد", 404);
+    if (doc.ProjectId !== projectId) return cntBad(req, res, "E-COM-PROJECT-MISMATCH", "مدرک به پروژه دیگری تعلق دارد", 400);
+    const holdNo = b.holdNo ? String(b.holdNo).trim() : `HOLD-${Date.now().toString().slice(-6)}-${Math.random().toString(36).slice(2,5).toUpperCase()}`;
+    const existing = await r.findOne("DocumentHold", [{ column: "ProjectId", op: "eq", value: projectId }, { column: "HoldNo", op: "eq", value: holdNo }]);
+    if (existing) return cntBad(req, res, "E-EDM-HOLD-DUP", "شماره هولد تکراری است", 409);
+    const userId = req.headers["x-user-id"] || "system";
+    const id = crypto.randomUUID();
+    const row = {
+      Id: id,
+      ProjectId: projectId,
+      DocumentId: String(b.documentId),
+      DocNo: doc.DocNo,
+      Revision: doc.Revision,
+      HoldNo: holdNo,
+      TitleFa: String(b.titleFa).trim(),
+      HoldType: b.holdType ? String(b.holdType) : "other",
+      RaisedBy: userId,
+      RaisedAt: new Date().toISOString(),
+      DueAt: b.dueAt ? String(b.dueAt) : null,
+      ReleasedBy: null,
+      ReleasedAt: null,
+      NoteFa: b.noteFa ? String(b.noteFa).slice(0,1000) : null,
+      Status: "open",
+    };
+    await r.upsert("DocumentHold", { Id: id }, row, userId);
+    res.status(201).json(cntOk(req, { id, item: row }));
+  } catch (err) { next(err); }
+});
+
+app.get("/api/edms/:projectId/holds", comRequire("doc.document.view"), async (req, res, next) => {
+  try {
+    const projectId = String(req.params.projectId || "");
+    if (!projectId) return cntBad(req, res, "E-CNT-NO-PROJECT", "پارامتر projectId الزامی است");
+    const r = await repo();
+    const where = [{ column: "ProjectId", op: "eq", value: projectId }];
+    if (req.query.documentId) where.push({ column: "DocumentId", op: "eq", value: String(req.query.documentId) });
+    if (req.query.status) where.push({ column: "Status", op: "eq", value: String(req.query.status) });
+    if (req.query.holdType) where.push({ column: "HoldType", op: "eq", value: String(req.query.holdType) });
+    const holds = await r.list("DocumentHold", { where, limit: 500 });
+    holds.sort((a,b)=> new Date(b.RaisedAt) - new Date(a.RaisedAt));
+    const open = holds.filter(h=> h.Status==="open").length;
+    const overdue = holds.filter(h=> h.Status==="open" && h.DueAt && new Date(h.DueAt) < new Date()).length;
+    res.json(cntOk(req, { count: holds.length, summary: { open, overdue, released: holds.filter(h=>h.Status==="released").length }, items: holds }));
+  } catch (err) { next(err); }
+});
+
+app.post("/api/edms/:projectId/holds/:holdId/release", comRequire("doc.document.upload"), async (req, res, next) => {
+  try {
+    const r = await repo();
+    const hold = await r.findOne("DocumentHold", [{ column: "Id", op: "eq", value: String(req.params.holdId) }]);
+    if (!hold) return cntBad(req, res, "E-EDM-HOLD-NOT-FOUND", "هولد یافت نشد", 404);
+    if (hold.Status !== "open") return cntBad(req, res, "E-EDM-HOLD-NOT-OPEN", "هولد باز نیست", 409);
+    const userId = req.headers["x-user-id"] || "system";
+    const row = { ...hold, Status: "released", ReleasedBy: userId, ReleasedAt: new Date().toISOString(), NoteFa: req.body.noteFa ? String(req.body.noteFa).slice(0,1000) : hold.NoteFa };
+    await r.upsert("DocumentHold", { Id: hold.Id }, row, userId);
+    res.json(cntOk(req, { item: row }));
+  } catch (err) { next(err); }
+});
+
+app.post("/api/edms/:projectId/holds/:holdId/cancel", comRequire("doc.document.upload"), async (req, res, next) => {
+  try {
+    const r = await repo();
+    const hold = await r.findOne("DocumentHold", [{ column: "Id", op: "eq", value: String(req.params.holdId) }]);
+    if (!hold) return cntBad(req, res, "E-EDM-HOLD-NOT-FOUND", "هولد یافت نشد", 404);
+    if (hold.Status !== "open") return cntBad(req, res, "E-EDM-HOLD-NOT-OPEN", "هولد باز نیست", 409);
+    const userId = req.headers["x-user-id"] || "system";
+    const row = { ...hold, Status: "cancelled", ReleasedBy: userId, ReleasedAt: new Date().toISOString() };
+    await r.upsert("DocumentHold", { Id: hold.Id }, row, userId);
+    res.json(cntOk(req, { item: row }));
+  } catch (err) { next(err); }
+});
+
 /* ── ۱۴٫۱ وضعیت ماژول ── */
 app.get("/api/cnt/status", (req, res) => {
   res.json(cntOk(req, {

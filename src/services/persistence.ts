@@ -2818,6 +2818,36 @@ export const SCHEMA: TableDef[] = [
     ],
   },
 
+    /* ══════════════ MOD-14 · EDM-2 مدیریت Hold و Hold Items (d1) ══════════════ */
+  {
+    name: "DocumentHold",
+    module: "d1",
+    title: { fa: "هولد مدرک", en: "Document hold" },
+    pk: "Id",
+    columns: [
+      id(),
+      req("ProjectId", "text", { len: 60 }),
+      req("DocumentId", "text", { len: 60 }),
+      req("DocNo", "text", { len: 80 }),
+      req("Revision", "text", { len: 10 }),
+      req("HoldNo", "text", { len: 60 }),
+      req("TitleFa", "text", { len: 400, comment: "دلیل هولد" }),
+      req("HoldType", "text", { len: 20, comment: "vendor|client|engineering|procurement|other" }),
+      req("RaisedBy", "text", { len: 60 }),
+      req("RaisedAt", "datetime"),
+      c("DueAt", "date"),
+      c("ReleasedBy", "text", { len: 60 }),
+      c("ReleasedAt", "datetime"),
+      c("NoteFa", "text", { len: 1000 }),
+      req("Status", "text", { len: 20, comment: "open|released|cancelled" }),
+    ],
+    indexes: [
+      { name: "UX_DocHold_No", columns: ["ProjectId", "HoldNo"], unique: true },
+      { name: "IX_DocHold_Doc", columns: ["DocumentId", "Status"] },
+      { name: "IX_DocHold_Status", columns: ["ProjectId", "Status", "DueAt"] },
+    ],
+  },
+
     /* ══════════════ d16 — بهداشت، ایمنی و محیط زیست (HSE) ══════════════
    * پروانهٔ کار پیش‌نیاز دروازهٔ RFSU در ماژول راه‌اندازی است؛ تا پیش از
    * این جداول، آن پیش‌نیاز فقط رشتهٔ آزاد بود و قابل کنترل نبود. */
