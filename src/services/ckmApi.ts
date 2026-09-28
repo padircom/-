@@ -44,6 +44,26 @@ export class CkmClient {
   reuseLesson = (code: string, noteFa: string) => this.req("POST", `/lessons/${e(code)}/reuse`, { noteFa });
   deleteLesson = (code: string) => this.req("DELETE", `/lessons/${e(code)}`);
 
+  inbox = (params: { status?: string; type?: string } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.status) qs.set('status', params.status);
+    if (params.type) qs.set('type', params.type);
+    const extra = qs.toString() ? `?${qs.toString()}` : '';
+    return this.req<{ count: number; summary: { unread: number; overdue: number; total: number }; items: any[] }>("GET", `/inbox${extra}`);
+  };
+  readInbox = (id: string) => this.req("POST", `/inbox/${e(id)}/read`, {});
+  doneInbox = (id: string) => this.req("POST", `/inbox/${e(id)}/done`, {});
+  referrals = (params: { letterNo?: string; toUserId?: string; status?: string } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.letterNo) qs.set('letterNo', params.letterNo);
+    if (params.toUserId) qs.set('toUserId', params.toUserId);
+    if (params.status) qs.set('status', params.status);
+    const extra = qs.toString() ? `?${qs.toString()}` : '';
+    return this.req<{ count: number; items: any[] }>("GET", `/referrals${extra}`);
+  };
+  referLetter = (no: string, body: unknown) => this.req("POST", `/letters/${e(no)}/refer`, body);
+  doneReferral = (id: string, body: unknown = {}) => this.req("POST", `/referrals/${e(id)}/done`, body);
+
   createRule = (r: unknown) => this.req("POST", "/rules", r);
   updateRule = (code: string, patch: unknown) => this.req("PATCH", `/rules/${e(code)}`, patch);
   deleteRule = (code: string) => this.req("DELETE", `/rules/${e(code)}`);

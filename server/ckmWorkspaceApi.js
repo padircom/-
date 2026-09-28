@@ -290,7 +290,35 @@ export function registerCkmWorkspaceRoutes(app, { repo, subjects, evaluate }) {
     const issues = validateLetter(toLetter(row));
     /* اعلان قراردادی صادره می‌تواند بدون ارجاع پیش‌نویس شود ولی بدون آن امضا نمی‌شود. */
     assertEngine(Direction === "incoming" ? issues : issues.filter((i) => i.code !== "E-CKM-103"));
+
     const created = await r.create("Correspondence", { ProjectId: pid, ...row, ...letterDerived(row) }, actor(req), "cor");
+    // PAT-1: auto inbox for owner role — find users with that role
+    try {
+      if(row.OwnerRole){
+        const { DEMO_SUBJECTS } = await import("./rbacLogic.js");
+        const matched = DEMO_SUBJECTS.filter(u=> u.roles && (u.roles.includes(row.OwnerRole) || u.displayName===row.OwnerRole || u.roles.some(rr=> row.OwnerRole.includes(rr))));
+        // fallback: if OwnerRole is a role name like "مدیر قرارداد" mapped to role? Use displayName matching or role
+        // For simplicity, also create inbox for all doc_controllers if no match
+        const targets = matched.length ? matched : DEMO_SUBJECTS.filter(u=> u.id!==actor(req)).slice(0,3);
+        for(const tgt of targets.slice(0,5)){
+          const inboxId = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+          await r.create("CkmInboxItem", {
+            Id: inboxId,
+            ProjectId: pid,
+            RecipientUserId: tgt.id,
+            Type: "letter",
+            ReferenceId: row.LetterNo,
+            TitleFa: `نامه ${row.LetterNo}: ${row.SubjectFa.slice(0,80)}`,
+            DueAt: row.DueAt || null,
+            Status: "unread",
+            CreatedAt: new Date().toISOString(),
+            ReadAt: null,
+            DoneAt: null,
+            Priority: isTimeBarred(row.Kind) ? "high" : "normal",
+          }, actor(req), "inb");
+        }
+      }
+    } catch(e){ console.error('inbox auto create failed', e); }
     await audit(r, req, "CKM_LETTER_CREATED", { entityName: "Correspondence", entityId: row.LetterNo, status: row.Status, kind: row.Kind });
     ok(req, res, created, 201);
   }));
@@ -639,7 +667,117 @@ export function registerCkmWorkspaceRoutes(app, { repo, subjects, evaluate }) {
     ok(req, res, await r.get("NotificationRule", cur.Id));
   }));
 
-  app.delete(`${base}/rules/:code`, need("ckm.notify.manage"), route(async (req, res, r, pid) => {
+  /* ═══════════ PAT-1/2 کارتابل و ارجاعات ═══════════ */
+
+  app.get(`${base}/inbox`, need(VIEW_PERMS), route(async (req, res, r, pid) => {
+    const userId = actor(req);
+    const where=[{ column: "ProjectId", op: "eq", value: pid }, { column: "RecipientUserId", op: "eq", value: userId }];
+    if(req.query.status) where.push({ column: "Status", op: "eq", value: String(req.query.status) });
+    if(req.query.type) where.push({ column: "Type", op: "eq", value: String(req.query.type) });
+    const rows = await r.list("CkmInboxItem", { where, limit: 500 });
+    rows.sort((a,b)=> String(b.CreatedAt||"").localeCompare(String(a.CreatedAt||"")));
+    const unread = rows.filter(x=> x.Status==="unread").length;
+    const overdue = rows.filter(x=> x.DueAt && new Date(x.DueAt) < new Date() && x.Status!=="done" && x.Status!=="archived").length;
+    ok(req, res, { count: rows.length, summary: { unread, overdue, total: rows.length }, items: rows });
+  }));
+
+  app.post(`${base}/inbox/:id/read`, need(VIEW_PERMS), route(async (req, res, r, pid) => {
+    const row = await r.findOne("CkmInboxItem", [{ column: "Id", op: "eq", value: String(req.params.id) }]);
+    if(!row) throw notFound(`کارتابل ${req.params.id} یافت نشد`);
+    if(row.ProjectId!==pid) throw bad("E-CKM-PROJECT-MISMATCH", "پروژه ناهمخوان");
+    const now = new Date().toISOString();
+    const next = { ...row, Status: row.Status==="unread" ? "read" : row.Status, ReadAt: row.ReadAt || now };
+    await r.upsert("CkmInboxItem", { Id: row.Id }, next, actor(req));
+    ok(req, res, next);
+  }));
+
+  app.post(`${base}/inbox/:id/done`, need(VIEW_PERMS), route(async (req, res, r, pid) => {
+    const row = await r.findOne("CkmInboxItem", [{ column: "Id", op: "eq", value: String(req.params.id) }]);
+    if(!row) throw notFound(`کارتابل ${req.params.id} یافت نشد`);
+    const now = new Date().toISOString();
+    const next = { ...row, Status: "done", DoneAt: now, ReadAt: row.ReadAt || now };
+    await r.upsert("CkmInboxItem", { Id: row.Id }, next, actor(req));
+    ok(req, res, next);
+  }));
+
+  app.get(`${base}/referrals`, need(VIEW_PERMS), route(async (req, res, r, pid) => {
+    const where=[{ column: "ProjectId", op: "eq", value: pid }];
+    if(req.query.letterNo) where.push({ column: "LetterNo", op: "eq", value: String(req.query.letterNo) });
+    if(req.query.toUserId) where.push({ column: "ToUserId", op: "eq", value: String(req.query.toUserId) });
+    if(req.query.status) where.push({ column: "Status", op: "eq", value: String(req.query.status) });
+    const rows = await r.list("CkmReferral", { where, limit: 500 });
+    rows.sort((a,b)=> String(b.CreatedAt||"").localeCompare(String(a.CreatedAt||"")));
+    ok(req, res, { count: rows.length, items: rows });
+  }));
+
+  app.post(`${base}/letters/:no/refer`, need("ckm.letter.draft"), route(async (req, res, r, pid) => {
+    const cur = await must(r, "Correspondence", pid, "LetterNo", req.params.no, "نامهٔ");
+    const b = req.body ?? {};
+    const toUserId = text(b.toUserId, "گیرنده ارجاع", { max: 60, required: true });
+    const instruction = text(b.instructionFa, "دستور ارجاع", { max: 1000, required: true });
+    const deadline = date(b.deadline, "مهلت");
+    // check user exists
+    const target = (await import("./rbacLogic.js")).DEMO_SUBJECTS.find(u=> u.id===toUserId);
+    if(!target) throw notFound(`کاربر ${toUserId} یافت نشد`);
+    const id = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const now = new Date().toISOString();
+    const history = [{ at: now, by: actor(req), to: toUserId, instruction, deadline }];
+    const row = {
+      Id: id,
+      ProjectId: pid,
+      LetterNo: cur.LetterNo,
+      FromUserId: actor(req),
+      ToUserId: toUserId,
+      InstructionFa: instruction,
+      Deadline: deadline,
+      Status: "open",
+      CreatedAt: now,
+      DoneAt: null,
+      DoneNoteFa: null,
+      HistoryJson: JSON.stringify(history),
+    };
+    await r.create("CkmReferral", row, actor(req), "ref");
+    // inbox for target
+    const inboxId = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    await r.create("CkmInboxItem", {
+      Id: inboxId,
+      ProjectId: pid,
+      RecipientUserId: toUserId,
+      Type: "referral",
+      ReferenceId: cur.LetterNo,
+      TitleFa: `ارجاع ${cur.LetterNo}: ${instruction.slice(0,80)}`,
+      DueAt: deadline,
+      Status: "unread",
+      CreatedAt: now,
+      ReadAt: null,
+      DoneAt: null,
+      Priority: "normal",
+    }, actor(req), "inb");
+    // also inbox for letter if owner changed? Keep simple
+    await audit(r, req, "CKM_REFERRAL_CREATED", { entityName: "CkmReferral", entityId: id, letterNo: cur.LetterNo, toUserId });
+    ok(req, res, row, 201);
+  }));
+
+  app.post(`${base}/referrals/:id/done`, need(VIEW_PERMS), route(async (req, res, r, pid) => {
+    const cur = await must(r, "CkmReferral", pid, "Id", req.params.id, "ارجاع");
+    if(cur.Status!=="open") throw conflict("E-CKM-REFERRAL-CLOSED", "ارجاع باز نیست");
+    const note = text(req.body?.doneNoteFa, "نتیجه", { max: 1000 });
+    const now = new Date().toISOString();
+    let history = [];
+    try { history = JSON.parse(cur.HistoryJson||"[]"); } catch {}
+    history.push({ at: now, by: actor(req), action: "done", note });
+    const next = { ...cur, Status: "done", DoneAt: now, DoneNoteFa: note, HistoryJson: JSON.stringify(history) };
+    await r.patch("CkmReferral", cur.Id, { Status: "done", DoneAt: now, DoneNoteFa: note, HistoryJson: JSON.stringify(history) }, actor(req));
+    // mark inbox done for this user
+    const inboxRows = await r.list("CkmInboxItem", { where: [{ column: "ProjectId", op: "eq", value: pid }, { column: "ReferenceId", op: "eq", value: cur.LetterNo }, { column: "RecipientUserId", op: "eq", value: cur.ToUserId }, { column: "Type", op: "eq", value: "referral" }], limit: 50 });
+    for(const ib of inboxRows){
+      if(ib.Status!=="done") await r.patch("CkmInboxItem", ib.Id, { Status: "done", DoneAt: now, ReadAt: ib.ReadAt || now }, actor(req));
+    }
+    await audit(r, req, "CKM_REFERRAL_DONE", { entityName: "CkmReferral", entityId: cur.Id });
+    ok(req, res, next);
+  }));
+
+    app.delete(`${base}/rules/:code`, need("ckm.notify.manage"), route(async (req, res, r, pid) => {
     const cur = await must(r, "NotificationRule", pid, "Code", req.params.code, "قاعدهٔ");
     await r.remove("NotificationRule", cur.Id);
     await audit(r, req, "CKM_RULE_DELETED", { entityName: "NotificationRule", entityId: cur.Code });

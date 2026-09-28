@@ -29,9 +29,10 @@ import { CkmClient, type CkmResult, type CkmWorkspacePayload } from "../services
  * می‌شود؛ پنهان کردن دکمه فقط برای راحتی است. */
 
 /* شش تب = دقیقاً شش زیرماژول ماژول ارتباطات و دانش */
-export type CkmTab = "correspondence" | "meetings" | "stakeholders" | "notifications" | "knowledge" | "analytics";
+export type CkmTab = "inbox" | "correspondence" | "meetings" | "stakeholders" | "notifications" | "knowledge" | "analytics";
 
 const TABS: { id: CkmTab; fa: string; en: string; icon: string; proc: string }[] = [
+  { id: "inbox", fa: "کارتابل من", en: "My Inbox", icon: "📥", proc: "d11-p0" },
   { id: "correspondence", fa: "مکاتبات و اعلان قراردادی", en: "Correspondence & Notices", icon: "✉️", proc: "d11-p1" },
   { id: "meetings", fa: "جلسات و مصوبات", en: "Meetings & Actions", icon: "🗓", proc: "d11-p2" },
   { id: "stakeholders", fa: "ذی‌نفعان و برنامه ارتباطات", en: "Stakeholders & Comms Plan", icon: "🤝", proc: "d11-p3" },
@@ -349,7 +350,11 @@ function Tabs({ rtl, me, tab, ws, v, perm, busy, client, act, fmt }: {
 }) {
   const L = (b: { fa: string; en: string }) => (rtl ? b.fa : b.en);
   const [classFilter, setClassFilter] = useState<"all" | Letter["letterClass"]>("all");
+
   const [selectedMeeting, setSelectedMeeting] = useState<string>(ws.meetings[0]?.Code ?? "");
+  const [inboxData, setInboxData] = useState<{ count: number; summary: { unread: number; overdue: number; total: number }; items: any[] } | null>(null);
+  const [referralData, setReferralData] = useState<{ count: number; items: any[] } | null>(null);
+  const [referForm, setReferForm] = useState<{ letterNo: string; toUserId: string; instructionFa: string; deadline: string }>({ letterNo: "", toUserId: "", instructionFa: "", deadline: "" });
   useEffect(() => {
     if (!ws.meetings.some((m) => m.Code === selectedMeeting)) setSelectedMeeting(ws.meetings[0]?.Code ?? "");
   }, [ws.meetings, selectedMeeting]);
@@ -367,6 +372,16 @@ function Tabs({ rtl, me, tab, ws, v, perm, busy, client, act, fmt }: {
   const ruleF = useForm({ Code: "", EventCode: "notice_due", NameFa: "", Channels: "in_app,email", AudienceRoles: "", EscalateAfterHours: "24", EscalateToRole: "" });
 
   const filteredLetters = classFilter === "all" ? v.letterRows : v.letterRows.filter((r) => r.l.letterClass === classFilter);
+
+  const loadInbox = async () => {
+    const r = await client.inbox({});
+    if (r.ok) setInboxData(r.data as any);
+  };
+  const loadReferrals = async () => {
+    const r = await client.referrals({});
+    if (r.ok) setReferralData(r.data as any);
+  };
+  useEffect(() => { void loadInbox(); void loadReferrals(); }, [ws]);
   const selected = v.meetingRows.find((m) => m.row.Code === selectedMeeting) ?? null;
   const meetingActions = v.actionRows.filter((a) => a.row.MeetingCode === selectedMeeting);
   const maxCat = Math.max(...v.coverageByCat.map((c) => c.count), 1);
@@ -381,6 +396,85 @@ function Tabs({ rtl, me, tab, ws, v, perm, busy, client, act, fmt }: {
 
   return (
     <>
+      {/* ═══ تب ۰: کارتابل من — PAT-1/2 ═══ */}
+      {tab === "inbox" && (
+        <>
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+            <Kpi label={rtl ? "خوانده‌نشده" : "Unread"} value={inboxData ? fmt(inboxData.summary.unread) : "—"} tone={inboxData && inboxData.summary.unread ? "text-amber-300" : "text-emerald-300"} />
+            <Kpi label={rtl ? "معوق" : "Overdue"} value={inboxData ? fmt(inboxData.summary.overdue) : "—"} tone={inboxData && inboxData.summary.overdue ? "text-rose-300" : "tx1"} />
+            <Kpi label={rtl ? "کل کارتابل" : "Total inbox"} value={inboxData ? fmt(inboxData.count) : "—"} />
+            <Kpi label={rtl ? "ارجاعات باز" : "Open referrals"} value={referralData ? fmt(referralData.items.filter((x:any)=>x.Status==="open").length) : "—"} />
+          </div>
+
+          <Section title={rtl ? "کارتابل من — نامه‌ها و ارجاعات" : "My inbox — letters & referrals"} note={rtl ? "ارجاع با دستور، مهلت و سابقه — خوانده/انجام" : "referral with instruction, deadline, history — read/done"}>
+            <div className="thin-scroll max-h-[400px] overflow-auto">
+              <table className="w-full text-[9.5px]">
+                <thead className="tx3"><tr className="border-b b-line-soft"><Th>{rtl ? "نوع" : "Type"}</Th><Th>{rtl ? "مرجع" : "Ref"}</Th><Th>{rtl ? "عنوان" : "Title"}</Th><Th>{rtl ? "مهلت" : "Due"}</Th><Th>{rtl ? "اولویت" : "Prio"}</Th><Th>{rtl ? "وضعیت" : "Status"}</Th><Th>{rtl ? "اقدام" : "Action"}</Th></tr></thead>
+                <tbody>
+                  {(inboxData?.items ?? []).map((it:any)=>(
+                    <tr key={it.Id} className="border-b b-line-soft/50">
+                      <td className="px-2 py-1 tx2">{it.Type}</td>
+                      <td className="px-2 py-1 font-mono tx3" dir="ltr">{it.ReferenceId}</td>
+                      <td className="px-2 py-1 max-w-[300px] truncate tx1" title={it.TitleFa}>{it.TitleFa}</td>
+                      <td className="px-2 py-1 font-mono tx3" dir="ltr">{it.DueAt ? it.DueAt.slice(0,10) : "—"}</td>
+                      <td className="px-2 py-1"><span className={`rounded px-1.5 py-[1px] text-[8px] ${it.Priority==="high" ? "bg-rose-400/15 text-rose-300" : "bg-white/5 tx3"}`}>{it.Priority ?? "normal"}</span></td>
+                      <td className="px-2 py-1"><span className={`rounded px-1.5 py-[1px] text-[8px] ${it.Status==="unread" ? "bg-amber-400/15 text-amber-200" : it.Status==="done" ? "bg-emerald-400/15 text-emerald-300" : "bg-white/5 tx3"}`}>{it.Status}</span></td>
+                      <td className="px-2 py-1 whitespace-nowrap">
+                        <span className="flex items-center gap-1">
+                          {it.Status==="unread" && <button disabled={busy} className={rowBtn} onClick={()=>void act(()=>client.readInbox(it.Id), rtl ? "خوانده شد" : "Read")}>{rtl ? "خواندم" : "Read"}</button>}
+                          {it.Status!=="done" && it.Status!=="archived" && <button disabled={busy} className={rowBtn} onClick={()=>void act(()=>client.doneInbox(it.Id), rtl ? "انجام شد" : "Done")}>{rtl ? "انجام" : "Done"}</button>}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {!inboxData?.items.length && <p className="tx3 text-[11px] mt-2">{rtl ? "کارتابل خالی است" : "Inbox empty"}</p>}
+            </div>
+            <button className={btnPrimary+" mt-2"} onClick={()=>{ void loadInbox(); }}>{rtl ? "تازه‌سازی کارتابل" : "Refresh inbox"}</button>
+          </Section>
+
+          <Section title={rtl ? "ارجاعات مکاتبات — دستور، مهلت، سابقه" : "Referrals — instruction, deadline, history"} note={rtl ? "ارجاع نامه به کاربر با دستور و مهلت، سابقه در HistoryJson" : "refer letter to user with instruction & deadline, history in HistoryJson"}>
+            <div className="thin-scroll max-h-[300px] overflow-auto mb-2">
+              <table className="w-full text-[9.5px]">
+                <thead className="tx3"><tr className="border-b b-line-soft"><Th>{rtl ? "نامه" : "Letter"}</Th><Th>{rtl ? "از → به" : "From → To"}</Th><Th>{rtl ? "دستور" : "Instruction"}</Th><Th>{rtl ? "مهلت" : "Deadline"}</Th><Th>{rtl ? "وضعیت" : "Status"}</Th><Th>{rtl ? "اقدام" : "Action"}</Th></tr></thead>
+                <tbody>
+                  {(referralData?.items ?? []).map((rf:any)=>(
+                    <tr key={rf.Id} className="border-b b-line-soft/50">
+                      <td className="px-2 py-1 font-mono tx2" dir="ltr">{rf.LetterNo}</td>
+                      <td className="px-2 py-1 tx3" dir="ltr">{rf.FromUserId} → {rf.ToUserId}</td>
+                      <td className="px-2 py-1 max-w-[250px] truncate tx1" title={rf.InstructionFa}>{rf.InstructionFa}</td>
+                      <td className="px-2 py-1 font-mono tx3" dir="ltr">{rf.Deadline ?? "—"}</td>
+                      <td className="px-2 py-1"><span className={`rounded px-1.5 py-[1px] text-[8px] ${rf.Status==="open" ? "bg-amber-400/15 text-amber-200" : "bg-emerald-400/15 text-emerald-300"}`}>{rf.Status}</span></td>
+                      <td className="px-2 py-1">{rf.Status==="open" && <button disabled={busy} className={rowBtn} onClick={()=>void act(()=>client.doneReferral(rf.Id, { doneNoteFa: "انجام شد" }), rtl ? "ارجاع انجام شد" : "Referral done")}>{rtl ? "انجام" : "Done"}</button>}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="flex flex-wrap items-end gap-1.5 rounded-xl border b-line-soft bg-black/10 p-2">
+              <span className="w-full text-[9px] tx3">{rtl ? "ارجاع نامه — انتخاب نامه، گیرنده، دستور و مهلت" : "Refer letter — pick letter, recipient, instruction, deadline"}</span>
+              <select className={inputCls+" w-28"} value={referForm.letterNo} onChange={e=>setReferForm({...referForm, letterNo:e.target.value})} dir="ltr">
+                <option value="">{rtl ? "نامه" : "letter"}</option>
+                {ws.letters.map((l:any)=><option key={l.LetterNo} value={l.LetterNo}>{l.LetterNo}</option>)}
+              </select>
+              <select className={inputCls+" w-28"} value={referForm.toUserId} onChange={e=>setReferForm({...referForm, toUserId:e.target.value})} dir="ltr">
+                <option value="">{rtl ? "گیرنده" : "to user"}</option>
+                <option value="u-doc">u-doc</option><option value="u-pm">u-pm</option><option value="u-contracts">u-contracts</option><option value="u-site">u-site</option><option value="u-qc">u-qc</option>
+              </select>
+              <input className={inputCls+" w-56"} placeholder={rtl ? "دستور ارجاع" : "instruction"} value={referForm.instructionFa} onChange={e=>setReferForm({...referForm, instructionFa:e.target.value})} />
+              <input className={inputCls} type="date" value={referForm.deadline} onChange={e=>setReferForm({...referForm, deadline:e.target.value})} dir="ltr" />
+              <button disabled={busy || !referForm.letterNo || !referForm.toUserId || !referForm.instructionFa} className={btnPrimary} onClick={async ()=>{
+                if(await act(()=>client.referLetter(referForm.letterNo, { toUserId: referForm.toUserId, instructionFa: referForm.instructionFa, deadline: referForm.deadline || undefined }), rtl ? "ارجاع ثبت شد" : "Referred")){
+                  setReferForm({ letterNo:"", toUserId:"", instructionFa:"", deadline:"" });
+                }
+              }}>{rtl ? "ارجاع" : "Refer"}</button>
+            </div>
+          </Section>
+        </>
+      )}
+
       {/* ═══ تب ۱: مکاتبات ═══ */}
       {tab === "correspondence" && !perm.letters && (
         <Section title={rtl ? "مکاتبات محرمانه است" : "Correspondence is confidential"}>

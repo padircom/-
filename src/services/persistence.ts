@@ -3040,6 +3040,58 @@ export const SCHEMA: TableDef[] = [
     ],
   },
 
+        /* ══════════════ MOD-20 · PAT-1/2 کارتابل و ارجاعات CKM (d11) ══════════════ */
+  {
+    name: "CkmInboxItem",
+    module: "d11",
+    title: { fa: "کارتابل کاربر", en: "User inbox item" },
+    pk: "Id",
+    columns: [
+      id(),
+      req("ProjectId", "text", { len: 60 }),
+      req("RecipientUserId", "text", { len: 60 }),
+      req("Type", "text", { len: 30, comment: "letter|action|meeting|edms|referral" }),
+      req("ReferenceId", "text", { len: 80 }),
+      req("TitleFa", "text", { len: 500 }),
+      c("DueAt", "text", { len: 20 }),
+      req("Status", "text", { len: 20, comment: "unread|read|done|archived" }),
+      req("CreatedAt", "datetime"),
+      c("ReadAt", "datetime"),
+      c("DoneAt", "datetime"),
+      c("Priority", "text", { len: 20 }),
+    ],
+    indexes: [
+      { name: "UX_CkmInbox_Id", columns: ["Id"], unique: true },
+      { name: "IX_CkmInbox_Recipient", columns: ["ProjectId", "RecipientUserId", "Status"] },
+      { name: "IX_CkmInbox_Type", columns: ["ProjectId", "Type"] },
+    ],
+  },
+  {
+    name: "CkmReferral",
+    module: "d11",
+    title: { fa: "ارجاع مکاتبه", en: "Correspondence referral" },
+    pk: "Id",
+    columns: [
+      id(),
+      req("ProjectId", "text", { len: 60 }),
+      req("LetterNo", "text", { len: 80 }),
+      req("FromUserId", "text", { len: 60 }),
+      req("ToUserId", "text", { len: 60 }),
+      req("InstructionFa", "text", { len: 1000 }),
+      c("Deadline", "text", { len: 20 }),
+      req("Status", "text", { len: 20, comment: "open|done|cancelled" }),
+      req("CreatedAt", "datetime"),
+      c("DoneAt", "datetime"),
+      c("DoneNoteFa", "text", { len: 1000 }),
+      c("HistoryJson", "text", { len: 5000 }),
+    ],
+    indexes: [
+      { name: "UX_CkmReferral_Id", columns: ["Id"], unique: true },
+      { name: "IX_CkmReferral_Letter", columns: ["ProjectId", "LetterNo"] },
+      { name: "IX_CkmReferral_To", columns: ["ProjectId", "ToUserId", "Status"] },
+    ],
+  },
+
     /* ══════════════ d16 — بهداشت، ایمنی و محیط زیست (HSE) ══════════════
    * پروانهٔ کار پیش‌نیاز دروازهٔ RFSU در ماژول راه‌اندازی است؛ تا پیش از
    * این جداول، آن پیش‌نیاز فقط رشتهٔ آزاد بود و قابل کنترل نبود. */
