@@ -1,5 +1,5 @@
 /**
- * EDM-1 + EDM-2 + EDM-3 — کلاینت REST فضای کاری اسناد و مدارک (d1) با اتصال فایل، Hold و پیش‌نیاز.
+ * EDM-1 + EDM-2 + EDM-3 + EDM-4 — کلاینت REST فضای کاری اسناد و مدارک (d1).
  */
 import { jsonRequest, type ApiResult } from './apiClient';
 
@@ -99,6 +99,32 @@ export type EdmsReadiness = {
   canIssue: boolean;
 };
 
+export type EdmsComment = {
+  Id: string;
+  ProjectId: string;
+  DocumentId: string;
+  DocNo: string;
+  Revision: string;
+  CommentNo: number;
+  CommentText: string;
+  CommentedBy: string;
+  CommentedAt: string;
+  ReplyText?: string | null;
+  RepliedBy?: string | null;
+  RepliedAt?: string | null;
+  ConclusionText?: string | null;
+  ConcludedBy?: string | null;
+  ConcludedAt?: string | null;
+  ReviewCode?: string | null;
+  Status: string;
+};
+
+export type EdmsCommentList = {
+  count: number;
+  summary: { open: number; replied: number; concluded: number; total: number };
+  items: EdmsComment[];
+};
+
 export class EdmsClient {
   constructor(private readonly projectId: string, private readonly userId: string | null) {}
 
@@ -175,4 +201,24 @@ export class EdmsClient {
   createDependency = (body: unknown) => this.req<{ id: string; item: EdmsDependency }>('POST', `/api/edms/${encodeURIComponent(this.projectId)}/dependencies`, body);
   deleteDependency = (depId: string) => this.req<{ deleted: boolean; id: string }>('DELETE', `/api/edms/${encodeURIComponent(this.projectId)}/dependencies/${encodeURIComponent(depId)}`);
   readiness = (docId: string) => this.req<EdmsReadiness>('GET', `/api/edms/${encodeURIComponent(this.projectId)}/documents/${encodeURIComponent(docId)}/readiness`);
+
+  // comments EDM-4
+  comments = (docId: string) => this.req<EdmsCommentList>('GET', `/api/edms/${encodeURIComponent(this.projectId)}/documents/${encodeURIComponent(docId)}/comments`);
+  createComment = (docIdOrBody: string | { documentId: string; commentText: string; reviewCode?: string }, bodyMaybe?: unknown) => {
+    if (typeof docIdOrBody === 'string') {
+      return this.req<{ id: string; item: EdmsComment }>('POST', `/api/edms/${encodeURIComponent(this.projectId)}/documents/${encodeURIComponent(docIdOrBody)}/comments`, bodyMaybe);
+    } else {
+      const { documentId, ...rest } = docIdOrBody as any;
+      return this.req<{ id: string; item: EdmsComment }>('POST', `/api/edms/${encodeURIComponent(this.projectId)}/documents/${encodeURIComponent(documentId)}/comments`, rest);
+    }
+  };
+  replyComment = (commentId: string, body: unknown) => {
+    const payload = typeof body === 'string' ? { replyText: body } : body;
+    return this.req<{ item: EdmsComment }>('POST', `/api/edms/${encodeURIComponent(this.projectId)}/comments/${encodeURIComponent(commentId)}/reply`, payload);
+  };
+  concludeComment = (commentId: string, body: unknown) => {
+    const payload = typeof body === 'string' ? { conclusionText: body } : body;
+    return this.req<{ item: EdmsComment }>('POST', `/api/edms/${encodeURIComponent(this.projectId)}/comments/${encodeURIComponent(commentId)}/conclude`, payload);
+  };
+  voidComment = (commentId: string) => this.req<{ item: EdmsComment }>('POST', `/api/edms/${encodeURIComponent(this.projectId)}/comments/${encodeURIComponent(commentId)}/void`, {});
 }

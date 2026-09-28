@@ -6,10 +6,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Lang } from '../data/framework';
 import { useAuth } from '../context/AuthContext';
 import { useSystem } from '../context/SystemContext';
-import { EdmsClient, type EdmsDocumentList, type EdmsFileList, type EdmsHoldList, type EdmsDependencyList, type EdmsReadiness } from '../services/edmsWorkspace';
+import { EdmsClient, type EdmsDocumentList, type EdmsFileList, type EdmsHoldList, type EdmsDependencyList, type EdmsReadiness, type EdmsCommentList } from '../services/edmsWorkspace';
 import { createRow, listRows } from '../services/edmsApi';
 
-export type EdmsTab = 'overview' | 'mdr' | 'revision' | 'files' | 'holds' | 'deps' | 'workflow' | 'excel' | 'numbering' | 'correspondence' | 'transmittal' | 'lessons';
+export type EdmsTab = 'overview' | 'mdr' | 'revision' | 'files' | 'holds' | 'deps' | 'comments' | 'workflow' | 'excel' | 'numbering' | 'correspondence' | 'transmittal' | 'lessons';
 
 const TABS: { id: EdmsTab; fa: string; en: string }[] = [
   { id: 'overview', fa: 'نمای کلی', en: 'Overview' },
@@ -18,6 +18,7 @@ const TABS: { id: EdmsTab; fa: string; en: string }[] = [
   { id: 'files', fa: 'پیوست فایل', en: 'Files' },
   { id: 'holds', fa: 'Hold Items', en: 'Holds' },
   { id: 'deps', fa: 'پیش‌نیاز و قفل', en: 'Prereq & Gate' },
+  { id: 'comments', fa: 'نظر و Conclusion', en: 'Comments' },
   { id: 'workflow', fa: 'گردش کار', en: 'Workflow' },
   { id: 'excel', fa: 'اکسل', en: 'Excel' },
   { id: 'numbering', fa: 'شماره‌گذاری', en: 'Numbering' },
@@ -92,6 +93,7 @@ function LiveEdms({
   const [holdsData, setHoldsData] = useState<EdmsHoldList | null>(null);
   const [depsData, setDepsData] = useState<EdmsDependencyList | null>(null);
   const [readiness, setReadiness] = useState<EdmsReadiness | null>(null);
+  const [commentsData, setCommentsData] = useState<EdmsCommentList | null>(null);
   const [selDocId, setSelDocId] = useState<string>('');
   const [selDocNo, setSelDocNo] = useState<string>('');
   const [loading, setLoading] = useState(false);
@@ -107,6 +109,9 @@ function LiveEdms({
   const [holdForm, setHoldForm] = useState({ documentId: '', titleFa: '', holdType: 'other', dueAt: '', noteFa: '' });
   const [holdFilter, setHoldFilter] = useState({ status: '', holdType: '' });
   const [depForm, setDepForm] = useState({ documentId: '', dependsOnDocumentId: '', dependencyType: 'approval', isMandatory: true, noteFa: '' });
+  const [commentForm, setCommentForm] = useState({ documentId: '', commentText: '', reviewCode: '' });
+  const [replyForm, setReplyForm] = useState({ commentId: '', replyText: '' });
+  const [concludeForm, setConcludeForm] = useState({ commentId: '', conclusionText: '', reviewCode: '' });
 
   const loadDocs = useCallback(async () => {
     if (!client) return;
@@ -124,6 +129,7 @@ function LiveEdms({
         setSelDocNo(first.DocNo);
         setHoldForm(f => ({ ...f, documentId: first.Id }));
         setDepForm(f => ({ ...f, documentId: first.Id }));
+        setCommentForm(f => ({ ...f, documentId: first.Id }));
       }
     } catch (e: any) {
       if (seq !== gen.current) return;
@@ -157,8 +163,14 @@ function LiveEdms({
     if (r.ok) setReadiness(r.data); else setReadiness(null);
   }, [client]);
 
+  const loadComments = useCallback(async (docId: string) => {
+    if (!client || !docId) { setCommentsData(null); return; }
+    const r = await client.comments(docId);
+    if (r.ok) setCommentsData(r.data); else setCommentsData(null);
+  }, [client]);
+
   useEffect(() => { void loadDocs(); return () => { gen.current++; }; }, [loadDocs]);
-  useEffect(() => { if (selDocId) { void loadFiles(selDocId); void loadReadiness(selDocId); void loadDeps(selDocId); } }, [selDocId, loadFiles, loadReadiness, loadDeps]);
+  useEffect(() => { if (selDocId) { void loadFiles(selDocId); void loadReadiness(selDocId); void loadDeps(selDocId); void loadComments(selDocId); } }, [selDocId, loadFiles, loadReadiness, loadDeps, loadComments]);
   useEffect(() => { void loadHolds(); }, [loadHolds]);
 
   const filtered = useMemo(() => {
@@ -185,7 +197,7 @@ function LiveEdms({
     if (r.ok) {
       setMsg({ tone: 'ok', text: okText });
       await loadDocs();
-      if (selDocId) { await loadFiles(selDocId); await loadReadiness(selDocId); await loadDeps(selDocId); }
+      if (selDocId) { await loadFiles(selDocId); await loadReadiness(selDocId); await loadDeps(selDocId); await loadComments(selDocId); }
       await loadHolds();
       return true;
     }
@@ -199,7 +211,7 @@ function LiveEdms({
     <div dir={fa ? 'rtl' : 'ltr'} className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-1">
       <header className="glass-dark rounded-xl p-3 flex flex-wrap items-center gap-3">
         <div className="flex-1">
-          <h3 className="tx1 font-semibold text-[13px]">{t('اسناد — فایل به نسخه + Hold + پیش‌نیاز (EDM-1/2/3)', 'EDMS — file + Hold + prereq')}</h3>
+          <h3 className="tx1 font-semibold text-[13px]">{t('اسناد — فایل + Hold + پیش‌نیاز + نظر/Conclusion (EDM-1..4)', 'EDMS — file + Hold + prereq + comments')}</h3>
           <p className="text-[10px] tx3" dir="ltr">{projectId} · {kpis.total} docs · {kpis.versions} vers · {kpis.withFile} with file · {holdsData?.summary.open ?? 0} open holds · {depsData?.count ?? 0} deps · {readiness ? (readiness.canIssue ? 'Can Issue' : `${readiness.blockers.length} blockers`) : ''}</p>
         </div>
         <button className={btnGhost} disabled={loading || busy} onClick={() => void loadDocs()}>{t('تازه‌سازی', 'Refresh')}</button>
@@ -452,6 +464,94 @@ function LiveEdms({
                 </tbody>
               </table>
               {!depsData?.items.length && <p className="tx3 text-[11px] mt-2">{t('وابستگی ثبت نشده','No dependencies')}</p>}
+            </div>
+          </Section>
+        </div>
+      )}
+
+      {tab === 'comments' && (
+        <div className="grid gap-3">
+          <Section title={t('ثبت نظر (Comment)','Create comment')} note={t('CommentNo خودکار — ReviewCode C1..C4 — Status open→replied→concluded','Auto CommentNo — ReviewCode C1..C4 — open→replied→concluded')}>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+              <select className={inputCls} value={commentForm.documentId} onChange={e=>setCommentForm({...commentForm, documentId:e.target.value})}>
+                <option value="">{t('انتخاب مدرک','Select doc')}</option>
+                {(docsData?.items ?? []).map(d=><option key={d.Id} value={d.Id}>{d.DocNo} Rev {d.Revision}</option>)}
+              </select>
+              <input className={inputCls} placeholder={t('متن نظر','Comment text')} value={commentForm.commentText} onChange={e=>setCommentForm({...commentForm, commentText:e.target.value})} />
+              <select className={inputCls} value={commentForm.reviewCode} onChange={e=>setCommentForm({...commentForm, reviewCode:e.target.value})}>
+                <option value="">{t('بدون ReviewCode','No code')}</option>
+                <option value="C1">C1 — Rejected</option><option value="C2">C2 — Major</option><option value="C3">C3 — Minor</option><option value="C4">C4 — Approved</option>
+              </select>
+              <button className={btnPrimary} disabled={busy || !commentForm.documentId || !commentForm.commentText} onClick={()=>void act(async ()=>{
+                if(!client) return {ok:false, message:'No client'};
+                const r=await client.createComment({documentId:commentForm.documentId, commentText:commentForm.commentText, reviewCode:commentForm.reviewCode||undefined});
+                if(r.ok) setCommentForm(f=>({...f, commentText:''}));
+                return r.ok ? {ok:true} : {ok:false, message:r.message};
+              }, t('نظر ثبت شد','Comment created'))}>{t('ثبت نظر','Create comment')}</button>
+            </div>
+          </Section>
+
+          <Section title={t('فهرست نظرات مدرک انتخاب‌شده + برگه Conclusion','Comments of selected doc + Conclusion sheet')}>
+            {commentsData?.summary && <div className="grid grid-cols-4 gap-2 mb-2"><Kpi label={t('باز','Open')} value={String(commentsData.summary.open)} /><Kpi label={t('پاسخ‌داده','Replied')} value={String(commentsData.summary.replied)} /><Kpi label={t('جمع‌بندی','Concluded')} value={String(commentsData.summary.concluded)} /><Kpi label={t('کل','Total')} value={String(commentsData.summary.total)} /></div>}
+            <div className="overflow-x-auto max-h-[600px]">
+              <table className="w-full text-[11px] tx2">
+                <thead><tr><th className="p-1">#</th><th className="p-1">DocNo</th><th className="p-1">Rev</th><th className="p-1">{t('نظر','Comment')}</th><th className="p-1">Code</th><th className="p-1">Status</th><th className="p-1">{t('پاسخ','Reply')}</th><th className="p-1">{t('Conclusion','Conclusion')}</th><th className="p-1">{t('اقدام','Action')}</th></tr></thead>
+                <tbody>
+                  {(commentsData?.items ?? []).map(c=>(
+                    <tr key={c.Id} className="border-t b-line-soft">
+                      <td className="p-1" dir="ltr">{c.CommentNo}</td><td className="p-1" dir="ltr">{c.DocNo}</td><td className="p-1" dir="ltr">{c.Revision}</td>
+                      <td className="p-1 max-w-[200px] truncate" title={c.CommentText}>{c.CommentText}</td><td className="p-1">{c.ReviewCode ?? '—'}</td><td className="p-1">{c.Status}</td>
+                      <td className="p-1 max-w-[150px] truncate" title={c.ReplyText ?? ''}>{c.ReplyText ?? '—'}</td><td className="p-1 max-w-[150px] truncate" title={c.ConclusionText ?? ''}>{c.ConclusionText ?? '—'}</td>
+                      <td className="p-1 flex gap-1 flex-wrap">
+                        {c.Status==='open' && <button className={btnOk} onClick={()=>setReplyForm({commentId:c.Id, replyText:''})}>{t('پاسخ','Reply')}</button>}
+                        {c.Status==='replied' && <button className={btnOk} onClick={()=>setConcludeForm({commentId:c.Id, conclusionText:'', reviewCode:c.ReviewCode ?? ''})}>{t('Conclusion','Conclude')}</button>}
+                        {c.Status!=='void' && c.Status!=='concluded' && <button className={btnGhost} disabled={busy} onClick={()=>void act(async ()=>{
+                          if(!client) return {ok:false, message:'No client'};
+                          const r=await client.voidComment(c.Id);
+                          return r.ok ? {ok:true} : {ok:false, message:r.message};
+                        }, t('باطل شد','Voided'))}>{t('باطل','Void')}</button>}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {!commentsData?.items.length && <p className="tx3 text-[11px] mt-2">{t('نظری ثبت نشده','No comments')}</p>}
+            </div>
+          </Section>
+
+          <Section title={t('ثبت پاسخ (Reply)','Reply')}>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+              <select className={inputCls} value={replyForm.commentId} onChange={e=>setReplyForm({...replyForm, commentId:e.target.value})}>
+                <option value="">{t('انتخاب Comment','Select comment')}</option>
+                {(commentsData?.items ?? []).filter(c=>c.Status==='open').map(c=><option key={c.Id} value={c.Id}>#{c.CommentNo} — {c.CommentText.slice(0,40)}</option>)}
+              </select>
+              <input className={inputCls} placeholder={t('متن پاسخ','Reply text')} value={replyForm.replyText} onChange={e=>setReplyForm({...replyForm, replyText:e.target.value})} />
+              <button className={btnPrimary} disabled={busy || !replyForm.commentId || !replyForm.replyText} onClick={()=>void act(async ()=>{
+                if(!client) return {ok:false, message:'No client'};
+                const r=await client.replyComment(replyForm.commentId, replyForm.replyText);
+                if(r.ok) setReplyForm({commentId:'', replyText:''});
+                return r.ok ? {ok:true} : {ok:false, message:r.message};
+              }, t('پاسخ ثبت شد','Reply saved'))}>{t('ثبت پاسخ','Save reply')}</button>
+            </div>
+          </Section>
+
+          <Section title={t('ثبت Conclusion — نیاز مجوز approve','Conclude — requires approve permission')} note={t('فقط replied → concluded','Only replied → concluded')}>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+              <select className={inputCls} value={concludeForm.commentId} onChange={e=>setConcludeForm({...concludeForm, commentId:e.target.value})}>
+                <option value="">{t('انتخاب Comment','Select comment')}</option>
+                {(commentsData?.items ?? []).filter(c=>c.Status==='replied').map(c=><option key={c.Id} value={c.Id}>#{c.CommentNo} — {c.CommentText.slice(0,40)}</option>)}
+              </select>
+              <input className={inputCls} placeholder={t('متن Conclusion','Conclusion text')} value={concludeForm.conclusionText} onChange={e=>setConcludeForm({...concludeForm, conclusionText:e.target.value})} />
+              <select className={inputCls} value={concludeForm.reviewCode} onChange={e=>setConcludeForm({...concludeForm, reviewCode:e.target.value})}>
+                <option value="">{t('بدون تغییر Code','Keep code')}</option>
+                <option value="C1">C1</option><option value="C2">C2</option><option value="C3">C3</option><option value="C4">C4</option>
+              </select>
+              <button className={btnPrimary} disabled={busy || !concludeForm.commentId || !concludeForm.conclusionText} onClick={()=>void act(async ()=>{
+                if(!client) return {ok:false, message:'No client'};
+                const r=await client.concludeComment(concludeForm.commentId, {conclusionText:concludeForm.conclusionText, reviewCode:concludeForm.reviewCode||undefined});
+                if(r.ok) setConcludeForm({commentId:'', conclusionText:'', reviewCode:''});
+                return r.ok ? {ok:true} : {ok:false, message:r.message};
+              }, t('Conclusion ثبت شد','Concluded'))}>{t('ثبت Conclusion','Conclude')}</button>
             </div>
           </Section>
         </div>

@@ -8693,6 +8693,98 @@ app.get("/api/edms/:projectId/documents/:docId/readiness", comRequire("doc.docum
   } catch (err) { next(err); }
 });
 
+/* ══════════════ EDM-4 — Conclusion پایان چرخه Comment←Reply (d1) ══════════════ */
+app.post("/api/edms/:projectId/documents/:docId/comments", comRequire("doc.document.upload"), async (req, res, next) => {
+  try {
+    const projectId = String(req.params.projectId || "");
+    const docId = String(req.params.docId || "");
+    const b = req.body || {};
+    if (!b.commentText || !String(b.commentText).trim()) return cntBad(req, res, "E-EDM-COMMENT-NO-TEXT", "متن نظر الزامی است", 400);
+    const r = await repo();
+    const doc = await r.findOne("Document", [{ column: "Id", op: "eq", value: docId }]);
+    if (!doc) return cntBad(req, res, "E-EDM-DOC-NOT-FOUND", "مدرک یافت نشد", 404);
+    const existing = await r.list("DocumentComment", { where: [{ column: "DocumentId", op: "eq", value: docId }], limit: 1000 });
+    const nextNo = existing.length ? Math.max(...existing.map(x=> Number(x.CommentNo)||0)) + 1 : 1;
+    const userId = req.headers["x-user-id"] || "system";
+    const id = crypto.randomUUID();
+    const row = {
+      Id: id,
+      ProjectId: projectId,
+      DocumentId: docId,
+      DocNo: doc.DocNo,
+      Revision: doc.Revision,
+      CommentNo: nextNo,
+      CommentText: String(b.commentText).trim(),
+      CommentedBy: userId,
+      CommentedAt: new Date().toISOString(),
+      ReplyText: null,
+      RepliedBy: null,
+      RepliedAt: null,
+      ConclusionText: null,
+      ConcludedBy: null,
+      ConcludedAt: null,
+      ReviewCode: b.reviewCode ? String(b.reviewCode) : null,
+      Status: "open",
+    };
+    await r.upsert("DocumentComment", { Id: id }, row, userId);
+    res.status(201).json(cntOk(req, { id, item: row }));
+  } catch (err) { next(err); }
+});
+
+app.get("/api/edms/:projectId/documents/:docId/comments", comRequire("doc.document.view"), async (req, res, next) => {
+  try {
+    const docId = String(req.params.docId || "");
+    const r = await repo();
+    const comments = await r.list("DocumentComment", { where: [{ column: "DocumentId", op: "eq", value: docId }], limit: 500 });
+    comments.sort((a,b)=> Number(a.CommentNo) - Number(b.CommentNo));
+    const open = comments.filter(c=> c.Status==="open").length;
+    const replied = comments.filter(c=> c.Status==="replied").length;
+    const concluded = comments.filter(c=> c.Status==="concluded").length;
+    res.json(cntOk(req, { count: comments.length, summary: { open, replied, concluded, total: comments.length }, items: comments }));
+  } catch (err) { next(err); }
+});
+
+app.post("/api/edms/:projectId/comments/:commentId/reply", comRequire("doc.document.upload"), async (req, res, next) => {
+  try {
+    const b = req.body || {};
+    if (!b.replyText || !String(b.replyText).trim()) return cntBad(req, res, "E-EDM-REPLY-NO-TEXT", "متن پاسخ الزامی است", 400);
+    const r = await repo();
+    const c = await r.findOne("DocumentComment", [{ column: "Id", op: "eq", value: String(req.params.commentId) }]);
+    if (!c) return cntBad(req, res, "E-EDM-COMMENT-NOT-FOUND", "نظر یافت نشد", 404);
+    if (c.Status !== "open") return cntBad(req, res, "E-EDM-COMMENT-NOT-OPEN", "نظر باز نیست", 409);
+    const userId = req.headers["x-user-id"] || "system";
+    const row = { ...c, ReplyText: String(b.replyText).trim(), RepliedBy: userId, RepliedAt: new Date().toISOString(), Status: "replied" };
+    await r.upsert("DocumentComment", { Id: c.Id }, row, userId);
+    res.json(cntOk(req, { item: row }));
+  } catch (err) { next(err); }
+});
+
+app.post("/api/edms/:projectId/comments/:commentId/conclude", comRequire("doc.document.approve"), async (req, res, next) => {
+  try {
+    const b = req.body || {};
+    if (!b.conclusionText || !String(b.conclusionText).trim()) return cntBad(req, res, "E-EDM-CONCLUSION-NO-TEXT", "متن جمع‌بندی الزامی است", 400);
+    const r = await repo();
+    const c = await r.findOne("DocumentComment", [{ column: "Id", op: "eq", value: String(req.params.commentId) }]);
+    if (!c) return cntBad(req, res, "E-EDM-COMMENT-NOT-FOUND", "نظر یافت نشد", 404);
+    if (c.Status !== "replied") return cntBad(req, res, "E-EDM-COMMENT-NOT-REPLIED", "ابتدا باید پاسخ داده شود", 409);
+    const userId = req.headers["x-user-id"] || "system";
+    const row = { ...c, ConclusionText: String(b.conclusionText).trim(), ConcludedBy: userId, ConcludedAt: new Date().toISOString(), ReviewCode: b.reviewCode ? String(b.reviewCode) : c.ReviewCode, Status: "concluded" };
+    await r.upsert("DocumentComment", { Id: c.Id }, row, userId);
+    res.json(cntOk(req, { item: row }));
+  } catch (err) { next(err); }
+});
+
+app.post("/api/edms/:projectId/comments/:commentId/void", comRequire("doc.document.upload"), async (req, res, next) => {
+  try {
+    const r = await repo();
+    const c = await r.findOne("DocumentComment", [{ column: "Id", op: "eq", value: String(req.params.commentId) }]);
+    if (!c) return cntBad(req, res, "E-EDM-COMMENT-NOT-FOUND", "نظر یافت نشد", 404);
+    const row = { ...c, Status: "void" };
+    await r.upsert("DocumentComment", { Id: c.Id }, row, req.headers["x-user-id"] || "system");
+    res.json(cntOk(req, { item: row }));
+  } catch (err) { next(err); }
+});
+
 /* ── ۱۴٫۱ وضعیت ماژول ── */
 app.get("/api/cnt/status", (req, res) => {
   res.json(cntOk(req, {

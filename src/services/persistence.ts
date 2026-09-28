@@ -2872,6 +2872,38 @@ export const SCHEMA: TableDef[] = [
     ],
   },
 
+    /* ══════════════ MOD-14 · EDM-4 Conclusion پایان چرخه Comment←Reply (d1) ══════════════ */
+  {
+    name: "DocumentComment",
+    module: "d1",
+    title: { fa: "نظر و جمع‌بندی مدرک", en: "Document comment & conclusion" },
+    pk: "Id",
+    columns: [
+      id(),
+      req("ProjectId", "text", { len: 60 }),
+      req("DocumentId", "text", { len: 60 }),
+      req("DocNo", "text", { len: 80 }),
+      req("Revision", "text", { len: 10 }),
+      req("CommentNo", "int"),
+      req("CommentText", "text", { len: 2000 }),
+      req("CommentedBy", "text", { len: 60 }),
+      req("CommentedAt", "datetime"),
+      c("ReplyText", "text", { len: 2000 }),
+      c("RepliedBy", "text", { len: 60 }),
+      c("RepliedAt", "datetime"),
+      c("ConclusionText", "text", { len: 2000 }),
+      c("ConcludedBy", "text", { len: 60 }),
+      c("ConcludedAt", "datetime"),
+      c("ReviewCode", "text", { len: 10, comment: "C1|C2|C3|C4" }),
+      req("Status", "text", { len: 20, comment: "open|replied|concluded|void" }),
+    ],
+    indexes: [
+      { name: "UX_DocComment_No", columns: ["DocumentId", "CommentNo"], unique: true },
+      { name: "IX_DocComment_Status", columns: ["ProjectId", "Status"] },
+      { name: "IX_DocComment_Doc", columns: ["DocumentId", "Status"] },
+    ],
+  },
+
     /* ══════════════ d16 — بهداشت، ایمنی و محیط زیست (HSE) ══════════════
    * پروانهٔ کار پیش‌نیاز دروازهٔ RFSU در ماژول راه‌اندازی است؛ تا پیش از
    * این جداول، آن پیش‌نیاز فقط رشتهٔ آزاد بود و قابل کنترل نبود. */
