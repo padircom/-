@@ -2953,6 +2953,35 @@ export const SCHEMA: TableDef[] = [
     ],
   },
 
+        /* ══════════════ MOD-17 · EDM-7 اعلان ایمیلی EDMS (d1) ══════════════ */
+  {
+    name: "EdmsNotification",
+    module: "d1",
+    title: { fa: "اعلان EDMS", en: "EDMS notification" },
+    pk: "Id",
+    columns: [
+      id(),
+      req("ProjectId", "text", { len: 60 }),
+      req("DocumentId", "text", { len: 60 }),
+      req("DocNo", "text", { len: 80 }),
+      req("EventType", "text", { len: 40, comment: "hold_created|comment_created|reply_created|concluded|distributed|status_changed" }),
+      req("RecipientParty", "text", { len: 30 }),
+      c("RecipientEmail", "text", { len: 200 }),
+      req("SubjectFa", "text", { len: 200 }),
+      c("BodyFa", "text", { len: 2000 }),
+      req("Channel", "text", { len: 20, comment: "email|in_app" }),
+      req("Status", "text", { len: 20, comment: "pending|sent|failed" }),
+      req("CreatedAt", "datetime"),
+      c("SentAt", "datetime"),
+      c("ErrorText", "text", { len: 1000 }),
+    ],
+    indexes: [
+      { name: "UX_EdmsNotif_Id", columns: ["Id"], unique: true },
+      { name: "IX_EdmsNotif_Project", columns: ["ProjectId", "Status"] },
+      { name: "IX_EdmsNotif_Doc", columns: ["DocumentId", "EventType"] },
+    ],
+  },
+
     /* ══════════════ d16 — بهداشت، ایمنی و محیط زیست (HSE) ══════════════
    * پروانهٔ کار پیش‌نیاز دروازهٔ RFSU در ماژول راه‌اندازی است؛ تا پیش از
    * این جداول، آن پیش‌نیاز فقط رشتهٔ آزاد بود و قابل کنترل نبود. */

@@ -6,10 +6,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Lang } from '../data/framework';
 import { useAuth } from '../context/AuthContext';
 import { useSystem } from '../context/SystemContext';
-import { EdmsClient, type EdmsDocumentList, type EdmsFileList, type EdmsHoldList, type EdmsDependencyList, type EdmsReadiness, type EdmsCommentList, type EdmsDciList, type EdmsDistributionList, type EdmsTemplateList } from '../services/edmsWorkspace';
+import { EdmsClient, type EdmsDocumentList, type EdmsFileList, type EdmsHoldList, type EdmsDependencyList, type EdmsReadiness, type EdmsCommentList, type EdmsDciList, type EdmsDistributionList, type EdmsTemplateList, type EdmsNotificationList } from '../services/edmsWorkspace';
 import { createRow, listRows } from '../services/edmsApi';
 
-export type EdmsTab = 'overview' | 'mdr' | 'revision' | 'files' | 'holds' | 'deps' | 'comments' | 'dci' | 'templates' | 'workflow' | 'excel' | 'numbering' | 'correspondence' | 'transmittal' | 'lessons';
+export type EdmsTab = 'overview' | 'mdr' | 'revision' | 'files' | 'holds' | 'deps' | 'comments' | 'dci' | 'templates' | 'notifications' | 'workflow' | 'excel' | 'numbering' | 'correspondence' | 'transmittal' | 'lessons';
 
 const TABS: { id: EdmsTab; fa: string; en: string }[] = [
   { id: 'overview', fa: 'نمای کلی', en: 'Overview' },
@@ -21,6 +21,7 @@ const TABS: { id: EdmsTab; fa: string; en: string }[] = [
   { id: 'comments', fa: 'نظر و Conclusion', en: 'Comments' },
   { id: 'dci', fa: 'DCI و توزیع', en: 'DCI & Dist' },
   { id: 'templates', fa: 'قالب‌ها', en: 'Templates' },
+  { id: 'notifications', fa: 'اعلان‌ها', en: 'Notifications' },
   { id: 'workflow', fa: 'گردش کار', en: 'Workflow' },
   { id: 'excel', fa: 'اکسل', en: 'Excel' },
   { id: 'numbering', fa: 'شماره‌گذاری', en: 'Numbering' },
@@ -99,6 +100,7 @@ function LiveEdms({
   const [dciData, setDciData] = useState<EdmsDciList | null>(null);
   const [distData, setDistData] = useState<EdmsDistributionList | null>(null);
   const [tplData, setTplData] = useState<EdmsTemplateList | null>(null);
+  const [notifData, setNotifData] = useState<EdmsNotificationList | null>(null);
   const [selDocId, setSelDocId] = useState<string>('');
   const [selDocNo, setSelDocNo] = useState<string>('');
   const [loading, setLoading] = useState(false);
@@ -177,6 +179,12 @@ function LiveEdms({
     if (r.ok) setDciData(r.data);
   }, [client]);
 
+  const loadNotif = useCallback(async () => {
+    if (!client) return;
+    const r = await client.notifications({});
+    if (r.ok) setNotifData(r.data);
+  }, [client]);
+
   const loadTpl = useCallback(async (type?: string) => {
     if (!client) return;
     const r = await client.templates({ templateType: type || undefined });
@@ -202,7 +210,7 @@ function LiveEdms({
 
   useEffect(() => { void loadDocs(); return () => { gen.current++; }; }, [loadDocs]);
   useEffect(() => { if (selDocId) { void loadFiles(selDocId); void loadReadiness(selDocId); void loadDeps(selDocId); void loadComments(selDocId); void loadDist(selDocId); } }, [selDocId, loadFiles, loadReadiness, loadDeps, loadComments, loadDist]);
-  useEffect(() => { void loadHolds(); void loadDci(); void loadDist(); void loadTpl(); }, [loadHolds, loadDci, loadDist, loadTpl]);
+  useEffect(() => { void loadHolds(); void loadDci(); void loadDist(); void loadTpl(); void loadNotif(); }, [loadHolds, loadDci, loadDist, loadTpl, loadNotif]);
 
   const filtered = useMemo(() => {
     if (!docsData) return [];
@@ -231,6 +239,7 @@ function LiveEdms({
       if (selDocId) { await loadFiles(selDocId); await loadReadiness(selDocId); await loadDeps(selDocId); await loadComments(selDocId); await loadDist(selDocId); }
       await loadDci();
       await loadTpl();
+      await loadNotif();
       await loadHolds();
       return true;
     }
@@ -678,6 +687,30 @@ function LiveEdms({
               </table>
               {!tplData?.items.length && <p className="tx3 text-[11px] mt-2">{t('قالبی ثبت نشده','No templates')}</p>}
             </div>
+          </Section>
+        </div>
+      )}
+
+      {tab === 'notifications' && (
+        <div className="grid gap-3">
+          <Section title={t('اعلان‌های ایمیلی EDMS','EDMS email notifications')} note={t('خودکار: hold_created, comment_created, distributed — موتور SMTP موجود، در صورت عدم تنظیم شبیه‌سازی می‌شود','Auto: hold_created, comment_created, distributed — SMTP engine existing, simulated if not configured')}>
+            {notifData?.summary && <div className="grid grid-cols-3 gap-2 mb-2"><Kpi label={t('در انتظار','Pending')} value={String(notifData.summary.pending)} /><Kpi label={t('ارسال‌شده','Sent')} value={String(notifData.summary.sent)} /><Kpi label={t('کل','Total')} value={String(notifData.summary.total)} /></div>}
+            <div className="overflow-x-auto max-h-[500px]">
+              <table className="w-full text-[11px] tx2">
+                <thead><tr><th className="p-1">DocNo</th><th className="p-1">Event</th><th className="p-1">Party</th><th className="p-1">Subject</th><th className="p-1">Channel</th><th className="p-1">Status</th><th className="p-1">At</th><th className="p-1">{t('ارسال','Send')}</th></tr></thead>
+                <tbody>
+                  {(notifData?.items ?? []).map(n=>(
+                    <tr key={n.Id} className="border-t b-line-soft"><td className="p-1" dir="ltr">{n.DocNo}</td><td className="p-1">{n.EventType}</td><td className="p-1">{n.RecipientParty}</td><td className="p-1 max-w-[200px] truncate" title={n.SubjectFa}>{n.SubjectFa}</td><td className="p-1">{n.Channel}</td><td className="p-1">{n.Status}</td><td className="p-1" dir="ltr">{(n.CreatedAt||'').slice(0,16)}</td><td className="p-1">{n.Status==='pending' && <button className={btnOk} disabled={busy} onClick={()=>void act(async ()=>{
+                      if(!client) return {ok:false, message:'No client'};
+                      const r=await client.sendNotification(n.Id);
+                      return r.ok ? {ok:true} : {ok:false, message:r.message};
+                    }, t('ارسال شد','Sent'))}>{t('ارسال','Send')}</button>}</td></tr>
+                  ))}
+                </tbody>
+              </table>
+              {!notifData?.items.length && <p className="tx3 text-[11px] mt-2">{t('اعلانی نیست','No notifications')}</p>}
+            </div>
+            <button className={btnGhost} onClick={()=>void loadNotif()}>{t('تازه‌سازی','Refresh')}</button>
           </Section>
         </div>
       )}

@@ -8530,6 +8530,7 @@ app.post("/api/edms/:projectId/holds", comRequire("doc.document.upload"), async 
       Status: "open",
     };
     await r.upsert("DocumentHold", { Id: id }, row, userId);
+    await edmsNotify(r, { projectId, documentId: String(b.documentId), docNo: doc.DocNo, eventType: 'hold_created', party: 'client', subjectFa: `Hold جدید ${holdNo} برای ${doc.DocNo}`, bodyFa: `${b.titleFa} - ${b.noteFa||''}`, channel: 'email' });
     res.status(201).json(cntOk(req, { id, item: row }));
   } catch (err) { next(err); }
 });
@@ -8727,6 +8728,7 @@ app.post("/api/edms/:projectId/documents/:docId/comments", comRequire("doc.docum
       Status: "open",
     };
     await r.upsert("DocumentComment", { Id: id }, row, userId);
+    await edmsNotify(r, { projectId, documentId: docId, docNo: doc.DocNo, eventType: 'comment_created', party: 'contractor', subjectFa: `نظر جدید #${nextNo} برای ${doc.DocNo}`, bodyFa: String(b.commentText).slice(0,500), channel: 'email' });
     res.status(201).json(cntOk(req, { id, item: row }));
   } catch (err) { next(err); }
 });
@@ -8891,12 +8893,41 @@ app.post("/api/edms/:projectId/documents/:docId/distribute", comRequire("doc.tra
       NoteFa: b.noteFa ? String(b.noteFa) : null,
     };
     await r.upsert("DocumentDistribution", { Id: id }, row, userId);
+    await edmsNotify(r, { projectId, documentId: docId, docNo: doc.DocNo, eventType: 'distributed', party: String(b.party), subjectFa: `توزیع ${doc.DocNo} Rev ${doc.Revision} به ${b.party}`, bodyFa: `Transmittal ${b.transmittalNo||''} - ${b.noteFa||''}`, channel: 'email' });
     res.status(201).json(cntOk(req, { id, item: row }));
   } catch(err){ next(err); }
 });
 
 
-/* ── MOD-16 EDM-6 قالب‌های پروژه ── */
+
+async function edmsNotify(r, { projectId, documentId, docNo, eventType, party, subjectFa, bodyFa, channel }) {
+  try {
+    const id = crypto.randomUUID();
+    const row = {
+      Id: id,
+      ProjectId: projectId,
+      DocumentId: documentId,
+      DocNo: docNo || '',
+      EventType: eventType,
+      RecipientParty: party || 'client',
+      RecipientEmail: null,
+      SubjectFa: subjectFa || eventType,
+      BodyFa: bodyFa || '',
+      Channel: channel || 'email',
+      Status: 'pending',
+      CreatedAt: new Date().toISOString(),
+      SentAt: null,
+      ErrorText: null,
+    };
+    await r.upsert("EdmsNotification", { Id: id }, row, "system");
+    return row;
+  } catch(e){
+    console.error('edmsNotify failed', e);
+    return null;
+  }
+}
+
+/* ── MOD-16 EDM-6 قالب‌های پروژه ── *//* ── MOD-16 EDM-6 قالب‌های پروژه ── */
 app.get("/api/edms/:projectId/templates", comRequire("doc.document.view"), async (req, res, next) => {
   try {
     const projectId = String(req.params.projectId || "");
@@ -8944,6 +8975,76 @@ app.delete("/api/edms/:projectId/templates/:templateId", comRequire("doc.documen
     if(!tpl) return cntBad(req, res, "E-EDM-TPL-NOT-FOUND", "قالب یافت نشد", 404);
     await r.delete("DocumentTemplate", String(req.params.templateId), req.headers["x-user-id"] || "system");
     res.json(cntOk(req, { deleted: true, id: String(req.params.templateId) }));
+  } catch(err){ next(err); }
+});
+
+
+/* ── MOD-17 EDM-7 اعلان ایمیلی EDMS ── */
+app.get("/api/edms/:projectId/notifications", comRequire("doc.document.view"), async (req, res, next) => {
+  try {
+    const projectId = String(req.params.projectId || "");
+    const r = await repo();
+    const where=[{ column: "ProjectId", op: "eq", value: projectId }];
+    if(req.query.documentId) where.push({ column: "DocumentId", op: "eq", value: String(req.query.documentId) });
+    if(req.query.eventType) where.push({ column: "EventType", op: "eq", value: String(req.query.eventType) });
+    if(req.query.status) where.push({ column: "Status", op: "eq", value: String(req.query.status) });
+    const rows = await r.list("EdmsNotification", { where, limit: 500 });
+    rows.sort((a,b)=> String(b.CreatedAt||"").localeCompare(String(a.CreatedAt||"")));
+    const pending = rows.filter(x=> x.Status==="pending").length;
+    const sent = rows.filter(x=> x.Status==="sent").length;
+    res.json(cntOk(req, { count: rows.length, summary: { pending, sent, total: rows.length }, items: rows }));
+  } catch(err){ next(err); }
+});
+
+app.post("/api/edms/:projectId/notifications/:notifId/send", comRequire("doc.document.upload"), async (req, res, next) => {
+  try {
+    const r = await repo();
+    const n = await r.findOne("EdmsNotification", [{ column: "Id", op: "eq", value: String(req.params.notifId) }]);
+    if(!n) return cntBad(req, res, "E-EDM-NOTIF-NOT-FOUND", "اعلان یافت نشد", 404);
+    const userId = req.headers["x-user-id"] || "system";
+    let status='sent';
+    let sentAt=new Date().toISOString();
+    let errText=null;
+    try {
+      if(n.Channel==='email'){
+        if(smtpConfigured()){
+          // try real send if SMTP configured, else simulate
+          const transporter = (await import('nodemailer')).default.createTransport({
+            host: process.env.SMTP_HOST,
+            port: Number(process.env.SMTP_PORT || 587),
+            secure: process.env.SMTP_SECURE === 'true',
+            auth: process.env.SMTP_USER ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASSWORD || '' } : undefined,
+          });
+          await transporter.sendMail({
+            from: process.env.SMTP_FROM,
+            to: n.RecipientEmail || 'test@example.com',
+            subject: n.SubjectFa,
+            text: n.BodyFa || n.SubjectFa,
+          });
+        }
+      }
+    } catch(e){
+      status='failed';
+      errText=String(e.message||e).slice(0,1000);
+      sentAt=null;
+    }
+    const row = { ...n, Status: status, SentAt: sentAt, ErrorText: errText };
+    await r.upsert("EdmsNotification", { Id: n.Id }, row, userId);
+    res.json(cntOk(req, { item: row }));
+  } catch(err){ next(err); }
+});
+
+app.post("/api/edms/:projectId/notifications", comRequire("doc.document.upload"), async (req, res, next) => {
+  try {
+    const projectId = String(req.params.projectId || "");
+    const b = req.body || {};
+    if(!b.documentId) return cntBad(req, res, "E-EDM-NOTIF-NO-DOC", "شناسه مدرک الزامی است", 400);
+    if(!b.eventType) return cntBad(req, res, "E-EDM-NOTIF-NO-EVENT", "نوع رویداد الزامی است", 400);
+    const r = await repo();
+    const doc = await r.findOne("Document", [{ column: "Id", op: "eq", value: String(b.documentId) }]);
+    if(!doc) return cntBad(req, res, "E-EDM-DOC-NOT-FOUND", "مدرک یافت نشد", 404);
+    const row = await edmsNotify(r, { projectId, documentId: String(b.documentId), docNo: doc.DocNo, eventType: String(b.eventType), party: b.party||'client', subjectFa: b.subjectFa||String(b.eventType), bodyFa: b.bodyFa||'', channel: b.channel||'email' });
+    res.status(201).json(cntOk(req, { id: row.Id, item: row }));
   } catch(err){ next(err); }
 });
 

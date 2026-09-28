@@ -165,6 +165,23 @@ export type EdmsTemplate = {
 };
 export type EdmsTemplateList = { count: number; items: EdmsTemplate[] };
 
+export type EdmsNotification = {
+  Id: string;
+  ProjectId: string;
+  DocumentId: string;
+  DocNo: string;
+  EventType: string;
+  RecipientParty: string;
+  RecipientEmail?: string | null;
+  SubjectFa: string;
+  BodyFa?: string | null;
+  Channel: string;
+  Status: string;
+  CreatedAt: string;
+  SentAt?: string | null;
+};
+export type EdmsNotificationList = { count: number; summary: { pending: number; sent: number; total: number }; items: EdmsNotification[] };
+
 export type EdmsCommentList = {
   count: number;
   summary: { open: number; replied: number; concluded: number; total: number };
@@ -282,6 +299,17 @@ export class EdmsClient {
     return this.req<EdmsTemplateList>('GET', `/api/edms/${encodeURIComponent(this.projectId)}/templates${extra}`);
   };
   createTemplate = (body: { templateType: string; nameFa: string; code?: string; contentJson?: unknown; noteFa?: string }) => this.req<{ id: string; item: EdmsTemplate }>('POST', `/api/edms/${encodeURIComponent(this.projectId)}/templates`, body);
+  notifications = (params: { documentId?: string; eventType?: string; status?: string } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.documentId) qs.set('documentId', params.documentId);
+    if (params.eventType) qs.set('eventType', params.eventType);
+    if (params.status) qs.set('status', params.status);
+    const extra = qs.toString() ? `&${qs.toString()}` : '';
+    return this.req<EdmsNotificationList>('GET', `/api/edms/${encodeURIComponent(this.projectId)}/notifications${extra}`);
+  };
+  sendNotification = (notifId: string) => this.req<{ item: EdmsNotification }>('POST', `/api/edms/${encodeURIComponent(this.projectId)}/notifications/${encodeURIComponent(notifId)}/send`, {});
+  createNotification = (body: { documentId: string; eventType: string; party?: string; subjectFa?: string; bodyFa?: string; channel?: string }) => this.req<{ id: string; item: EdmsNotification }>('POST', `/api/edms/${encodeURIComponent(this.projectId)}/notifications`, body);
+
   deleteTemplate = (templateId: string) => this.req<{ deleted: boolean; id: string }>('DELETE', `/api/edms/${encodeURIComponent(this.projectId)}/templates/${encodeURIComponent(templateId)}`);
 
   distribute = (docId: string, body: { party: string; transmittalNo?: string; noteFa?: string }) => this.req<{ id: string; item: EdmsDistribution }>('POST', `/api/edms/${encodeURIComponent(this.projectId)}/documents/${encodeURIComponent(docId)}/distribute`, body);
