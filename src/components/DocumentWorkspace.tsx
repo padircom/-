@@ -1,15 +1,15 @@
 /**
- * EDM-1 + EDM-2 — میز کار زنده اسناد و مدارک (d1) با اتصال فایل به نسخه و Hold.
+ * EDM-1 + EDM-2 + EDM-3 — میز کار زنده اسناد و مدارک (d1) با اتصال فایل، Hold و پیش‌نیاز.
  * هیچ دادهٔ نمونه ندارد؛ همه از /api/edms/:projectId/... می‌آید.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Lang } from '../data/framework';
 import { useAuth } from '../context/AuthContext';
 import { useSystem } from '../context/SystemContext';
-import { EdmsClient, type EdmsDocumentList, type EdmsFileList, type EdmsHoldList } from '../services/edmsWorkspace';
+import { EdmsClient, type EdmsDocumentList, type EdmsFileList, type EdmsHoldList, type EdmsDependencyList, type EdmsReadiness } from '../services/edmsWorkspace';
 import { createRow, listRows } from '../services/edmsApi';
 
-export type EdmsTab = 'overview' | 'mdr' | 'revision' | 'files' | 'holds' | 'workflow' | 'excel' | 'numbering' | 'correspondence' | 'transmittal' | 'lessons';
+export type EdmsTab = 'overview' | 'mdr' | 'revision' | 'files' | 'holds' | 'deps' | 'workflow' | 'excel' | 'numbering' | 'correspondence' | 'transmittal' | 'lessons';
 
 const TABS: { id: EdmsTab; fa: string; en: string }[] = [
   { id: 'overview', fa: 'نمای کلی', en: 'Overview' },
@@ -17,6 +17,7 @@ const TABS: { id: EdmsTab; fa: string; en: string }[] = [
   { id: 'revision', fa: 'نسخه‌ها', en: 'Revisions' },
   { id: 'files', fa: 'پیوست فایل', en: 'Files' },
   { id: 'holds', fa: 'Hold Items', en: 'Holds' },
+  { id: 'deps', fa: 'پیش‌نیاز و قفل', en: 'Prereq & Gate' },
   { id: 'workflow', fa: 'گردش کار', en: 'Workflow' },
   { id: 'excel', fa: 'اکسل', en: 'Excel' },
   { id: 'numbering', fa: 'شماره‌گذاری', en: 'Numbering' },
@@ -89,6 +90,8 @@ function LiveEdms({
   const [docsData, setDocsData] = useState<EdmsDocumentList | null>(null);
   const [filesData, setFilesData] = useState<EdmsFileList | null>(null);
   const [holdsData, setHoldsData] = useState<EdmsHoldList | null>(null);
+  const [depsData, setDepsData] = useState<EdmsDependencyList | null>(null);
+  const [readiness, setReadiness] = useState<EdmsReadiness | null>(null);
   const [selDocId, setSelDocId] = useState<string>('');
   const [selDocNo, setSelDocNo] = useState<string>('');
   const [loading, setLoading] = useState(false);
@@ -98,13 +101,12 @@ function LiveEdms({
   const [query, setQuery] = useState('');
   const gen = useRef(0);
 
-  // create doc form
   const [docForm, setDocForm] = useState({ docNo: '', titleFa: '', revision: 'A', discipline: 'Civil', status: 'draft', reviewCode: '—', slaHours: '0' });
   const [fileNote, setFileNote] = useState('');
   const [uploadFile, setUploadFile] = useState<File | null>(null);
-  // hold form
   const [holdForm, setHoldForm] = useState({ documentId: '', titleFa: '', holdType: 'other', dueAt: '', noteFa: '' });
   const [holdFilter, setHoldFilter] = useState({ status: '', holdType: '' });
+  const [depForm, setDepForm] = useState({ documentId: '', dependsOnDocumentId: '', dependencyType: 'approval', isMandatory: true, noteFa: '' });
 
   const loadDocs = useCallback(async () => {
     if (!client) return;
@@ -121,6 +123,7 @@ function LiveEdms({
         setSelDocId(first.Id);
         setSelDocNo(first.DocNo);
         setHoldForm(f => ({ ...f, documentId: first.Id }));
+        setDepForm(f => ({ ...f, documentId: first.Id }));
       }
     } catch (e: any) {
       if (seq !== gen.current) return;
@@ -133,8 +136,7 @@ function LiveEdms({
   const loadFiles = useCallback(async (docId: string) => {
     if (!client || !docId) { setFilesData(null); return; }
     const r = await client.files(docId);
-    if (r.ok) setFilesData(r.data);
-    else setFilesData(null);
+    if (r.ok) setFilesData(r.data); else setFilesData(null);
   }, [client]);
 
   const loadHolds = useCallback(async () => {
@@ -143,8 +145,20 @@ function LiveEdms({
     if (r.ok) setHoldsData(r.data);
   }, [client, holdFilter]);
 
+  const loadDeps = useCallback(async (docId?: string) => {
+    if (!client) return;
+    const r = await client.dependencies({ documentId: docId || undefined });
+    if (r.ok) setDepsData(r.data);
+  }, [client]);
+
+  const loadReadiness = useCallback(async (docId: string) => {
+    if (!client || !docId) { setReadiness(null); return; }
+    const r = await client.readiness(docId);
+    if (r.ok) setReadiness(r.data); else setReadiness(null);
+  }, [client]);
+
   useEffect(() => { void loadDocs(); return () => { gen.current++; }; }, [loadDocs]);
-  useEffect(() => { if (selDocId) void loadFiles(selDocId); }, [selDocId, loadFiles]);
+  useEffect(() => { if (selDocId) { void loadFiles(selDocId); void loadReadiness(selDocId); void loadDeps(selDocId); } }, [selDocId, loadFiles, loadReadiness, loadDeps]);
   useEffect(() => { void loadHolds(); }, [loadHolds]);
 
   const filtered = useMemo(() => {
@@ -171,7 +185,7 @@ function LiveEdms({
     if (r.ok) {
       setMsg({ tone: 'ok', text: okText });
       await loadDocs();
-      if (selDocId) await loadFiles(selDocId);
+      if (selDocId) { await loadFiles(selDocId); await loadReadiness(selDocId); await loadDeps(selDocId); }
       await loadHolds();
       return true;
     }
@@ -179,16 +193,14 @@ function LiveEdms({
     return false;
   };
 
-  if (!projectId) {
-    return <div className="tx3 text-[11px] p-3">{t('پروژه انتخاب نشده است', 'No project selected')}</div>;
-  }
+  if (!projectId) return <div className="tx3 text-[11px] p-3">{t('پروژه انتخاب نشده است', 'No project selected')}</div>;
 
   return (
     <div dir={fa ? 'rtl' : 'ltr'} className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-1">
       <header className="glass-dark rounded-xl p-3 flex flex-wrap items-center gap-3">
         <div className="flex-1">
-          <h3 className="tx1 font-semibold text-[13px]">{t('اسناد و مدارک — فایل به نسخه + Hold (EDM-1/2)', 'EDMS — file to revision + Holds')}</h3>
-          <p className="text-[10px] tx3" dir="ltr">{projectId} · {kpis.total} docs · {kpis.versions} versions · {kpis.withFile} with file · {holdsData?.summary.open ?? 0} open holds</p>
+          <h3 className="tx1 font-semibold text-[13px]">{t('اسناد — فایل به نسخه + Hold + پیش‌نیاز (EDM-1/2/3)', 'EDMS — file + Hold + prereq')}</h3>
+          <p className="text-[10px] tx3" dir="ltr">{projectId} · {kpis.total} docs · {kpis.versions} vers · {kpis.withFile} with file · {holdsData?.summary.open ?? 0} open holds · {depsData?.count ?? 0} deps · {readiness ? (readiness.canIssue ? 'Can Issue' : `${readiness.blockers.length} blockers`) : ''}</p>
         </div>
         <button className={btnGhost} disabled={loading || busy} onClick={() => void loadDocs()}>{t('تازه‌سازی', 'Refresh')}</button>
       </header>
@@ -209,105 +221,80 @@ function LiveEdms({
 
       {tab === 'overview' && (
         <div className="grid gap-3">
-          <Section title={t('KPI اسناد و Hold', 'Docs & Hold KPI')} note={t('بدون نمونه — فقط دادهٔ واقعی', 'No sample — live only')}>
+          <Section title={t('KPI اسناد و Hold و پیش‌نیاز', 'Docs & Hold & Prereq KPI')}>
             <div className="grid grid-cols-2 lg:grid-cols-5 gap-2">
               <Kpi label={t('کل مدارک', 'Total docs')} value={String(kpis.total)} />
               <Kpi label={t('تأییدشده', 'Approved')} value={String(kpis.approved)} />
               <Kpi label={t('دارای فایل', 'With file')} value={String(kpis.withFile)} />
               <Kpi label={t('Hold باز', 'Open holds')} value={String(holdsData?.summary.open ?? 0)} />
-              <Kpi label={t('Hold معوق', 'Overdue holds')} value={String(holdsData?.summary.overdue ?? 0)} />
+              <Kpi label={t('وابستگی‌ها', 'Deps')} value={String(depsData?.count ?? 0)} />
             </div>
           </Section>
-          <Section title={t('نسخه‌ها به تفکیک DocNo', 'Versions by DocNo')}>
-            <div className="overflow-x-auto max-h-[400px]">
-              <table className="w-full text-[11px] tx2">
-                <thead><tr><th className="p-1 text-start">DocNo</th><th className="p-1">Versions</th><th className="p-1">Revisions</th></tr></thead>
-                <tbody>
-                  {Object.entries(docsData?.byDocNo ?? {}).slice(0, 50).map(([docNo, vers]) => (
-                    <tr key={docNo} className="border-t b-line-soft"><td className="p-1" dir="ltr">{docNo}</td><td className="p-1">{vers.length}</td><td className="p-1" dir="ltr">{vers.map(v => v.revision).join(', ')}</td></tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+          <Section title={t('آمادگی صدور مدرک انتخاب‌شده', 'Readiness of selected doc')} note={t('قفل صدور: Hold باز یا پیش‌نیاز الزامی تأییدنشده', 'Gate: open Hold or mandatory prereq not approved')}>
+            {readiness ? (
+              <div className="text-[11px] tx2 space-y-1">
+                <p>{readiness.document.docNo} Rev {readiness.document.revision} — {readiness.document.status} — {readiness.canIssue ? t('قابل صدور', 'Can issue') : t('مسدود', 'Blocked')}</p>
+                {readiness.blockers.length > 0 && <ul className="list-disc ps-4 text-rose-300">{readiness.blockers.map((b,i)=><li key={i}>{b}</li>)}</ul>}
+                {readiness.warnings.length > 0 && <ul className="list-disc ps-4 text-amber-300">{readiness.warnings.map((w,i)=><li key={i}>{w}</li>)}</ul>}
+              </div>
+            ) : <p className="tx3 text-[11px]">{t('مدرکی انتخاب نشده', 'No doc selected')}</p>}
           </Section>
         </div>
       )}
 
       {tab === 'mdr' && (
         <div className="grid gap-3">
-          <Section title={t('ایجاد مدرک جدید', 'Create document')} note={t('DocNo + Revision یکتا', 'DocNo+Revision unique')}>
+          <Section title={t('ایجاد مدرک جدید', 'Create document')}>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
               <input className={inputCls} placeholder="DocNo" value={docForm.docNo} onChange={e => setDocForm({ ...docForm, docNo: e.target.value })} />
               <input className={inputCls} placeholder={t('عنوان فارسی', 'Title Fa')} value={docForm.titleFa} onChange={e => setDocForm({ ...docForm, titleFa: e.target.value })} />
               <input className={inputCls} placeholder="Revision" value={docForm.revision} onChange={e => setDocForm({ ...docForm, revision: e.target.value })} />
               <input className={inputCls} placeholder="Discipline" value={docForm.discipline} onChange={e => setDocForm({ ...docForm, discipline: e.target.value })} />
               <select className={inputCls} value={docForm.status} onChange={e => setDocForm({ ...docForm, status: e.target.value })}>
-                {['draft', 'under_review', 'approved', 'rejected'].map(s => <option key={s} value={s}>{s}</option>)}
+                {['draft','under_review','approved','rejected'].map(s=><option key={s} value={s}>{s}</option>)}
               </select>
               <input className={inputCls} placeholder="ReviewCode" value={docForm.reviewCode} onChange={e => setDocForm({ ...docForm, reviewCode: e.target.value })} />
             </div>
             <button className={btnPrimary} disabled={busy || !docForm.docNo || !docForm.titleFa} onClick={() => void act(async () => {
               const res = await listRows('Document', projectId);
-              if (res?.items?.some((r: any) => r.DocNo === docForm.docNo && r.Revision === docForm.revision)) {
-                return { ok: false, message: t('تکراری است', 'Duplicate') };
-              }
-              const row = {
-                ProjectId: projectId,
-                DocNo: docForm.docNo.trim(),
-                TitleFa: docForm.titleFa.trim(),
-                TitleEn: docForm.titleFa.trim(),
-                Revision: docForm.revision.trim(),
-                Discipline: docForm.discipline.trim(),
-                Status: docForm.status,
-                ReviewCode: docForm.reviewCode.trim(),
-                SlaHours: Number(docForm.slaHours) || 0,
-                IssuedAt: new Date().toISOString().slice(0, 10),
-              };
+              if (res?.items?.some((r:any)=> r.DocNo===docForm.docNo && r.Revision===docForm.revision)) return { ok:false, message: t('تکراری است','Duplicate') };
+              const row = { ProjectId: projectId, DocNo: docForm.docNo.trim(), TitleFa: docForm.titleFa.trim(), TitleEn: docForm.titleFa.trim(), Revision: docForm.revision.trim(), Discipline: docForm.discipline.trim(), Status: docForm.status, ReviewCode: docForm.reviewCode.trim(), SlaHours: Number(docForm.slaHours)||0, IssuedAt: new Date().toISOString().slice(0,10) };
               const created = await createRow('Document', row);
-              return created ? { ok: true } : { ok: false, message: t('ثبت ناموفق', 'Create failed') };
-            }, t('مدرک ایجاد شد', 'Document created'))}>{t('ثبت مدرک', 'Create')}</button>
+              return created ? { ok:true } : { ok:false, message: t('ثبت ناموفق','Create failed') };
+            }, t('مدرک ایجاد شد','Document created'))}>{t('ثبت مدرک','Create')}</button>
           </Section>
-
           <Section title={t('MDR — فهرست مدارک', 'MDR — documents')}>
-            <div className="flex gap-2 mb-2">
-              <input className={inputCls} style={{ maxWidth: '300px' }} placeholder={t('جستجو DocNo/Title', 'Search')} value={query} onChange={e => setQuery(e.target.value)} />
-            </div>
+            <div className="flex gap-2 mb-2"><input className={inputCls} style={{maxWidth:'300px'}} placeholder={t('جستجو','Search')} value={query} onChange={e=>setQuery(e.target.value)} /></div>
             <div className="overflow-x-auto max-h-[500px]">
               <table className="w-full text-[11px] tx2">
-                <thead><tr><th className="p-1 text-start">DocNo</th><th className="p-1 text-start">{t('عنوان', 'Title')}</th><th className="p-1">Rev</th><th className="p-1">Status</th><th className="p-1">Disc</th><th className="p-1">{t('فایل', 'File')}</th><th className="p-1">{t('نسخه‌ها', 'Vers')}</th><th className="p-1">{t('اقدام', 'Action')}</th></tr></thead>
+                <thead><tr><th className="p-1 text-start">DocNo</th><th className="p-1 text-start">{t('عنوان','Title')}</th><th className="p-1">Rev</th><th className="p-1">Status</th><th className="p-1">Disc</th><th className="p-1">{t('فایل','File')}</th><th className="p-1">{t('نسخه‌ها','Vers')}</th><th className="p-1">{t('اقدام','Action')}</th></tr></thead>
                 <tbody>
-                  {filtered.map(d => (
-                    <tr key={d.Id} className={`border-t b-line-soft ${selDocId === d.Id ? 'bg-white/5' : ''}`}>
-                      <td className="p-1" dir="ltr">{d.DocNo}</td>
-                      <td className="p-1">{d.TitleFa}</td>
-                      <td className="p-1" dir="ltr">{d.Revision}</td>
-                      <td className="p-1">{d.Status}</td>
-                      <td className="p-1">{d.Discipline ?? '—'}</td>
-                      <td className="p-1">{d.hasFile ? '✓' : '—'}</td>
-                      <td className="p-1">{d.versions}</td>
-                      <td className="p-1 flex gap-1"><button className={btnGhost} onClick={() => { setSelDocId(d.Id); setSelDocNo(d.DocNo); setTab('files'); }}>{t('فایل‌ها', 'Files')}</button><button className={btnGhost} onClick={() => { setSelDocId(d.Id); setHoldForm(f=>({...f,documentId:d.Id})); setTab('holds'); }}>{t('Hold', 'Hold')}</button></td>
+                  {filtered.map(d=>(
+                    <tr key={d.Id} className={`border-t b-line-soft ${selDocId===d.Id?'bg-white/5':''}`}>
+                      <td className="p-1" dir="ltr">{d.DocNo}</td><td className="p-1">{d.TitleFa}</td><td className="p-1" dir="ltr">{d.Revision}</td><td className="p-1">{d.Status}</td><td className="p-1">{d.Discipline ?? '—'}</td><td className="p-1">{d.hasFile?'✓':'—'}</td><td className="p-1">{d.versions}</td>
+                      <td className="p-1 flex gap-1"><button className={btnGhost} onClick={()=>{setSelDocId(d.Id); setSelDocNo(d.DocNo); setTab('files');}}>{t('فایل‌ها','Files')}</button><button className={btnGhost} onClick={()=>{setSelDocId(d.Id); setHoldForm(f=>({...f,documentId:d.Id})); setTab('holds');}}>{t('Hold','Hold')}</button><button className={btnGhost} onClick={()=>{setSelDocId(d.Id); setDepForm(f=>({...f,documentId:d.Id})); setTab('deps');}}>{t('پیش‌نیاز','Prereq')}</button></td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-              {!filtered.length && <p className="tx3 text-[11px] mt-2">{t('مدرکی نیست', 'No docs')}</p>}
+              {!filtered.length && <p className="tx3 text-[11px] mt-2">{t('مدرکی نیست','No docs')}</p>}
             </div>
           </Section>
         </div>
       )}
 
       {tab === 'revision' && (
-        <Section title={t('تاریخچه نسخه‌ها', 'Version history')}>
+        <Section title={t('تاریخچه نسخه‌ها','Version history')}>
           <div className="grid gap-2">
-            <select className={inputCls} value={selDocNo} onChange={e => setSelDocNo(e.target.value)}>
-              <option value="">{t('انتخاب DocNo', 'Select DocNo')}</option>
-              {Object.keys(docsData?.byDocNo ?? {}).map(dn => <option key={dn} value={dn}>{dn}</option>)}
+            <select className={inputCls} value={selDocNo} onChange={e=>setSelDocNo(e.target.value)}>
+              <option value="">{t('انتخاب DocNo','Select DocNo')}</option>
+              {Object.keys(docsData?.byDocNo ?? {}).map(dn=><option key={dn} value={dn}>{dn}</option>)}
             </select>
             {selDocNo && docsData?.byDocNo[selDocNo] && (
               <table className="w-full text-[11px] tx2">
                 <thead><tr><th className="p-1">Revision</th><th className="p-1">Status</th><th className="p-1">IssuedAt</th><th className="p-1">FilePath</th><th className="p-1">Id</th></tr></thead>
                 <tbody>
-                  {docsData.byDocNo[selDocNo].map(v => (
+                  {docsData.byDocNo[selDocNo].map(v=>(
                     <tr key={v.id} className="border-t b-line-soft"><td className="p-1" dir="ltr">{v.revision}</td><td className="p-1">{v.status}</td><td className="p-1" dir="ltr">{v.issuedAt ?? '—'}</td><td className="p-1" dir="ltr">{v.filePath ?? '—'}</td><td className="p-1" dir="ltr">{v.id.slice(0,8)}</td></tr>
                   ))}
                 </tbody>
@@ -319,41 +306,39 @@ function LiveEdms({
 
       {tab === 'files' && (
         <div className="grid gap-3">
-          <Section title={t('انتخاب مدرک', 'Select document')}>
-            <select className={inputCls} value={selDocId} onChange={e => { setSelDocId(e.target.value); const doc = docsData?.items.find(x => x.Id === e.target.value); if (doc) setSelDocNo(doc.DocNo); }}>
-              <option value="">{t('انتخاب مدرک', 'Select doc')}</option>
-              {(docsData?.items ?? []).map(d => <option key={d.Id} value={d.Id}>{d.DocNo} Rev {d.Revision} — {d.TitleFa}</option>)}
+          <Section title={t('انتخاب مدرک','Select document')}>
+            <select className={inputCls} value={selDocId} onChange={e=>{setSelDocId(e.target.value); const doc=docsData?.items.find(x=>x.Id===e.target.value); if(doc) setSelDocNo(doc.DocNo);}}>
+              <option value="">{t('انتخاب مدرک','Select doc')}</option>
+              {(docsData?.items ?? []).map(d=><option key={d.Id} value={d.Id}>{d.DocNo} Rev {d.Revision} — {d.TitleFa}</option>)}
             </select>
           </Section>
-
-          <Section title={t('آپلود فایل به نسخه', 'Upload file to revision')} note={t('اتصال فایل به نسخه — FilePath در Document هم به‌روز می‌شود', 'File to revision link')}>
+          <Section title={t('آپلود فایل به نسخه','Upload file to revision')}>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-              <input type="file" className={inputCls} onChange={e => setUploadFile(e.target.files?.[0] ?? null)} />
-              <input className={inputCls} placeholder={t('یادداشت (اختیاری)', 'Note optional')} value={fileNote} onChange={e => setFileNote(e.target.value)} />
-              <button className={btnPrimary} disabled={busy || !uploadFile || !selDocId} onClick={() => void act(async () => {
-                if (!client || !uploadFile || !selDocId) return { ok: false, message: 'No file' };
-                const r = await client.uploadFile(selDocId, uploadFile, fileNote || undefined);
-                if (r.ok) { setUploadFile(null); setFileNote(''); return { ok: true }; }
-                return { ok: false, message: r.message };
-              }, t('فایل آپلود شد', 'File uploaded'))}>{t('آپلود', 'Upload')}</button>
+              <input type="file" className={inputCls} onChange={e=>setUploadFile(e.target.files?.[0] ?? null)} />
+              <input className={inputCls} placeholder={t('یادداشت','Note')} value={fileNote} onChange={e=>setFileNote(e.target.value)} />
+              <button className={btnPrimary} disabled={busy || !uploadFile || !selDocId} onClick={()=>void act(async ()=>{
+                if(!client || !uploadFile || !selDocId) return {ok:false, message:'No file'};
+                const r=await client.uploadFile(selDocId, uploadFile, fileNote||undefined);
+                if(r.ok){setUploadFile(null); setFileNote(''); return {ok:true};}
+                return {ok:false, message:r.message};
+              }, t('فایل آپلود شد','File uploaded'))}>{t('آپلود','Upload')}</button>
             </div>
           </Section>
-
-          <Section title={t('پیوست‌های این نسخه', 'Attachments')}>
+          <Section title={t('پیوست‌های این نسخه','Attachments')}>
             <div className="overflow-x-auto">
               <table className="w-full text-[11px] tx2">
-                <thead><tr><th className="p-1">{t('FileName', 'نام فایل')}</th><th className="p-1">Mime</th><th className="p-1">Size</th><th className="p-1">UploadedAt</th><th className="p-1">By</th><th className="p-1">{t('دانلود', 'Download')}</th><th className="p-1">{t('حذف', 'Delete')}</th></tr></thead>
+                <thead><tr><th className="p-1">{t('FileName','نام فایل')}</th><th className="p-1">Mime</th><th className="p-1">Size</th><th className="p-1">UploadedAt</th><th className="p-1">By</th><th className="p-1">{t('دانلود','Download')}</th><th className="p-1">{t('حذف','Delete')}</th></tr></thead>
                 <tbody>
-                  {(filesData?.items ?? []).map(f => (
-                    <tr key={f.Id} className="border-t b-line-soft"><td className="p-1" dir="ltr">{f.FileName}</td><td className="p-1">{f.MimeType}</td><td className="p-1">{(f.SizeBytes/1024).toFixed(1)} KB</td><td className="p-1" dir="ltr">{new Date(f.UploadedAt).toLocaleString(fa?'fa-IR':'en-US')}</td><td className="p-1" dir="ltr">{f.UploadedBy.slice(0,8)}</td><td className="p-1"><a className={btnGhost} href={f.downloadUrl} target="_blank" rel="noreferrer">{t('دانلود', 'Download')}</a></td><td className="p-1"><button className={btnGhost} disabled={busy} onClick={() => void act(async () => {
-                    if (!client) return { ok: false, message: 'No client' };
-                    const r = await client.deleteFile(f.Id);
-                    return r.ok ? { ok: true } : { ok: false, message: r.message };
-                  }, t('حذف شد', 'Deleted'))}>{t('حذف', 'Delete')}</button></td></tr>
+                  {(filesData?.items ?? []).map(f=>(
+                    <tr key={f.Id} className="border-t b-line-soft"><td className="p-1" dir="ltr">{f.FileName}</td><td className="p-1">{f.MimeType}</td><td className="p-1">{(f.SizeBytes/1024).toFixed(1)} KB</td><td className="p-1" dir="ltr">{new Date(f.UploadedAt).toLocaleString(fa?'fa-IR':'en-US')}</td><td className="p-1" dir="ltr">{f.UploadedBy.slice(0,8)}</td><td className="p-1"><a className={btnGhost} href={f.downloadUrl} target="_blank" rel="noreferrer">{t('دانلود','Download')}</a></td><td className="p-1"><button className={btnGhost} disabled={busy} onClick={()=>void act(async ()=>{
+                    if(!client) return {ok:false, message:'No client'};
+                    const r=await client.deleteFile(f.Id);
+                    return r.ok ? {ok:true} : {ok:false, message:r.message};
+                  }, t('حذف شد','Deleted'))}>{t('حذف','Delete')}</button></td></tr>
                   ))}
                 </tbody>
               </table>
-              {!filesData?.items.length && <p className="tx3 text-[11px] mt-2">{t('پیوستی نیست', 'No attachments')}</p>}
+              {!filesData?.items.length && <p className="tx3 text-[11px] mt-2">{t('پیوستی نیست','No attachments')}</p>}
             </div>
           </Section>
         </div>
@@ -361,70 +346,120 @@ function LiveEdms({
 
       {tab === 'holds' && (
         <div className="grid gap-3">
-          <Section title={t('ایجاد Hold برای مدرک', 'Create Hold for document')} note={t('HoldNo خودکار — DueAt تاریخ رفع مورد انتظار', 'HoldNo auto — DueAt expected release')}>
+          <Section title={t('ایجاد Hold','Create Hold')}>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-              <select className={inputCls} value={holdForm.documentId} onChange={e => setHoldForm({ ...holdForm, documentId: e.target.value })}>
-                <option value="">{t('انتخاب مدرک', 'Select doc')}</option>
-                {(docsData?.items ?? []).map(d => <option key={d.Id} value={d.Id}>{d.DocNo} Rev {d.Revision}</option>)}
+              <select className={inputCls} value={holdForm.documentId} onChange={e=>setHoldForm({...holdForm, documentId:e.target.value})}>
+                <option value="">{t('انتخاب مدرک','Select doc')}</option>
+                {(docsData?.items ?? []).map(d=><option key={d.Id} value={d.Id}>{d.DocNo} Rev {d.Revision}</option>)}
               </select>
-              <input className={inputCls} placeholder={t('دلیل Hold', 'Hold reason')} value={holdForm.titleFa} onChange={e => setHoldForm({ ...holdForm, titleFa: e.target.value })} />
-              <select className={inputCls} value={holdForm.holdType} onChange={e => setHoldForm({ ...holdForm, holdType: e.target.value })}>
-                {['vendor','client','engineering','procurement','other'].map(v => <option key={v} value={v}>{v}</option>)}
+              <input className={inputCls} placeholder={t('دلیل Hold','Hold reason')} value={holdForm.titleFa} onChange={e=>setHoldForm({...holdForm, titleFa:e.target.value})} />
+              <select className={inputCls} value={holdForm.holdType} onChange={e=>setHoldForm({...holdForm, holdType:e.target.value})}>
+                {['vendor','client','engineering','procurement','other'].map(v=><option key={v} value={v}>{v}</option>)}
               </select>
-              <input className={inputCls} type="date" value={holdForm.dueAt} onChange={e => setHoldForm({ ...holdForm, dueAt: e.target.value })} />
-              <input className={inputCls} placeholder={t('یادداشت', 'Note')} value={holdForm.noteFa} onChange={e => setHoldForm({ ...holdForm, noteFa: e.target.value })} />
-              <button className={btnPrimary} disabled={busy || !holdForm.documentId || !holdForm.titleFa} onClick={() => void act(async () => {
-                if (!client) return { ok: false, message: 'No client' };
-                const r = await client.createHold({ documentId: holdForm.documentId, titleFa: holdForm.titleFa, holdType: holdForm.holdType, dueAt: holdForm.dueAt || undefined, noteFa: holdForm.noteFa || undefined });
-                return r.ok ? { ok: true } : { ok: false, message: r.message };
-              }, t('Hold ثبت شد', 'Hold created'))}>{t('ثبت Hold', 'Create Hold')}</button>
+              <input className={inputCls} type="date" value={holdForm.dueAt} onChange={e=>setHoldForm({...holdForm, dueAt:e.target.value})} />
+              <input className={inputCls} placeholder={t('یادداشت','Note')} value={holdForm.noteFa} onChange={e=>setHoldForm({...holdForm, noteFa:e.target.value})} />
+              <button className={btnPrimary} disabled={busy || !holdForm.documentId || !holdForm.titleFa} onClick={()=>void act(async ()=>{
+                if(!client) return {ok:false, message:'No client'};
+                const r=await client.createHold({documentId:holdForm.documentId, titleFa:holdForm.titleFa, holdType:holdForm.holdType, dueAt:holdForm.dueAt||undefined, noteFa:holdForm.noteFa||undefined});
+                return r.ok ? {ok:true} : {ok:false, message:r.message};
+              }, t('Hold ثبت شد','Hold created'))}>{t('ثبت Hold','Create Hold')}</button>
             </div>
           </Section>
-
-          <Section title={t('فیلتر Hold', 'Hold filter')}>
+          <Section title={t('فیلتر Hold','Hold filter')}>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-              <select className={inputCls} value={holdFilter.status} onChange={e => setHoldFilter({ ...holdFilter, status: e.target.value })}>
-                <option value="">{t('همه وضعیت‌ها', 'All statuses')}</option>
-                <option value="open">open</option>
-                <option value="released">released</option>
-                <option value="cancelled">cancelled</option>
+              <select className={inputCls} value={holdFilter.status} onChange={e=>setHoldFilter({...holdFilter, status:e.target.value})}>
+                <option value="">{t('همه وضعیت‌ها','All statuses')}</option><option value="open">open</option><option value="released">released</option><option value="cancelled">cancelled</option>
               </select>
-              <select className={inputCls} value={holdFilter.holdType} onChange={e => setHoldFilter({ ...holdFilter, holdType: e.target.value })}>
-                <option value="">{t('همه نوع‌ها', 'All types')}</option>
-                {['vendor','client','engineering','procurement','other'].map(v => <option key={v} value={v}>{v}</option>)}
+              <select className={inputCls} value={holdFilter.holdType} onChange={e=>setHoldFilter({...holdFilter, holdType:e.target.value})}>
+                <option value="">{t('همه نوع‌ها','All types')}</option>{['vendor','client','engineering','procurement','other'].map(v=><option key={v} value={v}>{v}</option>)}
               </select>
-              <button className={btnGhost} onClick={() => void loadHolds()}>{t('اعمال', 'Apply')}</button>
+              <button className={btnGhost} onClick={()=>void loadHolds()}>{t('اعمال','Apply')}</button>
             </div>
-            {holdsData?.summary && <div className="grid grid-cols-3 gap-2 mt-2"><Kpi label={t('باز', 'Open')} value={String(holdsData.summary.open)} /><Kpi label={t('معوق', 'Overdue')} value={String(holdsData.summary.overdue)} /><Kpi label={t('آزادشده', 'Released')} value={String(holdsData.summary.released)} /></div>}
+            {holdsData?.summary && <div className="grid grid-cols-3 gap-2 mt-2"><Kpi label={t('باز','Open')} value={String(holdsData.summary.open)} /><Kpi label={t('معوق','Overdue')} value={String(holdsData.summary.overdue)} /><Kpi label={t('آزادشده','Released')} value={String(holdsData.summary.released)} /></div>}
           </Section>
-
-          <Section title={t('فهرست Hold Items', 'Hold Items list')}>
+          <Section title={t('فهرست Hold Items','Hold Items list')}>
             <div className="overflow-x-auto max-h-[500px]">
               <table className="w-full text-[11px] tx2">
-                <thead><tr><th className="p-1">HoldNo</th><th className="p-1">DocNo</th><th className="p-1">Rev</th><th className="p-1">{t('دلیل', 'Reason')}</th><th className="p-1">Type</th><th className="p-1">Status</th><th className="p-1">DueAt</th><th className="p-1">{t('اقدام', 'Action')}</th></tr></thead>
+                <thead><tr><th className="p-1">HoldNo</th><th className="p-1">DocNo</th><th className="p-1">Rev</th><th className="p-1">{t('دلیل','Reason')}</th><th className="p-1">Type</th><th className="p-1">Status</th><th className="p-1">DueAt</th><th className="p-1">{t('اقدام','Action')}</th></tr></thead>
                 <tbody>
-                  {(holdsData?.items ?? []).map(h => (
-                    <tr key={h.Id} className="border-t b-line-soft"><td className="p-1" dir="ltr">{h.HoldNo}</td><td className="p-1" dir="ltr">{h.DocNo}</td><td className="p-1" dir="ltr">{h.Revision}</td><td className="p-1">{h.TitleFa}</td><td className="p-1">{h.HoldType}</td><td className="p-1">{h.Status}</td><td className="p-1" dir="ltr">{h.DueAt ?? '—'}</td><td className="p-1 flex gap-1">{h.Status==='open' && <><button className={btnOk} disabled={busy} onClick={() => void act(async () => {
-                      if (!client) return { ok: false, message: 'No client' };
-                      const r = await client.releaseHold(h.Id);
-                      return r.ok ? { ok: true } : { ok: false, message: r.message };
-                    }, t('آزاد شد', 'Released'))}>{t('آزاد', 'Release')}</button><button className={btnGhost} disabled={busy} onClick={() => void act(async () => {
-                      if (!client) return { ok: false, message: 'No client' };
-                      const r = await client.cancelHold(h.Id);
-                      return r.ok ? { ok: true } : { ok: false, message: r.message };
-                    }, t('لغو شد', 'Cancelled'))}>{t('لغو', 'Cancel')}</button></>}</td></tr>
+                  {(holdsData?.items ?? []).map(h=>(
+                    <tr key={h.Id} className="border-t b-line-soft"><td className="p-1" dir="ltr">{h.HoldNo}</td><td className="p-1" dir="ltr">{h.DocNo}</td><td className="p-1" dir="ltr">{h.Revision}</td><td className="p-1">{h.TitleFa}</td><td className="p-1">{h.HoldType}</td><td className="p-1">{h.Status}</td><td className="p-1" dir="ltr">{h.DueAt ?? '—'}</td><td className="p-1 flex gap-1">{h.Status==='open' && <><button className={btnOk} disabled={busy} onClick={()=>void act(async ()=>{
+                      if(!client) return {ok:false, message:'No client'};
+                      const r=await client.releaseHold(h.Id);
+                      return r.ok ? {ok:true} : {ok:false, message:r.message};
+                    }, t('آزاد شد','Released'))}>{t('آزاد','Release')}</button><button className={btnGhost} disabled={busy} onClick={()=>void act(async ()=>{
+                      if(!client) return {ok:false, message:'No client'};
+                      const r=await client.cancelHold(h.Id);
+                      return r.ok ? {ok:true} : {ok:false, message:r.message};
+                    }, t('لغو شد','Cancelled'))}>{t('لغو','Cancel')}</button></>}</td></tr>
                   ))}
                 </tbody>
               </table>
-              {!holdsData?.items.length && <p className="tx3 text-[11px] mt-2">{t('Hold باز نیست', 'No open holds')}</p>}
+              {!holdsData?.items.length && <p className="tx3 text-[11px] mt-2">{t('Hold باز نیست','No open holds')}</p>}
+            </div>
+          </Section>
+        </div>
+      )}
+
+      {tab === 'deps' && (
+        <div className="grid gap-3">
+          <Section title={t('ایجاد پیش‌نیاز (وابستگی مدرک به مدرک)','Create prerequisite')} note={t('IsMandatory=true = قفل صدور — حلقه ممنوع', 'Mandatory = gate lock — cycle forbidden')}>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+              <select className={inputCls} value={depForm.documentId} onChange={e=>setDepForm({...depForm, documentId:e.target.value})}>
+                <option value="">{t('مدرک وابسته','Dependent doc')}</option>
+                {(docsData?.items ?? []).map(d=><option key={d.Id} value={d.Id}>{d.DocNo} Rev {d.Revision}</option>)}
+              </select>
+              <select className={inputCls} value={depForm.dependsOnDocumentId} onChange={e=>setDepForm({...depForm, dependsOnDocumentId:e.target.value})}>
+                <option value="">{t('پیش‌نیاز','Prerequisite doc')}</option>
+                {(docsData?.items ?? []).map(d=><option key={d.Id} value={d.Id}>{d.DocNo} Rev {d.Revision} — {d.Status}</option>)}
+              </select>
+              <select className={inputCls} value={depForm.dependencyType} onChange={e=>setDepForm({...depForm, dependencyType:e.target.value})}>
+                {['approval','info','hold'].map(v=><option key={v} value={v}>{v}</option>)}
+              </select>
+              <label className="flex items-center gap-2 text-[11px] tx2"><input type="checkbox" checked={depForm.isMandatory} onChange={e=>setDepForm({...depForm, isMandatory:e.target.checked})} />{t('الزامی (قفل صدور)','Mandatory (gate lock)')}</label>
+              <input className={inputCls} placeholder={t('یادداشت','Note')} value={depForm.noteFa} onChange={e=>setDepForm({...depForm, noteFa:e.target.value})} />
+              <button className={btnPrimary} disabled={busy || !depForm.documentId || !depForm.dependsOnDocumentId} onClick={()=>void act(async ()=>{
+                if(!client) return {ok:false, message:'No client'};
+                const r=await client.createDependency({documentId:depForm.documentId, dependsOnDocumentId:depForm.dependsOnDocumentId, dependencyType:depForm.dependencyType, isMandatory:depForm.isMandatory, noteFa:depForm.noteFa||undefined});
+                return r.ok ? {ok:true} : {ok:false, message:r.message};
+              }, t('پیش‌نیاز ثبت شد','Dependency created'))}>{t('ثبت پیش‌نیاز','Create prereq')}</button>
+            </div>
+          </Section>
+
+          <Section title={t('آمادگی صدور مدرک انتخاب‌شده','Readiness of selected doc')} note={t('Hold باز یا پیش‌نیاز الزامی تأییدنشده = مسدود', 'Open Hold or mandatory prereq not approved = blocked')}>
+            {readiness ? (
+              <div className="text-[11px] tx2 space-y-1">
+                <p>{readiness.document.docNo} Rev {readiness.document.revision} — {readiness.document.status} — {readiness.canIssue ? t('قابل صدور','Can issue') : t('مسدود','Blocked')} — {readiness.totalDeps} deps ({readiness.mandatory} mandatory)</p>
+                {readiness.blockers.length>0 && <ul className="list-disc ps-4 text-rose-300">{readiness.blockers.map((b,i)=><li key={i}>{b}</li>)}</ul>}
+                {readiness.warnings.length>0 && <ul className="list-disc ps-4 text-amber-300">{readiness.warnings.map((w,i)=><li key={i}>{w}</li>)}</ul>}
+                <button className={btnGhost} onClick={()=> selDocId && void loadReadiness(selDocId)}>{t('بررسی مجدد','Recheck')}</button>
+              </div>
+            ) : <p className="tx3 text-[11px]">{t('مدرکی انتخاب نشده','No doc selected')}</p>}
+          </Section>
+
+          <Section title={t('فهرست وابستگی‌ها','Dependency list')}>
+            <div className="overflow-x-auto max-h-[500px]">
+              <table className="w-full text-[11px] tx2">
+                <thead><tr><th className="p-1">DocNo</th><th className="p-1">Rev</th><th className="p-1">→ {t('پیش‌نیاز','Prereq')}</th><th className="p-1">Rev</th><th className="p-1">Type</th><th className="p-1">Mandatory</th><th className="p-1">Prereq Status</th><th className="p-1">{t('حذف','Delete')}</th></tr></thead>
+                <tbody>
+                  {(depsData?.items ?? []).map(d=>(
+                    <tr key={d.Id} className="border-t b-line-soft"><td className="p-1" dir="ltr">{d.document?.docNo ?? d.DocumentId.slice(0,8)}</td><td className="p-1" dir="ltr">{d.document?.revision ?? '—'}</td><td className="p-1" dir="ltr">{d.prereq?.docNo ?? d.DependsOnDocumentId.slice(0,8)}</td><td className="p-1" dir="ltr">{d.prereq?.revision ?? '—'}</td><td className="p-1">{d.DependencyType}</td><td className="p-1">{d.IsMandatory?'✓':''}</td><td className="p-1">{d.prereq?.status ?? '—'}</td><td className="p-1"><button className={btnGhost} disabled={busy} onClick={()=>void act(async ()=>{
+                      if(!client) return {ok:false, message:'No client'};
+                      const r=await client.deleteDependency(d.Id);
+                      return r.ok ? {ok:true} : {ok:false, message:r.message};
+                    }, t('حذف شد','Deleted'))}>{t('حذف','Delete')}</button></td></tr>
+                  ))}
+                </tbody>
+              </table>
+              {!depsData?.items.length && <p className="tx3 text-[11px] mt-2">{t('وابستگی ثبت نشده','No dependencies')}</p>}
             </div>
           </Section>
         </div>
       )}
 
       {['workflow','excel','numbering','correspondence','transmittal','lessons'].includes(tab) && (
-        <Section title={t('این تب در مراحل بعدی P3 تکمیل می‌شود', 'This tab in next P3 steps')} note={t('تمرکز فعلی EDM-1/2', 'Current focus EDM-1/2')}>
-          <p className="tx3 text-[11px]">{t('باقی: EDM-3..9', 'Remaining: EDM-3..9')}</p>
+        <Section title={t('این تب در مراحل بعدی P3 تکمیل می‌شود','This tab in next P3 steps')}>
+          <p className="tx3 text-[11px]">{t('باقی: EDM-4..9','Remaining: EDM-4..9')}</p>
         </Section>
       )}
     </div>

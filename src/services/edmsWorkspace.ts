@@ -1,6 +1,5 @@
 /**
- * EDM-1 + EDM-2 — کلاینت REST فضای کاری اسناد و مدارک (d1) با اتصال فایل به نسخه و Hold.
- * مسیرها نسبی هستند تا از پروکسی Vite عبور کنند.
+ * EDM-1 + EDM-2 + EDM-3 — کلاینت REST فضای کاری اسناد و مدارک (d1) با اتصال فایل، Hold و پیش‌نیاز.
  */
 import { jsonRequest, type ApiResult } from './apiClient';
 
@@ -75,6 +74,31 @@ export type EdmsHoldList = {
   items: EdmsHold[];
 };
 
+export type EdmsDependency = {
+  Id: string;
+  ProjectId: string;
+  DocumentId: string;
+  DependsOnDocumentId: string;
+  DependencyType: string;
+  IsMandatory: boolean;
+  NoteFa?: string | null;
+  CreatedBy: string;
+  CreatedAt: string;
+  document?: { docNo: string; revision: string; titleFa: string; status: string } | null;
+  prereq?: { docNo: string; revision: string; titleFa: string; status: string } | null;
+};
+
+export type EdmsDependencyList = { count: number; items: EdmsDependency[] };
+
+export type EdmsReadiness = {
+  document: { id: string; docNo: string; revision: string; status: string };
+  totalDeps: number;
+  mandatory: number;
+  blockers: string[];
+  warnings: string[];
+  canIssue: boolean;
+};
+
 export class EdmsClient {
   constructor(private readonly projectId: string, private readonly userId: string | null) {}
 
@@ -127,7 +151,6 @@ export class EdmsClient {
 
   deleteFile = (fileId: string) => this.req<{ deleted: boolean; id: string }>('DELETE', `/api/edms/${encodeURIComponent(this.projectId)}/files/${encodeURIComponent(fileId)}`);
 
-  // holds EDM-2
   holds = (params: { documentId?: string; status?: string; holdType?: string } = {}) => {
     const qs = new URLSearchParams();
     if (params.documentId) qs.set('documentId', params.documentId);
@@ -140,4 +163,16 @@ export class EdmsClient {
   createHold = (body: unknown) => this.req<{ id: string; item: EdmsHold }>('POST', `/api/edms/${encodeURIComponent(this.projectId)}/holds`, body);
   releaseHold = (holdId: string, noteFa?: string) => this.req<{ item: EdmsHold }>('POST', `/api/edms/${encodeURIComponent(this.projectId)}/holds/${encodeURIComponent(holdId)}/release`, { noteFa });
   cancelHold = (holdId: string) => this.req<{ item: EdmsHold }>('POST', `/api/edms/${encodeURIComponent(this.projectId)}/holds/${encodeURIComponent(holdId)}/cancel`, {});
+
+  dependencies = (params: { documentId?: string; dependsOn?: string } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.documentId) qs.set('documentId', params.documentId);
+    if (params.dependsOn) qs.set('dependsOn', params.dependsOn);
+    const extra = qs.toString() ? `&${qs.toString()}` : '';
+    return this.req<EdmsDependencyList>('GET', `/api/edms/${encodeURIComponent(this.projectId)}/dependencies${extra}`);
+  };
+
+  createDependency = (body: unknown) => this.req<{ id: string; item: EdmsDependency }>('POST', `/api/edms/${encodeURIComponent(this.projectId)}/dependencies`, body);
+  deleteDependency = (depId: string) => this.req<{ deleted: boolean; id: string }>('DELETE', `/api/edms/${encodeURIComponent(this.projectId)}/dependencies/${encodeURIComponent(depId)}`);
+  readiness = (docId: string) => this.req<EdmsReadiness>('GET', `/api/edms/${encodeURIComponent(this.projectId)}/documents/${encodeURIComponent(docId)}/readiness`);
 }

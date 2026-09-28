@@ -8577,6 +8577,122 @@ app.post("/api/edms/:projectId/holds/:holdId/cancel", comRequire("doc.document.u
   } catch (err) { next(err); }
 });
 
+/* ══════════════ EDM-3 — پیش‌نیاز مدارک و قفل صدور (d1) ══════════════ */
+app.post("/api/edms/:projectId/dependencies", comRequire("doc.document.upload"), async (req, res, next) => {
+  try {
+    const projectId = String(req.params.projectId || "");
+    if (!projectId) return cntBad(req, res, "E-CNT-NO-PROJECT", "پارامتر projectId الزامی است");
+    const b = req.body || {};
+    const docId = String(b.documentId || "").trim();
+    const depId = String(b.dependsOnDocumentId || "").trim();
+    if (!docId || !depId) return cntBad(req, res, "E-EDM-DEP-NO-DOC", "شناسه مدرک و پیش‌نیاز الزامی است", 400);
+    if (docId === depId) return cntBad(req, res, "E-EDM-DEP-SELF", "یک مدرک نمی‌تواند پیش‌نیاز خودش باشد", 400);
+    const r = await repo();
+    const [doc, prereq] = await Promise.all([
+      r.findOne("Document", [{ column: "Id", op: "eq", value: docId }]),
+      r.findOne("Document", [{ column: "Id", op: "eq", value: depId }]),
+    ]);
+    if (!doc || !prereq) return cntBad(req, res, "E-EDM-DOC-NOT-FOUND", "مدرک یا پیش‌نیاز یافت نشد", 404);
+    if (doc.ProjectId !== projectId || prereq.ProjectId !== projectId) return cntBad(req, res, "E-COM-PROJECT-MISMATCH", "مدارک به پروژه دیگری تعلق دارند", 400);
+    // cycle detection: check if prereq already depends on doc (direct or indirect via existing deps)
+    const allDeps = await r.list("DocumentDependency", { where: [{ column: "ProjectId", op: "eq", value: projectId }], limit: 2000 });
+    const graph = new Map();
+    for (const d of allDeps) {
+      const arr = graph.get(d.DocumentId) || [];
+      arr.push(d.DependsOnDocumentId);
+      graph.set(d.DocumentId, arr);
+    }
+    // DFS from prereq to see if doc is reachable
+    const visited = new Set();
+    const stack = [depId];
+    while (stack.length) {
+      const cur = stack.pop();
+      if (cur === docId) return cntBad(req, res, "E-EDM-DEP-CYCLE", "این وابستگی حلقه می‌سازد", 409);
+      if (visited.has(cur)) continue;
+      visited.add(cur);
+      for (const nb of graph.get(cur) || []) stack.push(nb);
+    }
+    const existing = await r.findOne("DocumentDependency", [{ column: "DocumentId", op: "eq", value: docId }, { column: "DependsOnDocumentId", op: "eq", value: depId }]);
+    if (existing) return cntBad(req, res, "E-EDM-DEP-DUP", "این پیش‌نیاز قبلاً ثبت شده است", 409);
+    const userId = req.headers["x-user-id"] || "system";
+    const id = crypto.randomUUID();
+    const row = {
+      Id: id,
+      ProjectId: projectId,
+      DocumentId: docId,
+      DependsOnDocumentId: depId,
+      DependencyType: b.dependencyType ? String(b.dependencyType) : "approval",
+      IsMandatory: b.isMandatory === false ? false : true,
+      NoteFa: b.noteFa ? String(b.noteFa).slice(0,600) : null,
+      CreatedBy: userId,
+      CreatedAt: new Date().toISOString(),
+    };
+    await r.upsert("DocumentDependency", { Id: id }, row, userId);
+    res.status(201).json(cntOk(req, { id, item: row }));
+  } catch (err) { next(err); }
+});
+
+app.get("/api/edms/:projectId/dependencies", comRequire("doc.document.view"), async (req, res, next) => {
+  try {
+    const projectId = String(req.params.projectId || "");
+    if (!projectId) return cntBad(req, res, "E-CNT-NO-PROJECT", "پارامتر projectId الزامی است");
+    const r = await repo();
+    const where = [{ column: "ProjectId", op: "eq", value: projectId }];
+    if (req.query.documentId) where.push({ column: "DocumentId", op: "eq", value: String(req.query.documentId) });
+    if (req.query.dependsOn) where.push({ column: "DependsOnDocumentId", op: "eq", value: String(req.query.dependsOn) });
+    const deps = await r.list("DocumentDependency", { where, limit: 1000 });
+    // enrich with doc info
+    const docIds = [...new Set([...deps.map(d=>d.DocumentId), ...deps.map(d=>d.DependsOnDocumentId)])];
+    const docs = await Promise.all(docIds.map(id=> r.findOne("Document", [{ column: "Id", op: "eq", value: id }])));
+    const byId = new Map(docs.filter(Boolean).map(d=> [d.Id, d]));
+    const items = deps.map(d=> ({
+      ...d,
+      document: byId.get(d.DocumentId) ? { docNo: byId.get(d.DocumentId).DocNo, revision: byId.get(d.DocumentId).Revision, titleFa: byId.get(d.DocumentId).TitleFa, status: byId.get(d.DocumentId).Status } : null,
+      prereq: byId.get(d.DependsOnDocumentId) ? { docNo: byId.get(d.DependsOnDocumentId).DocNo, revision: byId.get(d.DependsOnDocumentId).Revision, titleFa: byId.get(d.DependsOnDocumentId).TitleFa, status: byId.get(d.DependsOnDocumentId).Status } : null,
+    }));
+    res.json(cntOk(req, { count: deps.length, items }));
+  } catch (err) { next(err); }
+});
+
+app.delete("/api/edms/:projectId/dependencies/:depId", comRequire("doc.document.upload"), async (req, res, next) => {
+  try {
+    const r = await repo();
+    const dep = await r.findOne("DocumentDependency", [{ column: "Id", op: "eq", value: String(req.params.depId) }]);
+    if (!dep) return cntBad(req, res, "E-EDM-DEP-NOT-FOUND", "وابستگی یافت نشد", 404);
+    await r.delete("DocumentDependency", { Id: dep.Id });
+    res.json(cntOk(req, { deleted: true, id: dep.Id }));
+  } catch (err) { next(err); }
+});
+
+app.get("/api/edms/:projectId/documents/:docId/readiness", comRequire("doc.document.view"), async (req, res, next) => {
+  try {
+    const projectId = String(req.params.projectId || "");
+    const docId = String(req.params.docId || "");
+    const r = await repo();
+    const doc = await r.findOne("Document", [{ column: "Id", op: "eq", value: docId }]);
+    if (!doc) return cntBad(req, res, "E-EDM-DOC-NOT-FOUND", "مدرک یافت نشد", 404);
+    const deps = await r.list("DocumentDependency", { where: [{ column: "DocumentId", op: "eq", value: docId }], limit: 500 });
+    const prereqIds = deps.map(d=> d.DependsOnDocumentId);
+    const prereqs = await Promise.all(prereqIds.map(id=> r.findOne("Document", [{ column: "Id", op: "eq", value: id }])));
+    const byId = new Map(prereqs.filter(Boolean).map(d=> [d.Id, d]));
+    const blockers = [];
+    const warnings = [];
+    for (const dep of deps) {
+      const pre = byId.get(dep.DependsOnDocumentId);
+      if (!pre) { blockers.push(`پیش‌نیاز ${dep.DependsOnDocumentId} یافت نشد`); continue; }
+      if (dep.IsMandatory && pre.Status !== "approved") {
+        blockers.push(`${pre.DocNo} Rev ${pre.Revision} — وضعیت ${pre.Status} (باید approved باشد)`);
+      } else if (!dep.IsMandatory && pre.Status !== "approved") {
+        warnings.push(`${pre.DocNo} Rev ${pre.Revision} — وضعیت ${pre.Status}`);
+      }
+    }
+    // also check holds
+    const holds = await r.list("DocumentHold", { where: [{ column: "DocumentId", op: "eq", value: docId }, { column: "Status", op: "eq", value: "open" }], limit: 200 });
+    if (holds.length) blockers.push(`${holds.length} Hold باز دارد`);
+    res.json(cntOk(req, { document: { id: doc.Id, docNo: doc.DocNo, revision: doc.Revision, status: doc.Status }, totalDeps: deps.length, mandatory: deps.filter(d=> d.IsMandatory).length, blockers, warnings, canIssue: blockers.length===0 }));
+  } catch (err) { next(err); }
+});
+
 /* ── ۱۴٫۱ وضعیت ماژول ── */
 app.get("/api/cnt/status", (req, res) => {
   res.json(cntOk(req, {

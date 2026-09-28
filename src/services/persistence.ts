@@ -2848,6 +2848,30 @@ export const SCHEMA: TableDef[] = [
     ],
   },
 
+    /* ══════════════ MOD-14 · EDM-3 پیش‌نیاز مدارک و قفل صدور (d1) ══════════════ */
+  {
+    name: "DocumentDependency",
+    module: "d1",
+    title: { fa: "پیش‌نیاز مدرک", en: "Document prerequisite" },
+    pk: "Id",
+    columns: [
+      id(),
+      req("ProjectId", "text", { len: 60 }),
+      req("DocumentId", "text", { len: 60, comment: "مدرک وابسته" }),
+      req("DependsOnDocumentId", "text", { len: 60, comment: "مدرک پیش‌نیاز" }),
+      req("DependencyType", "text", { len: 20, comment: "approval|info|hold" }),
+      req("IsMandatory", "bool", { default: "1", comment: "الزامی = قفل صدور" }),
+      c("NoteFa", "text", { len: 600 }),
+      req("CreatedBy", "text", { len: 60 }),
+      req("CreatedAt", "datetime"),
+    ],
+    indexes: [
+      { name: "UX_DocDep", columns: ["DocumentId", "DependsOnDocumentId"], unique: true },
+      { name: "IX_DocDep_Prereq", columns: ["DependsOnDocumentId"] },
+      { name: "IX_DocDep_Project", columns: ["ProjectId", "DocumentId"] },
+    ],
+  },
+
     /* ══════════════ d16 — بهداشت، ایمنی و محیط زیست (HSE) ══════════════
    * پروانهٔ کار پیش‌نیاز دروازهٔ RFSU در ماژول راه‌اندازی است؛ تا پیش از
    * این جداول، آن پیش‌نیاز فقط رشتهٔ آزاد بود و قابل کنترل نبود. */
