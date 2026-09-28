@@ -17,6 +17,7 @@ import QualityWorkspace, { type QmsTab } from "./QualityWorkspace";
 import WorkforceWorkspace, { type HrmTab } from "./WorkforceWorkspace";
 import CommunicationWorkspace, { type CkmTab } from "./CommunicationWorkspace";
 import MachineryWorkspace, { type EqmTab } from "./MachineryWorkspace";
+import CommissioningWorkspace, { type ComTab } from "./CommissioningWorkspace";
 import EngineeringWorkspace from "./EngineeringWorkspace";
 import HSEWorkspace, { type HseTab } from "./HSEWorkspace";
 import VendorRatingPanel from "./VendorRatingPanel";
@@ -293,6 +294,21 @@ const D11_TAB_BY_SUB: Record<string, CkmTab> = {
   "d11-p4-s1": "notifications",
   "d11-p5-s1": "knowledge",
   "d11-p6-s1": "analytics",
+};
+
+const D15_TAB_BY_SUB: Record<string, ComTab> = {
+  "d15-p1-s1": "systems",
+  "d15-p1-s2": "plan",
+  "d15-p2-s1": "packs",
+  "d15-p2-s2": "clearance",
+  "d15-p3-s1": "sheets",
+  "d15-p3-s2": "overview",
+  "d15-p4-s1": "certs",
+  "d15-p4-s2": "punch",
+  "d15-p5-s1": "overview",
+  "d15-p5-s2": "overview",
+  "d15-p6-s1": "overview",
+  "d15-p6-s2": "overview",
 };
 
 /** Extra submodules only on the d5 inner page — main sidebar untouched. */
@@ -1319,6 +1335,101 @@ export default function ModuleDetail({ lang, target, onBack, onOpenFlowNet, onNa
                       ...p.subs.map((s) => ({ id: s.id, title: s.title, sql: s.sql })),
                       
                     ].map((s) => (
+                      <button
+                        key={s.id}
+                        onClick={() => {
+                          audit("OPEN_SUBPROCESS", { projectId: target.projectId, entity: dom.id, entityId: s.id });
+                          setSelected({ pId: p.id, sId: s.id });
+                        }}
+                        className={`group flex w-full items-start gap-2 rounded-lg px-2 py-2 text-start transition hover:-translate-y-px glass-row ${selected?.sId === s.id ? "row-on" : ""}`}
+                      >
+                        <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: dom.accent }} />
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-[10px] font-light tx1">{t(s.title, lang)}</div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </aside>
+        </div>
+      </div>
+    );
+  }
+
+  const d15Tab = ((): ComTab => {
+    const sid = selected?.sId ?? target.subId;
+    if (sid && D15_TAB_BY_SUB[sid]) return D15_TAB_BY_SUB[sid];
+    return "overview";
+  })();
+
+  if (dom.id === "d15") {
+    return (
+      <div className="flex h-full min-h-0 flex-col gap-3 overflow-hidden" dir={rtl ? "rtl" : "ltr"}>
+        <div className="glass flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl px-3 py-2.5">
+          <button onClick={onBack} className="glass-row flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-[10.5px] font-light tx2 transition hover:tx1">
+            <span className={rtl ? "" : "rotate-180"}>→</span>
+            {rtl ? "بازگشت به داشبورد" : "Back to dashboard"}
+          </button>
+          {cluster && (
+            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl text-[20px]"
+                  style={{ background: `${cluster.color}1f`, border: `1px solid ${cluster.color}55` }}>
+              {cluster.icon}
+            </span>
+          )}
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
+              {cluster && (
+                <h1 className="truncate text-[20px] font-semibold leading-tight" style={{ color: cluster.color }}>
+                  {t(cluster.title, lang)}
+                </h1>
+              )}
+              <span className="text-[16px] font-light tx4">/</span>
+              {project && (
+                <h2 className="truncate text-[19px] font-semibold leading-tight tx1">{t(project.name, lang)}</h2>
+              )}
+            </div>
+            {project && (
+              <p className="mt-1 truncate text-[10px] font-extralight tx3">
+                <span dir="ltr">{project.code}</span> · {t(project.client, lang)} · {t(project.location, lang)}
+              </p>
+            )}
+          </div>
+          <div className="shrink-0 text-end">
+            <SystemBadge domainId={dom.id} lang={lang} className="mb-1 justify-end" />
+            <div className="text-[9px] font-extralight tx3">{t(dom.title, lang)}</div>
+            <div className="text-[11px] font-light tx1">
+              {rtl ? "CSU — تفکیک سیستمی، بسته آزمون و گواهی تحویل — دادهٔ واقعی" : "CSU — systemization, test packs & certificates — live data"}
+            </div>
+          </div>
+        </div>
+        <div dir="ltr" className="flex min-h-0 flex-1 gap-3 overflow-hidden">
+          <div dir={rtl ? "rtl" : "ltr"} className="glass flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl p-3">
+            <CommissioningWorkspace projectId={target.projectId} lang={lang} initialTab={d15Tab} hideTabs />
+          </div>
+          <aside dir={rtl ? "rtl" : "ltr"} className="glass-dark flex w-[300px] shrink-0 flex-col overflow-hidden rounded-2xl">
+            <div className="b-line border-b px-3 py-2.5">
+              <div className="flex items-center gap-2">
+                <span className="grid h-6 w-6 place-items-center rounded-md text-[12px]"
+                      style={{ background: `${dom.accent}1a`, border: `1px solid ${dom.accent}55`, color: dom.accent }}>
+                  {dom.icon}
+                </span>
+                <div className="text-[10.5px] font-normal tx1">{t(dom.title, lang)}</div>
+              </div>
+            </div>
+            <div className="thin-scroll flex-1 overflow-y-auto p-2 space-y-2">
+              {dom.processes.map((p, i) => (
+                <div key={p.id} className="rounded-xl border b-line-soft bg-black/10 p-1.5">
+                  <div className="flex items-center gap-1.5 px-1 py-1">
+                    <span className="text-[8px] font-light tabular-nums tx4">
+                      {(i + 1).toLocaleString(rtl ? "fa-IR" : "en-US")}
+                    </span>
+                    <span className="text-[10.5px] font-normal" style={{ color: dom.accent }}>{t(p.title, lang)}</span>
+                  </div>
+                  <div className="mt-1 space-y-1">
+                    {p.subs.map((s) => (
                       <button
                         key={s.id}
                         onClick={() => {
