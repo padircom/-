@@ -1,5 +1,6 @@
 import { useAuth } from "../context/AuthContext";
 import { jsonRequest } from "../services/apiClient";
+import OutboundPanel from "./OutboundPanel";
 import { useMemo, useRef, useState } from "react";
 import { type Lang } from "../data/framework";
 import { SCHEMA, allColumns } from "../services/persistence";
@@ -24,13 +25,14 @@ import {
   type XerExtract,
 } from "../services/integration";
 
-type Pane = "overview" | "xer" | "templates" | "openapi";
+type Pane = "overview" | "xer" | "templates" | "openapi" | "outbound";
 
 const PANES: { key: Pane; icon: string; label: { fa: string; en: string } }[] = [
   { key: "overview", icon: "🔌", label: { fa: "اتصال‌دهنده‌ها", en: "Connectors" } },
   { key: "xer", icon: "📅", label: { fa: "ورود XER پریماورا", en: "Primavera XER" } },
   { key: "templates", icon: "📄", label: { fa: "قالب‌های ورود داده", en: "Import templates" } },
   { key: "openapi", icon: "🧩", label: { fa: "مشخصات OpenAPI", en: "OpenAPI spec" } },
+  { key: "outbound", icon: "📤", label: { fa: "خروجی و ارسال بیرونی", en: "Export & outbound" } },
 ];
 
 const STATUS_META: Record<string, { fa: string; en: string; cls: string }> = {
@@ -507,6 +509,8 @@ export default function IntegrationCenter({ lang }: { lang: Lang }) {
       )}
 
       {/* ═════ OpenAPI ═════ */}
+      {pane === "outbound" && <OutboundPanel lang={lang} />}
+
       {pane === "openapi" && (
         <div className="space-y-3">
           <div className={`${card} space-y-3`}>

@@ -489,6 +489,18 @@ export const PERMISSION_CATALOG: PermissionDef[] = [
   P("report.internal.generate", "core", "تولید گزارش داخلی", "Generate internal report", "internal"),
   P("report.official.publish", "core", "انتشار گزارش ابلاغی", "Publish official report", "restricted", true),
   P("report.export.bulk", "core", "خروجی انبوه داده", "Bulk data export", "restricted", true),
+  /* P9/RPT-1: گزارش‌ساز سفارشی. مشخصات قالب سند حاکمیتی است: تحریر و انتشار
+   * جدا شده‌اند (SOD-31) و هر مجموعه‌داده مجوز پایهٔ خودش را می‌خواهد. */
+  P("report.custom.view", "d3", "مشاهدهٔ گزارش‌ساز سفارشی", "View custom report builder", "internal"),
+  P("report.custom.run", "d3", "اجرای گزارش سفارشی روی دادهٔ مجاز", "Run custom report on authorized data", "internal"),
+  P("report.custom.edit", "d3", "ساخت و ویرایش قالب گزارش سفارشی", "Author custom report template", "confidential", true),
+  P("report.custom.publish", "d3", "انتشار و بازنشستگی قالب گزارش", "Publish/retire custom report template", "confidential", true),
+  /* P9/ITG-1..3: خروجی و نوشتن در سامانهٔ بیرونی. هر چهار مجوز جدا‌اند تا
+   * «خروجی XER» با «ارسال به P6» یا «همگام‌سازی تقویم» یکی گرفته نشود. */
+  P("itg.connector.view", "core", "مشاهدهٔ وضعیت اتصال‌دهنده‌ها و دفتر اجرا", "View connectors & run ledger", "internal"),
+  P("itg.export.run", "core", "ساخت خروجی XER و XML پروژه", "Run XER / Project XML export", "confidential", true),
+  P("itg.primavera.push", "core", "ارسال فعالیت‌ها به API پریماورا", "Push activities to Primavera API", "confidential", true),
+  P("itg.calendar.sync", "core", "خروجی و همگام‌سازی تقویم Outlook/Exchange", "Outlook/Exchange calendar export & sync", "confidential", true),
 ];
 
 export const PERMISSION_CODES: string[] = PERMISSION_CATALOG.map((p) => p.code);
@@ -525,7 +537,8 @@ export const ROLE_CATALOG: RoleDef[] = [
     inherits: [],
     clearance: "internal",
     party: "any",
-    grants: ["core.portfolio.view", "core.project.view", "doc.document.view", "plan.schedule.view", "pex.dashboard.view", "gov.process.view", "report.internal.generate", "eng.mdr.view"],
+    grants: ["core.portfolio.view", "core.project.view", "doc.document.view", "plan.schedule.view", "pex.dashboard.view", "gov.process.view", "report.internal.generate", "eng.mdr.view", "report.custom.view", "report.custom.run"
+    ],
   },
   {
     code: "site_engineer",
@@ -596,6 +609,7 @@ export const ROLE_CATALOG: RoleDef[] = [
       "pmo.charter.view",
       "pmo.form.view",
       "pmo.health.view",
+    "report.custom.edit", "itg.connector.view", "itg.export.run", "itg.primavera.push"
     ],
   },
   {
@@ -746,6 +760,7 @@ export const ROLE_CATALOG: RoleDef[] = [
       "cnt.ipc.prepare",
       "pmo.charter.view",
       "pmo.form.view",
+    "itg.connector.view"
     ],
   },
   {
@@ -828,6 +843,7 @@ export const ROLE_CATALOG: RoleDef[] = [
       "cnt.contract.view",
       "cnt.ipc.approve",
       "gov.process.edit",
+    "report.custom.publish", "itg.connector.view", "itg.export.run", "itg.calendar.sync"
     ],
   },
   {
@@ -894,6 +910,7 @@ export const ROLE_CATALOG: RoleDef[] = [
       "eng.mdr.view", "eng.mdr.edit", "eng.review.code", "eng.crs.resolve",
       "eng.tq.answer", "eng.vpr.review", "eng.ifc.release", "eng.mr.approve",
       "doc.document.approve", "core.ai.run", "report.internal.generate",
+    "report.custom.edit", "itg.connector.view"
     ],
   },
   {
@@ -940,7 +957,12 @@ export const ROLE_CATALOG: RoleDef[] = [
       "pmo.health.record",
       "cnt.contract.view",
       "gov.process.edit",
-    ]
+      /* P9: خروجی و همگام‌سازی سامانه‌های بیرونی کار PMO است. انتشار قالب
+       * گزارش به PMO داده نشد چون تحریر آن (از طریق planner) در همین نقش
+       * است و SOD-31 تحریر و انتشار را از هم جدا می‌کند. */
+      "itg.connector.view", "itg.export.run", "itg.primavera.push", "itg.calendar.sync",
+    
+    ],
   },
   {
     code: "executive",
@@ -955,6 +977,7 @@ export const ROLE_CATALOG: RoleDef[] = [
       "pmo.health.approve",
       "cnt.contract.view",
       "cnt.ipc.approve",
+    "report.custom.publish", "itg.connector.view"
     ],
   },
   {
@@ -1005,7 +1028,8 @@ export const ROLE_CATALOG: RoleDef[] = [
     inherits: ["viewer"],
     clearance: "restricted",
     party: "any",
-    grants: ["sys.audit.view", "qms.audit.conduct", "fin.cost.view", "fin.rate.view", "rcc.claim.view", "ckm.letter.view", "hrm.productivity.view"],
+    grants: ["sys.audit.view", "qms.audit.conduct", "fin.cost.view", "fin.rate.view", "rcc.claim.view", "ckm.letter.view", "hrm.productivity.view", "itg.connector.view"
+    ],
   },
   {
     code: "admin",
@@ -1105,6 +1129,18 @@ export const SOD_RULES: SodRule[] = [
     reason: {
       fa: "ثبت‌کنندهٔ درخواست بازرسی نباید آزادکنندهٔ QC همان درخواست باشد",
       en: "The inspection requester must not be its QC releaser",
+    },
+  },
+  {
+    /* P9/RPT-1: سازندهٔ قالب گزارش نباید همان منتشرکنندهٔ آن باشد؛ قالب
+     * منتشرشده تعریف «عدد رسمی» را عوض می‌کند، پس انتشار باید مستقل باشد. */
+    id: "SOD-31",
+    a: "report.custom.edit",
+    b: "report.custom.publish",
+    severity: "high",
+    reason: {
+      fa: "سازندهٔ قالب گزارش نباید منتشرکنندهٔ همان قالب باشد",
+      en: "The template author must not be its publisher",
     },
   },
   {

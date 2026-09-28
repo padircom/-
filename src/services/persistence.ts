@@ -5146,6 +5146,71 @@ export const SCHEMA: TableDef[] = [
     ],
   },
 
+  /* ══════════════ P9 · گزارش‌ساز سفارشی و یکپارچه‌سازی خروجی ══════════════ */
+
+  {
+    /* RPT-1: قالب گزارش سفارشی. مشخصات قالب (فیلد/فیلتر/گروه/نمودار) یک
+     * سند ممیزی‌پذیر است؛ نسخه با انتشار بالا می‌رود و ویرایش قالب منتشرشده
+     * تا زمانی که بازنشسته نشود ممکن نیست. */
+    name: "RptTemplate",
+    module: "d3",
+    title: { fa: "قالب گزارش سفارشی", en: "Custom report template" },
+    pk: "Id",
+    columns: [
+      id(),
+      req("ProjectId", "text", { len: 60 }),
+      req("Code", "text", { len: 40 }),
+      req("TitleFa", "text", { len: 200 }),
+      req("DatasetKey", "text", { len: 40, comment: "کلید مجموعه‌داده در موتور گزارش‌ساز" }),
+      req("FieldsJson", "json", { comment: "فهرست ستون‌های مجاز" }),
+      c("FiltersJson", "json", { comment: "فیلترها با عملگر بسته" }),
+      c("GroupJson", "json", { comment: "گروه‌بندی و تجمیع" }),
+      c("SortJson", "json", { comment: "ترتیب" }),
+      c("ChartJson", "json", { comment: "نمودار" }),
+      c("LimitRows", "int", { default: "500" }),
+      req("Status", "text", { len: 20, default: "'draft'", comment: "draft|published|retired" }),
+      req("Version", "int", { default: "0" }),
+      c("NoteFa", "text", { len: 1000 }),
+      c("PublishedAt", "datetime"), c("PublishedBy", "text", { len: 60 }),
+      c("RetiredAt", "datetime"), c("RetiredBy", "text", { len: 60 }),
+      c("ModelVersion", "text", { len: 40, comment: "rpt-builder-v1" }),
+    ],
+    indexes: [
+      { name: "UX_RptTemplate_Code", columns: ["ProjectId", "Code"], unique: true },
+      { name: "IX_RptTemplate_Status", columns: ["ProjectId", "Status", "DatasetKey"] },
+    ],
+  },
+
+  {
+    /* ITG-1..3: گزارش هر تلاش خروجی (XER، MSP، P6، تقویم). نوشتن در سامانهٔ
+     * بیرونی باید شاهد داشته باشد — «موفق» بدون ردیف ثبت نمی‌شود. */
+    name: "ItgConnectorRun",
+    module: "core",
+    title: { fa: "اجرای اتصال‌دهندهٔ خروجی", en: "Outbound connector run" },
+    pk: "Id",
+    columns: [
+      id(),
+      req("ProjectId", "text", { len: 60 }),
+      req("Connector", "text", { len: 30, comment: "xer|msp|p6|calendar|exchange" }),
+      req("Direction", "text", { len: 10, default: "'out'", comment: "out" }),
+      req("Status", "text", { len: 16, default: "'queued'", comment: "queued|succeeded|failed" }),
+      c("ItemCount", "int"),
+      c("PayloadBytes", "int"),
+      c("Endpoint", "text", { len: 300 }),
+      c("DurationMs", "int"),
+      c("ErrorCode", "text", { len: 40 }),
+      c("ErrorFa", "text", { len: 500 }),
+      req("ActorId", "text", { len: 60 }),
+      req("StartedAt", "datetime"),
+      c("FinishedAt", "datetime"),
+      c("ModelVersion", "text", { len: 40, comment: "itg-outbound-v1" }),
+    ],
+    indexes: [
+      { name: "IX_ItgConnectorRun_Project", columns: ["ProjectId", "Connector", "StartedAt"] },
+      { name: "IX_ItgConnectorRun_Status", columns: ["Status", "StartedAt"] },
+    ],
+  },
+
   /* ══════════════ MOD-32 · CNT صورت‌وضعیت قالب‌پذیر — P8/d14 ══════════════ */
 
   {
@@ -5877,6 +5942,15 @@ export const MIGRATIONS: Migration[] = [
       `IF COL_LENGTH('dbo.CntIpcTemplate','Version') IS NULL ALTER TABLE dbo.CntIpcTemplate ADD [Version] INT NOT NULL CONSTRAINT DF_CntIpcTemplate_Version DEFAULT (0);`,
       `IF COL_LENGTH('dbo.CntIpcCertificate','TemplateVersion') IS NULL ALTER TABLE dbo.CntIpcCertificate ADD [TemplateVersion] INT NOT NULL CONSTRAINT DF_CntIpcCertificate_TemplateVersion DEFAULT (0);`,
     ],
+  },
+  {
+    /* P9/RPT-1 + ITG: قالب گزارش سفارشی (اسکیمای مشخصات گزارش) و دفتر اجرای
+       اتصال‌دهنده‌های خروجی. هیچ‌کدام از CRUD عمومی سرو نمی‌شوند. */
+    version: "0044", name: "report_builder_outbound",
+    statements: ["RptTemplate", "ItgConnectorRun"].flatMap(n => {
+      const t = TABLE_BY_NAME.get(n)!;
+      return [tableDdl(t, "mssql"), ...(t.indexes ?? []).map(i => indexDdl(t, i, "mssql"))];
+    }),
   },
 ];
 

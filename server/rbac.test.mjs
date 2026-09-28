@@ -79,10 +79,14 @@ test("کاتالوگ: نسخه موتور و اندازه‌ها", () => {
   // release — the QC decision — is restricted to the QC role.
   // P8 PMO/CNT/GOV adds twelve explicit permissions: pmo.charter.view/edit/approve,
   // pmo.form.view/manage/submit/approve, pmo.health.view/record/approve,
-  // cnt.ipc.template.edit and gov.process.edit; the approval gates (charter/health)
+  // cnt.ipctemplate.edit and gov.process.edit; the approval gates (charter/health)
   // are restricted and the drafting gates are confidential, so SOD-30 stays
   // enforceable. IPC prepare/review/approve already existed (SOD-11) and are reused.
-  assert.equal(PERMISSION_CATALOG.length, 226);
+  // P9 RPT/ITG adds eight: report.custom.view/run/edit/publish and
+  // itg.connector.view/export.run/primavera.push/calendar.sync. Reading is internal;
+  // authoring, publishing, exporting and writing to external systems are
+  // confidential — SOD-31 keeps template authoring and publishing apart.
+  assert.equal(PERMISSION_CATALOG.length, 234);
   assert.equal(ROLE_CATALOG.length, 21);
 });
 
@@ -295,9 +299,9 @@ test("SOD: بیست‌وهشت قاعده تعریف شده و شناسه‌ها
    *   انحراف از همان مبنا). */
   /* + P7 CPMS: SOD-29 — درخواست‌دهندهٔ بازرسی ≠ آزادکنندهٔ آن (QC).
    * + P8 PMO: SOD-30 — تحریر منشور ≠ تصویب آن. */
-  assert.equal(SOD_RULES.length, 30);
-  assert.equal(new Set(SOD_RULES.map((r) => r.id)).size, 30);
-  for (const id of ["SOD-01", "SOD-07", "SOD-08", "SOD-10", "SOD-11", "SOD-12", "SOD-13", "SOD-14", "SOD-15", "SOD-21", "SOD-22", "SOD-23", "SOD-24", "SOD-25", "SOD-26", "SOD-27", "SOD-28", "SOD-29", "SOD-30"]) {
+  assert.equal(SOD_RULES.length, 31);
+  assert.equal(new Set(SOD_RULES.map((r) => r.id)).size, 31);
+  for (const id of ["SOD-01", "SOD-07", "SOD-08", "SOD-10", "SOD-11", "SOD-12", "SOD-13", "SOD-14", "SOD-15", "SOD-21", "SOD-22", "SOD-23", "SOD-24", "SOD-25", "SOD-26", "SOD-27", "SOD-28", "SOD-29", "SOD-30", "SOD-31"]) {
     assert.ok(SOD_RULES.some((r) => r.id === id), `${id} نیست`);
   }
 });
