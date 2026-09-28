@@ -1,4 +1,10 @@
 import { registerStrategyExcellenceRoutes } from "./strategyExcellenceWorkspaceApi.js";
+import { registerCpmWorkspaceRoutes, CPM_DEDICATED_ROUTES } from "./cpmWorkspaceApi.js";
+import { registerPmoWorkspaceRoutes, PMO_DEDICATED_ROUTES } from "./pmoWorkspaceApi.js";
+import { registerCntIpcRoutes, CNT_IPC_DEDICATED_ROUTES } from "./cntIpcApi.js";
+import { registerReportBuilderRoutes, RPT_DEDICATED_ROUTES } from "./reportBuilderApi.js";
+import { registerItgOutboundRoutes, ITG_OUTBOUND_DEDICATED_ROUTES } from "./itgOutboundApi.js";
+import { registerDrillRoutes } from "./mcsDrillApi.js";
 import { registerMonitoringWorkspaceRoutes } from "./monitoringWorkspaceApi.js";
 import { registerEqmWorkspaceRoutes, EQM_TABLES } from "./eqmWorkspaceApi.js";
 import { authorizeData, scopeData } from "./dataAccess.js";
@@ -600,6 +606,14 @@ const DEDICATED_TABLE_ROUTES = {
   LessonReuse: "/api/ckm/:projectId/lessons/:code/reuse",
   Stakeholder: "/api/ckm/:projectId/stakeholders",
   NotificationRule: "/api/ckm/:projectId/rules",
+  /* P7/CPMS — جدول‌های ساخت و اجرا فقط از مسیر پروژه‌ای خودشان. */
+  ...CPM_DEDICATED_ROUTES,
+  /* P8/PMO — منشور، فرم‌ساز و کارت سلامت؛ P8/CNT — قالب و سند صورت‌وضعیت. */
+  ...PMO_DEDICATED_ROUTES,
+  ...CNT_IPC_DEDICATED_ROUTES,
+  /* P9/RPT-1 — قالب گزارش سفارشی؛ P9/ITG — دفتر اجرای اتصال‌دهنده‌های خروجی. */
+  ...RPT_DEDICATED_ROUTES,
+  ...ITG_OUTBOUND_DEDICATED_ROUTES,
 };
 
 /** جدول‌هایی که از راه REST عمومی قابل دسترسی‌اند — بقیه فقط از مسیر اختصاصی خودشان. */
@@ -611,7 +625,9 @@ const PUBLIC_TABLES = new Set([
   "ProcessTree",
 ]);
 
-const EDITABLE_TAXONOMY_DOMAINS = new Set(["d6", "d20"]);
+/* GOV-1: ساختار فرایند همهٔ حوزه‌ها از سامانه قابل ویرایش است (پیش‌تر فقط
+ * d6/d20)؛ ویرایش مجوز `gov.process.edit` و خواندن `gov.process.view` می‌خواهد. */
+const EDITABLE_TAXONOMY_DOMAINS = new Set(["d1", "d2", "d3", "d4", "d5", "d6", "d7", "d8", "d9", "d10", "d11", "d12", "d14", "d15", "d16", "d17", "d18", "d19", "d20"]);
 
 const taxonomyText = (value, max = 1200) => String(value ?? "").trim().slice(0, max);
 const taxonomyBi = (value, fallback = "") => ({
@@ -660,6 +676,27 @@ function taxonomyResponse(req, data, status = 200) {
     status,
     body: { ok: true, data, meta: { traceId: req.requestId, timestamp: new Date().toISOString(), driver: persistence?.driver?.kind ?? "pending" } },
   };
+}
+
+/**
+ * GOV-1: دروازهٔ مجوز ساختار فرایند.
+ * هویت از همان آداپتور `x-user-id`؛ کاربر ناشناس/غیرمجاز رد می‌شود و
+ * نبود رکورد پروژه در محدودهٔ کاربر هم همان ۴۰۳ را می‌دهد (نه نشت اطلاعات).
+ */
+function taxonomyGate(req, res, permission) {
+  const id = String(req.headers["x-user-id"] ?? "").trim();
+  const subject = id ? ENG_RBAC_SUBJECTS.find((u) => u.id === id && u.active !== false) : null;
+  if (!subject) {
+    if (String(process.env.FIN_RBAC_ENFORCE ?? "1") === "0") return null;
+    res.status(401).json({ ok: false, error: { code: "E-TAXONOMY-AUTH-REQUIRED", message: "شناسهٔ کاربر معتبر و فعال الزامی است", permission, traceId: req.requestId } });
+    return false;
+  }
+  const projectId = taxonomyText(req.body?.projectId ?? req.query.projectId, 60);
+  if (!rbacEvaluate(subject, permission, { projectId: projectId || undefined }).allow) {
+    res.status(403).json({ ok: false, error: { code: "E-TAXONOMY-FORBIDDEN", message: "مجوز ویرایش/مشاهدهٔ ساختار فرایند را ندارید", permission, traceId: req.requestId } });
+    return false;
+  }
+  return subject;
 }
 
 /** ?where=Col:op:value&order=Col:desc&limit=&offset= → SelectSpec امن */
@@ -807,7 +844,12 @@ function buildDegradedResponse(req, reason) {
 
 
 app.use((req, res, next) => {
-  const requestId = req.headers["x-request-id"] || `req-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  /* شناسهٔ درخواست از سربرگ کاربر می‌آید؛ پیش از استفاده در سربرگ پاسخ و سیاههٔ
+   * سرور پاک‌سازی می‌شود تا نویسهٔ کنترل، قالب‌بندی (%s/%o) یا مقدار بلند نشت نکند. */
+  const rawRequestId = String(req.headers["x-request-id"] || "").trim();
+  const requestId = /^[A-Za-z0-9._-]{1,64}$/.test(rawRequestId)
+    ? rawRequestId
+    : `req-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   req.requestId = requestId;
   res.setHeader("X-Request-Id", requestId);
   next();
@@ -824,6 +866,18 @@ registerRccWorkspaceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: r
 registerEqmWorkspaceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
 registerMonitoringWorkspaceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
 registerStrategyExcellenceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
+/* P7/CPMS: میز کار ساخت و اجرا — پروژه‌ای، مجوز مستقل، پیوست واقعی. */
+registerCpmWorkspaceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate, storageRoot, acceptedMimeTypes, maxFileBytes });
+/* P8/PMO: منشور، فرم‌ساز و کارت سلامت — با گردش تأیید و SOD-30. */
+registerPmoWorkspaceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
+/* P8/CNT: قالب‌پذیری صورت‌وضعیت — محاسبهٔ سرور و SOD-11. */
+registerCntIpcRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
+/* P9/RPT-1: گزارش‌ساز سفارشی — مجموعه‌دادهٔ مجاز + انتشار با SOD-31. */
+registerReportBuilderRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
+/* P9/ITG-1..3: خروجی XER/XML/ICS و نوشتن در سامانهٔ بیرونی با دفتر اجرا. */
+registerItgOutboundRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
+/* P9/MIX-1: پیمایش سبد → پروژه → فاز → اقلام، با شمارش صادقانهٔ بخش‌های بسته. */
+registerDrillRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
 
 const sanitizeFileName = (name) => path.basename(name).replace(/[^a-zA-Z0-9._-]/g, "_").slice(-180) || "upload.bin";
 const uploadStorage = multer.diskStorage({
@@ -3258,12 +3312,14 @@ app.post("/api/data/migrate", async (req, res, next) => {
   }
 });
 
-/* ═══════════════ ویرایشِ ساختارِ d6/d20 ═══════════════
+/* ═══════════════ ویرایشِ ساختارِ فرایند همهٔ حوزه‌ها (GOV-1) ═══════════════
  * یک ردیف برای هر پروژه/حوزه؛ در SQL و JSON هر دو از همان repository
  * استفاده می‌شود. نبودِ ردیف یعنی استفاده از framework.ts در کلاینت.
  */
 app.get("/api/framework/process-tree", async (req, res, next) => {
   try {
+    const gate = taxonomyGate(req, res, "gov.process.view");
+    if (gate === false) return undefined;
     const projectId = taxonomyText(req.query.projectId, 60);
     const domainId = taxonomyText(req.query.domainId, 20);
     if (!projectId || !EDITABLE_TAXONOMY_DOMAINS.has(domainId)) {
@@ -3283,7 +3339,8 @@ app.get("/api/framework/process-tree", async (req, res, next) => {
         processes = null;
       }
     }
-    const result = taxonomyResponse(req, { projectId, domainId, processes, source: processes ? "database" : "framework" });
+    const canEdit = gate ? rbacEvaluate(gate, "gov.process.edit", { projectId }).allow : false;
+    const result = taxonomyResponse(req, { projectId, domainId, processes, source: processes ? "database" : "framework", canEdit });
     return res.status(result.status).json(result.body);
   } catch (err) {
     return next(err);
@@ -3292,6 +3349,8 @@ app.get("/api/framework/process-tree", async (req, res, next) => {
 
 app.post("/api/framework/process-tree", async (req, res, next) => {
   try {
+    const gate = taxonomyGate(req, res, "gov.process.edit");
+    if (gate === false) return undefined;
     const projectId = taxonomyText(req.body?.projectId, 60);
     const domainId = taxonomyText(req.body?.domainId, 20);
     if (!projectId || !EDITABLE_TAXONOMY_DOMAINS.has(domainId)) {
@@ -3311,6 +3370,8 @@ app.post("/api/framework/process-tree", async (req, res, next) => {
 
 app.delete("/api/framework/process-tree", async (req, res, next) => {
   try {
+    const gate = taxonomyGate(req, res, "gov.process.edit");
+    if (gate === false) return undefined;
     const projectId = taxonomyText(req.query.projectId, 60);
     const domainId = taxonomyText(req.query.domainId, 20);
     if (!projectId || !EDITABLE_TAXONOMY_DOMAINS.has(domainId)) {
@@ -18261,7 +18322,7 @@ async function hrmAudit(r, req, action, details) {
   } catch {
     /* شکست ممیزی نباید پاسخ کاربر را بیندازد، ولی سکوت هم نمی‌کند:
      * در سیاههٔ سرور دیده می‌شود. */
-    console.error(`[${req.requestId}] hrmAudit failed for ${action}`);
+    console.error("[%s] hrmAudit failed for %s", req.requestId, action);
   }
 }
 
@@ -19930,7 +19991,7 @@ app.use((req, res) => {
 
 app.use((err, req, res, next) => {
   if (res.headersSent) return next(err);
-  console.error(`[${req.requestId}]`, err);
+  console.error("[%s]", req.requestId, err);
   if (err instanceof multer.MulterError) {
     return res.status(400).json({ ok: false, error: { code: "FILE_UPLOAD_ERROR", message: err.message, traceId: req.requestId } });
   }

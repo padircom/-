@@ -2862,8 +2862,6 @@ export const SCHEMA: TableDef[] = [
       req("DependencyType", "text", { len: 20, comment: "approval|info|hold" }),
       req("IsMandatory", "bool", { default: "1", comment: "الزامی = قفل صدور" }),
       c("NoteFa", "text", { len: 600 }),
-      req("CreatedBy", "text", { len: 60 }),
-      req("CreatedAt", "datetime"),
     ],
     indexes: [
       { name: "UX_DocDep", columns: ["DocumentId", "DependsOnDocumentId"], unique: true },
@@ -2943,9 +2941,6 @@ export const SCHEMA: TableDef[] = [
       c("Code", "text", { len: 40 }),
       c("ContentJson", "text", { len: 5000, comment: "JSON template fields" }),
       c("NoteFa", "text", { len: 500 }),
-      req("CreatedBy", "text", { len: 60 }),
-      req("CreatedAt", "datetime"),
-      c("UpdatedAt", "datetime"),
     ],
     indexes: [
       { name: "UX_DocTpl_Id", columns: ["Id"], unique: true },
@@ -2971,7 +2966,6 @@ export const SCHEMA: TableDef[] = [
       c("BodyFa", "text", { len: 2000 }),
       req("Channel", "text", { len: 20, comment: "email|in_app" }),
       req("Status", "text", { len: 20, comment: "pending|sent|failed" }),
-      req("CreatedAt", "datetime"),
       c("SentAt", "datetime"),
       c("ErrorText", "text", { len: 1000 }),
     ],
@@ -2997,12 +2991,10 @@ export const SCHEMA: TableDef[] = [
       c("PersonId", "text", { len: 60 }),
       c("PersonName", "text", { len: 120 }),
       req("WorkDate", "text", { len: 20, comment: "YYYY-MM-DD" }),
-      req("Hours", "number", { comment: "ساعت کار" }),
-      c("Cost", "number"),
+      req("Hours", "decimal", { precision: 18, scale: 2, comment: "ساعت کار" }),
+      c("Cost", "decimal", { precision: 18, scale: 2 }),
       c("Activity", "text", { len: 40, comment: "design|review|check|etc" }),
       c("NoteFa", "text", { len: 500 }),
-      req("CreatedBy", "text", { len: 60 }),
-      req("CreatedAt", "datetime"),
     ],
     indexes: [
       { name: "UX_DocEffort_Id", columns: ["Id"], unique: true },
@@ -3055,7 +3047,6 @@ export const SCHEMA: TableDef[] = [
       req("TitleFa", "text", { len: 500 }),
       c("DueAt", "text", { len: 20 }),
       req("Status", "text", { len: 20, comment: "unread|read|done|archived" }),
-      req("CreatedAt", "datetime"),
       c("ReadAt", "datetime"),
       c("DoneAt", "datetime"),
       c("Priority", "text", { len: 20 }),
@@ -3080,7 +3071,6 @@ export const SCHEMA: TableDef[] = [
       req("InstructionFa", "text", { len: 1000 }),
       c("Deadline", "text", { len: 20 }),
       req("Status", "text", { len: 20, comment: "open|done|cancelled" }),
-      req("CreatedAt", "datetime"),
       c("DoneAt", "datetime"),
       c("DoneNoteFa", "text", { len: 1000 }),
       c("HistoryJson", "text", { len: 5000 }),
@@ -3103,7 +3093,6 @@ export const SCHEMA: TableDef[] = [
       req("ProjectId", "text", { len: 60 }),
       req("Prefix", "text", { len: 20, comment: "e.g. OG2401-GN" }),
       req("LastNumber", "int"),
-      req("UpdatedAt", "datetime"),
     ],
     indexes: [
       { name: "UX_CkmSeq_Id", columns: ["Id"], unique: true },
@@ -3144,8 +3133,6 @@ export const SCHEMA: TableDef[] = [
       req("LinkType", "text", { len: 20, comment: "edms|tag|proc_package|letter" }),
       req("TargetId", "text", { len: 80 }),
       c("NoteFa", "text", { len: 500 }),
-      req("CreatedBy", "text", { len: 60 }),
-      req("CreatedAt", "datetime"),
     ],
     indexes: [
       { name: "UX_CkmLink_Id", columns: ["Id"], unique: true },
@@ -3454,7 +3441,6 @@ export const SCHEMA: TableDef[] = [
       c("Currency", "text", { len: 10 }),
       c("RecommendationFa", "text", { len: 2000 }),
       req("Status", "text", { len: 20, default: "'draft'" }),
-      c("CreatedBy", "text", { len: 60 }),
     ],
     indexes: [
       { name: "UX_ScmBidReport_No", columns: ["ProjectId", "ReportNo"], unique: true },
@@ -3707,9 +3693,9 @@ export const SCHEMA: TableDef[] = [
       req("ProjectId", "text", { len: 60 }),
       req("WarehouseCode", "text", { len: 40 }),
       req("MaterialCode", "text", { len: 40 }),
-      req("OnHand", "decimal", { precision: 18, scale: 3, default: 0 }),
-      c("Reserved", "decimal", { precision: 18, scale: 3, default: 0 }),
-      c("OnOrder", "decimal", { precision: 18, scale: 3, default: 0 }),
+      req("OnHand", "decimal", { precision: 18, scale: 3, default: "0" }),
+      c("Reserved", "decimal", { precision: 18, scale: 3, default: "0" }),
+      c("OnOrder", "decimal", { precision: 18, scale: 3, default: "0" }),
     ],
     indexes: [
       { name: "UX_ScmStockBal", columns: ["ProjectId", "WarehouseCode", "MaterialCode"], unique: true },
@@ -4841,7 +4827,458 @@ export const SCHEMA: TableDef[] = [
       { name: "IX_BreakdownValue_Project", columns: ["ProjectId", "ColumnKey"] },
     ],
   },
+
+  /* ══════════════ MOD-30 · CPMS ساخت و اجرا — P7/d2+d8 ══════════════ */
+
+  {
+    /* CPM-1: تخصیص حوزهٔ WBS به پیمانکار. کد پیمانکار به قرارداد فرعی همان
+     * پروژه (HrmSubContract.ContractNo) و کد WBS به WbsNode همان پروژه
+     * کنترل می‌شود؛ اینجا فقط شکل رکورد تعریف می‌شود. */
+    name: "CpmWorkArea",
+    module: "d2",
+    title: { fa: "حوزهٔ کاری پیمانکار", en: "Contractor work area" },
+    pk: "Id",
+    columns: [
+      id(),
+      req("ProjectId", "text", { len: 60 }),
+      req("Code", "text", { len: 40 }),
+      req("WbsCode", "text", { len: 60, comment: "کد WBS همان پروژه" }),
+      req("ContractorCode", "text", { len: 60, comment: "ContractNo قرارداد فرعی همان پروژه" }),
+      req("Discipline", "text", { len: 20, comment: "piping|electrical|instrument|civil" }),
+      req("ScopeFa", "text", { len: 1000 }),
+      c("PackageNo", "text", { len: 40 }),
+      c("StartDate", "date"),
+      c("EndDate", "date"),
+      c("WeightPct", "decimal", { precision: 9, scale: 2 }),
+      req("Status", "text", { len: 20, default: "'planned'" }),
+      c("NoteFa", "text", { len: 1000 }),
+      c("ModelVersion", "text", { len: 40, comment: "cpm-cpms-v1" }),
+    ],
+    indexes: [
+      { name: "UX_CpmWorkArea_Code", columns: ["ProjectId", "Code"], unique: true },
+      { name: "IX_CpmWorkArea_Wbs", columns: ["ProjectId", "WbsCode"] },
+      { name: "IX_CpmWorkArea_Contractor", columns: ["ProjectId", "ContractorCode"] },
+    ],
+  },
+  {
+    /* CPM-2: سربرگ گزارش روزانهٔ پیمانکار. عکس/پیوست در CpmDprAttachment
+     * با فایل واقعی زیر storage/cpm-dpr ذخیره می‌شود. */
+    name: "CpmDprEntry",
+    module: "d2",
+    title: { fa: "گزارش روزانهٔ پیمانکار", en: "Contractor daily report" },
+    pk: "Id",
+    columns: [
+      id(),
+      req("ProjectId", "text", { len: 60 }),
+      req("ReportNo", "text", { len: 40 }),
+      req("ReportDate", "date"),
+      req("Shift", "text", { len: 10, default: "'day'" }),
+      req("ContractorCode", "text", { len: 60 }),
+      req("Discipline", "text", { len: 20 }),
+      c("WorkAreaCode", "text", { len: 40 }),
+      req("LocationFa", "text", { len: 200 }),
+      c("WeatherFa", "text", { len: 120 }),
+      req("ManpowerCount", "int"),
+      c("EquipmentCount", "int"),
+      req("WorkDoneFa", "text", { len: 3000 }),
+      req("Status", "text", { len: 20, default: "'draft'" }),
+      c("NoteFa", "text", { len: 1000 }),
+      c("SubmittedAt", "datetime"),
+      c("SubmittedBy", "text", { len: 60 }),
+      c("ApprovedAt", "datetime"),
+      c("ApprovedBy", "text", { len: 60 }),
+      c("ReturnNoteFa", "text", { len: 1000 }),
+      c("ModelVersion", "text", { len: 40, comment: "cpm-cpms-v1" }),
+    ],
+    indexes: [
+      { name: "UX_CpmDpr_No", columns: ["ProjectId", "ReportNo"], unique: true },
+      { name: "IX_CpmDpr_Date", columns: ["ProjectId", "ReportDate"] },
+    ],
+  },
+  {
+    /* CPM-3: سربرگ گزارش دیسیپلینی. `LineCount`, `RejectedCount` و
+     * `NdtPassRate` محاسبهٔ سرور و فقط‌خواندنی‌اند (از بدنه پذیرفته نمی‌شوند). */
+    name: "CpmDisciplineReport",
+    module: "d2",
+    title: { fa: "گزارش دیسیپلینی", en: "Discipline report" },
+    pk: "Id",
+    columns: [
+      id(),
+      req("ProjectId", "text", { len: 60 }),
+      req("ReportNo", "text", { len: 40 }),
+      req("ReportDate", "date"),
+      req("Discipline", "text", { len: 20 }),
+      req("ContractorCode", "text", { len: 60 }),
+      c("WorkAreaCode", "text", { len: 40 }),
+      req("Status", "text", { len: 20, default: "'draft'" }),
+      c("NoteFa", "text", { len: 1000 }),
+      c("LineCount", "int", { comment: "محاسبهٔ سرور" }),
+      c("RejectedCount", "int", { comment: "محاسبهٔ سرور" }),
+      c("NdtPassRate", "decimal", { precision: 9, scale: 4, comment: "محاسبهٔ سرور؛ نبود داده = تهی" }),
+      c("SubmittedAt", "datetime"),
+      c("SubmittedBy", "text", { len: 60 }),
+      c("ApprovedAt", "datetime"),
+      c("ApprovedBy", "text", { len: 60 }),
+      c("ReturnNoteFa", "text", { len: 1000 }),
+      c("ModelVersion", "text", { len: 40, comment: "cpm-cpms-v1" }),
+    ],
+    indexes: [
+      { name: "UX_CpmDiscReport_No", columns: ["ProjectId", "ReportNo"], unique: true },
+      { name: "IX_CpmDiscReport_Date", columns: ["ProjectId", "ReportDate"] },
+    ],
+  },
+  {
+    /* CPM-3: خطوط گزارش دیسیپلینی — Fit-up/Weld/NDT/PWHT لوله‌کشی،
+     * کابل‌کشی/ترمینال/مگر/ارتینگ برق، لوپ‌چک/کالیبراسیون نصب ابزار دقیق،
+     * بتن‌ریزی/تراکم/نمونه مکعبی/قالب سیویل. */
+    name: "CpmDisciplineLine",
+    module: "d2",
+    title: { fa: "خط گزارش دیسیپلینی", en: "Discipline report line" },
+    pk: "Id",
+    columns: [
+      id(),
+      req("ProjectId", "text", { len: 60 }),
+      req("ReportNo", "text", { len: 40 }),
+      req("ItemRef", "text", { len: 60, comment: "LineNo/WeldNo/CableNo/LoopNo/PourId" }),
+      req("ItemType", "text", { len: 30 }),
+      c("SizeInch", "decimal", { precision: 9, scale: 2 }),
+      req("Quantity", "decimal", { precision: 18, scale: 3 }),
+      req("Unit", "text", { len: 12, default: "'ea'" }),
+      req("ResultCode", "text", { len: 20, default: "'na'" }),
+      c("NdtMethod", "text", { len: 10, comment: "RT|UT|PT|MT|VT — فقط برای آیتم NDT" }),
+      c("TestDate", "date"),
+      c("NoteFa", "text", { len: 500 }),
+    ],
+    indexes: [
+      { name: "UX_CpmDiscLine_Ref", columns: ["ProjectId", "ReportNo", "ItemRef"], unique: true },
+      { name: "IX_CpmDiscLine_Type", columns: ["ProjectId", "ItemType"] },
+    ],
+  },
+  {
+    /* CPM-4: درخواست بازرسی IR/RFI و آزادسازی QC. فیلدهای تصمیم فقط از
+     * گردش کار سرور پر می‌شوند؛ از بدنهٔ درخواست پذیرفته نمی‌شوند. */
+    name: "CpmInspectionRequest",
+    module: "d8",
+    title: { fa: "درخواست بازرسی و آزادسازی QC", en: "Inspection request & QC release" },
+    pk: "Id",
+    columns: [
+      id(),
+      req("ProjectId", "text", { len: 60 }),
+      req("RequestNo", "text", { len: 40 }),
+      req("RequestType", "text", { len: 10, default: "'ir'", comment: "ir|rfi" }),
+      req("ActivityCode", "text", { len: 60 }),
+      c("WorkAreaCode", "text", { len: 40 }),
+      req("Discipline", "text", { len: 20 }),
+      req("ContractorCode", "text", { len: 60 }),
+      req("LocationFa", "text", { len: 200 }),
+      req("ScopeFa", "text", { len: 1500 }),
+      req("RequestedAt", "date"),
+      c("TargetDate", "date"),
+      req("WitnessRequired", "bool", { default: "0" }),
+      req("Status", "text", { len: 20, default: "'draft'" }),
+      c("NcrRef", "text", { len: 40 }),
+      c("NoteFa", "text", { len: 1000 }),
+      c("RequestedBy", "text", { len: 60 }),
+      c("SubmittedAt", "datetime"),
+      c("SubmittedBy", "text", { len: 60 }),
+      c("ReleasedAt", "datetime"),
+      c("ReleasedBy", "text", { len: 60 }),
+      c("RejectedAt", "datetime"),
+      c("RejectedBy", "text", { len: 60 }),
+      c("CancelledAt", "datetime"),
+      c("CancelledBy", "text", { len: 60 }),
+      c("DecisionNoteFa", "text", { len: 1000 }),
+      c("InspectionRecordId", "text", { len: 60, comment: "سند InspectionRecord ساخته‌شده هنگام آزادسازی" }),
+      c("ModelVersion", "text", { len: 40, comment: "cpm-cpms-v1" }),
+    ],
+    indexes: [
+      { name: "UX_CpmInspection_No", columns: ["ProjectId", "RequestNo"], unique: true },
+      { name: "IX_CpmInspection_Status", columns: ["ProjectId", "Status"] },
+      { name: "IX_CpmInspection_Activity", columns: ["ProjectId", "ActivityCode"] },
+    ],
+  },
+  {
+    /* CPM-2 پیوست‌ها: فراداده در پایگاه داده، فایل واقعی زیر storage/cpm-dpr.
+     * نام ذخیره تولیدی است؛ نام کاربر فقط برای دانلود نگه داشته می‌شود. */
+    name: "CpmDprAttachment",
+    module: "d2",
+    title: { fa: "پیوست گزارش روزانه", en: "DPR attachment" },
+    pk: "Id",
+    columns: [
+      id(),
+      req("ProjectId", "text", { len: 60 }),
+      req("ReportNo", "text", { len: 40 }),
+      req("Kind", "text", { len: 20, default: "'attachment'", comment: "photo|attachment|test_report" }),
+      req("FileName", "text", { len: 200 }),
+      req("MimeType", "text", { len: 120 }),
+      req("SizeBytes", "int"),
+      c("Checksum", "text", { len: 80 }),
+      req("StoredName", "text", { len: 200 }),
+      c("NoteFa", "text", { len: 500 }),
+      c("UploadedBy", "text", { len: 60 }),
+      c("UploadedAt", "datetime"),
+    ],
+    indexes: [
+      { name: "UX_CpmDprAtt_Stored", columns: ["StoredName"], unique: true },
+      { name: "IX_CpmDprAtt_Report", columns: ["ProjectId", "ReportNo"] },
+    ],
+  },
+
+  /* ══════════════ MOD-31 · PMO دفتر مدیریت پروژه — P8/d6 ══════════════ */
+
+  {
+    /* PMO-1: منشور پروژه به‌صورت رکورد با گردش تأیید. فقط یک منشور «مصوب»
+     * در هر پروژه می‌ماند؛ تصویب منشور تازه، قبلی را «superseded» می‌کند. */
+    name: "PmoCharter",
+    module: "d6",
+    title: { fa: "منشور پروژه", en: "Project charter" },
+    pk: "Id",
+    columns: [
+      id(),
+      req("ProjectId", "text", { len: 60 }),
+      req("CharterNo", "text", { len: 40 }),
+      req("TitleFa", "text", { len: 300 }),
+      req("SponsorFa", "text", { len: 200 }),
+      c("ManagerFa", "text", { len: 200 }),
+      req("ObjectivesJson", "json", { comment: "اهداف منشور" }),
+      req("ScopeInFa", "text", { len: 2000 }),
+      c("ScopeOutFa", "text", { len: 2000 }),
+      req("MilestonesJson", "json", { comment: "نقاط عطف با تاریخ" }),
+      c("BudgetAmount", "decimal", { precision: 18, scale: 2 }),
+      req("Currency", "text", { len: 8, default: "'IRR'" }),
+      req("RisksJson", "json", { comment: "ریسک‌های اولیه" }),
+      c("NoteFa", "text", { len: 1000 }),
+      req("Status", "text", { len: 20, default: "'draft'", comment: "draft|submitted|approved|returned|superseded" }),
+      c("SubmittedAt", "datetime"), c("SubmittedBy", "text", { len: 60 }),
+      c("ApprovedAt", "datetime"), c("ApprovedBy", "text", { len: 60 }),
+      c("ReturnedAt", "datetime"), c("ReturnedBy", "text", { len: 60 }),
+      c("ReturnNoteFa", "text", { len: 500 }),
+      c("SupersededAt", "datetime", { comment: "زمان جایگزینی توسط منشور مصوب تازه" }),
+      c("SupersededBy", "text", { len: 60 }),
+      c("SupersededByCharterNo", "text", { len: 40 }),
+      c("ModelVersion", "text", { len: 40, comment: "pmo-gov-v1" }),
+    ],
+    indexes: [
+      { name: "UX_PmoCharter_No", columns: ["ProjectId", "CharterNo"], unique: true },
+      { name: "IX_PmoCharter_Status", columns: ["ProjectId", "Status"] },
+    ],
+  },
+  {
+    /* PMO-2: فرم‌ساز — تعریف فرم و نسخهٔ منتشرشده. تعریف منتشرشده ویرایش
+     * نمی‌شود؛ برای تغییر، فرم تازه با همان کد ساخته می‌شود. */
+    name: "PmoFormDefinition",
+    module: "d6",
+    title: { fa: "تعریف فرم مصوب", en: "Approved form definition" },
+    pk: "Id",
+    columns: [
+      id(),
+      req("ProjectId", "text", { len: 60 }),
+      req("Code", "text", { len: 40 }),
+      req("TitleFa", "text", { len: 200 }),
+      req("PurposeFa", "text", { len: 1000 }),
+      req("FieldsJson", "json", { comment: "فیلدها با نوع و اعتبارسنجی" }),
+      req("Status", "text", { len: 20, default: "'draft'", comment: "draft|published|retired" }),
+      req("Version", "int", { default: "1" }),
+      c("NoteFa", "text", { len: 500 }),
+      c("PublishedAt", "datetime"), c("PublishedBy", "text", { len: 60 }),
+      c("RetiredAt", "datetime"), c("RetiredBy", "text", { len: 60 }),
+      c("ModelVersion", "text", { len: 40, comment: "pmo-gov-v1" }),
+    ],
+    indexes: [
+      { name: "UX_PmoFormDefinition_Code", columns: ["ProjectId", "Code"], unique: true },
+      { name: "IX_PmoFormDefinition_Status", columns: ["ProjectId", "Status"] },
+    ],
+  },
+  {
+    /* PMO-2: رکورد پرشدهٔ فرم؛ دادهٔ ورودی با تعریف منتشرشدهٔ همان نسخه
+     * اعتبارسنجی و نرمال می‌شود. */
+    name: "PmoFormEntry",
+    module: "d6",
+    title: { fa: "رکورد فرم", en: "Form entry" },
+    pk: "Id",
+    columns: [
+      id(),
+      req("ProjectId", "text", { len: 60 }),
+      req("FormCode", "text", { len: 40 }),
+      req("FormVersion", "int"),
+      req("SubjectFa", "text", { len: 300 }),
+      req("DataJson", "json", { comment: "دادهٔ نرمال‌شدهٔ فرم" }),
+      req("Status", "text", { len: 20, default: "'draft'", comment: "draft|submitted|approved|returned" }),
+      c("NoteFa", "text", { len: 1000 }),
+      c("SubmittedAt", "datetime"), c("SubmittedBy", "text", { len: 60 }),
+      c("ApprovedAt", "datetime"), c("ApprovedBy", "text", { len: 60 }),
+      c("ReturnedAt", "datetime"), c("ReturnedBy", "text", { len: 60 }),
+      c("ReturnNoteFa", "text", { len: 500 }),
+      c("ModelVersion", "text", { len: 40, comment: "pmo-gov-v1" }),
+    ],
+    indexes: [
+      { name: "IX_PmoFormEntry_Form", columns: ["ProjectId", "FormCode", "FormVersion"] },
+      { name: "IX_PmoFormEntry_Status", columns: ["ProjectId", "Status"] },
+    ],
+  },
+  {
+    /* PMO-3: کارت سلامت پروژه — امتیاز اظهارشدهٔ معیارها با شاهد؛ امتیاز کل
+     * و رنگ فقط سمت سرور محاسبه می‌شود. */
+    name: "PmoHealthAssessment",
+    module: "d6",
+    title: { fa: "کارت سلامت پروژه", en: "Project health card" },
+    pk: "Id",
+    columns: [
+      id(),
+      req("ProjectId", "text", { len: 60 }),
+      req("AsOfDate", "date"),
+      c("PeriodNo", "int"),
+      req("CriteriaJson", "json", { comment: "معیارها با وزن، امتیاز و شاهد" }),
+      c("ScoreTotal", "decimal", { precision: 9, scale: 2 }),
+      c("Band", "text", { len: 10, comment: "green|amber|red" }),
+      req("Status", "text", { len: 20, default: "'draft'", comment: "draft|submitted|approved|returned" }),
+      c("NoteFa", "text", { len: 1000 }),
+      c("SubmittedAt", "datetime"), c("SubmittedBy", "text", { len: 60 }),
+      c("ApprovedAt", "datetime"), c("ApprovedBy", "text", { len: 60 }),
+      c("ApprovedNoteFa", "text", { len: 500 }),
+      c("ReturnedAt", "datetime"), c("ReturnedBy", "text", { len: 60 }),
+      c("ReturnNoteFa", "text", { len: 500 }),
+      c("ModelVersion", "text", { len: 40, comment: "pmo-gov-v1" }),
+    ],
+    indexes: [
+      { name: "IX_PmoHealthAssessment_Date", columns: ["ProjectId", "AsOfDate"] },
+      { name: "IX_PmoHealthAssessment_Status", columns: ["ProjectId", "Status"] },
+    ],
+  },
+
+  /* ══════════════ P9 · گزارش‌ساز سفارشی و یکپارچه‌سازی خروجی ══════════════ */
+
+  {
+    /* RPT-1: قالب گزارش سفارشی. مشخصات قالب (فیلد/فیلتر/گروه/نمودار) یک
+     * سند ممیزی‌پذیر است؛ نسخه با انتشار بالا می‌رود و ویرایش قالب منتشرشده
+     * تا زمانی که بازنشسته نشود ممکن نیست. */
+    name: "RptTemplate",
+    module: "d3",
+    title: { fa: "قالب گزارش سفارشی", en: "Custom report template" },
+    pk: "Id",
+    columns: [
+      id(),
+      req("ProjectId", "text", { len: 60 }),
+      req("Code", "text", { len: 40 }),
+      req("TitleFa", "text", { len: 200 }),
+      req("DatasetKey", "text", { len: 40, comment: "کلید مجموعه‌داده در موتور گزارش‌ساز" }),
+      req("FieldsJson", "json", { comment: "فهرست ستون‌های مجاز" }),
+      c("FiltersJson", "json", { comment: "فیلترها با عملگر بسته" }),
+      c("GroupJson", "json", { comment: "گروه‌بندی و تجمیع" }),
+      c("SortJson", "json", { comment: "ترتیب" }),
+      c("ChartJson", "json", { comment: "نمودار" }),
+      c("LimitRows", "int", { default: "500" }),
+      req("Status", "text", { len: 20, default: "'draft'", comment: "draft|published|retired" }),
+      req("Version", "int", { default: "0" }),
+      c("NoteFa", "text", { len: 1000 }),
+      c("PublishedAt", "datetime"), c("PublishedBy", "text", { len: 60 }),
+      c("RetiredAt", "datetime"), c("RetiredBy", "text", { len: 60 }),
+      c("ModelVersion", "text", { len: 40, comment: "rpt-builder-v1" }),
+    ],
+    indexes: [
+      { name: "UX_RptTemplate_Code", columns: ["ProjectId", "Code"], unique: true },
+      { name: "IX_RptTemplate_Status", columns: ["ProjectId", "Status", "DatasetKey"] },
+    ],
+  },
+
+  {
+    /* ITG-1..3: گزارش هر تلاش خروجی (XER، MSP، P6، تقویم). نوشتن در سامانهٔ
+     * بیرونی باید شاهد داشته باشد — «موفق» بدون ردیف ثبت نمی‌شود. */
+    name: "ItgConnectorRun",
+    module: "core",
+    title: { fa: "اجرای اتصال‌دهندهٔ خروجی", en: "Outbound connector run" },
+    pk: "Id",
+    columns: [
+      id(),
+      req("ProjectId", "text", { len: 60 }),
+      req("Connector", "text", { len: 30, comment: "xer|msp|p6|calendar|exchange" }),
+      req("Direction", "text", { len: 10, default: "'out'", comment: "out" }),
+      req("Status", "text", { len: 16, default: "'queued'", comment: "queued|succeeded|failed" }),
+      c("ItemCount", "int"),
+      c("PayloadBytes", "int"),
+      c("Endpoint", "text", { len: 300 }),
+      c("DurationMs", "int"),
+      c("ErrorCode", "text", { len: 40 }),
+      c("ErrorFa", "text", { len: 500 }),
+      req("ActorId", "text", { len: 60 }),
+      req("StartedAt", "datetime"),
+      c("FinishedAt", "datetime"),
+      c("ModelVersion", "text", { len: 40, comment: "itg-outbound-v1" }),
+    ],
+    indexes: [
+      { name: "IX_ItgConnectorRun_Project", columns: ["ProjectId", "Connector", "StartedAt"] },
+      { name: "IX_ItgConnectorRun_Status", columns: ["Status", "StartedAt"] },
+    ],
+  },
+
+  /* ══════════════ MOD-32 · CNT صورت‌وضعیت قالب‌پذیر — P8/d14 ══════════════ */
+
+  {
+    /* CNT-1: قالب صورت‌وضعیت — ردیف‌ها و کسورات با فرمول صریح و ممیزی‌پذیر. */
+    name: "CntIpcTemplate",
+    module: "d14",
+    title: { fa: "قالب صورت‌وضعیت", en: "IPC template" },
+    pk: "Id",
+    columns: [
+      id(),
+      req("ProjectId", "text", { len: 60 }),
+      req("Code", "text", { len: 40 }),
+      req("TitleFa", "text", { len: 200 }),
+      c("ContractCode", "text", { len: 60 }),
+      req("ItemsJson", "json", { comment: "ردیف‌ها: اندازه‌گیری/مقطوع/درصدی" }),
+      req("DeductionsJson", "json", { comment: "کسورات با مبنا و نرخ" }),
+      req("Status", "text", { len: 20, default: "'draft'", comment: "draft|published|retired" }),
+      /* نسخهٔ قالب: پیش‌نویس ۰، با انتشار ۱ و بالا. سند مصوب نسخهٔ مبنا را
+         نگه می‌دارد تا تغییر قالب، محاسبهٔ قدیمی را کهنه کند. */
+      req("Version", "int", { default: "0", comment: "۰ پیش‌نویس؛ اولین انتشار ۱" }),
+      c("NoteFa", "text", { len: 1000 }),
+      c("PublishedAt", "datetime"), c("PublishedBy", "text", { len: 60 }),
+      c("RetiredAt", "datetime"), c("RetiredBy", "text", { len: 60 }),
+      c("ModelVersion", "text", { len: 40, comment: "cnt-ipc-v1" }),
+    ],
+    indexes: [
+      { name: "UX_CntIpcTemplate_Code", columns: ["ProjectId", "Code"], unique: true },
+      { name: "IX_CntIpcTemplate_Status", columns: ["ProjectId", "Status"] },
+    ],
+  },
+  {
+    /* CNT-1: صورت‌وضعیت دوره — ورودی خام و نتیجهٔ محاسبه‌شدهٔ سرور ذخیره
+     * می‌شود تا سند مصوب همان چیزی باشد که محاسبه شد. */
+    name: "CntIpcCertificate",
+    module: "d14",
+    title: { fa: "صورت‌وضعیت دوره", en: "Interim payment certificate" },
+    pk: "Id",
+    columns: [
+      id(),
+      req("ProjectId", "text", { len: 60 }),
+      req("TemplateCode", "text", { len: 40 }),
+      req("TemplateVersion", "int", { default: "0", comment: "نسخهٔ قالب مبنا در لحظهٔ محاسبه" }),
+      c("ContractCode", "text", { len: 60 }),
+      req("PeriodNo", "int"),
+      req("PeriodFrom", "date"),
+      req("PeriodTo", "date"),
+      req("Currency", "text", { len: 8, default: "'IRR'" }),
+      req("InputsJson", "json", { comment: "ورودی ردیف‌ها" }),
+      c("ComputationJson", "json", { comment: "نتیجهٔ محاسبهٔ سرور" }),
+      c("GrossAmount", "decimal", { precision: 18, scale: 2 }),
+      c("DeductionTotal", "decimal", { precision: 18, scale: 2 }),
+      c("NetAmount", "decimal", { precision: 18, scale: 2 }),
+      req("Status", "text", { len: 20, default: "'draft'", comment: "draft|submitted|approved|returned" }),
+      c("NoteFa", "text", { len: 1000 }),
+      c("SubmittedAt", "datetime"), c("SubmittedBy", "text", { len: 60 }),
+      c("ApprovedAt", "datetime"), c("ApprovedBy", "text", { len: 60 }),
+      c("SignedNoteFa", "text", { len: 500 }),
+      c("ReturnedAt", "datetime"), c("ReturnedBy", "text", { len: 60 }),
+      c("ReturnNoteFa", "text", { len: 500 }),
+      c("ModelVersion", "text", { len: 40, comment: "cnt-ipc-v1" }),
+    ],
+    indexes: [
+      { name: "UX_CntIpcCertificate_Period", columns: ["ProjectId", "TemplateCode", "PeriodNo"], unique: true },
+      { name: "IX_CntIpcCertificate_Status", columns: ["ProjectId", "Status"] },
+    ],
+  },
 ];
+
 
 const TABLE_BY_NAME = new Map(SCHEMA.map((t) => [t.name, t]));
 
@@ -4876,6 +5313,14 @@ export function validateSchema(tables: TableDef[] = SCHEMA): string[] {
       if (!isSafeIdentifier(col.name)) errs.push(`${t.name}: نام ستون ناامن ${col.name}`);
     }
     if (!cols.has(t.pk)) errs.push(`${t.name}: کلید اصلی ${t.pk} ستون نیست`);
+
+    /* ستون‌های حسابرسی از `AUDIT_COLUMNS` می‌آیند؛ اعلام دستی‌شان در تعریف جدول
+     * باعث ستون تکراری و DDL نامعتبر می‌شود. این بررسی جلوی تکرار آن را می‌گیرد. */
+    for (const col of t.columns) {
+      if (AUDIT_COLUMN_NAMES.includes(col.name)) {
+        errs.push(`${t.name}: ستون حسابرسی ${col.name} نباید در تعریف جدول اعلام شود (خودکار افزوده می‌شود)`);
+      }
+    }
 
     for (const idx of t.indexes ?? []) {
       if (!isSafeIdentifier(idx.name)) errs.push(`${t.name}: نام ایندکس ناامن ${idx.name}`);
@@ -5452,8 +5897,64 @@ export const MIGRATIONS: Migration[] = [
       return [tableDdl(t, "mssql"), ...(t.indexes ?? []).map(i => indexDdl(t, i, "mssql"))];
     }),
   },
-
+  {
+    /* CSU-2 + EDM-1..9 + PAT-1..8: جدول‌های میز کار راه‌اندازی (Tag Register)،
+     * اسناد و مدارک و کارتابل/ارجاع/امضا/پیوند مکاتبات. بدون این مهاجرت،
+     * نصب تازه روی SQL Server این ۱۵ جدول را ندارد و مسیرهای اختصاصی
+     * آن‌ها با خطای «جدول وجود ندارد» شکست می‌خورند. */
+    version: "0039", name: "csu_edms_pats_live",
+    statements: ["CommissioningTag", "DocumentAttachment", "DocumentHold", "DocumentDependency", "DocumentComment", "DocumentDistribution", "DocumentTemplate", "EdmsNotification", "DocumentEffort", "DocumentSubReview", "CkmInboxItem", "CkmReferral", "CkmLetterSequence", "CkmSignature", "CkmLetterLink"].flatMap(n => {
+      const t = TABLE_BY_NAME.get(n)!;
+      return [tableDdl(t, "mssql"), ...(t.indexes ?? []).map(i => indexDdl(t, i, "mssql"))];
+    }),
+  },
+  {
+    /* P7/CPMS: میز کار ساخت و اجرا — حوزهٔ کاری پیمانکار، DPR پیمانکار،
+     * گزارش‌های دیسیپلینی با خطوط، درخواست بازرسی/آزادسازی QC و پیوست‌ها.
+     * بدون این مهاجرت، نصب تازه روی SQL Server این ۶ جدول را ندارد. */
+    version: "0040", name: "cpm_execution_live",
+    statements: ["CpmWorkArea", "CpmDprEntry", "CpmDisciplineReport", "CpmDisciplineLine", "CpmInspectionRequest", "CpmDprAttachment"].flatMap(n => {
+      const t = TABLE_BY_NAME.get(n)!;
+      return [tableDdl(t, "mssql"), ...(t.indexes ?? []).map(i => indexDdl(t, i, "mssql"))];
+    }),
+  },
+  {
+    /* P8/PMO: دفتر مدیریت پروژه — منشور، فرم‌ساز و کارت سلامت. */
+    version: "0041", name: "pmo_governance_live",
+    statements: ["PmoCharter", "PmoFormDefinition", "PmoFormEntry", "PmoHealthAssessment"].flatMap(n => {
+      const t = TABLE_BY_NAME.get(n)!;
+      return [tableDdl(t, "mssql"), ...(t.indexes ?? []).map(i => indexDdl(t, i, "mssql"))];
+    }),
+  },
+  {
+    /* P8/CNT: قالب صورت‌وضعیت و صورت‌وضعیت دوره. */
+    version: "0042", name: "cnt_ipc_live",
+    statements: ["CntIpcTemplate", "CntIpcCertificate"].flatMap(n => {
+      const t = TABLE_BY_NAME.get(n)!;
+      return [tableDdl(t, "mssql"), ...(t.indexes ?? []).map(i => indexDdl(t, i, "mssql"))];
+    }),
+  },
+  {
+    /* P8/CNT-1: نسخه‌بندی قالب و مبنای نسخهٔ سند، تا تغییر قالب سند قدیمی را
+       «کهنه» کند و محاسبهٔ مصوب قابل ردیابی بماند. */
+    version: "0043", name: "cnt_ipc_template_version",
+    statements: [
+      `IF COL_LENGTH('dbo.CntIpcTemplate','Version') IS NULL ALTER TABLE dbo.CntIpcTemplate ADD [Version] INT NOT NULL CONSTRAINT DF_CntIpcTemplate_Version DEFAULT (0);`,
+      `IF COL_LENGTH('dbo.CntIpcCertificate','TemplateVersion') IS NULL ALTER TABLE dbo.CntIpcCertificate ADD [TemplateVersion] INT NOT NULL CONSTRAINT DF_CntIpcCertificate_TemplateVersion DEFAULT (0);`,
+    ],
+  },
+  {
+    /* P9/RPT-1 + ITG: قالب گزارش سفارشی (اسکیمای مشخصات گزارش) و دفتر اجرای
+       اتصال‌دهنده‌های خروجی. هیچ‌کدام از CRUD عمومی سرو نمی‌شوند. */
+    version: "0044", name: "report_builder_outbound",
+    statements: ["RptTemplate", "ItgConnectorRun"].flatMap(n => {
+      const t = TABLE_BY_NAME.get(n)!;
+      return [tableDdl(t, "mssql"), ...(t.indexes ?? []).map(i => indexDdl(t, i, "mssql"))];
+    }),
+  },
 ];
+
+
 
 export function pendingMigrations(applied: AppliedMigration[], all: Migration[] = MIGRATIONS): Migration[] {
   const done = new Set(applied.map((a) => a.version));

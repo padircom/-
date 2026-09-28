@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { t, type Bi, type Lang } from "../data/framework";
 import { logAudit } from "../services/auditLogger";
 import { qmsApi } from "../services/qmsApiClient";
+import CpmWorkspace from "./CpmWorkspace";
 import {
   QMS_FORMULA_VERSION,
   canProceed,
@@ -423,7 +424,16 @@ export default function QualityWorkspace({
               <Kpi label={rtl ? "پذیرش بتن (ACI)" : "Concrete acceptance"} value={concrete.ok ? (rtl ? "قبول" : "pass") : (rtl ? "مردود" : "fail")} tone={concrete.ok ? "text-emerald-300" : "text-rose-300"} hint={concrete.reasons.join(" · ") || `f'c=30MPa`} />
             </div>
 
-            <Section title={rtl ? "درخواست‌های بازرسی و نتیجه" : "Inspection requests"} note={rtl ? "اعلان کمتر از ۴۸ ساعت نقض قرارداد است" : "notice under 48h breaches contract"}>
+            {/* CPM-4 — درخواست بازرسی (IR/RFI) و آزادسازی واقعی توسط QC؛
+                آزادسازی، سند InspectionRecord را در QMS می‌سازد. */}
+            <Section
+              title={rtl ? "درخواست بازرسی (IR/RFI) و آزادسازی — CPMS" : "Inspection request (IR/RFI) & release — CPMS"}
+              note={rtl ? "گردش واقعی: ثبت → ارسال → آزادسازی/رد توسط QC (تفکیک وظیفه سمت سرور)" : "real flow: draft → submit → QC release/reject (SoD enforced server-side)"}
+            >
+              <CpmWorkspace lang={lang} initialTab="inspection" hideTabs />
+            </Section>
+
+            <Section title={rtl ? "نتایج و امضای بازرسی (QMS)" : "Inspection results & signatures (QMS)"} note={rtl ? "اعلان کمتر از ۴۸ ساعت نقض قرارداد است" : "notice under 48h breaches contract"}>
               <table className="w-full text-[9.5px]">
                 <thead className="tx3">
                   <tr className="border-b b-line-soft">

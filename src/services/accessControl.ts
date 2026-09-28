@@ -322,6 +322,39 @@ export const PERMISSION_CATALOG: PermissionDef[] = [
   P("scm.mrr.view", "d5", "مشاهده رسید مواد", "View material receiving", "internal"),
   P("scm.mrr.post", "d5", "ثبت رسید مواد و OPI", "Post MRR & OPI", "confidential", true),
 
+  /* ── d2+d8 ساخت و اجرا — CPMS (P7) ── */
+  P("cpm.workarea.view", "d2", "مشاهده حوزهٔ کاری پیمانکار", "View contractor work areas", "internal"),
+  P("cpm.workarea.edit", "d2", "تخصیص و ویرایش حوزهٔ کاری پیمانکار", "Assign & edit contractor work areas", "confidential", true),
+  P("cpm.dpr.view", "d2", "مشاهده گزارش روزانهٔ پیمانکار", "View contractor daily reports", "internal"),
+  P("cpm.dpr.record", "d2", "ثبت گزارش روزانهٔ پیمانکار", "Record contractor daily report", "internal", true),
+  P("cpm.dpr.approve", "d2", "تأیید گزارش روزانهٔ پیمانکار", "Approve contractor daily report", "confidential", true),
+  P("cpm.discipline.view", "d2", "مشاهده گزارش دیسیپلینی", "View discipline reports", "internal"),
+  P("cpm.discipline.record", "d2", "ثبت گزارش دیسیپلینی (Fit-up/Weld/NDT/…)",
+    "Record discipline reports", "internal", true),
+  P("cpm.discipline.approve", "d2", "تأیید گزارش دیسیپلینی", "Approve discipline reports", "confidential", true),
+  P("cpm.inspection.view", "d8", "مشاهده درخواست بازرسی", "View inspection requests", "internal"),
+  P("cpm.inspection.request", "d8", "ثبت درخواست بازرسی (IR/RFI)", "Raise inspection request", "internal", true),
+  P("cpm.inspection.release", "d8", "آزادسازی/رد درخواست بازرسی توسط QC", "QC release/reject inspection request", "internal", true),
+  /* P8/PMO: دفتر مدیریت پروژه — منشور (تحریر/تصویب)، فرم‌ساز (طراحی/ثبت/تصویب)
+   * و کارت سلامت (ثبت/تصویب). تحریر و تصویب منشور دو مجوز جدا هستند تا
+   * SOD-30 قابل اعمال بماند. */
+  P("pmo.charter.view", "d6", "مشاهده منشور پروژه", "View project charter", "internal"),
+  P("pmo.charter.edit", "d6", "تحریر و ویرایش منشور پروژه", "Draft & edit project charter", "confidential", true),
+  P("pmo.charter.approve", "d6", "تصویب منشور پروژه", "Approve project charter", "restricted", true),
+  P("pmo.form.view", "d6", "مشاهده فرم‌های مصوب", "View approved forms", "internal"),
+  P("pmo.form.manage", "d6", "طراحی، انتشار و بازنشستگی فرم", "Design, publish & retire forms", "confidential", true),
+  P("pmo.form.submit", "d6", "تکمیل و ارسال رکورد فرم", "Fill & submit form entries", "internal", true),
+  P("pmo.form.approve", "d6", "تأیید و برگشت رکورد فرم", "Approve & return form entries", "confidential", true),
+  P("pmo.health.view", "d6", "مشاهده کارت سلامت پروژه", "View project health card", "internal"),
+  P("pmo.health.record", "d6", "ثبت ارزیابی سلامت پروژه", "Record project health assessment", "confidential", true),
+  P("pmo.health.approve", "d6", "تصویب کارت سلامت پروژه", "Approve project health card", "restricted", true),
+  /* P8/CNT: قالب‌پذیری صورت‌وضعیت. تهیه/بازبینی/تصویب صورت‌وضعیت از قبل
+   * مجوز مستقل دارند (cnt.ipc.prepare / cnt.ipc.review / cnt.ipc.approve —
+   * SOD-11)؛ اینجا فقط تعریف قالب اضافه می‌شود و همان‌ها بازاستفاده می‌شوند. */
+  P("cnt.ipctemplate.edit", "d14", "تعریف و انتشار قالب صورت‌وضعیت", "Define & publish IPC templates", "confidential", true),
+  /* P8/GOV-1: ویرایش ساختار فرایند برای همهٔ حوزه‌ها (پیش‌تر فقط نمایش بود). */
+  P("gov.process.edit", "d6", "ویرایش ساختار فرایند حوزه‌ها", "Edit domain process structure", "confidential", true),
+
   /* ── d6 حاکمیت ── */
   P("gov.process.view", "d6", "مشاهده فرآیندها", "View processes", "internal"),
   P("gov.gate.review", "d6", "بازبینی دروازه مرحله", "Review stage gate", "confidential", true),
@@ -456,6 +489,18 @@ export const PERMISSION_CATALOG: PermissionDef[] = [
   P("report.internal.generate", "core", "تولید گزارش داخلی", "Generate internal report", "internal"),
   P("report.official.publish", "core", "انتشار گزارش ابلاغی", "Publish official report", "restricted", true),
   P("report.export.bulk", "core", "خروجی انبوه داده", "Bulk data export", "restricted", true),
+  /* P9/RPT-1: گزارش‌ساز سفارشی. مشخصات قالب سند حاکمیتی است: تحریر و انتشار
+   * جدا شده‌اند (SOD-31) و هر مجموعه‌داده مجوز پایهٔ خودش را می‌خواهد. */
+  P("report.custom.view", "d3", "مشاهدهٔ گزارش‌ساز سفارشی", "View custom report builder", "internal"),
+  P("report.custom.run", "d3", "اجرای گزارش سفارشی روی دادهٔ مجاز", "Run custom report on authorized data", "internal"),
+  P("report.custom.edit", "d3", "ساخت و ویرایش قالب گزارش سفارشی", "Author custom report template", "confidential", true),
+  P("report.custom.publish", "d3", "انتشار و بازنشستگی قالب گزارش", "Publish/retire custom report template", "confidential", true),
+  /* P9/ITG-1..3: خروجی و نوشتن در سامانهٔ بیرونی. هر چهار مجوز جدا‌اند تا
+   * «خروجی XER» با «ارسال به P6» یا «همگام‌سازی تقویم» یکی گرفته نشود. */
+  P("itg.connector.view", "core", "مشاهدهٔ وضعیت اتصال‌دهنده‌ها و دفتر اجرا", "View connectors & run ledger", "internal"),
+  P("itg.export.run", "core", "ساخت خروجی XER و XML پروژه", "Run XER / Project XML export", "confidential", true),
+  P("itg.primavera.push", "core", "ارسال فعالیت‌ها به API پریماورا", "Push activities to Primavera API", "confidential", true),
+  P("itg.calendar.sync", "core", "خروجی و همگام‌سازی تقویم Outlook/Exchange", "Outlook/Exchange calendar export & sync", "confidential", true),
 ];
 
 export const PERMISSION_CODES: string[] = PERMISSION_CATALOG.map((p) => p.code);
@@ -492,7 +537,8 @@ export const ROLE_CATALOG: RoleDef[] = [
     inherits: [],
     clearance: "internal",
     party: "any",
-    grants: ["core.portfolio.view", "core.project.view", "doc.document.view", "plan.schedule.view", "pex.dashboard.view", "gov.process.view", "report.internal.generate", "eng.mdr.view"],
+    grants: ["core.portfolio.view", "core.project.view", "doc.document.view", "plan.schedule.view", "pex.dashboard.view", "gov.process.view", "report.internal.generate", "eng.mdr.view", "report.custom.view", "report.custom.run"
+    ],
   },
   {
     code: "site_engineer",
@@ -524,7 +570,17 @@ export const ROLE_CATALOG: RoleDef[] = [
       "hrm.device.monitor",
       /* تصمیم تخصیص نیرو در کارگاه گرفته می‌شود؛ بدون دیدن هیستوگرام
        * رستهٔ خودش، آن تصمیم کور است. */
-      "hrm.analytics.view"],
+      "hrm.analytics.view",
+      /* P7/CPMS: ثبت گزارش روزانه و دیسیپلینی و درخواست بازرسی کار کارگاه
+       * است؛ تأیید گزارش و آزادسازی QC دست او نیست. */
+      "cpm.workarea.view", "cpm.dpr.view", "cpm.dpr.record",
+      "cpm.discipline.view", "cpm.discipline.record",
+      "cpm.inspection.view", "cpm.inspection.request",
+      "pmo.form.view",
+      "pmo.form.submit",
+      "cnt.ipc.prepare",
+      "pmo.health.view",
+    ],
   },
   {
     code: "planner",
@@ -545,7 +601,16 @@ export const ROLE_CATALOG: RoleDef[] = [
       "hrm.mob.request",
       /* هیستوگرام و منحنی S ابزار اصلی برنامه‌ریز است، و مبنای نیرو
        * محصول کار خود اوست. */
-      "hrm.analytics.view", "hrm.plan.baseline", "hrm.device.monitor"],
+      "hrm.analytics.view", "hrm.plan.baseline", "hrm.device.monitor",
+      /* P7/CPMS: تخصیص WBS به پیمانکار کار برنامه‌ریزی است؛ ثبت گزارش
+       * روزانه و آزادسازی QC سمت کارگاه و کیفیت است. */
+      "cpm.workarea.view", "cpm.workarea.edit", "cpm.dpr.view",
+      "cpm.discipline.view", "cpm.inspection.view",
+      "pmo.charter.view",
+      "pmo.form.view",
+      "pmo.health.view",
+    "report.custom.edit", "itg.connector.view", "itg.export.run", "itg.primavera.push"
+    ],
   },
   {
     code: "cost_controller",
@@ -566,7 +631,13 @@ export const ROLE_CATALOG: RoleDef[] = [
       /* LIVE-1: ثبت هزینه، مطالبات، PR/PO و موجودی کار روزانهٔ اوست؛
        * تأیید PR و آزادسازی ذخیره دست مدیر پروژه است. */
       "fin.cost.post", "fin.procure.edit",
-      "scm.vendor.view", "scm.vendor.manage", "scm.package.view", "scm.package.edit", "scm.bidder.view", "scm.bidder.manage", "scm.mr.view", "scm.mr.manage", "scm.mrr.view", "scm.mrr.post"],
+      "scm.vendor.view", "scm.vendor.manage", "scm.package.view", "scm.package.edit", "scm.bidder.view", "scm.bidder.manage", "scm.mr.view", "scm.mr.manage", "scm.mrr.view", "scm.mrr.post",
+      "cnt.contract.view",
+      "cnt.ipctemplate.edit",
+      "cnt.ipc.prepare",
+      "pmo.health.view",
+      "pmo.form.view",
+    ],
   },
   {
     code: "qc_inspector",
@@ -575,10 +646,18 @@ export const ROLE_CATALOG: RoleDef[] = [
     clearance: "internal",
     party: "any",
     grants: ["qms.itp.view", "qms.inspection.record", "qms.ncr.raise", "com.checksheet.record", "com.checksheet.sign",
+      /* P7/CPMS: آزادسازی و رد درخواست بازرسی فقط با بازرس کیفیت است و
+       * موتور، ثبت‌کنندهٔ درخواست را از آزادسازی همان درخواست منع می‌کند. */
+      "cpm.workarea.view", "cpm.dpr.view", "cpm.discipline.view",
+      "cpm.inspection.view", "cpm.inspection.release",
       /* گیت کیفیت در زنجیرهٔ کارکرد: تطبیق ساعت ثبت‌شده با پیشرفت
        * تأییدشده. بدون این، ساعت روی فعالیتی می‌نشیند که اصلاً اجرا
        * نشده است. */
-      "hrm.timesheet.verify"],
+      "hrm.timesheet.verify",
+      "pmo.form.view",
+      "pmo.form.submit",
+      "pmo.health.view",
+    ],
   },
   {
     code: "qa_manager",
@@ -596,6 +675,11 @@ export const ROLE_CATALOG: RoleDef[] = [
       /* آزادسازی تخلف عمداً از افسر ایمنی جدا شد: موتور صادرکننده را از
        * آزادسازی منع می‌کند و افسر ایمنی معمولاً خودش صادرکننده است. */
       "hse.violation.release", "hse.inspection.conduct", "hse.violation.view",
+    
+      "pmo.form.view",
+      "pmo.form.submit",
+      "pmo.health.view",
+      "pmo.health.record",
     ],
   },
   {
@@ -670,6 +754,13 @@ export const ROLE_CATALOG: RoleDef[] = [
        * نرخ توافقی، حسن انجام کار و جریمه اینجا بسته می‌شود. تهیهٔ
        * صورت‌کارکرد هم با اوست، ولی تأیید نه — SOD-22 و SOD-23. */
       "hrm.sub.view", "hrm.sub.manage", "hrm.subipc.prepare",
+    
+      "cnt.contract.view",
+      "cnt.ipctemplate.edit",
+      "cnt.ipc.prepare",
+      "pmo.charter.view",
+      "pmo.form.view",
+    "itg.connector.view"
     ],
   },
   {
@@ -680,6 +771,10 @@ export const ROLE_CATALOG: RoleDef[] = [
     clearance: "restricted",
     party: "contractor",
     grants: ["spm.plan.view", "oex.assessment.view", "eqm.workspace.view", "eqm.dispatch.approve",
+      /* P7/CPMS: مدیر پروژه گزارش پیمانکار و دیسیپلینی را تأیید می‌کند،
+       * ولی آزادسازی QC سمت خودش نیست. */
+      "cpm.workarea.view", "cpm.dpr.view", "cpm.dpr.approve",
+      "cpm.discipline.view", "cpm.discipline.approve", "cpm.inspection.view",
       "core.project.edit", "core.ai.run",
       "plan.baseline.set", "plan.progress.approve",
       "pex.evm.view", "pex.kpi.edit", "pex.forecast.edit",
@@ -738,6 +833,17 @@ export const ROLE_CATALOG: RoleDef[] = [
        * `cnt.boq.edit` ندارد تا نرخ را نتواند تغییر دهد. */
       "cnt.contract.view", "cnt.measurement.record", "cnt.ipc.override",
       "com.punch.record", "com.certificate.view", "com.system.view", "com.milestone.manage",
+    
+      "pmo.charter.view",
+      "pmo.charter.edit",
+      "pmo.form.view",
+      "pmo.form.approve",
+      "pmo.health.view",
+      "pmo.health.record",
+      "cnt.contract.view",
+      "cnt.ipc.approve",
+      "gov.process.edit",
+    "report.custom.publish", "itg.connector.view", "itg.export.run", "itg.calendar.sync"
     ],
   },
   {
@@ -804,6 +910,7 @@ export const ROLE_CATALOG: RoleDef[] = [
       "eng.mdr.view", "eng.mdr.edit", "eng.review.code", "eng.crs.resolve",
       "eng.tq.answer", "eng.vpr.review", "eng.ifc.release", "eng.mr.approve",
       "doc.document.approve", "core.ai.run", "report.internal.generate",
+    "report.custom.edit", "itg.connector.view"
     ],
   },
   {
@@ -836,7 +943,26 @@ export const ROLE_CATALOG: RoleDef[] = [
       "hrm.cost.post",
       /* PMO ارسال را می‌زند، پس باید ببیند به مقصد رسیده یا نه و
        * بتواند دوباره تلاش کند (D13). */
-      "core.event.view", "core.event.replay"]
+      "core.event.view", "core.event.replay",
+      /* P7/CPMS: PMO تأییدکنندهٔ گزارش روزانه و دیسیپلینی است و حوزهٔ
+       * کاری پیمانکار را تعریف می‌کند؛ آزادسازی QC سمت بازرس است. */
+      "cpm.workarea.view", "cpm.workarea.edit", "cpm.dpr.view", "cpm.dpr.approve",
+      "cpm.discipline.view", "cpm.discipline.approve", "cpm.inspection.view",
+      "pmo.charter.view",
+      "pmo.charter.edit",
+      "pmo.form.view",
+      "pmo.form.manage",
+      "pmo.form.submit",
+      "pmo.health.view",
+      "pmo.health.record",
+      "cnt.contract.view",
+      "gov.process.edit",
+      /* P9: خروجی و همگام‌سازی سامانه‌های بیرونی کار PMO است. انتشار قالب
+       * گزارش به PMO داده نشد چون تحریر آن (از طریق planner) در همین نقش
+       * است و SOD-31 تحریر و انتشار را از هم جدا می‌کند. */
+      "itg.connector.view", "itg.export.run", "itg.primavera.push", "itg.calendar.sync",
+    
+    ],
   },
   {
     code: "executive",
@@ -844,7 +970,15 @@ export const ROLE_CATALOG: RoleDef[] = [
     inherits: ["viewer"],
     clearance: "restricted",
     party: "contractor",
-    grants: ["spm.plan.view", "spm.plan.edit", "oex.assessment.view", "oex.assessment.edit", "eqm.workspace.view", "eqm.dispatch.approve", "fin.cost.view", "fin.budget.edit", "fin.reserve.draw", "pex.evm.view", "rcc.change.approve", "gov.gate.approve", "rcc.claim.view", "core.ai.run"],
+    grants: ["spm.plan.view", "spm.plan.edit", "oex.assessment.view", "oex.assessment.edit", "eqm.workspace.view", "eqm.dispatch.approve", "fin.cost.view", "fin.budget.edit", "fin.reserve.draw", "pex.evm.view", "rcc.change.approve", "gov.gate.approve", "rcc.claim.view", "core.ai.run",
+      "pmo.charter.view",
+      "pmo.charter.approve",
+      "pmo.health.view",
+      "pmo.health.approve",
+      "cnt.contract.view",
+      "cnt.ipc.approve",
+    "report.custom.publish", "itg.connector.view"
+    ],
   },
   {
     code: "consultant",
@@ -868,7 +1002,12 @@ export const ROLE_CATALOG: RoleDef[] = [
        * برگشتنش هم به تشخیص او. */
       "cnt.guarantee.view", "cnt.guarantee.release", "cnt.progress.view", "cnt.kpi.view",
       "cnt.report.view",
-      "com.certificate.view", "com.certificate.issue", "pex.evm.view", "rcc.change.approve", "gov.gate.approve", "ckm.letter.view", "ckm.letter.sign", "doc.document.approve", "eng.review.code", "eng.crs.resolve", "eng.tq.answer"],
+      "com.certificate.view", "com.certificate.issue", "pex.evm.view", "rcc.change.approve", "gov.gate.approve", "ckm.letter.view", "ckm.letter.sign", "doc.document.approve", "eng.review.code", "eng.crs.resolve", "eng.tq.answer",
+      "pmo.charter.view",
+      "pmo.charter.approve",
+      "pmo.health.view",
+      "pmo.health.approve",
+    ],
   },
   {
     code: "subcontractor",
@@ -876,7 +1015,12 @@ export const ROLE_CATALOG: RoleDef[] = [
     inherits: [],
     clearance: "internal",
     party: "subcontractor",
-    grants: ["core.project.view", "plan.schedule.view", "plan.progress.report", "doc.document.view", "hrm.timesheet.enter", "qms.itp.view"],
+    grants: ["core.project.view", "plan.schedule.view", "plan.progress.report", "doc.document.view", "hrm.timesheet.enter", "qms.itp.view",
+      /* P7/CPMS: پیمانکار جزء گزارش روزانه و دیسیپلینی خودش را ثبت می‌کند،
+       * ولی تأیید و آزادسازی با کارفرما/QC است. */
+      "cpm.workarea.view", "cpm.dpr.view", "cpm.dpr.record",
+      "cpm.discipline.view", "cpm.discipline.record",
+      "cpm.inspection.view", "cpm.inspection.request"],
   },
   {
     code: "auditor",
@@ -884,7 +1028,8 @@ export const ROLE_CATALOG: RoleDef[] = [
     inherits: ["viewer"],
     clearance: "restricted",
     party: "any",
-    grants: ["sys.audit.view", "qms.audit.conduct", "fin.cost.view", "fin.rate.view", "rcc.claim.view", "ckm.letter.view", "hrm.productivity.view"],
+    grants: ["sys.audit.view", "qms.audit.conduct", "fin.cost.view", "fin.rate.view", "rcc.claim.view", "ckm.letter.view", "hrm.productivity.view", "itg.connector.view"
+    ],
   },
   {
     code: "admin",
@@ -972,6 +1117,44 @@ export type SodRule = {
  * منطق: «تهیه‌کننده نباید تأییدکننده باشد» و «صادرکنندهٔ ایراد نباید بستن آن را امضا کند».
  */
 export const SOD_RULES: SodRule[] = [
+  {
+    /* P7/CPMS: کسی که درخواست بازرسی را می‌زند نمی‌تواند همان را آزاد
+     * کند. موتور CPMS این را در زمان اجرا هم کنترل می‌کند؛ این قاعده
+     * جلوی طراحی نقشی را می‌گیرد که از پیش هر دو کلید را به یک نفر
+     * می‌دهد و کنترل زمان اجرا را به تلهٔ «همیشه رد» تبدیل می‌کند. */
+    id: "SOD-29",
+    a: "cpm.inspection.request",
+    b: "cpm.inspection.release",
+    severity: "high",
+    reason: {
+      fa: "ثبت‌کنندهٔ درخواست بازرسی نباید آزادکنندهٔ QC همان درخواست باشد",
+      en: "The inspection requester must not be its QC releaser",
+    },
+  },
+  {
+    /* P9/RPT-1: سازندهٔ قالب گزارش نباید همان منتشرکنندهٔ آن باشد؛ قالب
+     * منتشرشده تعریف «عدد رسمی» را عوض می‌کند، پس انتشار باید مستقل باشد. */
+    id: "SOD-31",
+    a: "report.custom.edit",
+    b: "report.custom.publish",
+    severity: "high",
+    reason: {
+      fa: "سازندهٔ قالب گزارش نباید منتشرکنندهٔ همان قالب باشد",
+      en: "The template author must not be its publisher",
+    },
+  },
+  {
+    /* تحریر منشور و تصویب آن نباید در یک نفر جمع شود؛ منشور سند مبنای
+     * پروژه است و تصویب آن باید مستقل باشد. */
+    id: "SOD-30",
+    a: "pmo.charter.edit",
+    b: "pmo.charter.approve",
+    severity: "high",
+    reason: {
+      fa: "تحریرکنندهٔ منشور پروژه نباید تصویب‌کنندهٔ همان منشور باشد",
+      en: "The charter author must not be its approver",
+    },
+  },
   {
     id: "SOD-01",
     a: "fin.ipc.prepare",

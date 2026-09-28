@@ -29,7 +29,7 @@ export function registerMonitoringWorkspaceRoutes(app, { repo, subjects, evaluat
           });
           return { table: spec.table, state: rows.length ? 'ready' : 'empty', rows };
         } catch (err) {
-          console.error(`[${req.requestId}] monitoring source unavailable: ${spec.table}`, err?.code ?? err?.name);
+          console.error("[%s] monitoring source unavailable: %s", req.requestId, spec.table, err?.code ?? err?.name);
           return { table: spec.table, state: 'unavailable', rows: [] };
         }
       }));

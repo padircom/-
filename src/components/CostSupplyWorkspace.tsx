@@ -325,7 +325,7 @@ export default function CostSupplyWorkspace({
           <>
             <Tabs rtl={rtl} lang={lang} tab={tab} ws={ws} v={view} perm={perm} busy={busy} client={client} act={act} />
             {(tab.startsWith("scm-")) && (
-              <ScmTabs rtl={rtl} tab={tab} ws={ws} scmWs={scmWs} busy={scmBusy} msg={scmMsg} onClearMsg={()=>setScmMsg(null)} client={scmClient} act={scmAct} />
+              <ScmTabs rtl={rtl} tab={tab} scmWs={scmWs} busy={scmBusy} msg={scmMsg} onClearMsg={()=>setScmMsg(null)} client={scmClient} act={scmAct} />
             )}
           </>
         )}
@@ -1141,7 +1141,7 @@ function PrActions({ rtl, code, status, over, perm, busy, client, act, onMakePo 
 
 
 /* ═══════════════ SCM Tabs P5 ═══════════════ */
-function ScmTabs({ rtl, tab, ws, scmWs, busy, msg, onClearMsg, client, act }: { rtl: boolean; tab: string; ws: any; scmWs: any; busy: boolean; msg: any; onClearMsg: ()=>void; client: any; act: any }) {
+function ScmTabs({ rtl, tab, scmWs, busy, msg, onClearMsg, client, act }: { rtl: boolean; tab: string; scmWs: any; busy: boolean; msg: any; onClearMsg: ()=>void; client: any; act: any }) {
   const vendors = scmWs?.vendors ?? [];
   const avls = scmWs?.avls ?? [];
   const packages = scmWs?.packages ?? [];
@@ -1194,7 +1194,6 @@ function ScmTabs({ rtl, tab, ws, scmWs, busy, msg, onClearMsg, client, act }: { 
 
   const inputCls = "rounded-lg border b-line-soft bg-black/20 px-2 py-1 text-[10px] tx1 placeholder:text-[9px] placeholder:tx4 focus:outline-none focus:border-amber-400/40";
   const btnPrimary = "rounded-lg bg-amber-400/20 px-3 py-1.5 text-[10px] font-semibold text-amber-100 hover:bg-amber-400/30 disabled:opacity-40";
-  const btnCls = "rounded-lg border px-2 py-1 text-[9px]";
 
   return (
     <div className="space-y-3">

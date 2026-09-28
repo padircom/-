@@ -7,8 +7,7 @@ import { getSchedule, type ApiSchedule } from "../services/pexApiClient";
 import BreakdownBuilder from "./BreakdownBuilder";
 import ContractWorkshop from "./ContractWorkshop";
 import InteractiveGantt, { type GanttActivity } from "./InteractiveGantt";
-import PexDprPanel from "./PexDprPanel";
-import { PEX_ACTIVITIES as PEX_SNAPSHOT_ACTIVITIES, PEX_PROJECT as PEX_SNAPSHOT_PROJECT } from "../data/pexSnapshot";
+import CpmWorkspace from "./CpmWorkspace";
 import MspAnalysisPanel from "./MspAnalysisPanel";
 
 export type PexTab =
@@ -23,6 +22,8 @@ export type PexTab =
   | "lookahead"
   | "dpr"
   | "dprReg"
+  | "workAreas"
+  | "discipline"
   | "weekly"
   | "mpr"
   | "reports"
@@ -1079,9 +1080,24 @@ export default function PlanningWorkspace({
           </div>
         )}
 
+        {/* CPM-2 — DPR زندهٔ پیمانکار (پیش‌نویس→ارسال→تأیید + پیوست عکس/مدرک) */}
         {tab === "dprReg" && (
           <div className="fade-rise">
-            <PexDprPanel lang={lang} projectCode={PEX_SNAPSHOT_PROJECT.code} activities={PEX_SNAPSHOT_ACTIVITIES} />
+            <CpmWorkspace lang={lang} initialTab="dpr" hideTabs />
+          </div>
+        )}
+
+        {/* CPM-1 — حوزهٔ کاری پیمانکاران (تخصیص WBS به پیمانکار) */}
+        {tab === "workAreas" && (
+          <div className="fade-rise">
+            <CpmWorkspace lang={lang} initialTab="areas" hideTabs />
+          </div>
+        )}
+
+        {/* CPM-3 — گزارش‌های دیسیپلینی (لوله‌کشی/برق/ابزار دقیق/سیویل) */}
+        {tab === "discipline" && (
+          <div className="fade-rise">
+            <CpmWorkspace lang={lang} initialTab="discipline" hideTabs />
           </div>
         )}
 

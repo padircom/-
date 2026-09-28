@@ -3,11 +3,13 @@ import { type Lang } from '../data/framework';
 import { useAuth } from '../context/AuthContext';
 import { jsonRequest } from '../services/apiClient';
 import { type MonitoringData, type MonitoringItem, type SourceState } from '../services/monitoringWorkspace';
+import ReportBuilderPanel from './ReportBuilderPanel';
+import DrillDownPanel from './DrillDownPanel';
 
-export type MonitorTab = 'dash' | 'wpd' | 'evm' | 'kpi' | 'phi' | 'var' | 'ews' | 'action' | 'forecast' | 'reports' | 'scurve' | 'exec';
+export type MonitorTab = 'dash' | 'wpd' | 'evm' | 'kpi' | 'phi' | 'var' | 'ews' | 'action' | 'forecast' | 'reports' | 'builder' | 'drill' | 'scurve' | 'exec';
 type Props = { lang: Lang; projectId: string; initialTab?: MonitorTab; subId?: string; hideTabs?: boolean };
-const TABS: [MonitorTab, string, string][] = [['dash','داشبورد','Dashboard'],['wpd','منابع داده','Data sources'],['evm','ارزش کسب‌شده','EVM'],['kpi','شاخص‌ها','KPIs'],['phi','سلامت PHI','PHI'],['var','انحراف','Variance'],['ews','هشدار','Alerts'],['action','پیش‌نگر / مصوبات','Lookahead / actions'],['forecast','پیش‌بینی ثبت‌شده','Stored forecast'],['scurve','روند تصاویر','Snapshot trend'],['reports','خروجی داخلی','Internal export'],['exec','خلاصهٔ مدیریتی','Executive summary']];
-const SUB: Record<string,MonitorTab> = { 'd3-p1-s1':'kpi','d3-p1-phi':'phi','d3-p2-s1':'evm','d3-p2-wpd':'wpd','d3-p2-fc':'forecast','d3-p3-s1':'var','d3-p4-s1':'ews','d3-p4-ews':'ews','d3-p5-s1':'action','d3-p6-s1':'dash','d3-p6-14':'reports','d3-p6-exec':'exec','d3-p6-dash':'dash' };
+const TABS: [MonitorTab, string, string][] = [['dash','داشبورد','Dashboard'],['wpd','منابع داده','Data sources'],['evm','ارزش کسب‌شده','EVM'],['kpi','شاخص‌ها','KPIs'],['phi','سلامت PHI','PHI'],['var','انحراف','Variance'],['ews','هشدار','Alerts'],['action','پیش‌نگر / مصوبات','Lookahead / actions'],['forecast','پیش‌بینی ثبت‌شده','Stored forecast'],['scurve','روند تصاویر','Snapshot trend'],['reports','خروجی داخلی','Internal export'],['builder','گزارش‌ساز سفارشی','Custom report builder'],['drill','پیمایش سلسله‌مراتبی','Drill-down'],['exec','خلاصهٔ مدیریتی','Executive summary']];
+const SUB: Record<string,MonitorTab> = { 'd3-p1-s1':'kpi','d3-p1-phi':'phi','d3-p2-s1':'evm','d3-p2-wpd':'wpd','d3-p2-fc':'forecast','d3-p3-s1':'var','d3-p4-s1':'ews','d3-p4-ews':'ews','d3-p5-s1':'action','d3-p6-s1':'dash','d3-p6-14':'reports','d3-p6-builder':'builder','d3-p6-drill':'drill','d3-p6-exec':'exec','d3-p6-dash':'dash' };
 const SOURCE_LABELS: Record<string,[string,string]> = { Activity:['برنامهٔ فعالیت‌ها','Activities'],ProgressEntry:['پیشرفت تأییدشده','Approved progress'],EvmSnapshot:['تصویر ارزش کسب‌شده','EVM snapshot'],Risk:['ریسک بازِ بالا','High open risks'],ChangeRequest:['تغییر در انتظار تصمیم','Pending changes'],Claim:['ادعای پیش‌نویس','Draft claims'],Document:['مدرک پیش‌نویس / در بازبینی','Draft / under-review documents'],Ncr:['عدم انطباق بسته‌نشده','Unclosed NCRs'],Equipment:['ماشین در تعمیر','Equipment in repair'],MaintenanceOrder:['تعمیرات باز','Open maintenance orders'],Correspondence:['مکاتبات معوق','Overdue correspondence'],MeetingAction:['مصوبات معوق','Overdue meeting actions'] };
 const STATES: Record<SourceState|string,[string,string]> = { unverified:['تصویر فاقد ورودی یا مهر سازگاری','Snapshot lacks inputs or integrity stamp'],ready:['دادهٔ موجود','Available'],empty:['بدون داده','No data'],restricted:['بدون مجوز','Restricted'],unavailable:['منبع در دسترس نیست','Source unavailable'],too_large:['بیش از سقف پردازش؛ عدد کامل نمایش داده نمی‌شود','Over processing limit; no partial total'],invalid:['دادهٔ نامعتبر','Invalid data'] };
 export default function MonitoringWorkspace(props: Props) {
@@ -67,6 +69,10 @@ function LiveMonitoring({lang,projectId,initialTab,subId,hideTabs,userId}:Props 
     {!hideTabs&&<nav className="flex flex-wrap gap-2">{TABS.map(([id,a,b])=><button key={id} className={`${button} ${tab===id?'toggle-on':''}`} onClick={()=>setTab(id)}>{text(a,b)}</button>)}</nav>}
     {error&&<p role="alert" className="rounded-xl p-3 bg-rose-500/10 text-rose-400 text-sm">{error} — {text('دادهٔ قبلی به‌عنوان دادهٔ زنده نمایش داده نمی‌شود.','Old data is not shown as live data.')}</p>}
     {loading&&<p role="status" className="tx3 text-xs">{text('در حال دریافت از سرور…','Fetching from server…')}</p>}
+    {/* P9: گزارش‌ساز سفارشی و پیمایش سلسله‌مراتبی مستقل از تصویر EVM‌اند؛
+      * نبود دادهٔ پایش، این دو را از کار نمی‌اندازد. */}
+    {tab==='builder'&&<ReportBuilderPanel lang={lang}/>}
+    {tab==='drill'&&<DrillDownPanel lang={lang}/>}
     {current&&<>
       <section className="glass-dark rounded-xl p-3 text-xs tx3 space-y-1">
         <p>{text('زمان بازخوانی سرور: ','Server read time: ')}<time dir="ltr">{current.generatedAt}</time></p>

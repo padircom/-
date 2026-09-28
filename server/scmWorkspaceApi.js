@@ -89,7 +89,7 @@ export function registerScmWorkspaceRoutes(app, { repo, subjects, evaluate }) {
     if (err?.code === "UNIQUE_VIOLATION" || err?.code === "DUPLICATE_KEY") {
       return res.status(409).json({ ok: false, error: { code: "E-SCM-DUPLICATE", message: "کد تکراری است", traceId: req.requestId } });
     }
-    console.error(`[${req.requestId}] scm error:`, err);
+    console.error("[%s] scm error:", req.requestId, err);
     return res.status(500).json({ ok: false, error: { code: "E-SCM-INTERNAL", message: "خطای داخلی سرور", traceId: req.requestId } });
   };
   const subjectOf = (req) => {
@@ -126,7 +126,7 @@ export function registerScmWorkspaceRoutes(app, { repo, subjects, evaluate }) {
         Details: { traceId: req.requestId, ...details },
       }, actor(req));
     } catch {
-      console.error(`[${req.requestId}] scm audit failed ${action}`);
+      console.error("[%s] scm audit failed %s", req.requestId, action);
     }
   };
   const byProject = (pid) => [{ column: "ProjectId", op: "eq", value: pid }];
