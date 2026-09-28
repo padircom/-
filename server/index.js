@@ -25,6 +25,7 @@ import { registerRccWorkspaceRoutes } from "./rccWorkspaceApi.js";
 import { registerDprDocRoutes } from "./dprDocApi.js";
 import { registerFinWorkspaceRoutes } from "./finWorkspaceApi.js";
 import { registerCkmWorkspaceRoutes } from "./ckmWorkspaceApi.js";
+import { registerScmWorkspaceRoutes } from "./scmWorkspaceApi.js";
 import { canDprTransition, openDprBlocked, validateDpr } from "./pexDprLogic.js";
 import { inspectionBand, inspectionScore, nextInspectionDue, ptwCanTransition, ptwMissing, severityWeight, validateIncident, validateInspection, validatePermit, woPermitGate } from "./hseFieldLogic.js";
 import {
@@ -818,6 +819,7 @@ registerDprDocRoutes(app, { storageRoot, acceptedMimeTypes, maxFileBytes });
 /* LIVE-1: میز کار هزینه و تأمین d5 روی دادهٔ ماندگار (/api/fin/:projectId/...). */
 registerFinWorkspaceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
 registerCkmWorkspaceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
+registerScmWorkspaceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
 registerRccWorkspaceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
 registerEqmWorkspaceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
 registerMonitoringWorkspaceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
