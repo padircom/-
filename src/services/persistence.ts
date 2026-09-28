@@ -5211,6 +5211,46 @@ export const SCHEMA: TableDef[] = [
     ],
   },
 
+  /* ══════════════ P10 · دستیار هوشمند — پرسش، پاسخ و منبع داده ══════════════ */
+
+  {
+    /* AI-4: دفتر پرسش و پاسخ دستیار. این ردیف شاهد ممیزی‌پذیر است: چه کسی
+     * پرسید، کدام ابزار اجرا شد، کدام جدول‌ها خوانده شدند و چه عددی برگشت.
+     * متن پاسخ و جدولِ *بریدهٔ* همان لحظه ذخیره می‌شود تا خروجی سند (AI-3)
+     * از همین snapshot ساخته شود، نه از دادهٔ عوض‌شدهٔ بعدی؛ و «بسته» بودن
+     * یک منبع هم در SourcesJson می‌ماند تا صفر تلقی نشود. */
+    name: "AiInteraction",
+    module: "core",
+    title: { fa: "پرسش و پاسخ دستیار هوشمند", en: "AI assistant interaction" },
+    pk: "Id",
+    columns: [
+      id(),
+      req("ProjectId", "text", { len: 60 }),
+      req("Code", "text", { len: 30 }),
+      req("QuestionFa", "text", { len: 500 }),
+      req("Tool", "text", { len: 40, comment: "top_risks|delays|forecast|bottlenecks|briefing|dataset_query" }),
+      req("State", "text", { len: 20, comment: "answered|empty|insufficient|restricted" }),
+      c("ParamsJson", "json"),
+      req("AnswerFa", "text", { len: 4000 }),
+      c("FactsJson", "json"),
+      c("TableJson", "json", { comment: "snapshot جدول، حداکثر ۲۰۰ ردیف" }),
+      c("ChartJson", "json"),
+      req("SourcesJson", "json", { comment: "جدول، تعداد ردیف و بسته/باز بودن منبع" }),
+      req("RowCount", "int", { default: "0" }),
+      req("Truncated", "bool", { default: "0" }),
+      c("Provider", "text", { len: 40, comment: "ارائه‌دهندهٔ بازنویسی متن؛ null یعنی متن فقط سرور" }),
+      c("NarrationFa", "text", { len: 4000 }),
+      c("LatencyMs", "int"),
+      req("ActorId", "text", { len: 60 }),
+      c("ModelVersion", "text", { len: 40, comment: "ai-assistant-v1" }),
+    ],
+    indexes: [
+      { name: "UX_AiInteraction_Code", columns: ["ProjectId", "Code"], unique: true },
+      { name: "IX_AiInteraction_Actor", columns: ["ProjectId", "ActorId", "CreatedAt"] },
+      { name: "IX_AiInteraction_Tool", columns: ["ProjectId", "Tool", "CreatedAt"] },
+    ],
+  },
+
   /* ══════════════ MOD-32 · CNT صورت‌وضعیت قالب‌پذیر — P8/d14 ══════════════ */
 
   {
@@ -5948,6 +5988,16 @@ export const MIGRATIONS: Migration[] = [
        اتصال‌دهنده‌های خروجی. هیچ‌کدام از CRUD عمومی سرو نمی‌شوند. */
     version: "0044", name: "report_builder_outbound",
     statements: ["RptTemplate", "ItgConnectorRun"].flatMap(n => {
+      const t = TABLE_BY_NAME.get(n)!;
+      return [tableDdl(t, "mssql"), ...(t.indexes ?? []).map(i => indexDdl(t, i, "mssql"))];
+    }),
+  },
+  {
+    /* P10/AI-4: دفتر پرسش و پاسخ دستیار هوشمند. بدون این مهاجرت، نصب تازه
+     * روی SQL Server تاریخچهٔ پرسش‌ها را ندارد و مسیر اختصاصی آن با خطای
+     * «جدول وجود ندارد» شکست می‌خورد. جدول از CRUD عمومی بسته است. */
+    version: "0045", name: "ai_assistant_live",
+    statements: ["AiInteraction"].flatMap(n => {
       const t = TABLE_BY_NAME.get(n)!;
       return [tableDdl(t, "mssql"), ...(t.indexes ?? []).map(i => indexDdl(t, i, "mssql"))];
     }),

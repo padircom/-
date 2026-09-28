@@ -72,5 +72,8 @@ server/cntIpcLogic.js
 server/rptBuilderLogic.js
 server/itgOutboundLogic.js
 server/mcsDrillLogic.js
+
+# Generated P10 AI assistant engine (بازتولید: npm run build:aiassist)
+server/aiAssistantLogic.js
 # پیوست‌های DPR/CPMS زمان اجرا — داده است، نه کد
 server/storage/cpm-dpr/

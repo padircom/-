@@ -4,6 +4,7 @@ import { registerPmoWorkspaceRoutes, PMO_DEDICATED_ROUTES } from "./pmoWorkspace
 import { registerCntIpcRoutes, CNT_IPC_DEDICATED_ROUTES } from "./cntIpcApi.js";
 import { registerReportBuilderRoutes, RPT_DEDICATED_ROUTES } from "./reportBuilderApi.js";
 import { registerItgOutboundRoutes, ITG_OUTBOUND_DEDICATED_ROUTES } from "./itgOutboundApi.js";
+import { registerAiAssistantRoutes, AI_DEDICATED_ROUTES } from "./aiAssistantApi.js";
 import { registerDrillRoutes } from "./mcsDrillApi.js";
 import { registerMonitoringWorkspaceRoutes } from "./monitoringWorkspaceApi.js";
 import { registerEqmWorkspaceRoutes, EQM_TABLES } from "./eqmWorkspaceApi.js";
@@ -614,6 +615,8 @@ const DEDICATED_TABLE_ROUTES = {
   /* P9/RPT-1 — قالب گزارش سفارشی؛ P9/ITG — دفتر اجرای اتصال‌دهنده‌های خروجی. */
   ...RPT_DEDICATED_ROUTES,
   ...ITG_OUTBOUND_DEDICATED_ROUTES,
+  /* P10/AI — دفتر پرسش و پاسخ دستیار. */
+  ...AI_DEDICATED_ROUTES,
 };
 
 /** جدول‌هایی که از راه REST عمومی قابل دسترسی‌اند — بقیه فقط از مسیر اختصاصی خودشان. */
@@ -878,6 +881,8 @@ registerReportBuilderRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: 
 registerItgOutboundRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
 /* P9/MIX-1: پیمایش سبد → پروژه → فاز → اقلام، با شمارش صادقانهٔ بخش‌های بسته. */
 registerDrillRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
+/* P10/AI-1..4: دستیار هوشمند — پرسش فقط‌خواندنی، بینش آماده و دفتر پرسش‌وپاسخ. */
+registerAiAssistantRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
 
 const sanitizeFileName = (name) => path.basename(name).replace(/[^a-zA-Z0-9._-]/g, "_").slice(-180) || "upload.bin";
 const uploadStorage = multer.diskStorage({
