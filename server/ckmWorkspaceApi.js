@@ -851,6 +851,85 @@ export function registerCkmWorkspaceRoutes(app, { repo, subjects, evaluate }) {
     ok(req, res, next);
   }));
 
+    /* ═══════════ PAT-5/6/7/8 امضا و پیوندها ═══════════ */
+
+  app.get(`${base}/letters/:no/signatures`, need(VIEW_PERMS), route(async (req, res, r, pid) => {
+    const rows = await r.list("CkmSignature", { where: [{ column: "ProjectId", op: "eq", value: pid }, { column: "LetterNo", op: "eq", value: String(req.params.no) }], limit: 100 });
+    rows.sort((a,b)=> String(a.SignedAt||"").localeCompare(String(b.SignedAt||"")));
+    ok(req, res, { count: rows.length, items: rows });
+  }));
+
+  app.post(`${base}/letters/:no/sign`, need("ckm.letter.sign"), route(async (req, res, r, pid) => {
+    const cur = await must(r, "Correspondence", pid, "LetterNo", req.params.no, "نامهٔ");
+    const userId = actor(req);
+    if(cur.DraftedBy && cur.DraftedBy===userId) throw forbidden("E-CKM-SOD", "تهیه‌کننده نمی‌تواند امضای نهایی کند");
+    const b = req.body ?? {};
+    const method = b.method ? String(b.method) : "simple";
+    const note = text(b.noteFa, "یادداشت امضا", { max: 500 });
+    // hash content
+    const crypto = await import("crypto");
+    const hash = crypto.createHash("sha256").update(`${cur.LetterNo}|${cur.SubjectFa}|${userId}|${new Date().toISOString()}`).digest("hex");
+    const id = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const row = {
+      Id: id,
+      ProjectId: pid,
+      LetterNo: cur.LetterNo,
+      SignedBy: userId,
+      SignedAt: new Date().toISOString(),
+      SignatureHash: hash,
+      Method: method,
+      NoteFa: note,
+    };
+    await r.create("CkmSignature", row, userId, "sig");
+    // also update letter SignedBy/SignedAt if not set
+    if(!cur.SignedBy){
+      await r.patch("Correspondence", cur.Id, { SignedBy: userId, SignedAt: new Date().toISOString() }, userId);
+    }
+    await audit(r, req, "CKM_LETTER_ESIGNED", { entityName: "CkmSignature", entityId: id, letterNo: cur.LetterNo, method });
+    ok(req, res, row, 201);
+  }));
+
+  app.get(`${base}/letters/:no/links`, need(VIEW_PERMS), route(async (req, res, r, pid) => {
+    const rows = await r.list("CkmLetterLink", { where: [{ column: "ProjectId", op: "eq", value: pid }, { column: "LetterNo", op: "eq", value: String(req.params.no) }], limit: 200 });
+    rows.sort((a,b)=> String(b.CreatedAt||"").localeCompare(String(a.CreatedAt||"")));
+    ok(req, res, { count: rows.length, items: rows });
+  }));
+
+  app.post(`${base}/letters/:no/links`, need("ckm.letter.draft"), route(async (req, res, r, pid) => {
+    const cur = await must(r, "Correspondence", pid, "LetterNo", req.params.no, "نامهٔ");
+    const b = req.body ?? {};
+    const linkType = oneOf(b.linkType, "نوع پیوند", ["edms","tag","proc_package","letter"]);
+    const targetId = text(b.targetId, "شناسه هدف", { max: 80, required: true });
+    const note = text(b.noteFa, "یادداشت پیوند", { max: 500 });
+    // validate target exists loosely
+    if(linkType==="edms"){
+      const doc = await r.findOne("Document", [{ column: "Id", op: "eq", value: targetId }]);
+      if(!doc) throw notFound(`مدرک ${targetId} یافت نشد`);
+    }
+    const id = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const row = {
+      Id: id,
+      ProjectId: pid,
+      LetterNo: cur.LetterNo,
+      LinkType: linkType,
+      TargetId: targetId,
+      NoteFa: note,
+      CreatedBy: actor(req),
+      CreatedAt: new Date().toISOString(),
+    };
+    await r.create("CkmLetterLink", row, actor(req), "lnk");
+    await audit(r, req, "CKM_LETTER_LINKED", { entityName: "CkmLetterLink", entityId: id, letterNo: cur.LetterNo, linkType, targetId });
+    ok(req, res, row, 201);
+  }));
+
+  app.delete(`${base}/letters/:no/links/:linkId`, need("ckm.letter.draft"), route(async (req, res, r, pid) => {
+    const link = await r.findOne("CkmLetterLink", [{ column: "Id", op: "eq", value: String(req.params.linkId) }]);
+    if(!link) throw notFound(`پیوند ${req.params.linkId} یافت نشد`);
+    if(link.ProjectId!==pid || link.LetterNo!==String(req.params.no)) throw bad("E-CKM-PROJECT-MISMATCH", "ناهمخوانی پروژه/نامه");
+    await r.remove("CkmLetterLink", link.Id);
+    ok(req, res, { deleted: link.Id });
+  }));
+
     app.delete(`${base}/rules/:code`, need("ckm.notify.manage"), route(async (req, res, r, pid) => {
     const cur = await must(r, "NotificationRule", pid, "Code", req.params.code, "قاعدهٔ");
     await r.remove("NotificationRule", cur.Id);

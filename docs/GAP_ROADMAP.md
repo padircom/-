@@ -64,7 +64,7 @@
 - **آزمون‌ها: ۴۲۵۲/۴۲۵۲** (۱۹ آزمون جدید: ۸ واحد و ۱۱ REST، شامل راه‌اندازی مجدد، تفکیک وظیفه، جداسازی پروژه، نسخهٔ هم‌زمان و عدم تغییر مبنا). `npx tsc --noEmit` بدون خطا؛ `npm run build` موفق. آزمون دستی مرورگر و SQL Server انجام نشده است.
 - سرور جدید آزمون فقط با `PERSIST_DRIVER=json DATA_DIR=./server/rundata` اجرا شد؛ پاک‌سازی فقط رکوردهای دارای پیشوند یکتای آزمون است، نه پوشهٔ داده. harnessهای قدیمی همچنان JSON موقت و ایزولهٔ خودشان را دارند.
 - مرز استقرار: همان آداپتور هویت SEC-1؛ JSON برای یک فرایند API است، نه چند replica. تراکنش اتمیِ تغییر رکورد + ممیزی و قفل توزیع‌شده برای استقرار چندفرایندی در این مرحله اضافه نشده‌اند.
-- پیشرفت: **44/85 = 52٪**؛ **P1: 16/16 = 100٪، P2: 3/3 = 100٪، P3: 9/9 = 100٪، P4: 4/8 = 50٪**. مرحلهٔ بعد **P4 / PAT-5** امضای الکترونیکی.
+- پیشرفت: **48/85 = 56٪**؛ **P1: 16/16 = 100٪، P2: 3/3 = 100٪، P3: 9/9 = 100٪، P4: 8/8 = 100٪**. **P4 کامل شد — مرحلهٔ بعد P5 SCM**.
 
 
 ### LIVE-4 — گزارش مرحله (۲۰۲۶-۰۹-۲۷)
@@ -166,10 +166,10 @@
 | ✅ PAT-2 | CKM | مدیریت ارجاعات (دستور، مهلت، سابقه) — جدول CkmReferral، ۳ مسیر referrals/refer/done، HistoryJson، inbox ارجاع، UI ارجاع در تب کارتابل | M |
 | ✅ PAT-3 | CKM | تولید نامه با قالب و سربرگ (Word/PDF) — مسیر /letters/generate با templateId از DocumentTemplate، auto header/footer via template ContentJson، UI تولید خودکار در تب مکاتبات | M |
 | ✅ PAT-4 | CKM | شماره‌گذاری خودکار نامه — جدول CkmLetterSequence، Prefix پروژه-نوع (GN/IN/NT/CL/SB/RFI/NC)، autoLetterNo در create و generate، شماره c1-p1-GN-0001 | S |
-| ⬜ PAT-5 | CKM | امضای الکترونیکی نامه | M |
-| ⬜ PAT-6 | CKM | اتصال نامه به Tag فنی | S |
-| ⬜ PAT-7 | CKM | پیوند نامه به مدرک EDMS و بستهٔ خرید | S |
-| ⬜ PAT-8 | CKM | رشتهٔ مکاتبه: پیرو، عطف، پاسخ | S |
+| ✅ PAT-5 | CKM | امضای الکترونیکی نامه — جدول CkmSignature، ۲ مسیر signatures/sign با hash SHA256، تفکیک وظیفه DraftedBy≠SignedBy، UI امضا در تب مکاتبات | M |
+| ✅ PAT-6 | CKM | اتصال نامه به Tag فنی — via CkmLetterLink LinkType=tag، مسیر links CRUD، UI پیوند | S |
+| ✅ PAT-7 | CKM | پیوند نامه به مدرک EDMS و بستهٔ خرید — LinkType edms/proc_package، اعتبارسنجی وجود مدرک، UI پیوند | S |
+| ✅ PAT-8 | CKM | رشتهٔ مکاتبه: پیرو، عطف، پاسخ — فیلد RefLetterNo، نمایش thread پیرو→موضوع، UI رشته در تب مکاتبات | S |
 
 ## P5 — خرید و تدارکات — SCM/PPMS (d5)
 پیش‌نیاز: LIVE-1

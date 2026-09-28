@@ -3111,6 +3111,49 @@ export const SCHEMA: TableDef[] = [
     ],
   },
 
+        /* ══════════════ MOD-22 · PAT-5/6/7/8 امضا و پیوندهای نامه (d11) ══════════════ */
+  {
+    name: "CkmSignature",
+    module: "d11",
+    title: { fa: "امضای الکترونیکی نامه", en: "Letter e-signature" },
+    pk: "Id",
+    columns: [
+      id(),
+      req("ProjectId", "text", { len: 60 }),
+      req("LetterNo", "text", { len: 80 }),
+      req("SignedBy", "text", { len: 60 }),
+      req("SignedAt", "datetime"),
+      c("SignatureHash", "text", { len: 200, comment: "SHA256 of content+user+time" }),
+      c("Method", "text", { len: 30, comment: "simple|otp|cert" }),
+      c("NoteFa", "text", { len: 500 }),
+    ],
+    indexes: [
+      { name: "UX_CkmSig_Id", columns: ["Id"], unique: true },
+      { name: "IX_CkmSig_Letter", columns: ["ProjectId", "LetterNo"] },
+    ],
+  },
+  {
+    name: "CkmLetterLink",
+    module: "d11",
+    title: { fa: "پیوند نامه به مدرک/Tag/بسته خرید", en: "Letter link to doc/tag/package" },
+    pk: "Id",
+    columns: [
+      id(),
+      req("ProjectId", "text", { len: 60 }),
+      req("LetterNo", "text", { len: 80 }),
+      req("LinkType", "text", { len: 20, comment: "edms|tag|proc_package|letter" }),
+      req("TargetId", "text", { len: 80 }),
+      c("NoteFa", "text", { len: 500 }),
+      req("CreatedBy", "text", { len: 60 }),
+      req("CreatedAt", "datetime"),
+    ],
+    indexes: [
+      { name: "UX_CkmLink_Id", columns: ["Id"], unique: true },
+      { name: "IX_CkmLink_Letter", columns: ["ProjectId", "LetterNo"] },
+      { name: "IX_CkmLink_TypeTarget", columns: ["ProjectId", "LinkType", "TargetId"] },
+    ],
+  },
+
     /* ══════════════ d16 — بهداشت، ایمنی و محیط زیست (HSE) ══════════════
    * پروانهٔ کار پیش‌نیاز دروازهٔ RFSU در ماژول راه‌اندازی است؛ تا پیش از
    * این جداول، آن پیش‌نیاز فقط رشتهٔ آزاد بود و قابل کنترل نبود. */

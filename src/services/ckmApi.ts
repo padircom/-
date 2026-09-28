@@ -63,6 +63,11 @@ export class CkmClient {
   };
   referLetter = (no: string, body: unknown) => this.req("POST", `/letters/${e(no)}/refer`, body);
   generateLetter = (body: unknown) => this.req("POST", "/letters/generate", body);
+  signatures = (no: string) => this.req<{ count: number; items: any[] }>("GET", `/letters/${e(no)}/signatures`);
+  signLetter = (no: string, body: unknown = {}) => this.req("POST", `/letters/${e(no)}/sign`, body);
+  letterLinks = (no: string) => this.req<{ count: number; items: any[] }>("GET", `/letters/${e(no)}/links`);
+  createLetterLink = (no: string, body: unknown) => this.req("POST", `/letters/${e(no)}/links`, body);
+  deleteLetterLink = (no: string, linkId: string) => this.req("DELETE", `/letters/${e(no)}/links/${e(linkId)}`);
   letterTemplates = () => this.req<{ count: number; items: any[] }>("GET", "/../edms/c1-p1/templates?templateType=letter", {} as any);
   doneReferral = (id: string, body: unknown = {}) => this.req("POST", `/referrals/${e(id)}/done`, body);
 

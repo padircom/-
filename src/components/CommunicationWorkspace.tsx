@@ -355,6 +355,10 @@ function Tabs({ rtl, me, tab, ws, v, perm, busy, client, act, fmt }: {
   const [inboxData, setInboxData] = useState<{ count: number; summary: { unread: number; overdue: number; total: number }; items: any[] } | null>(null);
   const [referralData, setReferralData] = useState<{ count: number; items: any[] } | null>(null);
   const [referForm, setReferForm] = useState<{ letterNo: string; toUserId: string; instructionFa: string; deadline: string }>({ letterNo: "", toUserId: "", instructionFa: "", deadline: "" });
+  const [selectedLetterNo, setSelectedLetterNo] = useState<string>("");
+  const [sigData, setSigData] = useState<{ count: number; items: any[] } | null>(null);
+  const [linkData, setLinkData] = useState<{ count: number; items: any[] } | null>(null);
+  const [linkForm, setLinkForm] = useState<{ letterNo: string; linkType: string; targetId: string; noteFa: string }>({ letterNo: "", linkType: "edms", targetId: "", noteFa: "" });
   useEffect(() => {
     if (!ws.meetings.some((m) => m.Code === selectedMeeting)) setSelectedMeeting(ws.meetings[0]?.Code ?? "");
   }, [ws.meetings, selectedMeeting]);
@@ -378,11 +382,23 @@ function Tabs({ rtl, me, tab, ws, v, perm, busy, client, act, fmt }: {
     const r = await client.inbox({});
     if (r.ok) setInboxData(r.data as any);
   };
+  const loadSigs = async (no: string) => {
+    if(!no) { setSigData(null); return; }
+    const r = await client.signatures(no);
+    if(r.ok) setSigData(r.data as any);
+  };
+  const loadLinks = async (no: string) => {
+    if(!no) { setLinkData(null); return; }
+    const r = await client.letterLinks(no);
+    if(r.ok) setLinkData(r.data as any);
+  };
+
   const loadReferrals = async () => {
     const r = await client.referrals({});
     if (r.ok) setReferralData(r.data as any);
   };
   useEffect(() => { void loadInbox(); void loadReferrals(); }, [ws]);
+  useEffect(() => { if(selectedLetterNo) { void loadSigs(selectedLetterNo); void loadLinks(selectedLetterNo); } }, [selectedLetterNo]);
   const selected = v.meetingRows.find((m) => m.row.Code === selectedMeeting) ?? null;
   const meetingActions = v.actionRows.filter((a) => a.row.MeetingCode === selectedMeeting);
   const maxCat = Math.max(...v.coverageByCat.map((c) => c.count), 1);
@@ -652,6 +668,65 @@ function Tabs({ rtl, me, tab, ws, v, perm, busy, client, act, fmt }: {
               </div>
             </Section>
           )}
+
+          <Section title={rtl ? "امضای الکترونیکی و پیوندها — PAT-5/6/7/8" : "E-signature & links — PAT-5/6/7/8"} note={rtl ? "امضا با hash SHA256، پیوند به EDMS/Tag/بسته خرید/نامه، رشته پیرو/عطف/پاسخ" : "signature with SHA256 hash, links to EDMS/Tag/package/letter, thread follow-up/ref/response"}>
+            <div className="flex flex-wrap items-end gap-1.5 rounded-xl border b-line-soft bg-black/10 p-2 mb-2">
+              <span className="w-full text-[9px] tx3">{rtl ? "انتخاب نامه برای دیدن امضا و پیوندها — کلیک روی شماره در جدول بالا" : "Select letter to view signatures & links — click number in table above"}</span>
+              <select className={inputCls+" w-40"} value={selectedLetterNo} onChange={e=>setSelectedLetterNo(e.target.value)} dir="ltr">
+                <option value="">{rtl ? "انتخاب نامه" : "select letter"}</option>
+                {ws.letters.map((l:any)=><option key={l.LetterNo} value={l.LetterNo}>{l.LetterNo} — {l.SubjectFa.slice(0,30)}</option>)}
+              </select>
+              <button disabled={busy || !selectedLetterNo} className={btnPrimary} onClick={()=>{ void loadSigs(selectedLetterNo); void loadLinks(selectedLetterNo); }}>{rtl ? "بارگذاری" : "Load"}</button>
+              {selectedLetterNo && perm.sign && <button disabled={busy} className={btnOk} onClick={()=>void act(()=>client.signLetter(selectedLetterNo, { method:"simple", noteFa:"امضای الکترونیکی" }), rtl ? "امضا ثبت شد" : "Signed")}>{rtl ? "امضای الکترونیکی" : "E-sign"}</button>}
+            </div>
+
+            {selectedLetterNo && (
+              <div className="grid gap-2 md:grid-cols-2">
+                <div>
+                  <div className="text-[9px] tx2 mb-1">{rtl ? "امضاها" : "Signatures"} ({sigData?.count ?? 0})</div>
+                  <div className="thin-scroll max-h-[200px] overflow-auto">
+                    <table className="w-full text-[9px]"><thead className="tx3"><tr className="border-b b-line-soft"><Th>{rtl ? "امضاکننده" : "Signer"}</Th><Th>{rtl ? "زمان" : "Time"}</Th><Th>Hash</Th><Th>{rtl ? "روش" : "Method"}</Th></tr></thead>
+                    <tbody>{(sigData?.items ?? []).map((sg:any)=><tr key={sg.Id} className="border-b b-line-soft/50"><td className="px-2 py-1 tx2" dir="ltr">{sg.SignedBy}</td><td className="px-2 py-1 font-mono tx3" dir="ltr">{sg.SignedAt.slice(0,16)}</td><td className="px-2 py-1 font-mono text-[7px] tx4" dir="ltr">{sg.SignatureHash.slice(0,16)}…</td><td className="px-2 py-1 tx3">{sg.Method}</td></tr>)}</tbody></table>
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[9px] tx2 mb-1">{rtl ? "پیوندها به EDMS/Tag/بسته/نامه" : "Links to EDMS/Tag/Package/Letter"} ({linkData?.count ?? 0})</div>
+                  <div className="thin-scroll max-h-[200px] overflow-auto mb-2">
+                    <table className="w-full text-[9px]"><thead className="tx3"><tr className="border-b b-line-soft"><Th>{rtl ? "نوع" : "Type"}</Th><Th>{rtl ? "هدف" : "Target"}</Th><Th>{rtl ? "یادداشت" : "Note"}</Th><Th /></tr></thead>
+                    <tbody>{(linkData?.items ?? []).map((lk:any)=><tr key={lk.Id} className="border-b b-line-soft/50"><td className="px-2 py-1 tx2">{lk.LinkType}</td><td className="px-2 py-1 font-mono tx3" dir="ltr">{lk.TargetId}</td><td className="px-2 py-1 tx3">{lk.NoteFa ?? "—"}</td><td className="px-2 py-1"><button disabled={busy} className="text-[9px] text-rose-300" onClick={()=>void act(()=>client.deleteLetterLink(selectedLetterNo, lk.Id), rtl ? "پیوند حذف شد" : "Link deleted")}>✕</button></td></tr>)}</tbody></table>
+                  </div>
+                  <div className="flex flex-wrap items-end gap-1.5 rounded-xl border b-line-soft bg-black/10 p-2">
+                    <select className={inputCls} value={linkForm.linkType} onChange={e=>setLinkForm({...linkForm, linkType:e.target.value})}>
+                      <option value="edms">edms</option><option value="tag">tag</option><option value="proc_package">proc_package</option><option value="letter">letter</option>
+                    </select>
+                    <input className={inputCls+" w-32"} placeholder={rtl ? "شناسه هدف" : "targetId"} value={linkForm.targetId} onChange={e=>setLinkForm({...linkForm, targetId:e.target.value})} dir="ltr" />
+                    <input className={inputCls+" w-32"} placeholder={rtl ? "یادداشت" : "note"} value={linkForm.noteFa} onChange={e=>setLinkForm({...linkForm, noteFa:e.target.value})} />
+                    <button disabled={busy || !selectedLetterNo || !linkForm.targetId} className={btnPrimary} onClick={async ()=>{
+                      if(await act(()=>client.createLetterLink(selectedLetterNo, { linkType: linkForm.linkType, targetId: linkForm.targetId, noteFa: linkForm.noteFa || undefined }), rtl ? "پیوند ثبت شد" : "Link created")){
+                        setLinkForm({ letterNo:"", linkType:"edms", targetId:"", noteFa:"" });
+                      }
+                    }}>{rtl ? "پیوند" : "Link"}</button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* رشته مکاتبه */}
+            <div className="mt-2">
+              <div className="text-[9px] tx2 mb-1">{rtl ? "رشته مکاتبه — پیرو، عطف، پاسخ (PAT-8)" : "Correspondence thread — follow-up, ref, response (PAT-8)"}</div>
+              <div className="thin-scroll max-h-[200px] overflow-auto">
+                <table className="w-full text-[9px]">
+                  <thead className="tx3"><tr className="border-b b-line-soft"><Th>{rtl ? "نامه" : "Letter"}</Th><Th>{rtl ? "پیرو/عطف" : "Ref"}</Th><Th>{rtl ? "موضوع" : "Subject"}</Th><Th>{rtl ? "وضعیت" : "Status"}</Th></tr></thead>
+                  <tbody>
+                    {ws.letters.filter((l:any)=> l.RefLetterNo).map((l:any)=>{
+                      const ref = ws.letters.find((x:any)=> x.LetterNo===l.RefLetterNo);
+                      return <tr key={l.LetterNo} className="border-b b-line-soft/50"><td className="px-2 py-1 font-mono tx2" dir="ltr">{l.LetterNo}</td><td className="px-2 py-1 font-mono tx3" dir="ltr">{l.RefLetterNo} {ref ? `→ ${ref.SubjectFa.slice(0,20)}` : ""}</td><td className="px-2 py-1 max-w-[200px] truncate tx1" title={l.SubjectFa}>{l.SubjectFa}</td><td className="px-2 py-1 tx3">{l.Status}</td></tr>;
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </Section>
 
           <Section title={rtl ? "مهلت پیش‌فرض پاسخ بر حسب نوع نامه" : "Default response window by letter class"} note={rtl ? "روز کاری · موارد نشان‌دار مهلت قراردادی الزام‌آور دارند · قابل تغییر برای هر نامه" : "working days · flagged classes are time-barred"}>
             <div className="grid grid-cols-2 gap-2 md:grid-cols-4 lg:grid-cols-7">
