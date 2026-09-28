@@ -369,6 +369,7 @@ function Tabs({ rtl, me, tab, ws, v, perm, busy, client, act, fmt }: {
   const stF = useForm({ Code: "", NameFa: "", Org: "", RoleFa: "", Power: "3", Interest: "3", CurrentLevel: "neutral", DesiredLevel: "supportive", Channels: "", Frequency: "monthly", OwnerRole: "" });
   const lessonF = useForm({ Code: "", TitleFa: "", Category: "technical", Impact: "medium", SourceRef: "", SituationFa: "", RecommendationFa: "", Tags: "" });
   const [reusing, setReusing] = useState<{ code: string; note: string } | null>(null);
+  const genLetterF = useForm({ TemplateId: "", Kind: "general", Direction: "outgoing", SubjectFa: "", FromParty: "", ToParty: "", OwnerRole: "", ResponseDays: "", RefLetterNo: "" });
   const ruleF = useForm({ Code: "", EventCode: "notice_due", NameFa: "", Channels: "in_app,email", AudienceRoles: "", EscalateAfterHours: "24", EscalateToRole: "" });
 
   const filteredLetters = classFilter === "all" ? v.letterRows : v.letterRows.filter((r) => r.l.letterClass === classFilter);
@@ -609,7 +610,7 @@ function Tabs({ rtl, me, tab, ws, v, perm, busy, client, act, fmt }: {
                 <input className={`${inputCls} w-24`} placeholder={rtl ? "مالک پاسخ" : "owner"} value={letterF.v.OwnerRole} onChange={letterF.set("OwnerRole")} />
                 <input className={`${inputCls} w-20`} type="number" min={1} placeholder={`${rtl ? "مهلت" : "days"} ${DEFAULT_RESPONSE_DAYS[letterF.v.Kind as Letter["letterClass"]] ?? ""}`} value={letterF.v.ResponseDays} onChange={letterF.set("ResponseDays")} dir="ltr" />
                 <input className={`${inputCls} w-28`} placeholder={rtl ? "پیرو/عطف" : "ref letter"} value={letterF.v.RefLetterNo} onChange={letterF.set("RefLetterNo")} dir="ltr" />
-                <button disabled={busy || !letterF.v.LetterNo || !letterF.v.SubjectFa} className={btnPrimary}
+                <button disabled={busy || !letterF.v.SubjectFa} className={btnPrimary}
                   onClick={async () => {
                     const f = letterF.v;
                     const body = {
@@ -623,6 +624,34 @@ function Tabs({ rtl, me, tab, ws, v, perm, busy, client, act, fmt }: {
               </div>
             )}
           </Section>
+
+          {perm.draft && (
+            <Section title={rtl ? "تولید نامه از قالب + شماره‌گذاری خودکار" : "Generate letter from template + auto numbering"} note={rtl ? "PAT-3/4 — شماره خودکار بر اساس Prefix پروژه-نوع، قالب از DocumentTemplate نوع letter" : "PAT-3/4 — auto number by prefix project-type, template from DocumentTemplate letter"}>
+              <div className="flex flex-wrap items-end gap-1.5 rounded-xl border b-line-soft bg-black/10 p-2">
+                <span className="w-full text-[9px] tx3">{rtl ? "اگر شماره خالی باشد، سرور خودکار c1-p1-GN-0001 می‌سازد — قالب اختیاری" : "If letter no empty, server auto-generates c1-p1-GN-0001 — template optional"}</span>
+                <select className={inputCls} value={genLetterF.v.Kind} onChange={genLetterF.set("Kind")}>
+                  {LETTER_CLASSES.map((c:any)=><option key={c} value={c}>{L(CLASS_LABEL[c])}</option>)}
+                </select>
+                <select className={inputCls} value={genLetterF.v.Direction} onChange={genLetterF.set("Direction")}>
+                  <option value="incoming">{rtl ? "وارده" : "incoming"}</option>
+                  <option value="outgoing">{rtl ? "صادره" : "outgoing"}</option>
+                </select>
+                <input className={inputCls+" w-56"} placeholder={rtl ? "موضوع" : "subject"} value={genLetterF.v.SubjectFa} onChange={genLetterF.set("SubjectFa")} />
+                <input className={inputCls+" w-24"} placeholder={rtl ? "فرستنده" : "from"} value={genLetterF.v.FromParty} onChange={genLetterF.set("FromParty")} />
+                <input className={inputCls+" w-24"} placeholder={rtl ? "گیرنده" : "to"} value={genLetterF.v.ToParty} onChange={genLetterF.set("ToParty")} />
+                <input className={inputCls+" w-24"} placeholder={rtl ? "مالک پاسخ" : "owner"} value={genLetterF.v.OwnerRole} onChange={genLetterF.set("OwnerRole")} />
+                <input className={inputCls+" w-28"} placeholder={rtl ? "قالب ID (اختیاری)" : "templateId opt"} value={genLetterF.v.TemplateId} onChange={genLetterF.set("TemplateId")} dir="ltr" />
+                <input className={inputCls+" w-20"} type="number" min={1} placeholder={rtl ? "مهلت" : "days"} value={genLetterF.v.ResponseDays} onChange={genLetterF.set("ResponseDays")} dir="ltr" />
+                <input className={inputCls+" w-28"} placeholder={rtl ? "پیرو/عطف" : "ref letter"} value={genLetterF.v.RefLetterNo} onChange={genLetterF.set("RefLetterNo")} dir="ltr" />
+                <button disabled={busy || !genLetterF.v.SubjectFa || !genLetterF.v.FromParty || !genLetterF.v.ToParty} className={btnPrimary}
+                  onClick={async ()=>{
+                    const f=genLetterF.v;
+                    const body={ Kind:f.Kind, Direction:f.Direction, SubjectFa:f.SubjectFa, FromParty:f.FromParty, ToParty:f.ToParty, OwnerRole:f.OwnerRole||undefined, ResponseDays: num(f.ResponseDays), RefLetterNo: f.RefLetterNo||undefined, templateId: f.TemplateId||undefined };
+                    if(await act(()=>client.generateLetter(body), rtl ? "نامه از قالب تولید شد" : "Letter generated from template", "CKM_LETTER_GENERATED")) genLetterF.reset();
+                  }}>{rtl ? "تولید خودکار" : "Generate auto"}</button>
+              </div>
+            </Section>
+          )}
 
           <Section title={rtl ? "مهلت پیش‌فرض پاسخ بر حسب نوع نامه" : "Default response window by letter class"} note={rtl ? "روز کاری · موارد نشان‌دار مهلت قراردادی الزام‌آور دارند · قابل تغییر برای هر نامه" : "working days · flagged classes are time-barred"}>
             <div className="grid grid-cols-2 gap-2 md:grid-cols-4 lg:grid-cols-7">

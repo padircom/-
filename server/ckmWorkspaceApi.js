@@ -222,7 +222,31 @@ export function registerCkmWorkspaceRoutes(app, { repo, subjects, evaluate }) {
   /** ستون‌های مشتق نامه (مهلت و پرچم Time-Bar) همیشه سمت سرور. */
   const letterDerived = (row) => ({ DueAt: letterDueDate(row, todayIso()), TimeBarred: isTimeBarred(row.Kind) });
 
-  const base = "/api/ckm/:projectId";
+  async function autoLetterNo(r, pid, kind, direction){
+    const prefixMap = {
+      general: "GN",
+      instruction: "IN",
+      notice: "NT",
+      claim_notice: "CL",
+      submittal: "SB",
+      rfi: "RFI",
+      ncr_related: "NC",
+    };
+    const code = prefixMap[kind] || "GN";
+    const prefix = `${pid}-${code}`;
+    let seq = await r.findOne("CkmLetterSequence", [{ column: "ProjectId", op: "eq", value: pid }, { column: "Prefix", op: "eq", value: prefix }]);
+    let nextNum = 1;
+    if(seq){
+      nextNum = (Number(seq.LastNumber)||0) + 1;
+      await r.patch("CkmLetterSequence", seq.Id, { LastNumber: nextNum, UpdatedAt: new Date().toISOString() }, "system");
+    } else {
+      const id = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      await r.create("CkmLetterSequence", { Id: id, ProjectId: pid, Prefix: prefix, LastNumber: nextNum, UpdatedAt: new Date().toISOString() }, "system", "seq");
+    }
+    return `${prefix}-${String(nextNum).padStart(4,"0")}`;
+  }
+
+    const base = "/api/ckm/:projectId";
 
   /* ═══════════ خواندن ═══════════ */
 
@@ -261,14 +285,64 @@ export function registerCkmWorkspaceRoutes(app, { repo, subjects, evaluate }) {
 
   /* ═══════════ مکاتبات ═══════════ */
 
-  app.post(`${base}/letters`, need("ckm.letter.draft"), route(async (req, res, r, pid) => {
+  /* PAT-3/4: تولید نامه از قالب + شماره‌گذاری خودکار */
+  app.post(`${base}/letters/generate`, need("ckm.letter.draft"), route(async (req, res, r, pid) => {
+    const b = req.body ?? {};
+    const templateId = b.templateId ? String(b.templateId) : null;
+    const kind = b.Kind ? oneOf(b.Kind, "نوع نامه", LETTER_CLASSES) : "general";
+    const direction = b.Direction ? oneOf(b.Direction, "جهت", ["incoming","outgoing"]) : "outgoing";
+    const subjectFa = text(b.SubjectFa, "موضوع", { max: 500, required: true });
+    const fromParty = text(b.FromParty, "فرستنده", { max: 200, required: true });
+    const toParty = text(b.ToParty, "گیرنده", { max: 200, required: true });
+    const today = todayIso();
+    let content = null;
+    let templateName = null;
+    if(templateId){
+      const tpl = await r.findOne("DocumentTemplate", [{ column: "Id", op: "eq", value: templateId }]);
+      if(!tpl) throw notFound(`قالب ${templateId} یافت نشد`);
+      templateName = tpl.NameFa;
+      try { content = tpl.ContentJson ? JSON.parse(tpl.ContentJson) : null; } catch { content = tpl.ContentJson; }
+    }
+    const letterNo = await autoLetterNo(r, pid, kind, direction);
+    const row = {
+      LetterNo: letterNo,
+      Direction: direction,
+      Kind: kind,
+      SubjectFa: subjectFa,
+      FromParty: fromParty,
+      ToParty: toParty,
+      IssuedAt: date(b.IssuedAt, "تاریخ نامه") ?? today,
+      ReceivedAt: direction==="incoming" ? (date(b.ReceivedAt, "تاریخ ثبت") ?? today) : null,
+      ResponseDays: int(b.ResponseDays, "مهلت", { min: 1, max: 365 }),
+      Links: list(b.Links, "ارجاع"),
+      OwnerRole: text(b.OwnerRole, "مالک", { max: 80 }),
+      Attachments: int(b.Attachments, "پیوست", { min: 0, max: 999 }),
+      RefLetterNo: text(b.RefLetterNo, "پیرو/عطف", { max: 80 }),
+      DraftedBy: actor(req),
+      Status: direction==="incoming" ? "registered" : "draft",
+    };
+    const issues = validateLetter(toLetter(row));
+    assertEngine(direction==="incoming" ? issues : issues.filter(i=> i.code!=="E-CKM-103"));
+    const created = await r.create("Correspondence", { ProjectId: pid, ...row, ...{ DueAt: letterDueDate(row, today), TimeBarred: isTimeBarred(row.Kind) } }, actor(req), "cor");
+    await audit(r, req, "CKM_LETTER_GENERATED", { entityName: "Correspondence", entityId: letterNo, templateId, templateName, kind });
+    ok(req, res, { ...created, _generatedFromTemplate: templateId, _templateName: templateName, _content: content }, 201);
+  }));
+
+    app.post(`${base}/letters`, need("ckm.letter.draft"), route(async (req, res, r, pid) => {
     const b = req.body ?? {};
     const today = todayIso();
     const Direction = oneOf(b.Direction, "جهت", ["incoming", "outgoing"]);
+    const KindTmp = b.Kind ? oneOf(b.Kind, "نوع نامه", LETTER_CLASSES) : "general";
+    let letterNo;
+    if(b.LetterNo){
+      letterNo = code(b.LetterNo, "شماره نامه");
+    } else {
+      letterNo = await autoLetterNo(r, pid, KindTmp, Direction);
+    }
     const row = {
-      LetterNo: code(b.LetterNo, "شماره نامه"),
+      LetterNo: letterNo,
       Direction,
-      Kind: oneOf(b.Kind, "نوع نامه", LETTER_CLASSES),
+      Kind: KindTmp,
       SubjectFa: text(b.SubjectFa, "موضوع", { max: 500, required: true }),
       FromParty: text(b.FromParty, "فرستنده", { max: 200, required: true }),
       ToParty: text(b.ToParty, "گیرنده", { max: 200, required: true }),

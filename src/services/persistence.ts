@@ -3092,6 +3092,25 @@ export const SCHEMA: TableDef[] = [
     ],
   },
 
+        /* ══════════════ MOD-21 · PAT-3/4 تولید نامه و شماره‌گذاری خودکار (d11) ══════════════ */
+  {
+    name: "CkmLetterSequence",
+    module: "d11",
+    title: { fa: "شماره‌گذاری نامه", en: "Letter numbering sequence" },
+    pk: "Id",
+    columns: [
+      id(),
+      req("ProjectId", "text", { len: 60 }),
+      req("Prefix", "text", { len: 20, comment: "e.g. OG2401-GN" }),
+      req("LastNumber", "int"),
+      req("UpdatedAt", "datetime"),
+    ],
+    indexes: [
+      { name: "UX_CkmSeq_Id", columns: ["Id"], unique: true },
+      { name: "UX_CkmSeq_ProjectPrefix", columns: ["ProjectId", "Prefix"], unique: true },
+    ],
+  },
+
     /* ══════════════ d16 — بهداشت، ایمنی و محیط زیست (HSE) ══════════════
    * پروانهٔ کار پیش‌نیاز دروازهٔ RFSU در ماژول راه‌اندازی است؛ تا پیش از
    * این جداول، آن پیش‌نیاز فقط رشتهٔ آزاد بود و قابل کنترل نبود. */

@@ -62,6 +62,8 @@ export class CkmClient {
     return this.req<{ count: number; items: any[] }>("GET", `/referrals${extra}`);
   };
   referLetter = (no: string, body: unknown) => this.req("POST", `/letters/${e(no)}/refer`, body);
+  generateLetter = (body: unknown) => this.req("POST", "/letters/generate", body);
+  letterTemplates = () => this.req<{ count: number; items: any[] }>("GET", "/../edms/c1-p1/templates?templateType=letter", {} as any);
   doneReferral = (id: string, body: unknown = {}) => this.req("POST", `/referrals/${e(id)}/done`, body);
 
   createRule = (r: unknown) => this.req("POST", "/rules", r);
