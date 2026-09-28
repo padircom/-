@@ -22,9 +22,10 @@ import {
   type Finding,
   type TrailEntry,
 } from "../services/governance";
+import PmoWorkspace from "./PmoWorkspace";
 import { govApi } from "../services/govApiClient";
 
-export type GovTab = "workflow" | "integration" | "stakeholders" | "audit" | "decision";
+export type GovTab = "workflow" | "integration" | "stakeholders" | "audit" | "decision" | "pmo";
 
 type WorkflowRow = {
   id: string;
@@ -114,6 +115,7 @@ const TABS: { id: GovTab; fa: string; en: string; icon: string }[] = [
   { id: "stakeholders", fa: "مدیریت ذی‌نفعان", en: "Stakeholders", icon: "👥" },
   { id: "audit", fa: "ممیزی و انطباق", en: "Audit & Compliance", icon: "📋" },
   { id: "decision", fa: "پشتیبان تصمیم", en: "Decision Support", icon: "🧭" },
+  { id: "pmo", fa: "دفتر پروژه (PMO)", en: "PMO desk", icon: "🏛" },
 ];
 
 const POWER = ["High", "Medium", "Low"] as const;
@@ -531,6 +533,8 @@ export default function GovernanceWorkspace({
             </p>
           </div>
         )}
+        {/* P8 / PMO-1..3 — میز کار دفتر مدیریت پروژه */}
+        {tab === "pmo" && <PmoWorkspace lang={lang} />}
       </div>
     </div>
   );

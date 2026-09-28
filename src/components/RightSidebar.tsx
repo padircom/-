@@ -78,7 +78,7 @@ function loadGroupState(): { open: string | null; supportOpen: boolean } {
 export default function RightSidebar({ lang, quickAction, onQuickAction, onNavigate }: Props) {
   const rtl = lang === "fa";
   const { clusters, projectsByCluster, projectScope } = useSystem();
-  const { can } = useAuth();
+  const { can, user } = useAuth();
   const [openDomain, setOpenDomain] = useState<string | null>(null);
   const [selCluster, setSelCluster] = useState<string>(() => projectScope?.clusterId ?? "");
   const [selProject, setSelProject] = useState<string>(() => projectScope?.projectId ?? "");
@@ -98,13 +98,15 @@ export default function RightSidebar({ lang, quickAction, onQuickAction, onNavig
   useEffect(() => {
     let alive = true;
     const projectId = projectScope?.projectId;
-    if (!projectId) {
+    /* GOV-1: خواندن ساختار فرایند مجوز `gov.process.view` می‌خواهد و بی‌آن،
+       سرور ۴۰۳ می‌دهد. پس فقط دارندهٔ مجوز ویرایش درخواست می‌فرستد. */
+    if (!projectId || !can("gov.process.edit", projectId)) {
       setTaxonomyOverrides({});
       return () => { alive = false; };
     }
     (async () => {
       const entries = await Promise.all(
-        EDITABLE_TAXONOMY_DOMAINS.map(async (domainId) => [domainId, await loadProcessTree(projectId, domainId)] as const),
+        EDITABLE_TAXONOMY_DOMAINS.map(async (domainId) => [domainId, await loadProcessTree(projectId, domainId, user?.id)] as const),
       );
       if (!alive) return;
       const next: Record<string, Process[]> = {};
@@ -112,7 +114,7 @@ export default function RightSidebar({ lang, quickAction, onQuickAction, onNavig
       setTaxonomyOverrides(next);
     })();
     return () => { alive = false; };
-  }, [projectScope?.projectId]);
+  }, [projectScope?.projectId, can, user?.id]);
 
   useEffect(() => {
     const onTaxonomyUpdated = (event: Event) => {

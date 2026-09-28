@@ -5023,7 +5023,197 @@ export const SCHEMA: TableDef[] = [
       { name: "IX_CpmDprAtt_Report", columns: ["ProjectId", "ReportNo"] },
     ],
   },
+
+  /* ══════════════ MOD-31 · PMO دفتر مدیریت پروژه — P8/d6 ══════════════ */
+
+  {
+    /* PMO-1: منشور پروژه به‌صورت رکورد با گردش تأیید. فقط یک منشور «مصوب»
+     * در هر پروژه می‌ماند؛ تصویب منشور تازه، قبلی را «superseded» می‌کند. */
+    name: "PmoCharter",
+    module: "d6",
+    title: { fa: "منشور پروژه", en: "Project charter" },
+    pk: "Id",
+    columns: [
+      id(),
+      req("ProjectId", "text", { len: 60 }),
+      req("CharterNo", "text", { len: 40 }),
+      req("TitleFa", "text", { len: 300 }),
+      req("SponsorFa", "text", { len: 200 }),
+      c("ManagerFa", "text", { len: 200 }),
+      req("ObjectivesJson", "json", { comment: "اهداف منشور" }),
+      req("ScopeInFa", "text", { len: 2000 }),
+      c("ScopeOutFa", "text", { len: 2000 }),
+      req("MilestonesJson", "json", { comment: "نقاط عطف با تاریخ" }),
+      c("BudgetAmount", "decimal", { precision: 18, scale: 2 }),
+      req("Currency", "text", { len: 8, default: "'IRR'" }),
+      req("RisksJson", "json", { comment: "ریسک‌های اولیه" }),
+      c("NoteFa", "text", { len: 1000 }),
+      req("Status", "text", { len: 20, default: "'draft'", comment: "draft|submitted|approved|returned|superseded" }),
+      c("SubmittedAt", "datetime"), c("SubmittedBy", "text", { len: 60 }),
+      c("ApprovedAt", "datetime"), c("ApprovedBy", "text", { len: 60 }),
+      c("ReturnedAt", "datetime"), c("ReturnedBy", "text", { len: 60 }),
+      c("ReturnNoteFa", "text", { len: 500 }),
+      c("SupersededAt", "datetime", { comment: "زمان جایگزینی توسط منشور مصوب تازه" }),
+      c("SupersededBy", "text", { len: 60 }),
+      c("SupersededByCharterNo", "text", { len: 40 }),
+      c("ModelVersion", "text", { len: 40, comment: "pmo-gov-v1" }),
+    ],
+    indexes: [
+      { name: "UX_PmoCharter_No", columns: ["ProjectId", "CharterNo"], unique: true },
+      { name: "IX_PmoCharter_Status", columns: ["ProjectId", "Status"] },
+    ],
+  },
+  {
+    /* PMO-2: فرم‌ساز — تعریف فرم و نسخهٔ منتشرشده. تعریف منتشرشده ویرایش
+     * نمی‌شود؛ برای تغییر، فرم تازه با همان کد ساخته می‌شود. */
+    name: "PmoFormDefinition",
+    module: "d6",
+    title: { fa: "تعریف فرم مصوب", en: "Approved form definition" },
+    pk: "Id",
+    columns: [
+      id(),
+      req("ProjectId", "text", { len: 60 }),
+      req("Code", "text", { len: 40 }),
+      req("TitleFa", "text", { len: 200 }),
+      req("PurposeFa", "text", { len: 1000 }),
+      req("FieldsJson", "json", { comment: "فیلدها با نوع و اعتبارسنجی" }),
+      req("Status", "text", { len: 20, default: "'draft'", comment: "draft|published|retired" }),
+      req("Version", "int", { default: "1" }),
+      c("NoteFa", "text", { len: 500 }),
+      c("PublishedAt", "datetime"), c("PublishedBy", "text", { len: 60 }),
+      c("RetiredAt", "datetime"), c("RetiredBy", "text", { len: 60 }),
+      c("ModelVersion", "text", { len: 40, comment: "pmo-gov-v1" }),
+    ],
+    indexes: [
+      { name: "UX_PmoFormDefinition_Code", columns: ["ProjectId", "Code"], unique: true },
+      { name: "IX_PmoFormDefinition_Status", columns: ["ProjectId", "Status"] },
+    ],
+  },
+  {
+    /* PMO-2: رکورد پرشدهٔ فرم؛ دادهٔ ورودی با تعریف منتشرشدهٔ همان نسخه
+     * اعتبارسنجی و نرمال می‌شود. */
+    name: "PmoFormEntry",
+    module: "d6",
+    title: { fa: "رکورد فرم", en: "Form entry" },
+    pk: "Id",
+    columns: [
+      id(),
+      req("ProjectId", "text", { len: 60 }),
+      req("FormCode", "text", { len: 40 }),
+      req("FormVersion", "int"),
+      req("SubjectFa", "text", { len: 300 }),
+      req("DataJson", "json", { comment: "دادهٔ نرمال‌شدهٔ فرم" }),
+      req("Status", "text", { len: 20, default: "'draft'", comment: "draft|submitted|approved|returned" }),
+      c("NoteFa", "text", { len: 1000 }),
+      c("SubmittedAt", "datetime"), c("SubmittedBy", "text", { len: 60 }),
+      c("ApprovedAt", "datetime"), c("ApprovedBy", "text", { len: 60 }),
+      c("ReturnedAt", "datetime"), c("ReturnedBy", "text", { len: 60 }),
+      c("ReturnNoteFa", "text", { len: 500 }),
+      c("ModelVersion", "text", { len: 40, comment: "pmo-gov-v1" }),
+    ],
+    indexes: [
+      { name: "IX_PmoFormEntry_Form", columns: ["ProjectId", "FormCode", "FormVersion"] },
+      { name: "IX_PmoFormEntry_Status", columns: ["ProjectId", "Status"] },
+    ],
+  },
+  {
+    /* PMO-3: کارت سلامت پروژه — امتیاز اظهارشدهٔ معیارها با شاهد؛ امتیاز کل
+     * و رنگ فقط سمت سرور محاسبه می‌شود. */
+    name: "PmoHealthAssessment",
+    module: "d6",
+    title: { fa: "کارت سلامت پروژه", en: "Project health card" },
+    pk: "Id",
+    columns: [
+      id(),
+      req("ProjectId", "text", { len: 60 }),
+      req("AsOfDate", "date"),
+      c("PeriodNo", "int"),
+      req("CriteriaJson", "json", { comment: "معیارها با وزن، امتیاز و شاهد" }),
+      c("ScoreTotal", "decimal", { precision: 9, scale: 2 }),
+      c("Band", "text", { len: 10, comment: "green|amber|red" }),
+      req("Status", "text", { len: 20, default: "'draft'", comment: "draft|submitted|approved|returned" }),
+      c("NoteFa", "text", { len: 1000 }),
+      c("SubmittedAt", "datetime"), c("SubmittedBy", "text", { len: 60 }),
+      c("ApprovedAt", "datetime"), c("ApprovedBy", "text", { len: 60 }),
+      c("ApprovedNoteFa", "text", { len: 500 }),
+      c("ReturnedAt", "datetime"), c("ReturnedBy", "text", { len: 60 }),
+      c("ReturnNoteFa", "text", { len: 500 }),
+      c("ModelVersion", "text", { len: 40, comment: "pmo-gov-v1" }),
+    ],
+    indexes: [
+      { name: "IX_PmoHealthAssessment_Date", columns: ["ProjectId", "AsOfDate"] },
+      { name: "IX_PmoHealthAssessment_Status", columns: ["ProjectId", "Status"] },
+    ],
+  },
+
+  /* ══════════════ MOD-32 · CNT صورت‌وضعیت قالب‌پذیر — P8/d14 ══════════════ */
+
+  {
+    /* CNT-1: قالب صورت‌وضعیت — ردیف‌ها و کسورات با فرمول صریح و ممیزی‌پذیر. */
+    name: "CntIpcTemplate",
+    module: "d14",
+    title: { fa: "قالب صورت‌وضعیت", en: "IPC template" },
+    pk: "Id",
+    columns: [
+      id(),
+      req("ProjectId", "text", { len: 60 }),
+      req("Code", "text", { len: 40 }),
+      req("TitleFa", "text", { len: 200 }),
+      c("ContractCode", "text", { len: 60 }),
+      req("ItemsJson", "json", { comment: "ردیف‌ها: اندازه‌گیری/مقطوع/درصدی" }),
+      req("DeductionsJson", "json", { comment: "کسورات با مبنا و نرخ" }),
+      req("Status", "text", { len: 20, default: "'draft'", comment: "draft|published|retired" }),
+      /* نسخهٔ قالب: پیش‌نویس ۰، با انتشار ۱ و بالا. سند مصوب نسخهٔ مبنا را
+         نگه می‌دارد تا تغییر قالب، محاسبهٔ قدیمی را کهنه کند. */
+      req("Version", "int", { default: "0", comment: "۰ پیش‌نویس؛ اولین انتشار ۱" }),
+      c("NoteFa", "text", { len: 1000 }),
+      c("PublishedAt", "datetime"), c("PublishedBy", "text", { len: 60 }),
+      c("RetiredAt", "datetime"), c("RetiredBy", "text", { len: 60 }),
+      c("ModelVersion", "text", { len: 40, comment: "cnt-ipc-v1" }),
+    ],
+    indexes: [
+      { name: "UX_CntIpcTemplate_Code", columns: ["ProjectId", "Code"], unique: true },
+      { name: "IX_CntIpcTemplate_Status", columns: ["ProjectId", "Status"] },
+    ],
+  },
+  {
+    /* CNT-1: صورت‌وضعیت دوره — ورودی خام و نتیجهٔ محاسبه‌شدهٔ سرور ذخیره
+     * می‌شود تا سند مصوب همان چیزی باشد که محاسبه شد. */
+    name: "CntIpcCertificate",
+    module: "d14",
+    title: { fa: "صورت‌وضعیت دوره", en: "Interim payment certificate" },
+    pk: "Id",
+    columns: [
+      id(),
+      req("ProjectId", "text", { len: 60 }),
+      req("TemplateCode", "text", { len: 40 }),
+      req("TemplateVersion", "int", { default: "0", comment: "نسخهٔ قالب مبنا در لحظهٔ محاسبه" }),
+      c("ContractCode", "text", { len: 60 }),
+      req("PeriodNo", "int"),
+      req("PeriodFrom", "date"),
+      req("PeriodTo", "date"),
+      req("Currency", "text", { len: 8, default: "'IRR'" }),
+      req("InputsJson", "json", { comment: "ورودی ردیف‌ها" }),
+      c("ComputationJson", "json", { comment: "نتیجهٔ محاسبهٔ سرور" }),
+      c("GrossAmount", "decimal", { precision: 18, scale: 2 }),
+      c("DeductionTotal", "decimal", { precision: 18, scale: 2 }),
+      c("NetAmount", "decimal", { precision: 18, scale: 2 }),
+      req("Status", "text", { len: 20, default: "'draft'", comment: "draft|submitted|approved|returned" }),
+      c("NoteFa", "text", { len: 1000 }),
+      c("SubmittedAt", "datetime"), c("SubmittedBy", "text", { len: 60 }),
+      c("ApprovedAt", "datetime"), c("ApprovedBy", "text", { len: 60 }),
+      c("SignedNoteFa", "text", { len: 500 }),
+      c("ReturnedAt", "datetime"), c("ReturnedBy", "text", { len: 60 }),
+      c("ReturnNoteFa", "text", { len: 500 }),
+      c("ModelVersion", "text", { len: 40, comment: "cnt-ipc-v1" }),
+    ],
+    indexes: [
+      { name: "UX_CntIpcCertificate_Period", columns: ["ProjectId", "TemplateCode", "PeriodNo"], unique: true },
+      { name: "IX_CntIpcCertificate_Status", columns: ["ProjectId", "Status"] },
+    ],
+  },
 ];
+
 
 const TABLE_BY_NAME = new Map(SCHEMA.map((t) => [t.name, t]));
 
@@ -5663,8 +5853,34 @@ export const MIGRATIONS: Migration[] = [
       return [tableDdl(t, "mssql"), ...(t.indexes ?? []).map(i => indexDdl(t, i, "mssql"))];
     }),
   },
-
+  {
+    /* P8/PMO: دفتر مدیریت پروژه — منشور، فرم‌ساز و کارت سلامت. */
+    version: "0041", name: "pmo_governance_live",
+    statements: ["PmoCharter", "PmoFormDefinition", "PmoFormEntry", "PmoHealthAssessment"].flatMap(n => {
+      const t = TABLE_BY_NAME.get(n)!;
+      return [tableDdl(t, "mssql"), ...(t.indexes ?? []).map(i => indexDdl(t, i, "mssql"))];
+    }),
+  },
+  {
+    /* P8/CNT: قالب صورت‌وضعیت و صورت‌وضعیت دوره. */
+    version: "0042", name: "cnt_ipc_live",
+    statements: ["CntIpcTemplate", "CntIpcCertificate"].flatMap(n => {
+      const t = TABLE_BY_NAME.get(n)!;
+      return [tableDdl(t, "mssql"), ...(t.indexes ?? []).map(i => indexDdl(t, i, "mssql"))];
+    }),
+  },
+  {
+    /* P8/CNT-1: نسخه‌بندی قالب و مبنای نسخهٔ سند، تا تغییر قالب سند قدیمی را
+       «کهنه» کند و محاسبهٔ مصوب قابل ردیابی بماند. */
+    version: "0043", name: "cnt_ipc_template_version",
+    statements: [
+      `IF COL_LENGTH('dbo.CntIpcTemplate','Version') IS NULL ALTER TABLE dbo.CntIpcTemplate ADD [Version] INT NOT NULL CONSTRAINT DF_CntIpcTemplate_Version DEFAULT (0);`,
+      `IF COL_LENGTH('dbo.CntIpcCertificate','TemplateVersion') IS NULL ALTER TABLE dbo.CntIpcCertificate ADD [TemplateVersion] INT NOT NULL CONSTRAINT DF_CntIpcCertificate_TemplateVersion DEFAULT (0);`,
+    ],
+  },
 ];
+
+
 
 export function pendingMigrations(applied: AppliedMigration[], all: Migration[] = MIGRATIONS): Migration[] {
   const done = new Set(applied.map((a) => a.version));

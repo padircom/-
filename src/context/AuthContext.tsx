@@ -24,7 +24,9 @@ export type PermissionCode =
   | "risk.edit"
   | "claim.edit"
   | "cost.view"
-  | "ai.run";
+  | "ai.run"
+  /* GOV-1: ویرایش ساختار فرایند مجوز مستقل دارد؛ سرور هم دوباره بررسی می‌کند. */
+  | "gov.process.edit";
 
 export type AuthUser = {
   id: string;
@@ -92,6 +94,7 @@ const ENGINE_TO_UI: Record<string, PermissionCode[]> = {
   "rcc.claim.submit": ["claim.edit"],
   "fin.cost.view": ["cost.view"],
   "cnt.contract.view": ["cost.view"],
+  "gov.process.edit": ["gov.process.edit"],
 };
 
 export const rolePermissions: Record<string, PermissionCode[]> = Object.fromEntries(

@@ -10,6 +10,7 @@ import PlanningWorkspace, { type PexTab } from "./PlanningWorkspace";
 import PmaWorkspace, { type PmaTab } from "./PmaWorkspace";
 import RiskClaimsWorkspace, { type D4Tab } from "./RiskClaimsWorkspace";
 import GovernanceWorkspace, { type GovTab } from "./GovernanceWorkspace";
+import PmoWorkspace from "./PmoWorkspace";
 import HseWorkspace, { type HseTab as HseFieldTab } from "./HseFieldWorkspace";
 import ContractsPanel from "./ContractsPanel";
 import CostSupplyWorkspace, { type FinTab } from "./CostSupplyWorkspace";
@@ -25,8 +26,10 @@ import GeoProjectsPanel from "./GeoProjectsPanel";
 import EfqmPanel from "./EfqmPanel";
 import StrategyWorkspace from "./StrategyWorkspace";
 import TaxonomyEditor from "./TaxonomyEditor";
+import CntIpcPanel from "./CntIpcPanel";
+import { loadProcessTreeFull, type ProcessTreeResult } from "../services/taxonomyApi";
 import SystemBadge from "./SystemBadge";
-import { EDITABLE_TAXONOMY_DOMAINS, loadProcessTree } from "../services/taxonomyApi";
+import { EDITABLE_TAXONOMY_DOMAINS } from "../services/taxonomyApi";
 
 /** Extra submodules only on the d1 inner page — not in the main right sidebar. */
 const D1_PAGE_SUBS: Record<string, { id: string; title: Bi; tab: EdmsTab; sql: string[] }[]> = {
@@ -400,7 +403,7 @@ type Props = {
   onNavigate?: (target: ModuleNavTarget) => void;
 };
 
-export default function ModuleDetail({ lang, target, onBack, onOpenFlowNet, onNavigate }: Props) {
+function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: Props) {
   const rtl = lang === "fa";
   const { clusters, projectsByCluster } = useSystem();
   const { user, can, audit } = useAuth();
@@ -412,19 +415,24 @@ export default function ModuleDetail({ lang, target, onBack, onOpenFlowNet, onNa
   );
   const [taxonomyProcesses, setTaxonomyProcesses] = useState<Process[] | null>(null);
   const [taxonomyEditorOpen, setTaxonomyEditorOpen] = useState(false);
+  const [taxonomyCanEdit, setTaxonomyCanEdit] = useState(false);
 
   useEffect(() => {
     let alive = true;
-    if (!dom || !EDITABLE_TAXONOMY_DOMAINS.includes(dom.id as (typeof EDITABLE_TAXONOMY_DOMAINS)[number]) || !target.projectId) {
-      setTaxonomyProcesses(null);
+    setTaxonomyProcesses(null);
+    /* بدون مجوز کلاینتی درخواست نمی‌فرستیم؛ مرجع نهایی همان پاسخ سرور است. */
+    if (!dom || !EDITABLE_TAXONOMY_DOMAINS.includes(dom.id) || !target.projectId || !can("gov.process.edit", target.projectId)) {
+      setTaxonomyCanEdit(false);
       return () => { alive = false; };
     }
     (async () => {
-      const saved = await loadProcessTree(target.projectId, dom.id);
-      if (alive) setTaxonomyProcesses(saved);
+      const result = await loadProcessTreeFull(target.projectId, dom.id, user?.id);
+      if (!alive || !result) return;
+      setTaxonomyProcesses(result.processes);
+      setTaxonomyCanEdit(result.canEdit === true);
     })();
     return () => { alive = false; };
-  }, [dom?.id, target.projectId]);
+  }, [dom?.id, target.projectId, user?.id, can]);
 
   if (!dom) return null;
 
@@ -448,8 +456,9 @@ export default function ModuleDetail({ lang, target, onBack, onOpenFlowNet, onNa
   }
 
   const activeProcesses = taxonomyProcesses ?? dom.processes;
-  const canEditTaxonomy = EDITABLE_TAXONOMY_DOMAINS.includes(dom.id as (typeof EDITABLE_TAXONOMY_DOMAINS)[number])
-    && (can("system.manage") || can("project.edit", target.projectId));
+  /* GOV-1: ویرایش ساختار فرایند مجوز مستقل خودش را دارد و سرور هم دوباره
+   * بررسی می‌کند؛ کلاینت فقط دکمه را نشان می‌دهد. */
+  const canEditTaxonomy = taxonomyCanEdit;
   const handleTaxonomySaved = (next: Process[]) => {
     setTaxonomyProcesses(next);
     setTaxonomyEditorOpen(false);
@@ -876,7 +885,11 @@ export default function ModuleDetail({ lang, target, onBack, onOpenFlowNet, onNa
     return "workflow";
   })();
 
-  const [d14View, setD14View] = useState<"contract" | "rating">(
+  /* P8: میز کار دفتر پروژه (PMO-1..3) کنار میز حاکمیت d6؛ نوار کنار و
+     حوزه‌های اصلی دست‌نخورده می‌مانند و فقط نمای درون d6 عوض می‌شود. */
+  const [d6View, setD6View] = useState<"gov" | "pmo">("gov");
+
+  const [d14View, setD14View] = useState<"contract" | "ipc" | "rating">(
     target.processId === "d14-p8" ? "rating" : "contract",
   );
 
@@ -1061,6 +1074,7 @@ export default function ModuleDetail({ lang, target, onBack, onOpenFlowNet, onNa
         <div className="flex shrink-0 items-center gap-1.5">
           {([
             ["contract", rtl ? "پیمان و صورت‌وضعیت" : "Contract & IPC"],
+            ["ipc", rtl ? "قالب‌پذیری صورت‌وضعیت" : "Configurable IPC"],
             ["rating", rtl ? "ارزیابی پیمانکاران و تأمین‌کنندگان" : "Contractor & Supplier Rating"],
           ] as const).map(([k, label]) => (
             <button
@@ -1077,7 +1091,13 @@ export default function ModuleDetail({ lang, target, onBack, onOpenFlowNet, onNa
         </div>
         <div className="glass flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl p-3">
           <div className="thin-scroll min-h-0 flex-1 overflow-y-auto">
-            {d14View === "rating" ? <VendorRatingPanel lang={lang} /> : <ContractsPanel lang={lang} />}
+            {d14View === "rating" ? (
+              <VendorRatingPanel lang={lang} />
+            ) : d14View === "ipc" ? (
+              <CntIpcPanel lang={lang} />
+            ) : (
+              <ContractsPanel lang={lang} />
+            )}
           </div>
         </div>
       </div>
@@ -1595,9 +1615,30 @@ export default function ModuleDetail({ lang, target, onBack, onOpenFlowNet, onNa
             </div>
           </div>
         </div>
+        <div className="flex shrink-0 items-center gap-1.5">
+          {([
+            ["gov", rtl ? "حاکمیت و فرآیندها (GOV)" : "Governance (GOV)"],
+            ["pmo", rtl ? "دفتر پروژه (PMO)" : "PMO desk"],
+          ] as const).map(([k, label]) => (
+            <button
+              key={k}
+              type="button"
+              onClick={() => setD6View(k)}
+              className={`rounded-lg px-2.5 py-1 text-[10px] font-light transition ${
+                d6View === k ? "toggle-on tx1" : "tx3 hover:tx2"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
         <div dir="ltr" className="flex min-h-0 flex-1 gap-3 overflow-hidden">
           <div dir={rtl ? "rtl" : "ltr"} className="glass flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl p-3">
-            <GovernanceWorkspace lang={lang} initialTab={d6Tab} hideTabs />
+            {d6View === "pmo" ? (
+              <PmoWorkspace lang={lang} />
+            ) : (
+              <GovernanceWorkspace lang={lang} initialTab={d6Tab} hideTabs />
+            )}
           </div>
           <aside dir={rtl ? "rtl" : "ltr"} className="glass-dark flex w-[300px] shrink-0 flex-col overflow-hidden rounded-2xl">
             <div className="b-line border-b px-3 py-2.5">
@@ -2083,6 +2124,72 @@ export default function ModuleDetail({ lang, target, onBack, onOpenFlowNet, onNa
           </div>
         </aside>
       </div>
+    </div>
+  );
+}
+
+/* ═══════════════ GOV-1 — ویرایش ساختار فرایند برای همهٔ حوزه‌ها ═══════════════
+ * ویرایشگر تا پیش از این فقط داخل d6/d20 بود. این پوسته، دکمهٔ شناور ویرایش را
+ * برای بقیهٔ حوزه‌ها اضافه می‌کند؛ داده از همان API پروژه‌ای می‌آید و مجوز
+ * `gov.process.edit` سمت سرور کنترل می‌شود (بدون مجوز، دکمه نمایش داده نمی‌شود).
+ */
+export default function ModuleDetail(props: Props) {
+  const { lang, target } = props;
+  const rtl = lang === "fa";
+  const dom = domains.find((d) => d.id === target.moduleId);
+  const { user, can, audit } = useAuth();
+  const [open, setOpen] = useState(false);
+  const [tree, setTree] = useState<ProcessTreeResult | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+
+  const legacyEditor = dom?.id === "d6" || dom?.id === "d20";
+  const mayEdit = tree?.canEdit === true;
+
+  /* GOV-1: پاسخ سرور تعیین می‌کند دکمهٔ ویرایش دیده شود یا نه. */
+  useEffect(() => {
+    let alive = true;
+    setTree(null);
+    if (!dom || !EDITABLE_TAXONOMY_DOMAINS.includes(dom.id) || !target.projectId || !can("gov.process.edit", target.projectId)) return () => { alive = false; };
+    (async () => {
+      const result = await loadProcessTreeFull(target.projectId, dom.id, user?.id);
+      if (alive) setTree(result);
+    })();
+    return () => { alive = false; };
+  }, [dom?.id, target.projectId, user?.id, reloadKey, can]);
+
+  const onSaved = (next: Process[]) => {
+    setOpen(false);
+    setReloadKey((k) => k + 1);
+    audit("UPDATE_PROCESS_TREE", { projectId: target.projectId, entity: target.moduleId, entityId: target.moduleId });
+    window.dispatchEvent(new CustomEvent("pmis:taxonomy-updated", { detail: { projectId: target.projectId, domainId: target.moduleId, processes: next } }));
+  };
+
+  return (
+    <div className="relative flex h-full min-h-0 flex-col">
+      <ModuleDetailView key={`${target.moduleId}:${reloadKey}`} {...props} />
+      {mayEdit && !legacyEditor && (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="glass-row absolute bottom-3 end-3 z-20 rounded-lg border b-line-soft px-3 py-1.5 text-[10px] tx2 transition hover:tx1"
+          dir={rtl ? "rtl" : "ltr"}
+        >
+          {rtl ? "🛠 ویرایش ساختار فرایند" : "🛠 Edit process structure"}
+        </button>
+      )}
+      {open && dom && (
+        <TaxonomyEditor
+          lang={lang}
+          domainTitle={dom.title}
+          domainId={dom.id}
+          projectId={target.projectId}
+          processes={tree?.processes ?? dom.processes}
+          defaultProcesses={dom.processes}
+          actor={user?.id}
+          onClose={() => { setOpen(false); setTree(null); }}
+          onSaved={onSaved}
+        />
+      )}
     </div>
   );
 }
