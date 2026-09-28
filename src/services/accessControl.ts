@@ -501,6 +501,16 @@ export const PERMISSION_CATALOG: PermissionDef[] = [
   P("itg.export.run", "core", "ساخت خروجی XER و XML پروژه", "Run XER / Project XML export", "confidential", true),
   P("itg.primavera.push", "core", "ارسال فعالیت‌ها به API پریماورا", "Push activities to Primavera API", "confidential", true),
   P("itg.calendar.sync", "core", "خروجی و همگام‌سازی تقویم Outlook/Exchange", "Outlook/Exchange calendar export & sync", "confidential", true),
+  /* P10/AI-1..4: دستیار هوشمند. پرسش فقط‌خواندنی است، ولی چهار اقتدار جدا
+   * دارد و یکی گرفته نمی‌شوند: پرسیدن (ai.assistant.ask)، دیدن بینش آماده
+   * (ai.insight.view)، خواندن تاریخچهٔ پرسش‌وپاسخ (ai.history.view — می‌تواند
+   * پرسش دیگران را هم نشان دهد) و خروجی گرفتن/ساخت سند (ai.export.run). سرویس
+   * بیرونی هوش مصنوعی هیچ‌کدام از این‌ها را جانشین نمی‌کند؛ «پرسش» و
+   * «پروایدر» دو چیز جدا هستند. */
+  P("ai.assistant.ask", "core", "پرسش از دستیار هوشمند", "Ask the AI assistant", "internal"),
+  P("ai.insight.view", "core", "مشاهدهٔ بینش‌های آمادهٔ پروژه", "View ready project insights", "internal"),
+  P("ai.history.view", "core", "مشاهدهٔ تاریخچهٔ پرسش و پاسخ", "View AI interaction history", "confidential"),
+  P("ai.export.run", "core", "خروجی جدول/سند از پاسخ دستیار", "Export AI answer table/document", "confidential", true),
 ];
 
 export const PERMISSION_CODES: string[] = PERMISSION_CATALOG.map((p) => p.code);
@@ -537,7 +547,11 @@ export const ROLE_CATALOG: RoleDef[] = [
     inherits: [],
     clearance: "internal",
     party: "any",
-    grants: ["core.portfolio.view", "core.project.view", "doc.document.view", "plan.schedule.view", "pex.dashboard.view", "gov.process.view", "report.internal.generate", "eng.mdr.view", "report.custom.view", "report.custom.run"
+    grants: ["core.portfolio.view", "core.project.view", "doc.document.view", "plan.schedule.view", "pex.dashboard.view", "gov.process.view", "report.internal.generate", "eng.mdr.view", "report.custom.view", "report.custom.run",
+      /* P10: پرسیدن و دیدن بینش پایه به همهٔ بینندگان داده می‌شود، چون خودِ
+       * ابزار برای هر منبع داده مجوز پایه را دوباره می‌سنجد و بخش بسته را
+       * «بسته» اعلام می‌کند، نه صفر. تاریخچه و خروجی سند این‌طور نیستند. */
+      "ai.assistant.ask", "ai.insight.view",
     ],
   },
   {
@@ -961,7 +975,8 @@ export const ROLE_CATALOG: RoleDef[] = [
        * گزارش به PMO داده نشد چون تحریر آن (از طریق planner) در همین نقش
        * است و SOD-31 تحریر و انتشار را از هم جدا می‌کند. */
       "itg.connector.view", "itg.export.run", "itg.primavera.push", "itg.calendar.sync",
-    
+      /* P10: تاریخچهٔ پرسش‌وپاسخ و خروجی سند، کار گزارش‌دهی PMO است. */
+      "ai.history.view", "ai.export.run",
     ],
   },
   {
@@ -977,7 +992,7 @@ export const ROLE_CATALOG: RoleDef[] = [
       "pmo.health.approve",
       "cnt.contract.view",
       "cnt.ipc.approve",
-    "report.custom.publish", "itg.connector.view"
+    "report.custom.publish", "itg.connector.view", "ai.history.view", "ai.export.run"
     ],
   },
   {
@@ -1020,7 +1035,10 @@ export const ROLE_CATALOG: RoleDef[] = [
        * ولی تأیید و آزادسازی با کارفرما/QC است. */
       "cpm.workarea.view", "cpm.dpr.view", "cpm.dpr.record",
       "cpm.discipline.view", "cpm.discipline.record",
-      "cpm.inspection.view", "cpm.inspection.request"],
+      "cpm.inspection.view", "cpm.inspection.request",
+      /* P10: دستیار برای پیمانکار جزء فقط همان دادهٔ خودش را می‌بیند؛ بخش‌های
+       * بیرون از مجوزش «بسته» اعلام می‌شود. */
+      "ai.assistant.ask", "ai.insight.view"],
   },
   {
     code: "auditor",
@@ -1028,7 +1046,10 @@ export const ROLE_CATALOG: RoleDef[] = [
     inherits: ["viewer"],
     clearance: "restricted",
     party: "any",
-    grants: ["sys.audit.view", "qms.audit.conduct", "fin.cost.view", "fin.rate.view", "rcc.claim.view", "ckm.letter.view", "hrm.productivity.view", "itg.connector.view"
+    grants: ["sys.audit.view", "qms.audit.conduct", "fin.cost.view", "fin.rate.view", "rcc.claim.view", "ckm.letter.view", "hrm.productivity.view", "itg.connector.view",
+      /* P10: ممیز باید ببیند چه پرسشی از داده پرسیده شده و کدام منبع
+       * خوانده شده؛ ولی خودش خروجی سند نمی‌گیرد. */
+      "ai.history.view"
     ],
   },
   {
@@ -1043,7 +1064,10 @@ export const ROLE_CATALOG: RoleDef[] = [
     // می‌کند؛ بدون آن، مدیر سامانه کلید را وارد می‌کرد ولی خودش اجازهٔ
     // آزمودنش را نداشت و پنل دانش پروژه برایش قفل می‌ماند.
     grants: ["sys.config.manage", "sys.user.manage", "sys.audit.purge", "sys.backup.export", "sys.backup.restore", "report.export.bulk", "core.portfolio.view", "core.project.view", "core.ai.run",
-      "scm.vendor.view", "scm.vendor.manage", "scm.package.view", "scm.package.edit", "scm.bidder.view", "scm.bidder.manage", "scm.mr.view", "scm.mrr.view", "scm.mrr.post"],
+      "scm.vendor.view", "scm.vendor.manage", "scm.package.view", "scm.package.edit", "scm.bidder.view", "scm.bidder.manage", "scm.mr.view", "scm.mrr.view", "scm.mrr.post",
+      /* P10: مدیر سامانه سرویس هوش مصنوعی را پیکربندی و می‌آزماید، ولی
+       * تاریخچهٔ پرسش کسب‌وکار و خروجی سند به او داده نمی‌شود. */
+      "ai.assistant.ask", "ai.insight.view"],
   },
 ];
 

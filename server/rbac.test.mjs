@@ -86,7 +86,11 @@ test("کاتالوگ: نسخه موتور و اندازه‌ها", () => {
   // itg.connector.view/export.run/primavera.push/calendar.sync. Reading is internal;
   // authoring, publishing, exporting and writing to external systems are
   // confidential — SOD-31 keeps template authoring and publishing apart.
-  assert.equal(PERMISSION_CATALOG.length, 234);
+  // P10 AI adds four: ai.assistant.ask, ai.insight.view, ai.history.view, ai.export.run.
+  // Asking and reading ready insights are internal; the interaction history and
+  // producing a document/table export are confidential (history may expose other
+  // people's questions, export leaves the system as a file).
+  assert.equal(PERMISSION_CATALOG.length, 238);
   assert.equal(ROLE_CATALOG.length, 21);
 });
 
