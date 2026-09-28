@@ -9126,6 +9126,94 @@ app.delete("/api/edms/:projectId/effort/:effortId", comRequire("doc.document.upl
   } catch(err){ next(err); }
 });
 
+
+/* ── MOD-19 EDM-9 شفاف‌سازی فنی پیمانکار فرعی ── */
+app.get("/api/edms/:projectId/sub-reviews", comRequire("doc.document.view"), async (req, res, next) => {
+  try {
+    const projectId = String(req.params.projectId || "");
+    const r = await repo();
+    const where=[{ column: "ProjectId", op: "eq", value: projectId }];
+    if(req.query.documentId) where.push({ column: "DocumentId", op: "eq", value: String(req.query.documentId) });
+    if(req.query.status) where.push({ column: "Status", op: "eq", value: String(req.query.status) });
+    const rows = await r.list("DocumentSubReview", { where, limit: 500 });
+    rows.sort((a,b)=> String(b.AskedAt||"").localeCompare(String(a.AskedAt||"")));
+    const open = rows.filter(x=> x.Status==="open").length;
+    res.json(cntOk(req, { count: rows.length, summary: { open, total: rows.length }, items: rows }));
+  } catch(err){ next(err); }
+});
+
+app.get("/api/edms/:projectId/documents/:docId/sub-reviews", comRequire("doc.document.view"), async (req, res, next) => {
+  try {
+    const docId = String(req.params.docId || "");
+    const r = await repo();
+    const rows = await r.list("DocumentSubReview", { where: [{ column: "DocumentId", op: "eq", value: docId }], limit: 500 });
+    rows.sort((a,b)=> String(b.AskedAt||"").localeCompare(String(a.AskedAt||"")));
+    res.json(cntOk(req, { count: rows.length, items: rows }));
+  } catch(err){ next(err); }
+});
+
+app.post("/api/edms/:projectId/documents/:docId/sub-reviews", comRequire("doc.document.upload"), async (req, res, next) => {
+  try {
+    const projectId = String(req.params.projectId || "");
+    const docId = String(req.params.docId || "");
+    const b = req.body || {};
+    if(!b.questionFa) return cntBad(req, res, "E-EDM-SUB-NO-Q", "سوال فنی الزامی است", 400);
+    if(!b.subcontractorParty) return cntBad(req, res, "E-EDM-SUB-NO-PARTY", "طرف پیمانکار فرعی الزامی است", 400);
+    const r = await repo();
+    const doc = await r.findOne("Document", [{ column: "Id", op: "eq", value: docId }]);
+    if(!doc) return cntBad(req, res, "E-EDM-DOC-NOT-FOUND", "مدرک یافت نشد", 404);
+    const userId = req.headers["x-user-id"] || "system";
+    const id = crypto.randomUUID();
+    const row = {
+      Id: id,
+      ProjectId: projectId,
+      DocumentId: docId,
+      DocNo: doc.DocNo,
+      Revision: doc.Revision,
+      SubcontractorParty: String(b.subcontractorParty).slice(0,40),
+      QuestionFa: String(b.questionFa).slice(0,2000),
+      AnswerFa: null,
+      Status: "open",
+      AskedBy: userId,
+      AskedAt: new Date().toISOString(),
+      AnsweredBy: null,
+      AnsweredAt: null,
+      NoteFa: b.noteFa ? String(b.noteFa).slice(0,500) : null,
+    };
+    await r.upsert("DocumentSubReview", { Id: id }, row, userId);
+    await edmsNotify(r, { projectId, documentId: docId, docNo: doc.DocNo, eventType: 'sub_clarification', party: String(b.subcontractorParty), subjectFa: `شفاف‌سازی فنی ${doc.DocNo} از ${b.subcontractorParty}`, bodyFa: String(b.questionFa).slice(0,500), channel: 'email' });
+    res.status(201).json(cntOk(req, { id, item: row }));
+  } catch(err){ next(err); }
+});
+
+app.post("/api/edms/:projectId/sub-reviews/:reviewId/answer", comRequire("doc.document.upload"), async (req, res, next) => {
+  try {
+    const b = req.body || {};
+    if(!b.answerFa) return cntBad(req, res, "E-EDM-SUB-NO-A", "پاسخ الزامی است", 400);
+    const r = await repo();
+    const rev = await r.findOne("DocumentSubReview", [{ column: "Id", op: "eq", value: String(req.params.reviewId) }]);
+    if(!rev) return cntBad(req, res, "E-EDM-SUB-NOT-FOUND", "شفاف‌سازی یافت نشد", 404);
+    if(rev.Status!=="open") return cntBad(req, res, "E-EDM-SUB-NOT-OPEN", "فقط مورد باز قابل پاسخ است", 409);
+    const userId = req.headers["x-user-id"] || "system";
+    const row = { ...rev, AnswerFa: String(b.answerFa).slice(0,2000), AnsweredBy: userId, AnsweredAt: new Date().toISOString(), Status: "answered" };
+    await r.upsert("DocumentSubReview", { Id: rev.Id }, row, userId);
+    res.json(cntOk(req, { item: row }));
+  } catch(err){ next(err); }
+});
+
+app.post("/api/edms/:projectId/sub-reviews/:reviewId/close", comRequire("doc.document.approve"), async (req, res, next) => {
+  try {
+    const r = await repo();
+    const rev = await r.findOne("DocumentSubReview", [{ column: "Id", op: "eq", value: String(req.params.reviewId) }]);
+    if(!rev) return cntBad(req, res, "E-EDM-SUB-NOT-FOUND", "شفاف‌سازی یافت نشد", 404);
+    if(rev.Status!=="answered") return cntBad(req, res, "E-EDM-SUB-NOT-ANSWERED", "ابتدا باید پاسخ داده شود", 409);
+    const userId = req.headers["x-user-id"] || "system";
+    const row = { ...rev, Status: "closed" };
+    await r.upsert("DocumentSubReview", { Id: rev.Id }, row, userId);
+    res.json(cntOk(req, { item: row }));
+  } catch(err){ next(err); }
+});
+
 /* ── ۱۴٫۱ وضعیت ماژول ── */
 app.get("/api/cnt/status", (req, res) => {
   res.json(cntOk(req, {

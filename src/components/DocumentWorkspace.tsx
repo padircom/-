@@ -6,10 +6,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Lang } from '../data/framework';
 import { useAuth } from '../context/AuthContext';
 import { useSystem } from '../context/SystemContext';
-import { EdmsClient, type EdmsDocumentList, type EdmsFileList, type EdmsHoldList, type EdmsDependencyList, type EdmsReadiness, type EdmsCommentList, type EdmsDciList, type EdmsDistributionList, type EdmsTemplateList, type EdmsNotificationList, type EdmsEffortList } from '../services/edmsWorkspace';
+import { EdmsClient, type EdmsDocumentList, type EdmsFileList, type EdmsHoldList, type EdmsDependencyList, type EdmsReadiness, type EdmsCommentList, type EdmsDciList, type EdmsDistributionList, type EdmsTemplateList, type EdmsNotificationList, type EdmsEffortList, type EdmsSubReviewList } from '../services/edmsWorkspace';
 import { createRow, listRows } from '../services/edmsApi';
 
-export type EdmsTab = 'overview' | 'mdr' | 'revision' | 'files' | 'holds' | 'deps' | 'comments' | 'dci' | 'templates' | 'notifications' | 'effort' | 'workflow' | 'excel' | 'numbering' | 'correspondence' | 'transmittal' | 'lessons';
+export type EdmsTab = 'overview' | 'mdr' | 'revision' | 'files' | 'holds' | 'deps' | 'comments' | 'dci' | 'templates' | 'notifications' | 'effort' | 'subreview' | 'workflow' | 'excel' | 'numbering' | 'correspondence' | 'transmittal' | 'lessons';
 
 const TABS: { id: EdmsTab; fa: string; en: string }[] = [
   { id: 'overview', fa: 'نمای کلی', en: 'Overview' },
@@ -23,6 +23,7 @@ const TABS: { id: EdmsTab; fa: string; en: string }[] = [
   { id: 'templates', fa: 'قالب‌ها', en: 'Templates' },
   { id: 'notifications', fa: 'اعلان‌ها', en: 'Notifications' },
   { id: 'effort', fa: 'نفرساعت', en: 'Effort' },
+  { id: 'subreview', fa: 'پیمانکار فرعی', en: 'Sub Review' },
   { id: 'workflow', fa: 'گردش کار', en: 'Workflow' },
   { id: 'excel', fa: 'اکسل', en: 'Excel' },
   { id: 'numbering', fa: 'شماره‌گذاری', en: 'Numbering' },
@@ -103,6 +104,7 @@ function LiveEdms({
   const [tplData, setTplData] = useState<EdmsTemplateList | null>(null);
   const [notifData, setNotifData] = useState<EdmsNotificationList | null>(null);
   const [effortData, setEffortData] = useState<EdmsEffortList | null>(null);
+  const [subData, setSubData] = useState<EdmsSubReviewList | null>(null);
   const [selDocId, setSelDocId] = useState<string>('');
   const [selDocNo, setSelDocNo] = useState<string>('');
   const [loading, setLoading] = useState(false);
@@ -124,6 +126,8 @@ function LiveEdms({
   const [distForm, setDistForm] = useState({ documentId: '', party: 'client', transmittalNo: '', noteFa: '' });
   const [tplForm, setTplForm] = useState({ templateType: 'doc', nameFa: '', code: '', noteFa: '' });
   const [effortForm, setEffortForm] = useState({ documentId: '', workDate: new Date().toISOString().slice(0,10), hours: '4', personName: '', activity: 'design', cost: '', noteFa: '' });
+  const [subForm, setSubForm] = useState({ documentId: '', subcontractorParty: '', questionFa: '', noteFa: '' });
+  const [subAnswerForm, setSubAnswerForm] = useState({ reviewId: '', answerFa: '' });
 
   const loadDocs = useCallback(async () => {
     if (!client) return;
@@ -144,6 +148,7 @@ function LiveEdms({
         setCommentForm(f => ({ ...f, documentId: first.Id }));
         setDistForm(f => ({ ...f, documentId: first.Id }));
         setEffortForm(f => ({ ...f, documentId: first.Id }));
+        setSubForm(f => ({ ...f, documentId: first.Id }));
       }
     } catch (e: any) {
       if (seq !== gen.current) return;
@@ -181,6 +186,17 @@ function LiveEdms({
     if (!client) return;
     const r = await client.dci();
     if (r.ok) setDciData(r.data);
+  }, [client]);
+
+  const loadSub = useCallback(async (docId?: string) => {
+    if (!client) return;
+    if (docId) {
+      const r = await client.docSubReviews(docId);
+      if (r.ok) setSubData(r.data);
+    } else {
+      const r = await client.subReviews({});
+      if (r.ok) setSubData(r.data);
+    }
   }, [client]);
 
   const loadEffort = useCallback(async (docId?: string) => {
@@ -224,8 +240,8 @@ function LiveEdms({
   }, [client]);
 
   useEffect(() => { void loadDocs(); return () => { gen.current++; }; }, [loadDocs]);
-  useEffect(() => { if (selDocId) { void loadFiles(selDocId); void loadReadiness(selDocId); void loadDeps(selDocId); void loadComments(selDocId); void loadDist(selDocId); void loadEffort(selDocId); } }, [selDocId, loadFiles, loadReadiness, loadDeps, loadComments, loadDist, loadEffort]);
-  useEffect(() => { void loadHolds(); void loadDci(); void loadDist(); void loadTpl(); void loadNotif(); void loadEffort(); }, [loadHolds, loadDci, loadDist, loadTpl, loadNotif, loadEffort]);
+  useEffect(() => { if (selDocId) { void loadFiles(selDocId); void loadReadiness(selDocId); void loadDeps(selDocId); void loadComments(selDocId); void loadDist(selDocId); void loadEffort(selDocId); void loadSub(selDocId); } }, [selDocId, loadFiles, loadReadiness, loadDeps, loadComments, loadDist, loadEffort, loadSub]);
+  useEffect(() => { void loadHolds(); void loadDci(); void loadDist(); void loadTpl(); void loadNotif(); void loadEffort(); void loadSub(); }, [loadHolds, loadDci, loadDist, loadTpl, loadNotif, loadEffort, loadSub]);
 
   const filtered = useMemo(() => {
     if (!docsData) return [];
@@ -255,7 +271,7 @@ function LiveEdms({
       await loadDci();
       await loadTpl();
       await loadNotif();
-      if (selDocId) await loadEffort(selDocId); else await loadEffort();
+      if (selDocId) { await loadEffort(selDocId); await loadSub(selDocId); } else { await loadEffort(); await loadSub(); }
       await loadHolds();
       return true;
     }
@@ -771,6 +787,63 @@ function LiveEdms({
                 </tbody>
               </table>
               {!effortData?.items.length && <p className="tx3 text-[11px] mt-2">{t('نفرساعتی ثبت نشده','No effort')}</p>}
+            </div>
+          </Section>
+        </div>
+      )}
+
+      {tab === 'subreview' && (
+        <div className="grid gap-3">
+          <Section title={t('ثبت شفاف‌سازی فنی پیمانکار فرعی','Create subcontractor technical clarification')} note={t('گردش: open→answered→closed — نیاز approve برای بستن','Flow: open→answered→closed — approve needed to close')}>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+              <select className={inputCls} value={subForm.documentId} onChange={e=>setSubForm({...subForm, documentId:e.target.value})}>
+                <option value="">{t('انتخاب مدرک','Select doc')}</option>
+                {(docsData?.items ?? []).map(d=><option key={d.Id} value={d.Id}>{d.DocNo} Rev {d.Revision}</option>)}
+              </select>
+              <input className={inputCls} placeholder={t('نام پیمانکار فرعی','Subcontractor party')} value={subForm.subcontractorParty} onChange={e=>setSubForm({...subForm, subcontractorParty:e.target.value})} />
+              <input className={inputCls} placeholder={t('سوال فنی','Technical question')} value={subForm.questionFa} onChange={e=>setSubForm({...subForm, questionFa:e.target.value})} />
+              <input className={inputCls} placeholder={t('یادداشت','Note')} value={subForm.noteFa} onChange={e=>setSubForm({...subForm, noteFa:e.target.value})} />
+              <button className={btnPrimary} disabled={busy || !subForm.documentId || !subForm.subcontractorParty || !subForm.questionFa} onClick={()=>void act(async ()=>{
+                if(!client) return {ok:false, message:'No client'};
+                const r=await client.createSubReview(subForm.documentId, {subcontractorParty:subForm.subcontractorParty, questionFa:subForm.questionFa, noteFa:subForm.noteFa||undefined});
+                if(r.ok) setSubForm(f=>({...f, questionFa:'', noteFa:''}));
+                return r.ok ? {ok:true} : {ok:false, message:r.message};
+              }, t('شفاف‌سازی ثبت شد','Clarification created'))}>{t('ثبت شفاف‌سازی','Create clarification')}</button>
+            </div>
+          </Section>
+
+          <Section title={t('پاسخ به شفاف‌سازی','Answer clarification')}>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+              <select className={inputCls} value={subAnswerForm.reviewId} onChange={e=>setSubAnswerForm({...subAnswerForm, reviewId:e.target.value})}>
+                <option value="">{t('انتخاب مورد باز','Select open')}</option>
+                {(subData?.items ?? []).filter(x=>x.Status==='open').map(x=><option key={x.Id} value={x.Id}>{x.DocNo} — {x.SubcontractorParty} — {x.QuestionFa.slice(0,40)}</option>)}
+              </select>
+              <input className={inputCls} placeholder={t('پاسخ فنی','Technical answer')} value={subAnswerForm.answerFa} onChange={e=>setSubAnswerForm({...subAnswerForm, answerFa:e.target.value})} />
+              <button className={btnPrimary} disabled={busy || !subAnswerForm.reviewId || !subAnswerForm.answerFa} onClick={()=>void act(async ()=>{
+                if(!client) return {ok:false, message:'No client'};
+                const r=await client.answerSubReview(subAnswerForm.reviewId, subAnswerForm.answerFa);
+                if(r.ok) setSubAnswerForm({reviewId:'', answerFa:''});
+                return r.ok ? {ok:true} : {ok:false, message:r.message};
+              }, t('پاسخ ثبت شد','Answered'))}>{t('ثبت پاسخ','Answer')}</button>
+            </div>
+          </Section>
+
+          <Section title={t('فهرست شفاف‌سازی‌های فنی','Technical clarifications list')}>
+            {subData?.summary && <div className="grid grid-cols-2 gap-2 mb-2"><Kpi label={t('باز','Open')} value={String(subData.summary.open)} /><Kpi label={t('کل','Total')} value={String(subData.summary.total)} /></div>}
+            <div className="overflow-x-auto max-h-[500px]">
+              <table className="w-full text-[11px] tx2">
+                <thead><tr><th className="p-1">DocNo</th><th className="p-1">Rev</th><th className="p-1">Sub</th><th className="p-1">{t('سوال','Question')}</th><th className="p-1">{t('پاسخ','Answer')}</th><th className="p-1">Status</th><th className="p-1">{t('اقدام','Action')}</th></tr></thead>
+                <tbody>
+                  {(subData?.items ?? []).map(x=>(
+                    <tr key={x.Id} className="border-t b-line-soft"><td className="p-1" dir="ltr">{x.DocNo}</td><td className="p-1" dir="ltr">{x.Revision}</td><td className="p-1">{x.SubcontractorParty}</td><td className="p-1 max-w-[200px] truncate" title={x.QuestionFa}>{x.QuestionFa}</td><td className="p-1 max-w-[200px] truncate" title={x.AnswerFa ?? ''}>{x.AnswerFa ?? '—'}</td><td className="p-1">{x.Status}</td><td className="p-1 flex gap-1">{x.Status==='answered' && <button className={btnOk} disabled={busy} onClick={()=>void act(async ()=>{
+                      if(!client) return {ok:false, message:'No client'};
+                      const r=await client.closeSubReview(x.Id);
+                      return r.ok ? {ok:true} : {ok:false, message:r.message};
+                    }, t('بسته شد','Closed'))}>{t('بستن','Close')}</button>}</td></tr>
+                  ))}
+                </tbody>
+              </table>
+              {!subData?.items.length && <p className="tx3 text-[11px] mt-2">{t('شفاف‌سازی ثبت نشده','No clarifications')}</p>}
             </div>
           </Section>
         </div>

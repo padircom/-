@@ -3011,6 +3011,35 @@ export const SCHEMA: TableDef[] = [
     ],
   },
 
+        /* ══════════════ MOD-19 · EDM-9 شفاف‌سازی فنی پیمانکار فرعی (d1) ══════════════ */
+  {
+    name: "DocumentSubReview",
+    module: "d1",
+    title: { fa: "شفاف‌سازی فنی پیمانکار فرعی", en: "Subcontractor technical clarification" },
+    pk: "Id",
+    columns: [
+      id(),
+      req("ProjectId", "text", { len: 60 }),
+      req("DocumentId", "text", { len: 60 }),
+      req("DocNo", "text", { len: 80 }),
+      req("Revision", "text", { len: 10 }),
+      req("SubcontractorParty", "text", { len: 40, comment: "subcontractor name or party" }),
+      req("QuestionFa", "text", { len: 2000 }),
+      c("AnswerFa", "text", { len: 2000 }),
+      req("Status", "text", { len: 20, comment: "open|answered|closed|void" }),
+      req("AskedBy", "text", { len: 60 }),
+      req("AskedAt", "datetime"),
+      c("AnsweredBy", "text", { len: 60 }),
+      c("AnsweredAt", "datetime"),
+      c("NoteFa", "text", { len: 500 }),
+    ],
+    indexes: [
+      { name: "UX_DocSub_Id", columns: ["Id"], unique: true },
+      { name: "IX_DocSub_Doc", columns: ["ProjectId", "DocumentId"] },
+      { name: "IX_DocSub_Status", columns: ["ProjectId", "Status"] },
+    ],
+  },
+
     /* ══════════════ d16 — بهداشت، ایمنی و محیط زیست (HSE) ══════════════
    * پروانهٔ کار پیش‌نیاز دروازهٔ RFSU در ماژول راه‌اندازی است؛ تا پیش از
    * این جداول، آن پیش‌نیاز فقط رشتهٔ آزاد بود و قابل کنترل نبود. */

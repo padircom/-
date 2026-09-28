@@ -201,6 +201,24 @@ export type EdmsEffort = {
 };
 export type EdmsEffortList = { count: number; summary: { totalHours: number; totalCost: number; byPerson?: Record<string, number> }; items: EdmsEffort[] };
 
+export type EdmsSubReview = {
+  Id: string;
+  ProjectId: string;
+  DocumentId: string;
+  DocNo: string;
+  Revision: string;
+  SubcontractorParty: string;
+  QuestionFa: string;
+  AnswerFa?: string | null;
+  Status: string;
+  AskedBy: string;
+  AskedAt: string;
+  AnsweredBy?: string | null;
+  AnsweredAt?: string | null;
+  NoteFa?: string | null;
+};
+export type EdmsSubReviewList = { count: number; summary?: { open: number; total: number }; items: EdmsSubReview[] };
+
 export type EdmsCommentList = {
   count: number;
   summary: { open: number; replied: number; concluded: number; total: number };
@@ -335,6 +353,18 @@ export class EdmsClient {
     return this.req<EdmsEffortList>('GET', `/api/edms/${encodeURIComponent(this.projectId)}/effort${extra}`);
   };
   createEffort = (docId: string, body: { workDate: string; hours: number; personName?: string; personId?: string; activity?: string; cost?: number; noteFa?: string }) => this.req<{ id: string; item: EdmsEffort }>('POST', `/api/edms/${encodeURIComponent(this.projectId)}/documents/${encodeURIComponent(docId)}/effort`, body);
+  subReviews = (params: { documentId?: string; status?: string } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.documentId) qs.set('documentId', params.documentId);
+    if (params.status) qs.set('status', params.status);
+    const extra = qs.toString() ? `&${qs.toString()}` : '';
+    return this.req<EdmsSubReviewList>('GET', `/api/edms/${encodeURIComponent(this.projectId)}/sub-reviews${extra}`);
+  };
+  docSubReviews = (docId: string) => this.req<EdmsSubReviewList>('GET', `/api/edms/${encodeURIComponent(this.projectId)}/documents/${encodeURIComponent(docId)}/sub-reviews`);
+  createSubReview = (docId: string, body: { subcontractorParty: string; questionFa: string; noteFa?: string }) => this.req<{ id: string; item: EdmsSubReview }>('POST', `/api/edms/${encodeURIComponent(this.projectId)}/documents/${encodeURIComponent(docId)}/sub-reviews`, body);
+  answerSubReview = (reviewId: string, answerFa: string) => this.req<{ item: EdmsSubReview }>('POST', `/api/edms/${encodeURIComponent(this.projectId)}/sub-reviews/${encodeURIComponent(reviewId)}/answer`, { answerFa });
+  closeSubReview = (reviewId: string) => this.req<{ item: EdmsSubReview }>('POST', `/api/edms/${encodeURIComponent(this.projectId)}/sub-reviews/${encodeURIComponent(reviewId)}/close`, {});
+
   deleteEffort = (effortId: string) => this.req<{ deleted: boolean; id: string }>('DELETE', `/api/edms/${encodeURIComponent(this.projectId)}/effort/${encodeURIComponent(effortId)}`);
 
   createNotification = (body: { documentId: string; eventType: string; party?: string; subjectFa?: string; bodyFa?: string; channel?: string }) => this.req<{ id: string; item: EdmsNotification }>('POST', `/api/edms/${encodeURIComponent(this.projectId)}/notifications`, body);
