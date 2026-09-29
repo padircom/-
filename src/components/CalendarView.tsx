@@ -325,13 +325,13 @@ export default function CalendarView({ lang }: { lang: Lang }) {
                 onClick={handlePrevMonth}
                 className="glass-row grid h-7 w-7 place-items-center rounded-lg tx2 hover:tx1"
               >
-                <span className={rtl ? "rotate-180" : ""}>&lt;</span>
+                <span className="inline-block rtl:rotate-180">&lt;</span>
               </button>
               <button 
                 onClick={handleNextMonth}
                 className="glass-row grid h-7 w-7 place-items-center rounded-lg tx2 hover:tx1"
               >
-                <span className={rtl ? "rotate-180" : ""}>&gt;</span>
+                <span className="inline-block rtl:rotate-180">&gt;</span>
               </button>
             </div>
           </header>
@@ -417,7 +417,7 @@ export default function CalendarView({ lang }: { lang: Lang }) {
                     className={`glass-row flex cursor-pointer items-center gap-2 rounded-xl px-3 py-1.5 text-[10px] transition-all ${
                       isSelectedOccasion 
                         ? "border-sky-400 bg-sky-400/10 tx1 shadow-sm" 
-                        : "tx2 border-r-2 border-r-amber-400 rtl:border-r-2 rtl:border-l-0"
+                        : "tx2 border-s-2 border-s-amber-400"
                     }`}
                   >
                     <span className={`rounded px-1.5 py-0.5 text-[9px] font-medium ${isSelectedOccasion ? "bg-sky-400 text-black" : "bg-amber-400/10 text-amber-400"}`}>
@@ -450,12 +450,12 @@ export default function CalendarView({ lang }: { lang: Lang }) {
             <span className="text-[10px] tx3">({currentMeetings.length})</span>
           </h3>
 
-          <div className="thin-scroll mb-2.5 max-h-[140px] flex-1 space-y-2 overflow-y-auto pr-1">
+          <div className="thin-scroll mb-2.5 max-h-[140px] flex-1 space-y-2 overflow-y-auto pe-1">
             {currentMeetings.length === 0 ? (
               <div className="text-center text-[10px] py-4 tx3">{rtl ? "جلسه‌ای ثبت نشده است" : "No meetings"}</div>
             ) : (
               currentMeetings.map((m) => (
-                <div key={m.id} className="glass-row group relative flex items-start justify-between rounded-xl border-l-2 border-l-sky-400 p-2.5 rtl:border-l-0 rtl:border-r-2 rtl:border-r-sky-400">
+                <div key={m.id} className="glass-row group relative flex items-start justify-between rounded-xl border-s-2 border-s-sky-400 p-2.5">
                   <div className="min-w-0 flex-1">
                     <div className="text-[10px] font-normal tx1">{m.text}</div>
                     <div className="mt-1 text-[9px] font-extralight tx3">{m.time}</div>
@@ -509,7 +509,7 @@ export default function CalendarView({ lang }: { lang: Lang }) {
             <span className="text-[10px] tx3">({currentTasks.length})</span>
           </h3>
 
-          <div className="thin-scroll mb-2.5 max-h-[140px] flex-1 space-y-2 overflow-y-auto pr-1">
+          <div className="thin-scroll mb-2.5 max-h-[140px] flex-1 space-y-2 overflow-y-auto pe-1">
             {currentTasks.length === 0 ? (
               <div className="text-center text-[10px] py-4 tx3">{rtl ? "کاری ثبت نشده است" : "No tasks"}</div>
             ) : (
@@ -528,7 +528,7 @@ export default function CalendarView({ lang }: { lang: Lang }) {
                   </label>
                   <button
                     onClick={() => handleDeleteTask(tItem.id)}
-                    className="opacity-60 transition hover:opacity-100 tx3 hover:text-rose-400 p-1 ml-1"
+                    className="opacity-60 transition hover:opacity-100 tx3 hover:text-rose-400 p-1 ms-1"
                     title={rtl ? "حذف کار" : "Delete task"}
                   >
                     ×

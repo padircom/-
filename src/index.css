@@ -1,4 +1,8 @@
 @import "tailwindcss";
+@import "./fonts.css";
+@import "./i18n.css";
+@import "./sidebars.css";
+@import "./workspace-typography.css";
 
 /* ══════════════════════════════════════════════════════════════
    THEME VARIABLE ENGINE
@@ -109,9 +113,11 @@ body,
 
 body {
   margin: 0;
-  font-family: "Vazirmatn", ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-ui);
   font-weight: 200;
-  letter-spacing: 0.01em;
+  letter-spacing: var(--ui-tracking);
+  line-height: 1.5;
+  font-synthesis: none;
   color: var(--ink);
   background:
     radial-gradient(1200px 800px at 15% -10%, var(--bg-glow-a) 0%, transparent 55%),

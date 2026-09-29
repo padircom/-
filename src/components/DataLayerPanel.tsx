@@ -227,7 +227,7 @@ export default function DataLayerPanel({ lang }: { lang: Lang }) {
                 </option>
               ))}
             </select>
-            <div className="thin-scroll max-h-[480px] space-y-0.5 overflow-y-auto pr-0.5">
+            <div className="thin-scroll max-h-[480px] space-y-0.5 overflow-y-auto pe-0.5">
               {tables.map((t) => (
                 <button
                   key={t.name}

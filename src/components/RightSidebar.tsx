@@ -314,13 +314,15 @@ export default function RightSidebar({ lang, quickAction, onQuickAction, onNavig
   };
 
   return (
-    <aside dir={rtl ? "rtl" : "ltr"} className="glass-dark flex h-full w-[320px] shrink-0 flex-col rounded-2xl">
+    <div className="sidebar-dock context-sidebar">
+    <div className="sidebar-panel">
+    <aside dir={rtl ? "rtl" : "ltr"} className="glass-dark flex h-full min-h-0 w-full flex-col rounded-2xl">
       <header className="b-line border-b px-4 py-3.5">
         <div className="flex items-center gap-2">
           <span className="chip-bg grid h-7 w-7 place-items-center rounded-lg text-[13px]">🧩</span>
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <h2 className="truncate text-[12.5px] font-normal tx1">{t(ui.frameworkTitle, lang)}</h2>
-            <p className="mt-0.5 text-[9.5px] font-extralight tx3">
+            <p className="mt-0.5 truncate text-[9.5px] font-extralight tx3">
 {rtl
                 ? `${faDigits(domainCount)} حوزه · ${faDigits(processCount)} فرآیند · ${faDigits(subCount)} زیرفرآیند`
                 : `${domainCount} Domains · ${processCount} Processes · ${subCount} Sub-processes`}
@@ -444,5 +446,7 @@ export default function RightSidebar({ lang, quickAction, onQuickAction, onNavig
         </div>
       </nav>
     </aside>
+    </div>
+    </div>
   );
 }

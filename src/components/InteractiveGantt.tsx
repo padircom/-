@@ -209,7 +209,7 @@ export default function InteractiveGantt({ lang, activities: incoming }: Props) 
             {/* ── سربرگ ستون‌ها ── */}
             <div className="sticky top-0 z-10 flex border-b b-line pb-1.5 text-[9.5px] font-extralight tx3" style={{ background: "var(--bg-c)" }}>
               <div className="w-[186px] shrink-0 ps-1">{rtl ? "نام فعالیت" : "Activity"}</div>
-              <div className="grid flex-1 gap-0 text-center" style={{ gridTemplateColumns: `repeat(${buckets}, minmax(0,1fr))` }}>
+              <div className="timeline-axis grid flex-1 gap-0 text-center" style={{ gridTemplateColumns: `repeat(${buckets}, minmax(0,1fr))` }}>
                 {Array.from({ length: buckets }, (_, i) => (
                   <div key={i} className="border-s b-line-soft">{rtl ? `دهه ${i + 1}` : `${i * 10 + 1}-${(i + 1) * 10}`}</div>
                 ))}
@@ -223,7 +223,7 @@ export default function InteractiveGantt({ lang, activities: incoming }: Props) 
                 * ستون زمانی وصل کند. */}
               <div className="pointer-events-none absolute inset-0 flex" aria-hidden>
                 <div className="w-[186px] shrink-0" />
-                <div className="grid flex-1" style={{ gridTemplateColumns: `repeat(${buckets}, minmax(0,1fr))` }}>
+                <div className="timeline-axis grid flex-1" style={{ gridTemplateColumns: `repeat(${buckets}, minmax(0,1fr))` }}>
                   {Array.from({ length: buckets }, (_, i) => (
                     <div key={i} className="border-s b-line-soft" />
                   ))}

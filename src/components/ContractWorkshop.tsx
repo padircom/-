@@ -614,7 +614,7 @@ export default function ContractWorkshop({ lang, projectCode = "PRJ", projectTit
               <div className="fixed inset-0 z-20" onClick={() => setExportOpen(false)} />
               <div
                 className="glass absolute z-30 mt-1 min-w-[190px] overflow-hidden rounded-xl border p-1"
-                style={{ borderColor: "var(--line)", [rtl ? "right" : "left"]: 0 } as React.CSSProperties}
+                style={{ borderColor: "var(--line)", insetInlineStart: 0 } as React.CSSProperties}
               >
                 {EXPORT_FORMATS.map((f) => (
                   <button
@@ -661,7 +661,7 @@ export default function ContractWorkshop({ lang, projectCode = "PRJ", projectTit
               <div className="fixed inset-0 z-20" onClick={() => setTemplateOpen(false)} />
               <div
                 className="glass absolute z-30 mt-1 min-w-[230px] overflow-hidden rounded-xl border p-1"
-                style={{ borderColor: "var(--line)", [rtl ? "right" : "left"]: 0 } as React.CSSProperties}
+                style={{ borderColor: "var(--line)", insetInlineStart: 0 } as React.CSSProperties}
               >
                 {TEMPLATE_PROFILES.map((tp) => (
                   <button
@@ -1051,7 +1051,7 @@ export default function ContractWorkshop({ lang, projectCode = "PRJ", projectTit
               <div className="mt-1.5 space-y-0.5 px-1">
                 {history.slice(-3).map((h, i) => (
                   <div key={i} className="flex flex-wrap items-start gap-1.5 text-[8.5px]">
-                    <span className="tx4">›</span>
+                    <span className="inline-block tx4 rtl:rotate-180">›</span>
                     <span className="tx2">{h.command}</span>
                     <span className="tx4">—</span>
                     <span className="tx3">{h.messageFa}</span>

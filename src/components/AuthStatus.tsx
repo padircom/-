@@ -8,7 +8,7 @@ export default function AuthStatus({ lang }: { lang: Lang }) {
   const [open, setOpen] = useState(false);
 
   return (
-    <div className="relative" dir={rtl ? "rtl" : "ltr"}>
+    <div className="auth-status relative" dir={rtl ? "rtl" : "ltr"}>
       <button
         onClick={() => setOpen((v) => !v)}
         className="toggle-shell flex items-center gap-2 rounded-xl px-2.5 py-1.5 text-[10px] font-light tx1"

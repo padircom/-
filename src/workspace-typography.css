@@ -1,0 +1,48 @@
+/* Shared font sizes for the right navigation and all active workspaces.
+   Size only: no font family, weight, line-height, spacing or layout overrides.
+   Rem units keep the existing accessibility/font-scale setting effective. */
+@media screen {
+  .app-main > :is(.context-sidebar, section) {
+    --workspace-text-size: 0.75rem;
+    --workspace-title-size: 0.875rem;
+    font-size: var(--workspace-text-size);
+  }
+
+  /* Replace legacy per-page body sizes (7–16px and Tailwind text sizes)
+     with the same token used by process and sub-process labels. */
+  .app-main > :is(.context-sidebar, section) :where(
+    .text-xs, .text-sm, .text-base,
+    [class~="text-[7px]"], [class~="text-[7.2px]"], [class~="text-[7.5px]"],
+    [class~="text-[8px]"], [class~="text-[8.5px]"],
+    [class~="text-[9px]"], [class~="text-[9.5px]"],
+    [class~="text-[10px]"], [class~="text-[10.5px]"],
+    [class~="text-[11px]"], [class~="text-[11.5px]"],
+    [class~="text-[12px]"], [class~="text-[12.5px]"],
+    [class~="text-[13px]"], [class~="text-[13.5px]"],
+    [class~="text-[14px]"], [class~="text-[14.5px]"],
+    [class~="text-[15px]"], [class~="text-[16px]"]
+  ):where(:not(
+    svg, svg *, .leaflet-container, .leaflet-container *,
+    .bg-white.text-black, .bg-white.text-black *,
+    .grid.place-items-center, .inline-grid.place-items-center
+  )) {
+    font-size: var(--workspace-text-size);
+  }
+
+  /* A single title size across pages; numerical KPIs and icon-only tiles
+     keep their original display sizes. Module rows are navigation, not titles. */
+  .app-main > :is(.context-sidebar, section) :is(h1, h2, h3, h4, h5, h6):where(:not(
+    svg *, .leaflet-container *, .bg-white.text-black *
+  )) {
+    font-size: var(--workspace-title-size);
+  }
+  .app-main > .context-sidebar h3,
+  .app-main > section .workspace-columns > aside h3 {
+    font-size: var(--workspace-text-size);
+  }
+
+  /* Do not change diagram or document-preview defaults through inheritance. */
+  .app-main > :is(.context-sidebar, section) :where(svg, .bg-white.text-black) {
+    font-size: 1rem;
+  }
+}

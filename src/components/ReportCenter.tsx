@@ -169,7 +169,7 @@ export default function ReportCenter({
         {/* ستون ۱: کاتالوگ */}
         <section className="glass-dark rounded-2xl p-2.5">
           <h4 className="mb-2 text-[10px] font-semibold tx1">{rtl ? "کاتالوگ گزارش" : "Report catalogue"}</h4>
-          <div className="thin-scroll max-h-[520px] space-y-1 overflow-y-auto pr-0.5">
+          <div className="thin-scroll max-h-[520px] space-y-1 overflow-y-auto pe-0.5">
             {REPORT_CATALOG.map((r) => {
               const allowed = r.audiences.includes(audience);
               return (
@@ -207,7 +207,7 @@ export default function ReportCenter({
             ))}
           </div>
 
-          <div className="thin-scroll max-h-[440px] space-y-2 overflow-y-auto pr-0.5">
+          <div className="thin-scroll max-h-[440px] space-y-2 overflow-y-auto pe-0.5">
             <div className="grid grid-cols-2 gap-1.5">
               <Field label={rtl ? "نام پروژه" : "Project"} value={lh.projectName} onChange={(v) => set({ projectName: v })} wide />
               <Field label={rtl ? "کد پروژه" : "Code"} value={lh.projectCode} onChange={(v) => set({ projectCode: v })} />

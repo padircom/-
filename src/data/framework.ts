@@ -1613,20 +1613,18 @@ export type Source = {
   name: string;
   icon: string;
   color: string;
-  connected: boolean;
   kind: Bi;
-  latency: string;
 };
 
 export const dataSources: Source[] = [
-  { id: "p6", name: "Primavera P6", icon: "📊", color: "#F97316", connected: true, kind: { fa: "زمان‌بندی", en: "Scheduling" }, latency: "12ms" },
-  { id: "msp", name: "Microsoft Project", icon: "🗓", color: "#3B82F6", connected: true, kind: { fa: "زمان‌بندی", en: "Scheduling" }, latency: "18ms" },
-  { id: "sap", name: "ERP / SAP", icon: "🏛", color: "#22D3EE", connected: true, kind: { fa: "مالی و منابع", en: "Finance & Resources" }, latency: "24ms" },
-  { id: "pbi", name: "Power BI", icon: "📶", color: "#FACC15", connected: true, kind: { fa: "تحلیل داده", en: "Analytics" }, latency: "9ms" },
-  { id: "cmms", name: "CMMS", icon: "🔧", color: "#A78BFA", connected: true, kind: { fa: "نگهداری و تعمیرات", en: "Maintenance" }, latency: "31ms" },
-  { id: "das", name: "Drilling DAS", icon: "🛢", color: "#34D399", connected: true, kind: { fa: "داده حفاری", en: "Drilling Data" }, latency: "7ms" },
-  { id: "iot", name: "IoT Sensors", icon: "📡", color: "#F472B6", connected: true, kind: { fa: "پایش میدانی", en: "Field Telemetry" }, latency: "4ms" },
-  { id: "dms", name: "DMS", icon: "📁", color: "#94A3B8", connected: false, kind: { fa: "مستندات", en: "Documents" }, latency: "—" },
+  { id: "p6", name: "Primavera P6", icon: "📊", color: "#F97316", kind: { fa: "زمان‌بندی", en: "Scheduling" } },
+  { id: "msp", name: "Microsoft Project", icon: "🗓", color: "#3B82F6", kind: { fa: "زمان‌بندی", en: "Scheduling" } },
+  { id: "sap", name: "ERP / SAP", icon: "🏛", color: "#22D3EE", kind: { fa: "مالی و منابع", en: "Finance & Resources" } },
+  { id: "pbi", name: "Power BI", icon: "📶", color: "#FACC15", kind: { fa: "تحلیل داده", en: "Analytics" } },
+  { id: "cmms", name: "CMMS", icon: "🔧", color: "#A78BFA", kind: { fa: "نگهداری و تعمیرات", en: "Maintenance" } },
+  { id: "das", name: "Drilling DAS", icon: "🛢", color: "#34D399", kind: { fa: "داده حفاری", en: "Drilling Data" } },
+  { id: "iot", name: "IoT Sensors", icon: "📡", color: "#F472B6", kind: { fa: "پایش میدانی", en: "Field Telemetry" } },
+  { id: "dms", name: "DMS", icon: "📁", color: "#94A3B8", kind: { fa: "مستندات", en: "Documents" } },
 ];
 
 /* ============================================================
@@ -1792,7 +1790,7 @@ export const ui = {
   frameworkTitle: { fa: "چارچوب جامع مدیریت پروژه", en: "Comprehensive Project Management Framework" },
   frameworkSub: { fa: "۵ ماژول · نمای سرتیترها", en: "5 Modules · Header Overview" },
   sourcesTitle: { fa: "منابع داده", en: "Data Sources" },
-  sourcesSub: { fa: "۷ اتصال فعال از ۸ منبع", en: "7 of 8 integrations live" },
+  sourcesSub: { fa: "وضعیت اتصال منابع", en: "Source connection status" },
   connect: { fa: "+ اتصال منبع جدید", en: "+ Connect New Source" },
   connected: { fa: "متصل", en: "Connected" },
   disconnected: { fa: "قطع", en: "Disconnected" },

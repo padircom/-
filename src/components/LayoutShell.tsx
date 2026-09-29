@@ -263,7 +263,7 @@ export default function LayoutShell({ scope, panels, rtl, titleFa, titleEn, exte
                   className="pointer-events-none absolute z-10 flex items-center gap-1 rounded-lg px-1.5 py-0.5 text-[8px]"
                   style={{
                     top: 4,
-                    [rtl ? "right" : "left"]: 4,
+                    insetInlineStart: 4,
                     background: "color-mix(in srgb, var(--bg-c) 88%, transparent)",
                     border: "1px solid var(--line)",
                   } as React.CSSProperties}
@@ -297,7 +297,7 @@ export default function LayoutShell({ scope, panels, rtl, titleFa, titleEn, exte
                   title={rtl ? "بکشید تا عرض تغییر کند · دوبار کلیک برای بازنشانی" : "Drag to resize · double-click to reset"}
                   className="absolute bottom-0 top-0 flex w-3 items-center justify-center"
                   style={{
-                    [rtl ? "left" : "right"]: -6,
+                    insetInlineEnd: -6,
                     cursor: "col-resize",
                     touchAction: "none",
                   } as React.CSSProperties}
