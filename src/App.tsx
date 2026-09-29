@@ -113,7 +113,7 @@ function EnvWidgets({ lang }: { lang: Lang }) {
   const temp = weather.temp.toLocaleString(locale);
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="env-widgets flex items-center gap-2">
       {/* online weather */}
       <div className="wchip" title="Live weather — open-meteo">
         <span className="text-[13px] leading-none">{weather.icon}</span>
@@ -182,14 +182,14 @@ export default function App() {
   };
 
   return (
-    <div className="flex h-screen w-screen flex-col overflow-hidden">
+    <div className="app-shell flex h-screen w-screen flex-col overflow-hidden">
       {/* ═══ Expanded corporate command bar ═══ */}
       <header
         dir="ltr"
-        className="glass-dark relative z-20 flex min-h-[76px] shrink-0 items-center gap-3 border-x-0 border-t-0 px-4 py-3"
+        className="app-header glass-dark relative z-20 flex min-h-[76px] shrink-0 items-center gap-3 border-x-0 border-t-0 px-4 py-3"
       >
         {/* ── fixed left corner: live dock + switchers (never moves) ── */}
-        <div className="order-first flex shrink-0 items-center gap-2">
+        <div className="header-controls order-first flex shrink-0 items-center gap-2">
           {/* ساعت · تاریخ · آب‌وهوا: همیشه نمایش داده می‌شود.
             پیش از این فقط از ۷۶۸px به بالا دیده می‌شد (`hidden md:block`)
             و در پنجره‌های باریک هدر بی‌دلیل خالی به نظر می‌رسید. */}
@@ -236,7 +236,7 @@ export default function App() {
         <div className="mx-auto" />
 
         {/* ── fixed right corner: brand + maker credits ── */}
-        <div className="order-last ms-auto flex min-w-0 items-center gap-3" dir={rtl ? "rtl" : "ltr"}>
+        <div className="header-brand order-last ms-auto flex min-w-0 items-center gap-3" dir={rtl ? "rtl" : "ltr"}>
           <span className="chip-bg b-line grid h-11 w-11 shrink-0 place-items-center rounded-2xl text-[20px] ring-1">◈</span>
           <div className="min-w-0">
             <h1 className="truncate text-[15px] font-light tx1">{t(ui.hubTitle, lang)}</h1>
@@ -260,8 +260,8 @@ export default function App() {
 
       </header>
 
-      {/* ═══ Three co-existing pillars (physical order locked, LTR flex) ═══ */}
-      <main dir="ltr" className="flex min-h-0 flex-1 gap-3 p-3">
+      {/* ═══ Three fixed pillars (left sources / workspace / right navigation) ═══ */}
+      <main className="app-main flex min-h-0 flex-1 gap-3 p-3">
         {/* سایدبار منابع داده هم مثل سایدبار چارچوب فقط در صفحهٔ اصلی
           * می‌ماند. در صفحهٔ حوزه، فضای کاری به پنل تخصصی می‌رسد و
           * ۲۴۸ پیکسل دیگر آزاد می‌شود. */}

@@ -241,7 +241,7 @@ export default function AdminWorkspace({ lang, subId, onBack, onOpenFlowNet }: P
               onClick={onBack}
               className="glass-row flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[10.5px] font-light tx2 transition hover:tx1"
             >
-              <span className={rtl ? "" : "rotate-180"}>→</span>
+              <span className="inline-block rotate-180 rtl:rotate-0">→</span>
               {rtl ? "بازگشت" : "Back"}
             </button>
           )}
@@ -323,7 +323,7 @@ export default function AdminWorkspace({ lang, subId, onBack, onOpenFlowNet }: P
       </nav>
 
       {/* ── Main Tab Content ── */}
-      <div className="thin-scroll flex-1 overflow-y-auto pr-1">
+      <div className="thin-scroll flex-1 overflow-y-auto pe-1">
         {/* ═════════ TAB 1: CLUSTERS & INDUSTRIES ═════════ */}
         {activeTab === "clusters" && (
           <div className="fade-rise space-y-4">
@@ -695,8 +695,8 @@ export default function AdminWorkspace({ lang, subId, onBack, onOpenFlowNet }: P
             )}
 
             {/* Projects Table View */}
-            <div className="glass-dark rounded-2xl overflow-hidden">
-              <table className="w-full text-start text-[11px]">
+            <div className="glass-dark rounded-2xl overflow-x-auto">
+              <table className="w-full min-w-[760px] text-start text-[11px]">
                 <thead>
                   <tr className="border-b b-line-soft bg-black/25 text-[9.5px] font-extralight tx3">
                     <th className="px-3 py-2.5 text-start">{rtl ? "کد" : "Code"}</th>

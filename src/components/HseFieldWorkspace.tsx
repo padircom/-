@@ -321,7 +321,7 @@ export default function HseWorkspace({
         </div>
       )}
 
-      <div className="thin-scroll min-h-0 flex-1 overflow-y-auto pr-1">
+      <div className="thin-scroll min-h-0 flex-1 overflow-y-auto pe-1">
         {tab === "dashboard" && (
           <div className="fade-rise space-y-2">
             <div className="grid gap-2 sm:grid-cols-5">

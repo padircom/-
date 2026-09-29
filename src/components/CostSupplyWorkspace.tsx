@@ -337,7 +337,7 @@ export default function CostSupplyWorkspace({
     <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden" dir={rtl ? "rtl" : "ltr"}>
       {header(independent ? null : view)}
       {tabsNav}
-      <div className="thin-scroll min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">{body}</div>
+      <div className="thin-scroll min-h-0 flex-1 space-y-3 overflow-y-auto pe-1">{body}</div>
     </div>
   );
 }

@@ -318,7 +318,7 @@ export default function WorkforceWorkspace({
         </nav>
       )}
 
-      <div className="thin-scroll min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
+      <div className="thin-scroll min-h-0 flex-1 space-y-3 overflow-y-auto pe-1">
         {/* ═══ تب ۱: برنامه‌ریزی نیرو، OBS و تجهیز ═══ */}
         {tab === "planning" && (
           <>

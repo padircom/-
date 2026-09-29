@@ -238,7 +238,7 @@ export default function GovernanceWorkspace({
       )}
 
       {/* Main Tab View */}
-      <div className="thin-scroll min-h-0 flex-1 overflow-y-auto pr-1">
+      <div className="thin-scroll min-h-0 flex-1 overflow-y-auto pe-1">
         {/* TAB 1: WORKFLOWS */}
         {tab === "workflow" && (
           <div className="fade-rise space-y-2">

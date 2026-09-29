@@ -1,0 +1,91 @@
+/* Fixed physical docks: hiding a panel retains a dedicated control rail.
+   Panel contents have their own locale dir; docking never swaps with language. */
+.sidebar-dock {
+  --sidebar-open-size: 248px;
+  --sidebar-rail-size: 40px;
+  position: relative;
+  flex: 0 0 auto;
+  block-size: 100%;
+  min-block-size: 0;
+  inline-size: var(--sidebar-open-size);
+  direction: ltr;
+  transition: inline-size 180ms ease;
+}
+.context-sidebar { --sidebar-open-size: 320px; }
+.sidebar-dock[data-collapsed="true"] { inline-size: var(--sidebar-rail-size); }
+.sidebar-panel { block-size: 100%; min-block-size: 0; }
+.sidebar-panel[hidden] { display: none; }
+
+/* Sources only: one persistent button, one icon and one style in both states.
+   Its containing rail occupies layout space; it cannot cover the workspace. */
+.sidebar-toggle {
+  position: absolute;
+  inset-block-start: 14px;
+  inset-inline-start: 6px;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  inline-size: 28px;
+  block-size: 28px;
+  padding: 0;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: var(--row);
+  color: var(--ink3);
+  cursor: pointer;
+  transition: color 160ms ease, background-color 160ms ease, border-color 160ms ease;
+}
+.sidebar-toggle svg { inline-size: 16px; block-size: 16px; }
+.sidebar-toggle:hover { color: var(--ink); background: var(--row-hover); border-color: var(--line); }
+.sidebar-toggle:focus-visible,
+.source-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Reserve only the heading's outer corner. Search fields and rows stay full width. */
+.sources-sidebar .sidebar-panel > aside:dir(ltr) > header > :first-child { padding-inline-start: 28px; }
+.sources-sidebar .sidebar-panel > aside:dir(rtl) > header > :first-child { padding-inline-end: 28px; }
+
+/* Flat rows, not cards: no outline/border, icon tile, radius, shadow or backdrop.
+   The existing selection and live health indicator remain independent. */
+.source-row {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+  cursor: pointer;
+  transition: background-color 160ms ease;
+}
+.source-row:hover { background: var(--row-hover); }
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-dock,
+  .sidebar-toggle,
+  .source-row { transition: none; }
+}
+
+/* Process trees: flat groups and rows, not nested cards. Scope these rules to
+   navigation lists; retain the outer panels, forms, badges and workspace cards. */
+.context-sidebar .fade-rise > .rounded-xl.border[class~="bg-black/10"],
+.workspace-columns > aside > .thin-scroll > .rounded-xl,
+.workspace-columns > aside > .thin-scroll button.glass-row {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+}
+
+.workspace-columns > aside > .thin-scroll button.glass-row {
+  /* No card lift on hover. Keep the existing .row-on selection background. */
+  transform: none;
+  translate: none;
+  transition: background-color 160ms ease;
+}
+.workspace-columns > aside > .thin-scroll button.glass-row:hover {
+  background: var(--row-hover);
+}
+.workspace-columns > aside > .thin-scroll button.glass-row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .workspace-columns > aside > .thin-scroll button.glass-row { transition: none; }
+}

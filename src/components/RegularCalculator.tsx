@@ -68,7 +68,7 @@ export default function RegularCalculator({ lang }: Props) {
     <div className="glass flex h-full min-h-0 flex-col rounded-2xl p-4">
       <h2 className="mb-3 text-[15px] font-normal tx1">{lang === "fa" ? "ماشین حساب عمومی" : "Regular Calculator"}</h2>
 
-      <div className="mb-2 rounded-xl bg-[rgba(255,255,255,0.04)] px-3 py-3 text-right text-[22px] font-light tracking-wide tabular-nums break-all tx1 shadow-inner">
+      <div className="mb-2 rounded-xl bg-[rgba(255,255,255,0.04)] px-3 py-3 text-end text-[22px] font-light tracking-wide tabular-nums break-all tx1 shadow-inner">
         {display}
       </div>
       <div className="h-1 w-full rounded-full bg-gradient-to-r from-transparent via-[var(--line-soft)] to-transparent" />

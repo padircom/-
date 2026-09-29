@@ -332,7 +332,7 @@ export default function CapabilityDetail({
       {/* Top bar */}
       <header className="b-line-soft mb-4 flex flex-wrap items-center gap-x-4 gap-y-2 border-b pb-3">
         <button onClick={onBack} className="glass-row flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-[10.5px] font-light tx2 transition hover:tx1">
-          <span className={rtl ? "" : "rotate-180"}>→</span>
+          <span className="inline-block rotate-180 rtl:rotate-0">→</span>
           {rtl ? "بازگشت به حوزه" : "Back to domain"}
         </button>
         {cluster && (
@@ -630,7 +630,7 @@ export default function CapabilityDetail({
                 <span className="text-[10.5px] font-normal tx1">{rtl ? "تعدیل دستی مدت فعالیت‌ها" : "Manual Duration Adjustments"}</span>
               </div>
 
-              <div className="thin-scroll flex-1 space-y-2.5 overflow-y-auto pr-1">
+              <div className="thin-scroll flex-1 space-y-2.5 overflow-y-auto pe-1">
                 {activities.map((act) => (
                   <div key={act.id} className="rounded-xl border b-line-soft bg-black/10 p-2 space-y-1.5">
                     <div className="flex items-center justify-between gap-1.5">
@@ -668,7 +668,7 @@ export default function CapabilityDetail({
                 <div className="min-w-[600px] space-y-2">
                   <div className="flex border-b b-line-soft pb-1 text-[8.5px] font-extralight tx3">
                     <div className="w-[180px] shrink-0">{rtl ? "نام فعالیت" : "Activity Name"}</div>
-                    <div className="flex-1 grid grid-cols-6 gap-1 text-center">
+                    <div className="timeline-axis flex-1 grid grid-cols-6 gap-1 text-center">
                       <div>{rtl ? "دهه ۱" : "Day 1-10"}</div>
                       <div>{rtl ? "دهه ۲" : "Day 11-20"}</div>
                       <div>{rtl ? "دهه ۳" : "Day 21-30"}</div>
@@ -683,7 +683,7 @@ export default function CapabilityDetail({
                     const durPct = Math.min(100 - startPct, (act.duration / 60) * 100);
                     return (
                       <div key={act.id} className="flex items-center text-[10px] py-1 hover:bg-white/[0.02] rounded">
-                        <div className="w-[180px] shrink-0 truncate pr-2 font-light tx1" title={t(act.name, lang)}>
+                        <div className="w-[180px] shrink-0 truncate pe-2 font-light tx1" title={t(act.name, lang)}>
                           {t(act.name, lang)}
                         </div>
                         <div className="flex-1 relative h-6 rounded-lg bg-black/15 overflow-hidden">

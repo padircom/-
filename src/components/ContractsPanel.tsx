@@ -773,13 +773,13 @@ function SubIpcSection({
             <table className="w-full text-[9px]">
               <thead>
                 <tr className="tx3">
-                  <th className="px-1.5 py-1 text-right font-extralight">ردیف</th>
-                  <th className="px-1.5 py-1 text-right font-extralight">دوره</th>
-                  <th className="px-1.5 py-1 text-left font-extralight">ناخالص</th>
-                  <th className="px-1.5 py-1 text-left font-extralight">کسور</th>
-                  <th className="px-1.5 py-1 text-left font-extralight">خالص</th>
-                  <th className="px-1.5 py-1 text-right font-extralight">وضعیت</th>
-                  <th className="px-1.5 py-1 text-right font-extralight">اصلی</th>
+                  <th className="px-1.5 py-1 text-start font-extralight">ردیف</th>
+                  <th className="px-1.5 py-1 text-start font-extralight">دوره</th>
+                  <th className="px-1.5 py-1 text-end font-extralight">ناخالص</th>
+                  <th className="px-1.5 py-1 text-end font-extralight">کسور</th>
+                  <th className="px-1.5 py-1 text-end font-extralight">خالص</th>
+                  <th className="px-1.5 py-1 text-start font-extralight">وضعیت</th>
+                  <th className="px-1.5 py-1 text-start font-extralight">اصلی</th>
                   <th className="px-1.5 py-1"></th>
                 </tr>
               </thead>
@@ -788,16 +788,16 @@ function SubIpcSection({
                   <tr key={it.Id} className={`border-t b-line-soft ${openId === it.Id ? "bg-white/5" : ""}`}>
                     <td className="px-1.5 py-1 tabular-nums tx2">{fmt(it.SerialNo)}</td>
                     <td className="px-1.5 py-1 tx1">{it.PeriodCode ?? "—"}</td>
-                    <td className="px-1.5 py-1 text-left tabular-nums tx2" dir="ltr">{fmt(it.GrossCurrent)}</td>
-                    <td className="px-1.5 py-1 text-left tabular-nums tx3" dir="ltr">{fmt(it.TotalDeductions)}</td>
-                    <td className="px-1.5 py-1 text-left tabular-nums tx1" dir="ltr">{fmt(it.NetPayable)}</td>
+                    <td className="px-1.5 py-1 text-end tabular-nums tx2" dir="ltr">{fmt(it.GrossCurrent)}</td>
+                    <td className="px-1.5 py-1 text-end tabular-nums tx3" dir="ltr">{fmt(it.TotalDeductions)}</td>
+                    <td className="px-1.5 py-1 text-end tabular-nums tx1" dir="ltr">{fmt(it.NetPayable)}</td>
                     <td className={`px-1.5 py-1 ${SUB_STATE_TONE[String(it.WorkflowState)] ?? "tx2"}`}>{it.stateFa}</td>
                     <td className="px-1.5 py-1 text-[8.5px]">
                       {it.isAwaitingMain
                         ? <span className="text-amber-300">منتظر</span>
                         : <span className="tx3">{it.mainIpcState ? "گره‌خورده" : "—"}</span>}
                     </td>
-                    <td className="px-1.5 py-1 text-left">
+                    <td className="px-1.5 py-1 text-end">
                       <button
                         onClick={() => setOpenId(openId === it.Id ? "" : String(it.Id))}
                         className="rounded-lg border b-line-soft px-1.5 py-0.5 text-[8.5px] tx2 transition hover:border-sky-400/50"
@@ -866,22 +866,22 @@ function SubIpcSection({
                 <table className="w-full text-[9px]">
                   <thead>
                     <tr className="tx3">
-                      <th className="px-1.5 py-1 text-right font-extralight">شرح</th>
-                      <th className="px-1.5 py-1 text-left font-extralight">مقدار</th>
-                      <th className="px-1.5 py-1 text-left font-extralight">نرخ</th>
-                      <th className="px-1.5 py-1 text-left font-extralight">مبلغ</th>
-                      <th className="px-1.5 py-1 text-left font-extralight">تأیید اصلی</th>
-                      <th className="px-1.5 py-1 text-right font-extralight">انحراف</th>
+                      <th className="px-1.5 py-1 text-start font-extralight">شرح</th>
+                      <th className="px-1.5 py-1 text-end font-extralight">مقدار</th>
+                      <th className="px-1.5 py-1 text-end font-extralight">نرخ</th>
+                      <th className="px-1.5 py-1 text-end font-extralight">مبلغ</th>
+                      <th className="px-1.5 py-1 text-end font-extralight">تأیید اصلی</th>
+                      <th className="px-1.5 py-1 text-start font-extralight">انحراف</th>
                     </tr>
                   </thead>
                   <tbody>
                     {lines.map((l) => (
                       <tr key={l.Id} className="border-t b-line-soft">
                         <td className="px-1.5 py-1 tx1">{l.DescriptionFa}</td>
-                        <td className="px-1.5 py-1 text-left tabular-nums tx2" dir="ltr">{fmt(l.Quantity)}</td>
-                        <td className="px-1.5 py-1 text-left tabular-nums tx2" dir="ltr">{fmt(l.UnitRate)}</td>
-                        <td className="px-1.5 py-1 text-left tabular-nums tx1" dir="ltr">{fmt(l.amount)}</td>
-                        <td className="px-1.5 py-1 text-left tabular-nums tx3" dir="ltr">{fmt(l.MainApprovedQty)}</td>
+                        <td className="px-1.5 py-1 text-end tabular-nums tx2" dir="ltr">{fmt(l.Quantity)}</td>
+                        <td className="px-1.5 py-1 text-end tabular-nums tx2" dir="ltr">{fmt(l.UnitRate)}</td>
+                        <td className="px-1.5 py-1 text-end tabular-nums tx1" dir="ltr">{fmt(l.amount)}</td>
+                        <td className="px-1.5 py-1 text-end tabular-nums tx3" dir="ltr">{fmt(l.MainApprovedQty)}</td>
                         <td className={`px-1.5 py-1 text-[8.5px] ${
                           l.varianceFlag === "ok" ? "text-emerald-300"
                             : l.varianceFlag === "exceeds_main" ? "text-rose-300" : "text-amber-300"
@@ -902,11 +902,11 @@ function SubIpcSection({
                 <table className="w-full text-[9px]">
                   <thead>
                     <tr className="tx3">
-                      <th className="px-1.5 py-1 text-right font-extralight">منشأ</th>
-                      <th className="px-1.5 py-1 text-right font-extralight">شرح</th>
-                      <th className="px-1.5 py-1 text-left font-extralight">مبلغ</th>
-                      <th className="px-1.5 py-1 text-right font-extralight">سند</th>
-                      <th className="px-1.5 py-1 text-right font-extralight">وضعیت</th>
+                      <th className="px-1.5 py-1 text-start font-extralight">منشأ</th>
+                      <th className="px-1.5 py-1 text-start font-extralight">شرح</th>
+                      <th className="px-1.5 py-1 text-end font-extralight">مبلغ</th>
+                      <th className="px-1.5 py-1 text-start font-extralight">سند</th>
+                      <th className="px-1.5 py-1 text-start font-extralight">وضعیت</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -914,7 +914,7 @@ function SubIpcSection({
                       <tr key={d.Id} className="border-t b-line-soft">
                         <td className="px-1.5 py-1 tx2">{d.sourceFa}</td>
                         <td className="px-1.5 py-1 tx1">{d.DescriptionFa}</td>
-                        <td className={`px-1.5 py-1 text-left tabular-nums ${d.isCountable ? "tx1" : "tx4 line-through"}`} dir="ltr">
+                        <td className={`px-1.5 py-1 text-end tabular-nums ${d.isCountable ? "tx1" : "tx4 line-through"}`} dir="ltr">
                           {fmt(d.Amount)}
                         </td>
                         <td className="px-1.5 py-1 text-[8.5px] tx3">{d.EvidenceDocNo ?? "—"}</td>
@@ -1620,13 +1620,13 @@ function FinBridgeSection({
             <table className="w-full text-[9px]">
               <thead>
                 <tr className="tx3">
-                  <th className="px-1.5 py-1 text-right font-extralight">شماره</th>
-                  <th className="px-1.5 py-1 text-right font-extralight">دوره</th>
-                  <th className="px-1.5 py-1 text-left font-extralight">خالص پیمان</th>
-                  <th className="px-1.5 py-1 text-left font-extralight">ثبت مالی</th>
-                  <th className="px-1.5 py-1 text-left font-extralight">اختلاف</th>
-                  <th className="px-1.5 py-1 text-right font-extralight">وضعیت</th>
-                  <th className="px-1.5 py-1 text-right font-extralight">اقدام</th>
+                  <th className="px-1.5 py-1 text-start font-extralight">شماره</th>
+                  <th className="px-1.5 py-1 text-start font-extralight">دوره</th>
+                  <th className="px-1.5 py-1 text-end font-extralight">خالص پیمان</th>
+                  <th className="px-1.5 py-1 text-end font-extralight">ثبت مالی</th>
+                  <th className="px-1.5 py-1 text-end font-extralight">اختلاف</th>
+                  <th className="px-1.5 py-1 text-start font-extralight">وضعیت</th>
+                  <th className="px-1.5 py-1 text-start font-extralight">اقدام</th>
                 </tr>
               </thead>
               <tbody>
@@ -1634,11 +1634,11 @@ function FinBridgeSection({
                   <tr key={r.ipcId} className="border-t b-line-soft">
                     <td className="px-1.5 py-1 tabular-nums tx1">{fmt(r.serialNo)}</td>
                     <td className="px-1.5 py-1 tx2">{r.periodCode || "—"}</td>
-                    <td className="px-1.5 py-1 text-left tabular-nums tx1" dir="ltr">{fmt(r.netAmount)}</td>
-                    <td className="px-1.5 py-1 text-left tabular-nums tx2" dir="ltr">
+                    <td className="px-1.5 py-1 text-end tabular-nums tx1" dir="ltr">{fmt(r.netAmount)}</td>
+                    <td className="px-1.5 py-1 text-end tabular-nums tx2" dir="ltr">
                       {r.postedAmount == null ? "—" : fmt(r.postedAmount)}
                     </td>
-                    <td className={`px-1.5 py-1 text-left tabular-nums ${
+                    <td className={`px-1.5 py-1 text-end tabular-nums ${
                       r.driftAmount ? "text-rose-300" : "tx4"
                     }`} dir="ltr">
                       {r.driftAmount ? fmt(r.driftAmount) : "۰"}
@@ -1738,10 +1738,10 @@ function FinBridgeSection({
             <table className="w-full text-[9px]">
               <thead>
                 <tr className="tx3">
-                  <th className="px-1.5 py-1 text-right font-extralight">شماره</th>
-                  <th className="px-1.5 py-1 text-right font-extralight">دوره</th>
-                  <th className="px-1.5 py-1 text-left font-extralight">خالص</th>
-                  <th className="px-1.5 py-1 text-right font-extralight">وضعیت</th>
+                  <th className="px-1.5 py-1 text-start font-extralight">شماره</th>
+                  <th className="px-1.5 py-1 text-start font-extralight">دوره</th>
+                  <th className="px-1.5 py-1 text-end font-extralight">خالص</th>
+                  <th className="px-1.5 py-1 text-start font-extralight">وضعیت</th>
                 </tr>
               </thead>
               <tbody>
@@ -1749,7 +1749,7 @@ function FinBridgeSection({
                   <tr key={i.ipcId} className="border-t b-line-soft">
                     <td className="px-1.5 py-1 tabular-nums tx1">{fmt(i.serialNo)}</td>
                     <td className="px-1.5 py-1 tx2">{i.periodCode || "—"}</td>
-                    <td className="px-1.5 py-1 text-left tabular-nums tx1" dir="ltr">{fmt(i.netAmount)}</td>
+                    <td className="px-1.5 py-1 text-end tabular-nums tx1" dir="ltr">{fmt(i.netAmount)}</td>
                     <td className="px-1.5 py-1 text-[8.5px]">
                       {i.isPosted
                         ? <span className="text-emerald-300">ثبت شده</span>
@@ -2076,11 +2076,11 @@ function KpiSection({
           <table className="w-full text-[9px]">
             <thead>
               <tr className="tx3">
-                <th className="px-1.5 py-1 text-right font-extralight">سنجه</th>
-                <th className="px-1.5 py-1 text-left font-extralight">مقدار</th>
-                <th className="px-1.5 py-1 text-left font-extralight">دورهٔ قبل</th>
+                <th className="px-1.5 py-1 text-start font-extralight">سنجه</th>
+                <th className="px-1.5 py-1 text-end font-extralight">مقدار</th>
+                <th className="px-1.5 py-1 text-end font-extralight">دورهٔ قبل</th>
                 <th className="px-1.5 py-1 text-center font-extralight">روند</th>
-                <th className="px-1.5 py-1 text-right font-extralight">توضیح</th>
+                <th className="px-1.5 py-1 text-start font-extralight">توضیح</th>
               </tr>
             </thead>
             <tbody>
@@ -2089,10 +2089,10 @@ function KpiSection({
                 return (
                   <tr key={k.code} className="border-t b-line-soft">
                     <td className="px-1.5 py-1 tx1">{k.titleFa}</td>
-                    <td className={`px-1.5 py-1 text-left tabular-nums ${k.isComputable ? "tx1" : "tx4"}`} dir="ltr">
+                    <td className={`px-1.5 py-1 text-end tabular-nums ${k.isComputable ? "tx1" : "tx4"}`} dir="ltr">
                       {k.displayFa}
                     </td>
-                    <td className="px-1.5 py-1 text-left tabular-nums tx4" dir="ltr">
+                    <td className="px-1.5 py-1 text-end tabular-nums tx4" dir="ltr">
                       {t?.previous == null ? "—" : fmt(t.previous)}
                     </td>
                     <td className={`px-1.5 py-1 text-center ${TREND_TONE[String(t?.direction ?? "unknown")]}`}>
@@ -2139,10 +2139,10 @@ function KpiSection({
                     style={{ width: `${Math.max(0, Math.min(100, c.normalized))}%` }}
                   />
                 </div>
-                <span className="w-10 shrink-0 text-left text-[9px] tabular-nums tx1" dir="ltr">
+                <span className="w-10 shrink-0 text-end text-[9px] tabular-nums tx1" dir="ltr">
                   {fmt(c.normalized)}
                 </span>
-                <span className="w-10 shrink-0 text-left text-[8px] tabular-nums tx4" dir="ltr">
+                <span className="w-10 shrink-0 text-end text-[8px] tabular-nums tx4" dir="ltr">
                   ×{fmt(c.weight)}
                 </span>
               </div>
@@ -2189,11 +2189,11 @@ function KpiSection({
               <table className="w-full text-[9px]">
                 <thead>
                   <tr className="tx3">
-                    <th className="px-1.5 py-1 text-right font-extralight">کد</th>
-                    <th className="px-1.5 py-1 text-right font-extralight">عنوان</th>
-                    <th className="px-1.5 py-1 text-left font-extralight">آستانه</th>
-                    <th className="px-1.5 py-1 text-right font-extralight">شدت</th>
-                    <th className="px-1.5 py-1 text-right font-extralight">وضعیت</th>
+                    <th className="px-1.5 py-1 text-start font-extralight">کد</th>
+                    <th className="px-1.5 py-1 text-start font-extralight">عنوان</th>
+                    <th className="px-1.5 py-1 text-end font-extralight">آستانه</th>
+                    <th className="px-1.5 py-1 text-start font-extralight">شدت</th>
+                    <th className="px-1.5 py-1 text-start font-extralight">وضعیت</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -2201,7 +2201,7 @@ function KpiSection({
                     <tr key={r.code} className="border-t b-line-soft">
                       <td className="px-1.5 py-1 font-mono text-[8px] tx3" dir="ltr">{r.code}</td>
                       <td className="px-1.5 py-1 tx1">{r.titleFa}</td>
-                      <td className="px-1.5 py-1 text-left tabular-nums tx2" dir="ltr">
+                      <td className="px-1.5 py-1 text-end tabular-nums tx2" dir="ltr">
                         {r.op === "gt" ? ">" : "<"} {fmt(r.effectiveThreshold)}
                         {r.isCustomized && <span className="tx4"> (سفارشی)</span>}
                       </td>
@@ -2446,10 +2446,10 @@ function ProgressSection({
                     style={{ width: `${Math.min(100, ch.progressPct ?? 0)}%` }}
                   />
                 </div>
-                <span className="w-12 shrink-0 text-left text-[9px] tabular-nums tx1" dir="ltr">
+                <span className="w-12 shrink-0 text-end text-[9px] tabular-nums tx1" dir="ltr">
                   {fmt(ch.progressPct)}٪
                 </span>
-                <span className="w-14 shrink-0 text-left text-[8px] tabular-nums tx4" dir="ltr">
+                <span className="w-14 shrink-0 text-end text-[8px] tabular-nums tx4" dir="ltr">
                   وزن {fmt(ch.weightPct)}٪
                 </span>
               </div>
@@ -2471,11 +2471,11 @@ function ProgressSection({
             <table className="w-full text-[9px]">
               <thead>
                 <tr className="tx3">
-                  <th className="px-1.5 py-1 text-right font-extralight">ردیف</th>
-                  <th className="px-1.5 py-1 text-right font-extralight">شرح</th>
-                  <th className="px-1.5 py-1 text-left font-extralight">وزن</th>
-                  <th className="px-1.5 py-1 text-left font-extralight">پیشرفت</th>
-                  <th className="px-1.5 py-1 text-left font-extralight">سهم</th>
+                  <th className="px-1.5 py-1 text-start font-extralight">ردیف</th>
+                  <th className="px-1.5 py-1 text-start font-extralight">شرح</th>
+                  <th className="px-1.5 py-1 text-end font-extralight">وزن</th>
+                  <th className="px-1.5 py-1 text-end font-extralight">پیشرفت</th>
+                  <th className="px-1.5 py-1 text-end font-extralight">سهم</th>
                 </tr>
               </thead>
               <tbody>
@@ -2483,11 +2483,11 @@ function ProgressSection({
                   <tr key={l.boqItemId} className="border-t b-line-soft">
                     <td className="px-1.5 py-1 tabular-nums tx2">{l.itemNo ?? "—"}</td>
                     <td className="px-1.5 py-1 tx1">{l.titleFa ?? "—"}</td>
-                    <td className="px-1.5 py-1 text-left tabular-nums tx3" dir="ltr">{fmt(l.weightPct)}٪</td>
-                    <td className={`px-1.5 py-1 text-left tabular-nums ${l.isOverrun ? "text-rose-300" : "tx1"}`} dir="ltr">
+                    <td className="px-1.5 py-1 text-end tabular-nums tx3" dir="ltr">{fmt(l.weightPct)}٪</td>
+                    <td className={`px-1.5 py-1 text-end tabular-nums ${l.isOverrun ? "text-rose-300" : "tx1"}`} dir="ltr">
                       {fmt(l.itemPct)}٪
                     </td>
-                    <td className="px-1.5 py-1 text-left tabular-nums tx2" dir="ltr">{fmt(l.contributionPct)}</td>
+                    <td className="px-1.5 py-1 text-end tabular-nums tx2" dir="ltr">{fmt(l.contributionPct)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -2510,12 +2510,12 @@ function ProgressSection({
             <table className="w-full text-[9px]">
               <thead>
                 <tr className="tx3">
-                  <th className="px-1.5 py-1 text-right font-extralight">#</th>
-                  <th className="px-1.5 py-1 text-right font-extralight">عنوان</th>
-                  <th className="px-1.5 py-1 text-left font-extralight">وزن</th>
-                  <th className="px-1.5 py-1 text-right font-extralight">وضعیت</th>
-                  <th className="px-1.5 py-1 text-right font-extralight">سند</th>
-                  <th className="px-1.5 py-1 text-left font-extralight">تأخیر</th>
+                  <th className="px-1.5 py-1 text-start font-extralight">#</th>
+                  <th className="px-1.5 py-1 text-start font-extralight">عنوان</th>
+                  <th className="px-1.5 py-1 text-end font-extralight">وزن</th>
+                  <th className="px-1.5 py-1 text-start font-extralight">وضعیت</th>
+                  <th className="px-1.5 py-1 text-start font-extralight">سند</th>
+                  <th className="px-1.5 py-1 text-end font-extralight">تأخیر</th>
                   <th className="px-1.5 py-1"></th>
                 </tr>
               </thead>
@@ -2524,15 +2524,15 @@ function ProgressSection({
                   <tr key={m.Id} className="border-t b-line-soft">
                     <td className="px-1.5 py-1 tabular-nums tx2">{fmt(m.MilestoneNo)}</td>
                     <td className="px-1.5 py-1 tx1">{m.TitleFa}</td>
-                    <td className="px-1.5 py-1 text-left tabular-nums tx2" dir="ltr">{fmt(m.WeightPct)}٪</td>
+                    <td className="px-1.5 py-1 text-end tabular-nums tx2" dir="ltr">{fmt(m.WeightPct)}٪</td>
                     <td className="px-1.5 py-1 text-[8.5px] tx2">{m.statusFa}</td>
                     <td className={`px-1.5 py-1 text-[8.5px] ${m.needsEvidence ? "text-amber-300" : "tx3"}`}>
                       {m.EvidenceDocNo ?? (m.needsEvidence ? "بی‌سند — نیم‌شمرده" : "—")}
                     </td>
-                    <td className={`px-1.5 py-1 text-left tabular-nums text-[8.5px] ${m.isLate ? "text-rose-300" : "tx4"}`} dir="ltr">
+                    <td className={`px-1.5 py-1 text-end tabular-nums text-[8.5px] ${m.isLate ? "text-rose-300" : "tx4"}`} dir="ltr">
                       {m.isLate ? `${fmt(m.lateDays)} روز` : "—"}
                     </td>
-                    <td className="px-1.5 py-1 text-left">
+                    <td className="px-1.5 py-1 text-end">
                       {m.effectivePct < 100 && (
                         <button
                           onClick={() => void act(

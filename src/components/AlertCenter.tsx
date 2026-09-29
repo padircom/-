@@ -41,7 +41,7 @@ export default function AlertCenter({ lang }: { lang: Lang }) {
         </span>
       </header>
 
-      <div className="thin-scroll min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
+      <div className="thin-scroll min-h-0 flex-1 space-y-2 overflow-y-auto pe-1">
         {alerts.map((al) => {
           const meta = severityMeta[al.severity];
           return (

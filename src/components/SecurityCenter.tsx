@@ -234,7 +234,7 @@ export default function SecurityCenter({ lang }: { lang: Lang }) {
             {posture.findings.length === 0 ? (
               <div className="py-10 text-center text-[10px] text-emerald-300">{rtl ? "هیچ یافتهٔ بازی وجود ندارد — پیکربندی سالم است" : "No open findings — configuration is clean"}</div>
             ) : (
-              <div className="thin-scroll max-h-[460px] space-y-1.5 overflow-y-auto pr-1">
+              <div className="thin-scroll max-h-[460px] space-y-1.5 overflow-y-auto pe-1">
                 {posture.findings.map((f, i) => (
                   <div key={`${f.code}-${i}`} className={`rounded-xl border p-2 ${SEV_STYLE[f.severity]}`}>
                     <div className="flex flex-wrap items-center gap-1.5">
@@ -541,7 +541,7 @@ export default function SecurityCenter({ lang }: { lang: Lang }) {
                   <div key={d.id} className="glass-row rounded-xl px-2.5 py-2">
                     <div className="flex flex-wrap items-center gap-1.5">
                       <span className="text-[9.5px] font-light tx1">{from}</span>
-                      <span className="tx4">→</span>
+                      <span className="inline-block tx4 rtl:rotate-180">→</span>
                       <span className="text-[9.5px] font-light tx1">{to}</span>
                       <span className={`rounded px-1.5 py-0.5 text-[8px] ${d.revoked ? "bg-neutral-500/20 tx3" : active ? "bg-emerald-400/15 text-emerald-300" : "bg-amber-400/15 text-amber-200"}`}>
                         {d.revoked ? (rtl ? "باطل‌شده" : "revoked") : active ? (rtl ? "فعال" : "active") : rtl ? "خارج از بازه" : "out of window"}

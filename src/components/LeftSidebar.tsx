@@ -1,5 +1,9 @@
 import { useState } from "react";
 import { dataSources, ui, t, type Lang } from "../data/framework";
+import { useAuth } from "../context/AuthContext";
+import { useDataSourceHealth } from "../hooks/useDataSourceHealth";
+import { healthMessages } from "../services/dataSourceHealth";
+import SidebarFrame from "./SidebarFrame";
 
 type Props = {
   lang: Lang;
@@ -9,50 +13,55 @@ type Props = {
 
 export default function LeftSidebar({ lang, activeSource, onPick }: Props) {
   const rtl = lang === "fa";
+  const { user } = useAuth();
+  const health = useDataSourceHealth(user?.id ?? null);
+  const connectedCount = dataSources.filter(source => health[source.id].status === "connected").length;
+  const summary = rtl
+    ? `${connectedCount.toLocaleString("fa-IR")} اتصال تأییدشده از ${dataSources.length.toLocaleString("fa-IR")} منبع`
+    : `${connectedCount} of ${dataSources.length} connections verified`;
+  const selectedSource = dataSources.find(source => source.id === activeSource);
   const [connectNotice, setConnectNotice] = useState(false);
-  const [collapsed, setCollapsed] = useState(false);
   return (
-    <div className={`relative h-full shrink-0 transition-[width] duration-300 ease-out ${collapsed ? "w-0" : "w-[248px]"}`}>
+    <SidebarFrame side="left" lang={lang}>
       <aside
         dir={rtl ? "rtl" : "ltr"}
-        className={`glass-dark flex h-full w-[248px] flex-col rounded-2xl transition-[transform,opacity] duration-300 ease-out ${collapsed ? "pointer-events-none -translate-x-full opacity-0" : "translate-x-0 opacity-100"}`}
+        className="glass-dark flex h-full min-h-0 w-full flex-col rounded-2xl"
       >
         <header className="b-line border-b px-4 py-3.5">
           <div className="flex items-center gap-2">
             <span className="chip-bg grid h-7 w-7 place-items-center rounded-lg text-[13px]">🔌</span>
             <div className="min-w-0 flex-1">
               <h2 className="truncate text-[12.5px] font-normal tx1">{t(ui.sourcesTitle, lang)}</h2>
-              <p className="mt-0.5 truncate text-[9.5px] font-extralight tx3">{t(ui.sourcesSub, lang)}</p>
+              <p className="mt-0.5 truncate text-[9.5px] font-extralight tx3" title={summary}>{summary}</p>
             </div>
-            <button
-              type="button"
-              onClick={() => setCollapsed(true)}
-              aria-expanded={!collapsed}
-              aria-label={rtl ? "پنهان کردن سایدبار منابع داده" : "Hide data sources sidebar"}
-              title={rtl ? "پنهان کردن سایدبار منابع داده" : "Hide data sources sidebar"}
-              className="grid h-7 w-7 shrink-0 place-items-center rounded-lg border b-line-soft bg-[var(--row)] tx3 transition hover:tx1"
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
-                <path d="m15 6-6 6 6 6" />
-              </svg>
-            </button>
           </div>
         </header>
 
-      <div className="thin-scroll flex-1 space-y-2 overflow-y-auto px-3 py-3">
+      <div className="thin-scroll min-h-0 flex-1 overflow-y-auto px-3 py-2">
         {dataSources.map((s) => {
           const on = activeSource === s.id;
+          const state = health[s.id];
+          const connected = state.status === "connected";
+          const label = connected ? t(ui.connected, lang)
+            : state.status === "loading" ? (rtl ? "بررسی…" : "Checking…")
+            : state.status === "disconnected" ? t(ui.disconnected, lang)
+            : (rtl ? "نامشخص" : "Unknown");
           return (
             <button
               key={s.id}
               onClick={() => onPick(s.id)}
-              className={`glass-row block w-full rounded-xl px-2.5 py-2 text-start ${on ? "row-on" : ""}`}
-              style={on ? { borderColor: s.color } : undefined}
+              type="button"
+              data-source-id={s.id}
+              data-health={state.status}
+              title={t(healthMessages[state.reason], lang)}
+              aria-describedby={on ? "source-health-detail" : undefined}
+              className={`source-row block w-full px-2 py-2.5 text-start ${on ? "row-on" : ""}`}
+              aria-pressed={on}
             >
               <div className="flex items-center gap-2.5">
                 <span
-                  className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-[14px]"
-                  style={{ background: `${s.color}1f`, border: `1px solid ${s.color}55` }}
+                  className="grid h-6 w-6 shrink-0 place-items-center text-[14px]"
+                  style={{ color: s.color }}
                 >
                   {s.icon}
                 </span>
@@ -60,8 +69,9 @@ export default function LeftSidebar({ lang, activeSource, onPick }: Props) {
                   <div className="flex items-center gap-1.5">
                     <span className="truncate text-[11px] font-light tx1">{s.name}</span>
                     <span
-                      className={`ms-auto h-[7px] w-[7px] shrink-0 rounded-full ${s.connected ? "pulse-dot" : ""}`}
-                      style={{ background: s.connected ? "#34D399" : "#94A3B8", opacity: s.connected ? 1 : 0.55 }}
+                      className={`ms-auto h-[7px] w-[7px] shrink-0 rounded-full ${connected ? "pulse-dot" : ""}`}
+                      aria-hidden="true"
+                      style={{ background: connected ? "#34D399" : state.reason === "disconnected" ? "#F87171" : "#94A3B8" }}
                     />
                   </div>
                   <div className="mt-0.5 flex items-center gap-1.5">
@@ -69,11 +79,13 @@ export default function LeftSidebar({ lang, activeSource, onPick }: Props) {
                     <span className="text-[8.5px] font-extralight tx4">·</span>
                     <span
                       className="text-[9px] font-extralight"
-                      style={{ color: s.connected ? "var(--ok)" : "var(--ink4)" }}
+                      style={{ color: connected ? "var(--ok)" : "var(--ink3)" }}
                     >
-                      {s.connected ? t(ui.connected, lang) : t(ui.disconnected, lang)}
+                      {label}
                     </span>
-                    <span className="ms-auto text-[8.5px] font-extralight tx4">{s.latency}</span>
+                    <span className="ms-auto shrink-0 text-[8.5px] font-extralight tx4 tabular-nums" dir="ltr">
+                      {connected && state.latencyMs !== null ? `${state.latencyMs.toLocaleString("en-US")} ms` : "—"}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -81,6 +93,13 @@ export default function LeftSidebar({ lang, activeSource, onPick }: Props) {
           );
         })}
       </div>
+
+      {selectedSource && (
+        <div id="source-health-detail" role="status" className="b-line border-t px-3 py-2 text-[9px] leading-4 tx3">
+          <span className="font-normal tx2" dir="ltr">{selectedSource.name}</span>
+          <p>{t(healthMessages[health[selectedSource.id].reason], lang)}</p>
+        </div>
+      )}
 
       <div className="b-line border-t p-3">
         <button
@@ -101,20 +120,6 @@ export default function LeftSidebar({ lang, activeSource, onPick }: Props) {
         )}
       </div>
       </aside>
-      {collapsed && (
-        <button
-          type="button"
-          onClick={() => setCollapsed(false)}
-          aria-expanded={false}
-          aria-label={rtl ? "نمایش سایدبار منابع داده" : "Show data sources sidebar"}
-          title={rtl ? "نمایش سایدبار منابع داده" : "Show data sources sidebar"}
-          className="absolute left-0 top-4 z-30 grid h-10 w-7 translate-x-0 place-items-center rounded-r-xl border border-l-0 border-sky-400/35 bg-[var(--panel2)] text-sky-200 shadow-lg transition hover:w-8 hover:bg-sky-400/10"
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
-            <path d="m9 6 6 6-6 6" />
-          </svg>
-        </button>
-      )}
-    </div>
+    </SidebarFrame>
   );
 }

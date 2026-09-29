@@ -152,7 +152,7 @@ export default function SqlConnectionPanel({ lang }: { lang: Lang }) {
         ))}
       </nav>
 
-      <div className="thin-scroll min-h-0 flex-1 overflow-y-auto pr-1">
+      <div className="thin-scroll min-h-0 flex-1 overflow-y-auto pe-1">
         {/* ── Connection settings ── */}
         {tab === "connection" && (
           <div className="fade-rise space-y-3">

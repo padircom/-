@@ -348,7 +348,7 @@ export default function QualityWorkspace({
         </nav>
       )}
 
-      <div className="thin-scroll min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
+      <div className="thin-scroll min-h-0 flex-1 space-y-3 overflow-y-auto pe-1">
         {/* ═══ تب ۱: برنامه‌ریزی کیفیت و ITP ═══ */}
         {tab === "plan" && (
           <>
