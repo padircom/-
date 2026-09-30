@@ -241,6 +241,28 @@ export default function DailyReportWorkspace({ lang }: { lang: Lang }) {
 
   return (
     <div className="mt-4 flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto" dir={rtl ? "rtl" : "ltr"}>
+      {/* ── بنر ورود به جداول پشتیبان (dprt-v1) ── */}
+      <section className="glass-dark shrink-0 rounded-2xl border border-emerald-400/30 bg-emerald-400/[0.06] p-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="grid h-8 w-8 place-items-center rounded-lg border border-emerald-400/40 bg-emerald-400/10 text-[15px]">✨</span>
+          <div className="min-w-0 flex-1">
+            <h3 className="text-[12px] font-semibold text-emerald-200">
+              {rtl ? "بخش جدید: جداول پشتیبان گزارش روزانه (۶ تب)" : "New: daily report supporting tables (6 tabs)"}
+            </h3>
+            <p className="text-[8.5px] font-extralight tx3">
+              {rtl
+                ? "وضعیت کارگاه، شرح تشریحی، نیروی انسانی (۱۴۴ ردیف)، ماشین‌آلات، تغییرات و فعالیت‌های اصلی — پایین همین صفحه"
+                : "Site status, narrative, manpower (144 rows), machinery, changes & main activities — below on this page"}
+            </p>
+          </div>
+          <button
+            onClick={() => document.getElementById("dpr-support-tables")?.scrollIntoView({ behavior: "smooth", block: "start" })}
+            className="rounded-lg border border-emerald-400/50 bg-emerald-400/15 px-3 py-1.5 text-[10px] font-medium text-emerald-200 transition hover:bg-emerald-400/25"
+          >
+            {rtl ? "مشاهده جداول ⬇" : "View tables ⬇"}
+          </button>
+        </div>
+      </section>
       {/* ── Template selection: Internal vs Mandated ── */}
       <section className="glass-dark shrink-0 rounded-2xl p-3">
         <div className="mb-3 flex flex-wrap items-center gap-2">

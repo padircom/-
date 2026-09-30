@@ -416,7 +416,7 @@ export default function DprSupportTables({
   const toggleGroup = (key: string) => setOpenGroups((p) => ({ ...p, [key]: !(p[key] ?? true) }));
 
   return (
-    <section className="glass-dark space-y-3 rounded-2xl p-3" dir={rtl ? "rtl" : "ltr"}>
+    <section id="dpr-support-tables" className="glass-dark scroll-mt-4 space-y-3 rounded-2xl p-3" dir={rtl ? "rtl" : "ltr"}>
       <div>
         <h3 className="text-sm font-semibold tx1">{rtl ? "جداول پشتیبان گزارش روزانه" : "Daily report supporting tables"}</h3>
         <p className="mt-1 text-[10px] tx3">
