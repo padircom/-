@@ -9,11 +9,10 @@
  * از روی چینش بخش‌های عکس استخراج شده و جنبهٔ نمایشی دارد.
  *
  * ── موارد نیازمند کنترل با اکسل ──────────────────────────────────────
- * چند عنوان در عکس بریده یا ناخوانا بود و با پرچم `note` مشخص شده‌اند:
- * «Foreman Structur» و «Others Structur» (بریدگی انتهای کلمه → Structure)،
- * یک ردیف piping بین Pipe Wrapper و Others Piping (خوانده شد: Radiographer)،
- * و دو ردیف مالی پس از Finance Manager. اگر در اکسل چیز دیگری است،
- * همین فایل در یک پاس اصلاح می‌شود — کدها ثابت می‌مانند.
+ * املای عکس عیناً حفظ شده («Structur»، «Radiograph»، «Custom Clearance»،
+ * «Soil Mechanic Lab.»)؛ موارد مشکوک با پرچم `note` مشخص‌اند. فاصله‌گذاری
+ * عین عکس است («Admin./Clerk»، «Communication- Engineer»). اگر در اکسل
+ * چیز دیگری است، همین فایل در یک پاس اصلاح می‌شود — کدها ثابت می‌مانند.
  *
  * فقط فاصله‌گذاری داخل پرانتزها یکدست شد: «( ARC )» ← «(ARC)».
  */
@@ -79,13 +78,13 @@ const rows: Array<[title: string, kind: DprManpowerKind, group: string, note?: s
   ["Water Proofing Worker", D, "civil"],
   ["Others Civil", D, "civil"],
   /* ── Structure (7) ── */
-  ["Foreman Structure", D, "structure", "در عکس «Foreman Structur» بریده شده بود"],
+  ["Foreman Structur", D, "structure", "عین عکس (احتمالاً Structure)"],
   ["Technician", D, "structure"],
   ["Assembler/Cutter", D, "structure"],
   ["Steel / Iron Worker", D, "structure"],
   ["Welder", D, "structure"],
   ["Welder Helper", D, "structure"],
-  ["Others Structure", D, "structure", "در عکس «Others Structur» بریده شده بود"],
+  ["Others Structur", D, "structure", "عین عکس (احتمالاً Structure)"],
   /* ── Piping (17) ── */
   ["Foreman Piping", D, "piping"],
   ["Cutter / Bender / Grinder", D, "piping"],
@@ -101,10 +100,9 @@ const rows: Array<[title: string, kind: DprManpowerKind, group: string, note?: s
   ["Pipe Support Welder", D, "piping"],
   ["Welder Helper", D, "piping"],
   ["Pipe Wrapper", D, "piping"],
-  ["Radiographer", D, "piping", "خوانش از عکس نامطمئن؛ با اکسل کنترل شود"],
+  ["Assembler", D, "piping"],
+  ["Radiograph", D, "piping", "عین عکس"],
   ["Others Piping", D, "piping"],
-  /* NOTE: یک ردیف piping بین Pipe Wrapper و Others Piping در عکس ناخوانا
-   * ماند؛ پس از اعلام عنوان دقیق، همین‌جا درج می‌شود (کدها جابه‌جا نمی‌شوند). */
   /* ── Electrical (5) ── */
   ["Foreman Electrical", D, "electrical"],
   ["Technician - Electrical", D, "electrical"],
@@ -186,8 +184,8 @@ const rows: Array<[title: string, kind: DprManpowerKind, group: string, note?: s
   ["Cost Control", I, "planning"],
   ["Contracts", I, "planning"],
   /* ── IT (2) ── */
-  ["IT & Communication - Engineer", I, "it"],
-  ["IT & Communication - Technician", I, "it"],
+  ["IT & Communication- Engineer", I, "it"],
+  ["IT & Communication- Technician", I, "it"],
   /* ── QC & labs (6) ── */
   ["QC Manager / Deputy", I, "qc"],
   ["QC - Engineers", I, "qc"],
@@ -214,11 +212,11 @@ const rows: Array<[title: string, kind: DprManpowerKind, group: string, note?: s
   ["FMCS", I, "material"],
   /* ── Admin & finance (6) ── */
   ["Admin. Manager", I, "admin"],
-  ["Admin. / Clerk", I, "admin"],
+  ["Admin./Clerk", I, "admin"],
   ["Administrative", I, "admin"],
   ["Finance Manager", I, "admin"],
-  ["Finance / Accountant", I, "admin", "خوانش از عکس نامطمئن؛ با اکسل کنترل شود"],
-  ["Others Finance", I, "admin", "خوانش از عکس نامطمئن؛ با اکسل کنترل شود"],
+  ["Finance / Accountant", I, "admin"],
+  ["Others Finance", I, "admin"],
   /* ── Logistics (2) ── */
   ["Logistics Manager / Deputy", I, "logistics"],
   ["Local Procurement / Purchaser", I, "logistics"],

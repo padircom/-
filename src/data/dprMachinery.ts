@@ -1,20 +1,23 @@
 /** فهرست ثابت ماشین‌آلات گزارش روزانه (Machinery) — طبق عکس اکسل کاربر.
  *
  * ── منشأ ────────────────────────────────────────────────────────────
- * رونویسی از عکس شیت Machinery (ستون Machinery). ترتیب ردیف‌ها عین عکس
- * است؛ کدها (MC-001…) صرفاً کلید فنی‌اند و در عکس نیستند. املای عکس
- * عیناً حفظ شده («Macking»، «Theodolit»)؛ فقط فاصله‌گذاری داخل پرانتزها
- * و ردیف‌های تناژ جرثقیل (`100<Crane<250 Ton` ← ‏`Crane 100 - 250 Ton`)
- * یکدست شد تا با ردیف‌های خواهر هم‌قالب باشد.
+ * رونویسی از عکس‌های شیت Machinery (ستون Machinery). ترتیب ردیف‌ها عین
+ * عکس است؛ کدها (MC-001…) صرفاً کلید فنی‌اند و در عکس نیستند.
+ *
+ * املا و فاصله‌گذاری عین عکس حفظ شده، حتی موارد نامتعارف:
+ * «Macking»، «Theodolit»، «Jimplock»، «Pichor / Jack Hammer»،
+ * «Silevv Plant»، «100<Crane< 250 Ton»، «Electric Engine(5KW)»،
+ * «Auto Cutting Machine ( CNC)»، «Mini &finger milling stone».
+ * در شیت، «Batching Plant» دو بار و «X-Ray» در دو ردیف (M/C و Machine)
+ * آمده است — هر دو عیناً نگه داشته شدند.
  *
  * ── گروه‌ها ──────────────────────────────────────────────────────────
  * ستون گروه در عکس نیست؛ گروه‌بندی فقط برای نمایش تاشو در رابط کاربری
  * از روی چینش عکس استخراج شده و جنبهٔ نمایشی دارد.
  *
- * ── موارد نیازمند کنترل با اکسل ──────────────────────────────────────
- * چند عنوان در عکس ناخوانا بود و با پرچم `note` مشخص شده‌اند. اگر در
- * اکسل چیز دیگری است، همین فایل در یک پاس اصلاح می‌شود — کدها ثابت
- * می‌مانند.
+ * ── وضعیت شمارش ─────────────────────────────────────────────────────
+ * این رونویسی ۱۴۲ عنوان است؛ کاربر گفته ۱۴۴ ردیف. دو عنوان در عکس‌ها
+ * خوانده نشد و عمداً با حدس پر نشده — پس از اعلام، همین‌جا درج می‌شود.
  */
 
 export interface DprMachineryRow {
@@ -54,14 +57,14 @@ const rows: Array<[title: string, group: string, note?: string]> = [
   ["Excavator", "earth"],
   ["Grader", "earth"],
   ["Hammer excavator", "earth"],
-  ["Picher / Jack Hammer", "earth", "عین عکس؛ خوانش نامطمئن"],
+  ["Pichor / Jack Hammer", "earth", "عین عکس"],
   ["Bitumen Spreader", "earth"],
   ["Asphalt Finishing Machine", "earth"],
-  ["Compact Roller / Vibrating Roller", "earth", "خوانش از عکس نامطمئن"],
+  ["Compact Roller / Vibrating Roller", "earth"],
   ["Compactor (small)", "earth"],
   ["Screening set", "earth"],
   /* ── Concrete (6) ── */
-  ["Batching Plant", "concrete", "دو بار در عکس آمده؛ با اکسل کنترل شود"],
+  ["Batching Plant", "concrete", "در شیت دو بار آمده (ردیف ۱۲ و ۲۳)"],
   ["Concrete Laboratory", "concrete"],
   ["Concrete / Truck Mixer", "concrete"],
   ["Concrete Pump", "concrete"],
@@ -72,60 +75,59 @@ const rows: Array<[title: string, group: string, note?: string]> = [
   ["Fire Fighting Sprinter", "utility"],
   ["Water Tank Lorry", "utility"],
   ["Fuel Tank Lorry", "utility"],
-  /* ── Batching (3) ── */
-  ["Silo Plant", "batching", "خوانش از عکس نامطمئن؛ با اکسل کنترل شود"],
-  ["Batching Plant", "batching", "تکرار دوم در عکس؛ با اکسل کنترل شود"],
-  ["Cement Silo", "batching"],
+  /* ── Batching (5) ── */
+  ["Silevv Plant", "batching", "عین عکس؛ با اکسل کنترل شود"],
+  ["Batching Plant", "batching", "تکرار دوم در شیت"],
   ["Truck Mixer", "batching"],
   ["Vibrator", "batching"],
-  ["Truck Spray Bar", "batching", "خوانش از عکس نامطمئن"],
+  ["Truck Spray Bar", "batching"],
   /* ── Rebar & cutting (4) ── */
   ["Rebar Cutting", "rebar"],
   ["Bar Bending", "rebar"],
   ["Grinding Machine", "rebar"],
-  ["Tractor/Loader Tractor", "rebar", "خوانش از عکس نامطمئن"],
+  ["Tractor/Loader Tractor", "rebar"],
   /* ── Hauling (11) ── */
   ["Dumper", "haul"],
   ["Dump Truck < 10 Ton", "haul"],
   ["Dump Truck > 10 Ton", "haul"],
-  ["Hand mixing concrete", "haul", "عین عکس؛ خوانش نامطمئن"],
+  ["Hand mixing concrete", "haul", "عین عکس"],
   ["Tractor", "haul"],
-  ["Empty truck", "haul", "عین عکس؛ خوانش نامطمئن"],
+  ["Empty truck", "haul", "عین عکس"],
   ["Truck", "haul"],
   ["Trailer", "haul"],
-  ["Weigh Scale", "haul", "خوانش از عکس نامطمئن"],
+  ["Weigh Scale", "haul"],
   ["Water Tanker", "haul"],
   ["Fuel Tanker", "haul"],
   /* ── Lifting (15) ── */
   ["Boom Truck < 5 Ton", "lifting"],
   ["Boom Truck > 5 Ton", "lifting"],
   ["Crane < 10 Ton", "lifting"],
-  ["Crane 11 - 20 Ton", "lifting"],
-  ["Crane 21 - 30 Ton", "lifting"],
-  ["Crane 31 - 40 Ton", "lifting"],
-  ["Crane 41 - 50 Ton", "lifting"],
-  ["Crane 51 - 70 Ton", "lifting"],
-  ["Crane 71 - 100 Ton", "lifting"],
-  ["Crane 100 - 250 Ton", "lifting"],
-  ["Crane 250 - 500 Ton", "lifting"],
+  ["Crane 11-20 Ton", "lifting"],
+  ["Crane 21-30 Ton", "lifting"],
+  ["Crane 31-40 Ton", "lifting"],
+  ["Crane 41-50 Ton", "lifting"],
+  ["Crane 51-70 Ton", "lifting"],
+  ["Crane 71-100 Ton", "lifting"],
+  ["100<Crane< 250 Ton", "lifting"],
+  ["250<Crane< 500 Ton", "lifting"],
   ["Crawler Crane", "lifting"],
   ["Lift Truck < 5 Ton", "lifting"],
-  ["Lift Truck (6 - 10 Ton)", "lifting"],
+  ["Lift Truck (6 - 10 Ton)", "lifting", "فاصله‌گذاری داخل پرانتز با اکسل کنترل شود"],
   ["Lift Truck > 10 Ton", "lifting"],
   /* ── Power & air (9) ── */
   ["Power Generator < 100 KVA", "power"],
-  ["Power Generator 150 - 300 KVA", "power", "در عکس 150-300 خوانده شد؛ احتمالاً 100-300؛ با اکسل کنترل شود"],
-  ["Power Generator 301 - 500 KVA", "power", "خوانش از عکس نامطمئن"],
+  ["Power Generator 150-300 KVA", "power"],
+  ["Power Generator 301-500 KVA", "power"],
   ["Power Generator > 500 KVA", "power"],
   ["Lighting Tower", "power"],
   ["Air Compressor < 200 cfm", "power"],
-  ["Air Compressor 201 - 500 cfm", "power"],
-  ["Air Compressor 501 - 700 cfm", "power"],
+  ["Air Compressor 201-500 cfm", "power"],
+  ["Air Compressor 501-700 cfm", "power"],
   ["Air Compressor > 700 cfm", "power"],
   /* ── Blasting & paint (5) ── */
   ["Shot blast Machine", "blast", "عین عکس"],
   ["Sandblast Machine", "blast"],
-  ["Paint-Spray Machine", "blast", "خوانش از عکس نامطمئن"],
+  ["Paint-Spray Machine", "blast"],
   ["Hydro-Test Pump", "blast"],
   ["Water Jet", "blast"],
   /* ── Welding (7) ── */
@@ -133,66 +135,66 @@ const rows: Array<[title: string, group: string, note?: string]> = [
   ["Welding Machine (Transformer)", "weld"],
   ["Welding Machine (Diesel Engine)", "weld"],
   ["Auto Welding Machine", "weld"],
-  ["Turning Positioner", "weld", "خوانش از عکس نامطمئن"],
-  ["PWHT Machine (stress relieving)", "weld", "خوانش از عکس نامطمئن"],
-  ["X-Ray M/C", "weld", "در عکس دو ردیف X-Ray هست (M/C و Machine)؛ با اکسل کنترل شود"],
-  /* ── Tanks & misc (7) ── */
-  ["Buggy Mixer", "tanks", "خوانش از عکس نامطمئن"],
+  ["Turning Positioner", "weld"],
+  ["PWHT Machine (stress relieving)", "weld"],
+  ["X-Ray M/C", "weld", "در شیت دو ردیف X-Ray هست (M/C و Machine)"],
+  /* ── Tanks & misc (8) ── */
+  ["Buggy Mixer", "tanks"],
   ["Water Tank", "tanks"],
   ["Diesel Tank", "tanks"],
-  ["Electric Engine (5KW)", "tanks", "خوانش از عکس نامطمئن"],
-  ["Lifting Fixture", "tanks", "خوانش از عکس نامطمئن"],
-  ["Lighting Projector", "tanks", "خوانش از عکس نامطمئن"],
-  ["Air cutting", "tanks", "خوانش از عکس نامطمئن"],
+  ["Electric Engine(5KW)", "tanks"],
+  ["Lifting Fixture", "tanks"],
+  ["Lighting Projector", "tanks"],
+  ["Air cutting", "tanks"],
   ["Sewage pumps", "tanks"],
-  /* ── Survey (5) ── */
-  ["Survey Camera - Nivo", "survey", "خوانش از عکس نامطمئن"],
-  ["Survey Camera - Total", "survey", "خوانش از عکس نامطمئن"],
+  /* ── Survey (6) ── */
+  ["Survey Camera - Nivo", "survey"],
+  ["Survey Camera - Total", "survey"],
   ["Survey Camera - Theodolit", "survey", "عین عکس (Theodolit)"],
   ["GPS", "survey"],
-  ["Topography Camera", "survey", "خوانش از عکس نامطمئن"],
-  ["Surveying Instrument", "survey", "خوانش از عکس نامطمئن"],
+  ["Topography Camera", "survey"],
+  ["Surveying Instrument", "survey"],
   /* ── Testing (7) ── */
-  ["Welding Trans", "test", "عین عکس؛ احتمال بریدگی کلمه؛ با اکسل کنترل شود"],
+  ["Welding Trans", "test", "عین عکس؛ احتمال بریدگی کلمه"],
   ["Rectifier", "test"],
-  ["Stress Relief Machine (PWHT Eq)", "test"],
-  ["X-Ray Machine", "test", "ردیف دوم X-Ray؛ با اکسل کنترل شود"],
+  ["Stress Relief Machine(PWHT Eq)", "test"],
+  ["X-Ray Machine", "test"],
   ["Ultrasonic Equipment", "test"],
-  ["Holiday Test Detector (Black Lig)", "test", "عین عکس؛ احتمال بریدگی کلمه"],
+  ["Holiday Test Detector(Black Lig)", "test", "عین عکس؛ احتمال بریدگی کلمه"],
   ["Vacuum Box Tester", "test"],
-  /* ── Saw & bend (12) ── */
-  ["Saw Machine", "saw", "خوانش از عکس نامطمئن"],
-  ["Gouge", "saw", "خوانش از عکس نامطمئن"],
-  ["Junction Box", "saw", "خوانش از عکس نامطمئن"],
-  ["Auto Cutting Machine (CNC)", "saw", "خوانش از عکس نامطمئن"],
-  ["Cutting Machine / Bevel Machine", "saw", "خوانش از عکس نامطمئن"],
+  /* ── Saw & bend (15) ── */
+  ["Saw Machine", "saw"],
+  ["Gouge", "saw"],
+  ["Junction Box", "saw"],
+  ["Auto Cutting Machine ( CNC)", "saw"],
   ["Plasma Cutting Machine", "saw"],
-  ["Saw Machine - Circular", "saw", "خوانش از عکس نامطمئن"],
-  ["Guillotine", "saw", "خوانش از عکس نامطمئن"],
-  ["Saw Machine - Band", "saw", "خوانش از عکس نامطمئن"],
-  ["Bending Machine - Bar", "saw", "خوانش از عکس نامطمئن"],
-  ["Bending Machine - Pipe", "saw", "خوانش از عکس نامطمئن"],
-  ["Rolling Machine", "saw", "خوانش از عکس نامطمئن"],
-  ["Threading Machine", "saw", "خوانش از عکس نامطمئن"],
+  ["Cutting Machine / Bevel Machine", "saw"],
+  ["Saw Machine - Circular", "saw"],
+  ["Guillotine", "saw"],
+  ["Saw Machine - Band", "saw"],
+  ["Bending Machine - Bar", "saw"],
+  ["Bending Machine - Pipe", "saw"],
+  ["Rolling Machine", "saw"],
+  ["Threading Machine", "saw"],
   ["Grinder", "saw"],
-  ["Punch / Press", "saw", "خوانش از عکس نامطمئن"],
-  /* ── Oven & jacks (6) ── */
-  ["Drying Oven (165 - 350 kg)", "oven", "خوانش از عکس نامطمئن"],
-  ["Drying Oven (5 - 45 kg)", "oven", "خوانش از عکس نامطمئن"],
-  ["Oven (10KG)", "oven", "خوانش از عکس نامطمئن"],
-  ["Jack - Horizontal", "oven", "خوانش از عکس نامطمئن"],
-  ["Jack - Vertical", "oven", "خوانش از عکس نامطمئن"],
+  ["Punch / Press", "saw"],
+  /* ── Oven & jacks (5) ── */
+  ["Drying Oven (165-350 kg)", "oven"],
+  ["Drying Oven ( 5-45 kg)", "oven"],
+  ["Oven ( 10KG)", "oven"],
+  ["Jack - Horizontal", "oven"],
+  ["Jack - Vertical", "oven"],
   /* ── Drilling & hoist (5) ── */
   ["Drilling Machine", "drill"],
-  ["Drill Wagon", "drill", "خوانش از عکس نامطمئن"],
-  ["Elevator", "drill", "خوانش از عکس نامطمئن"],
-  ["Electric Winch", "drill", "خوانش از عکس نامطمئن"],
-  ["Electric Hammer", "drill", "خوانش از عکس نامطمئن"],
-  /* ── Vehicles (7) ── */
+  ["Drill Wagon", "drill"],
+  ["Elevator", "drill"],
+  ["Electric Winch", "drill"],
+  ["Electric Hammer", "drill"],
+  /* ── Vehicles (6) ── */
   ["Bus", "vehicles"],
   ["Mini-Bus", "vehicles"],
   ["Pick Up", "vehicles"],
-  ["Light Vehicle (2Wd & 4Wd)", "vehicles"],
+  ["Light Vehicle ( 2Wd & 4Wd )", "vehicles"],
   ["Ambulance", "vehicles"],
   ["Motor Cycle", "vehicles"],
   /* ── Office (5) ── */
@@ -201,15 +203,15 @@ const rows: Array<[title: string, group: string, note?: string]> = [
   ["Printer", "office"],
   ["Copy Machine", "office"],
   ["Fax Machine", "office"],
-  ["Scanner", "office", "خوانش از عکس نامطمئن"],
-  /* ── Tools (7) ── */
+  /* ── Tools (8) ── */
   ["Oxygen - Acetylene Cutter", "tools"],
-  ["Angle Grinder", "tools", "خوانش از عکس نامطمئن"],
-  ["Electrode Dry Oven", "tools", "خوانش از عکس نامطمئن"],
-  ["Electrode Portable Oven", "tools", "خوانش از عکس نامطمئن"],
-  ["Jimplock", "tools", "عین عکس؛ خوانش بسیار نامطمئن؛ حتماً با اکسل کنترل شود"],
-  ["Grinding Stone", "tools", "خوانش از عکس نامطمئن"],
-  ["Mini & finger milling stone", "tools", "عین عکس؛ خوانش نامطمئن"],
+  ["Angle Grinder", "tools"],
+  ["Electrode Dry Oven", "tools"],
+  ["Electrode Portable Oven", "tools"],
+  ["Jimplock", "tools", "عین عکس"],
+  ["Grinding Stone", "tools"],
+  ["Scanner", "tools"],
+  ["Mini &finger milling stone", "tools", "عین عکس"],
 ];
 
 export const DPR_MACHINERY: DprMachineryRow[] = rows.map(([title, group, note], i) => ({

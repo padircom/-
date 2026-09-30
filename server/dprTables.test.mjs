@@ -41,11 +41,12 @@ test("dprt: نسخه و یکتایی کدها", () => {
   }
 });
 
-test("dprt: شمارش فهرست‌ها (رونویسی عکس؛ ۱ ردیف هر کدام ناخوانا ماند)", () => {
-  // کاربر: هر فهرست ۱۴۴ ردیف. یک ردیف piping و یک ردیف ماشین‌آلات در عکس
-  // ناخوانا بود و عمداً با حدس پر نشد؛ پس از اعلام، همین عدد به‌روز می‌شود.
-  assert.equal(DPR_MANPOWER.length, 143);
-  assert.equal(DPR_MACHINERY.length, 143);
+test("dprt: شمارش فهرست‌ها (نیروی انسانی ۱۴۴؛ ماشین‌آلات ۲ ردیف کم دارد)", () => {
+  // نیروی انسانی با عکس دوم کامل شد (۱۴۴). ماشین‌آلات از روی عکس‌ها ۱۴۲
+  // عنوان خوانده شد و ۲ ردیف هنوز نامشخص است؛ عمداً با حدس پر نشد و پس
+  // از اعلام، همین عدد به ۱۴۴ به‌روز می‌شود.
+  assert.equal(DPR_MANPOWER.length, 144);
+  assert.equal(DPR_MACHINERY.length, 142);
   const kinds = new Set(DPR_MANPOWER.map((r) => r.kind));
   assert.deepEqual([...kinds].sort(), ["direct", "indirect"]);
   assert.ok(DPR_MANPOWER.some((r) => r.kind === "direct"));
