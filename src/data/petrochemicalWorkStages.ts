@@ -23,9 +23,6 @@
  *
  * این ردیف‌ها در برگه ناخوانا یا ناتمام بودند و با حدس پر **نشده‌اند**:
  *
- *   · Piping ▸ «Valve Erection- (AG)» — در برگه ردیف وزن پر است
- *     (۱۰/۲۵/۵۰/۱۰/۵) ولی سلول‌های نام گام خالی‌اند. وزنِ بدون نامِ
- *     گام بی‌معناست، پس ردیف ثبت نشد.
  *   · Static Equipment ▸ «Double Tank» و «Spherical tank» (Note 12) —
  *     در برگه خالی‌اند.
  *   · Equipment Packages ▸ «Double Tank» و «Spherical tank» — در برگه
@@ -35,6 +32,22 @@
  *
  * برگه‌های Civil و Piping کامل‌اند (کاربر تأیید کرد): نشانگر «Page 2»
  * کنار تصویر مرز ناحیهٔ چاپ است، نه صفحهٔ دوم داده.
+ *
+ * ── تنها برچسبی که از برگهٔ پتروشیمی خوانده نشده ────────────────────
+ *
+ * نام گام‌های `Piping ▸ Valve Erection- (AG)` از ردیف هم‌ارز کاتالوگ
+ * نفتی برداشته شده است (وزن‌ها در هر دو برگه یکی است). جزئیات کنار
+ * خود ردیف. هیچ **وزنی** در این فایل استنتاجی نیست.
+ *
+ * ── ردیف‌های با جمع ناهمسان ─────────────────────────────────────────
+ *
+ * ۱۴ ردیف جمعشان ۱۰۰ نیست و این عمدی است:
+ *   · `Equipment Packages ▸ Package Equipment` = ۹۵ — در خود برگه ۹۵
+ *     است. برگهٔ کوچک‌ترِ هم‌نام برای همین ردیف ۵/۵/۶۰/۱۵/۵/۵/۵ (جمع
+ *     ۱۰۰) دارد؛ تعارض دو برگه هنوز حل نشده و نسخهٔ کامل ثبت است.
+ *   · ۱۲ ردیف `MECHANICAL WORK` و `ELECTRICAL WORK` ساختمان‌ها = ۱۰۱.
+ *   · `Rotary Equipment ▸ Fan/Blower` = ۹۸٫۵ — ردیف بسیار فشرده؛
+ *     نیازمند مقابله با نسخهٔ بزرگ‌تر برگه.
  *
  * ── نحوهٔ افزودن ردیف ────────────────────────────────────────────────
  *
@@ -124,8 +137,13 @@ const rows: WorkStageRow[] = [
   ["Piping", "Piping Support Field Installation -(AG)", "Handling:10|Erection/Fit Up ( Assembly in Position):34|Welding/Bolting:30|NDT:11|Clamp Installation:5|Punch Removal:5|Final Inspection:5"],
   ["Piping", "Piping Shop Fabrication - (AG)", "Fit Up:35|Welding:48|NDT:10|PWHT:2|Final Inspection:5"],
   ["Piping", "Piping Field Erection - (AG)", "Scaffolding:5|Fit Up:25|Welding:35|NDT:8|PWHT:2|Punch A Removal:5|Test Package Prepration:2|Hydro-Test:10|Reinstatement:3|Final Inspection:5"],
-  /* «Valve Erection- (AG)» اینجا نیست — نام گام‌ها در برگه زیر واترمارک
-   * پنهان است. وزن‌های خوانا: ۱۰/۲۵/۵۰/۱۰/۵. */
+  /* «Valve Erection- (AG)»: در برگهٔ پتروشیمی فقط ردیف وزن پر است و
+   * سلول‌های نام گام خالی‌اند. نام‌ها از ردیف هم‌ارز کاتالوگ نفتی
+   * («Valve Erection (AG) - welded») برداشته شد، چون هر پنج وزن مو به
+   * مو یکی‌اند: ۱۰/۲۵/۵۰/۱۰/۵. این تنها ردیفی است که برچسب گامش از
+   * برگهٔ پتروشیمی خوانده نشده — با تأیید کاربر. اگر نسخهٔ کامل برگه
+   * رسید، همین‌جا جایگزین شود. */
+  ["Piping", "Valve Erection- (AG)", "Material Handling:10|Valve Pre Installation (Fit Up):25|Welding:50|NDT:10|Final Inspection:5"],
   ["Piping", "Valve Erection- (UG)", "Handling:15|Installation:60|welding/Bolting:20|Final Inspection:5"],
   ["Piping", "Steam Tracing - (AG)", "Erection:15|Assembly:40|Welding/Threading:40|Final Inspection:5"],
   ["Piping", "U/G Piping (Metal)", "Material Handling:5|Fit Up:22|Welding:40|Alignment/Padding:5|NDT:5|Hydro-Test:10|Coating/Wrapping:5|Holiday Test:3|Final Inspection:5"],
