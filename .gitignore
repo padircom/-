@@ -75,5 +75,8 @@ server/mcsDrillLogic.js
 
 # Generated P10 AI assistant engine (بازتولید: npm run build:aiassist)
 server/aiAssistantLogic.js
+
+# Generated DPR supporting-tables engine (بازتولید: npm run build:dprt)
+server/dprTablesLogic.js
 # پیوست‌های DPR/CPMS زمان اجرا — داده است، نه کد
 server/storage/cpm-dpr/

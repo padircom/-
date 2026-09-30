@@ -30,6 +30,9 @@
  *     ولی نام گام‌ها خالی است.
  *   · Rotary Equipment ▸ «Silencer» — ردیف خالی.
  *
+ * (تأیید ۱۴۰۵/۰۷/۰۸: هر پنج ردیف تا رسیدن برگهٔ نهایی بیرون از کاتالوگ
+ * می‌مانند.)
+ *
  * برگه‌های Civil و Piping کامل‌اند (کاربر تأیید کرد): نشانگر «Page 2»
  * کنار تصویر مرز ناحیهٔ چاپ است، نه صفحهٔ دوم داده.
  *
@@ -41,7 +44,7 @@
  *
  * ── ردیف‌های با جمع ناهمسان ─────────────────────────────────────────
  *
- * ۱۴ ردیف جمعشان ۱۰۰ نیست و این عمدی است. کاربر بررسی و تأیید کرد که
+ * ۱۳ ردیف جمعشان ۱۰۰ نیست و این عمدی است. کاربر بررسی و تأیید کرد که
  * نرمال‌سازی خودکار لازم نیست، چون وزن هر گام در خود صفحه قابل ویرایش
  * است و رابط کاربری جمع ناهمسان را زرد نشان می‌دهد.
  *
@@ -53,14 +56,18 @@
  * و پرچمی که باید آن را لو بدهد هم پاک می‌شود. نرمال‌سازی وقتی درست
  * است که منشأ انحراف معلوم باشد.
  *
- *   · `Equipment Packages ▸ Package Equipment` = ۹۵ — در خود برگه ۹۵
- *     است. برگهٔ کوچک‌ترِ هم‌نام برای همین ردیف ۵/۵/۶۰/۱۵/۵/۵/۵ (جمع
- *     ۱۰۰) دارد؛ تعارض دو برگه حل نشد و نسخهٔ کامل ثبت است.
  *   · ۱۲ ردیف `MECHANICAL WORK` و `ELECTRICAL WORK` ساختمان‌ها = ۱۰۱،
  *     عیناً مطابق برگه.
  *   · `Rotary Equipment ▸ Fan/Blower` = ۹۸٫۵ — ۳۲ گام در نواری بسیار
  *     باریک؛ تنها ردیفی که به خوانشش اطمینان نیست. پیش از استناد به
- *     این ردیف، با نسخهٔ بزرگ‌ترِ برگه مقابله شود.
+ *     این ردیف، با نسخهٔ بزرگ‌ترِ برگه مقابله شود (تأیید ۱۴۰۵/۰۷/۰۸:
+ *     تا رسیدن آن نسخه، رونویسی فعلی با همین هشدار می‌ماند).
+ *
+ * حل‌شده ۱۴۰۵/۰۷/۰۸: `Equipment Packages ▸ Package Equipment` در برگهٔ
+ * کامل ۹۵ بود (۱۰/۸/۶۰/۵/۵/۲/۵) و در برگهٔ کوچک‌تر ۱۰۰
+ * (۵/۵/۶۰/۱۵/۵/۵/۵). با تصمیم کاربر وزن‌های برگهٔ کوچک‌تر ثبت شد؛ نام
+ * گام‌ها از برگهٔ کامل ماند، چون برچسب‌های برگهٔ کوچک‌تر داده نشده
+ * است. جزئیات کنار خود ردیف.
  *
  * ── نحوهٔ افزودن ردیف ────────────────────────────────────────────────
  *
@@ -214,8 +221,13 @@ const rows: WorkStageRow[] = [
   ["Equipment Packages", "Machinery", "Compressor", "Material Handling:10|Chipping & Padding:8|Installation:52|Alignment / Leveling:10|Grouting:4|Final Alignment / Piping:8|Final Inspection:8"],
   ["Equipment Packages", "Fix", "Mixer Agitator", "Material Handling:10|Installation:85|Final Inspection:5"],
   ["Equipment Packages", "Machinery", "Pump", "Material Handling:10|Chipping & Padding:8|Installation:52|1st Alignment:15|Grouting:5|2nd Alignment:5|Final Inspection:5"],
-  /* ⚠ جمع این ردیف در برگه ۹۵ درصد است، نه ۱۰۰. عیناً رونویسی شد. */
-  ["Equipment Packages", "Package", "Package Equipment", "Material Handling:10|Chipping & Padding:8|Installation:60|Skid Alignment/Levelinng:5|Grouting:5|Accessory Install:2|Final Inspection:5"],
+  /* تعارض دو برگه (۹۵ در برابر ۱۰۰) با تصمیم کاربر ۱۴۰۵/۰۷/۰۸ به نفع
+   * برگهٔ کوچک‌تر حل شد: وزن‌ها ۵/۵/۶۰/۱۵/۵/۵/۵ (جمع ۱۰۰) از برگهٔ
+   * کوچک‌تر، نام هر هفت گام از برگهٔ کامل (برچسب‌های برگهٔ کوچک‌تر
+   * داده نشده). «Levelinng» همان املای برگهٔ کامل است؛ اگر در برگهٔ
+   * کوچک‌تر «Leveling» است، با رؤیت اصلاح شود. وزن‌های پیشین برگهٔ
+   * کامل: ۱۰/۸/۶۰/۵/۵/۲/۵ (جمع ۹۵). */
+  ["Equipment Packages", "Package", "Package Equipment", "Material Handling:5|Chipping & Padding:5|Installation:60|Skid Alignment/Levelinng:15|Grouting:5|Accessory Install:5|Final Inspection:5"],
   ["Equipment Packages", "Machinery", "Overhead Crane", "Material Handling:8|Installing Rail Frame:37|Main Frame Fabrication:30|Crane Install:18|Load Test:2|Final Inspection:5"],
   ["Equipment Packages", "Fix", "Internals/Tray", "Material Handling:10|Install:85|Final Inspection:5"],
   ["Equipment Packages", "Machinery", "Air Cooler", "Material Handling:10|Structure Ground Assembly:15|Structure Installation:6|Tube Bundle Erection:20|Ground Assembly of Plenum:8|Plenum Chamber Installation:10|Motor Installation:4|Blade Installation:5|Pulley Installation:4|Ladder & Platform:4|Pully Adjustment:4|Shaft Alignment/Leveling:5|Final Inspection:5"],

@@ -4,6 +4,8 @@ import { pmisApiClient } from "../services/pmisApiClient";
 import { useSystem } from "../context/SystemContext";
 import { useAuth } from "../context/AuthContext";
 import ReportWorkflowPanel from "./ReportWorkflowPanel";
+import DprSupportTables, { type DprGeneralInfo, type DprIdentityInfo } from "./DprSupportTables";
+import { isDprFormatActive } from "../data/dprScope";
 
 type TemplateKind = "internal" | "mandated";
 type FormatInfo = { label: string; icon: string; color: string; previewable: "pdf" | "image" | "text" | "none" };
@@ -81,11 +83,16 @@ export default function DailyReportWorkspace({ lang }: { lang: Lang }) {
     siteActive: true,
   });
 
+  /* آینهٔ هویت و وضعیت عمومی از تب «وضعیت کارگاه» — سربرگ فقط نمایش می‌دهد. */
+  const [dprIdentity, setDprIdentity] = useState<DprIdentityInfo>({ reportNo: "", reportDate: "" });
+  const [dprGeneral, setDprGeneral] = useState<DprGeneralInfo>({ siteStatus: "", weather: "", avgTemp: null, humidity: null });
+
   const scopeProject = projectScope
     ? projectsByCluster[projectScope.clusterId]?.find((project) => project.id === projectScope.projectId)
     : undefined;
   const activeProjectCode = scopeProject?.code ?? projectScope?.projectId ?? "";
   const canManageTemplates = can("report.daily.edit", projectScope?.projectId);
+  const dprScopeOk = isDprFormatActive(projectScope?.clusterId, projectScope?.projectId);
 
   useEffect(() => {
     try {
@@ -205,6 +212,16 @@ export default function DailyReportWorkspace({ lang }: { lang: Lang }) {
     </label>
   );
 
+  /* فیلد فقط‌خواندنی: مقداری که مالک آن تب دیگری است، اینجا ویرایش نمی‌شود. */
+  const ro = (label: string, value: string) => (
+    <label className="flex flex-col gap-1">
+      <span className="text-[9px] font-extralight tx3">{label}</span>
+      <div className="w-full rounded-lg border b-line-soft bg-black/10 px-2.5 py-1.5 text-[11px] tx2" dir="auto">
+        {value || "—"}
+      </div>
+    </label>
+  );
+
   const logoBox = (who: "client" | "consultant" | "contractor", caption: string) => (
     <div className="flex flex-col items-center gap-1">
       <input type="file" hidden accept="image/*" id={`logo-${who}`} onChange={(e) => importLogo(who, e.target.files)} />
@@ -226,6 +243,30 @@ export default function DailyReportWorkspace({ lang }: { lang: Lang }) {
 
   return (
     <div className="mt-4 flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto" dir={rtl ? "rtl" : "ltr"}>
+      {/* ── بنر ورود به جداول پشتیبان (dprt-v1) — فقط در دامنهٔ فرمت ── */}
+      {dprScopeOk && (
+      <section className="glass-dark shrink-0 rounded-2xl border border-emerald-400/30 bg-emerald-400/[0.06] p-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="grid h-8 w-8 place-items-center rounded-lg border border-emerald-400/40 bg-emerald-400/10 text-[15px]">✨</span>
+          <div className="min-w-0 flex-1">
+            <h3 className="text-[12px] font-semibold text-emerald-200">
+              {rtl ? "بخش جدید: پشتیبان گزارش روزانه (۷ تب)" : "New: daily report support (7 tabs)"}
+            </h3>
+            <p className="text-[8.5px] font-extralight tx3">
+              {rtl
+                ? "وضعیت کارگاه، شرح تشریحی، نیروی انسانی (۱۴۴ ردیف)، ماشین‌آلات، متریال وارده، تغییرات و فعالیت‌های اصلی — پایین همین صفحه"
+                : "Site status, narrative, manpower (144 rows), machinery, materials, changes & main activities — below on this page"}
+            </p>
+          </div>
+          <button
+            onClick={() => document.getElementById("dpr-support-tables")?.scrollIntoView({ behavior: "smooth", block: "start" })}
+            className="rounded-lg border border-emerald-400/50 bg-emerald-400/15 px-3 py-1.5 text-[10px] font-medium text-emerald-200 transition hover:bg-emerald-400/25"
+          >
+            {rtl ? "مشاهده جداول ⬇" : "View tables ⬇"}
+          </button>
+        </div>
+      </section>
+      )}
       {/* ── Template selection: Internal vs Mandated ── */}
       <section className="glass-dark shrink-0 rounded-2xl p-3">
         <div className="mb-3 flex flex-wrap items-center gap-2">
@@ -350,7 +391,7 @@ export default function DailyReportWorkspace({ lang }: { lang: Lang }) {
         <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
           {field(rtl ? "شماره پروژه" : "Project No", "projectNo", "ltr")}
           {field(rtl ? "شماره قرارداد" : "Contract No", "contractNo", "ltr")}
-          {field(rtl ? "شماره گزارش" : "Report No", "reportNo")}
+          {ro(rtl ? "شماره گزارش" : "Report No", dprIdentity.reportNo || header.reportNo)}
           {field(rtl ? "شماره صفحه" : "Page", "page")}
 
           <div className="sm:col-span-2 lg:col-span-4">{field(rtl ? "نام پروژه" : "Project Name", "projectName")}</div>
@@ -360,27 +401,17 @@ export default function DailyReportWorkspace({ lang }: { lang: Lang }) {
           {field(rtl ? "پیمانکار" : "Contractor", "contractor")}
           {field(rtl ? "محل اجرا" : "Location", "location")}
 
-          {field(rtl ? "تاریخ گزارش" : "Report Date", "date", "ltr")}
+          {ro(rtl ? "تاریخ گزارش" : "Report Date", dprIdentity.reportDate || header.date)}
           {field(rtl ? "تاریخ شروع پروژه" : "Start Date", "startDate", "ltr")}
           {field(rtl ? "تاریخ پایان پروژه" : "End Date", "endDate", "ltr")}
 
-          <label className="flex flex-col gap-1">
-            <span className="text-[9px] font-extralight tx3">{rtl ? "وضعیت کارگاه" : "Site Status"}</span>
-            <select
-              value={header.siteActive ? "active" : "inactive"}
-              onChange={(e) => set("siteActive", e.target.value === "active")}
-              className="w-full rounded-lg border b-line-soft bg-black/15 px-2.5 py-1.5 text-[11px] tx1 outline-none"
-              style={{ colorScheme: "dark" }}
-            >
-              <option value="active">{rtl ? "فعال" : "Active"}</option>
-              <option value="inactive">{rtl ? "غیرفعال" : "Inactive"}</option>
-            </select>
-          </label>
-
-          {field(rtl ? "وضعیت آب‌وهوا" : "Weather", "weather")}
-          {field(rtl ? "حداکثر دما" : "Max Temp", "maxTemp", "ltr")}
-          {field(rtl ? "حداقل دما" : "Min Temp", "minTemp", "ltr")}
-          {field(rtl ? "درصد رطوبت" : "Humidity", "humidity", "ltr")}
+          {ro(rtl ? "وضعیت کارگاه" : "Site Status", dprGeneral.siteStatus)}
+          {ro(rtl ? "وضعیت آب‌وهوا" : "Weather", dprGeneral.weather)}
+          {ro(rtl ? "میانگین دما" : "Avg Temp", dprGeneral.avgTemp === null ? "" : String(dprGeneral.avgTemp))}
+          {ro(rtl ? "میانگین رطوبت" : "Avg Humidity", dprGeneral.humidity === null ? "" : String(dprGeneral.humidity))}
+          <p className="text-[8.5px] font-extralight tx4 sm:col-span-2 lg:col-span-4">
+            {rtl ? "شماره/تاریخ گزارش و وضعیت عمومی کارگاه از تب «وضعیت کارگاه» می‌آیند (تک‌منبع)." : "Identity and site status mirror the Site status tab (single source)."}
+          </p>
         </div>
 
         <div className="mt-3 flex items-center gap-2 border-t b-line-soft pt-2">
@@ -416,6 +447,30 @@ export default function DailyReportWorkspace({ lang }: { lang: Lang }) {
           </button>
         </div>
       </section>
+
+      {/* ── جداول پشتیبان گزارش روزانه (dprt-v1): مالک هویت و وضعیت عمومی ── */}
+      {dprScopeOk && (
+      <DprSupportTables
+        lang={lang}
+        projectCode={activeProjectCode}
+        canEdit={canManageTemplates}
+        onIdentity={(info) => {
+          setDprIdentity(info);
+          setHeader((prev) => ({ ...prev, reportNo: info.reportNo || prev.reportNo, date: info.reportDate || prev.date }));
+        }}
+        onGeneralStatus={(g) => {
+          setDprGeneral(g);
+          setHeader((prev) => ({
+            ...prev,
+            siteActive: g.siteStatus !== "In Active",
+            weather: g.weather || prev.weather,
+            maxTemp: g.avgTemp === null ? prev.maxTemp : String(g.avgTemp),
+            minTemp: g.avgTemp === null ? prev.minTemp : String(g.avgTemp),
+            humidity: g.humidity === null ? prev.humidity : String(g.humidity),
+          }));
+        }}
+      />
+      )}
 
       {savedReportId && (
         <ReportWorkflowPanel lang={lang} reportId={savedReportId} reportNo={header.reportNo} />

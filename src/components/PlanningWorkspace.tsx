@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { t, type Lang } from "../data/framework";
+import { useAuth } from "../context/AuthContext";
+import { useSystem } from "../context/SystemContext";
 import { PEX_SCURVE } from "../data/pexProject";
 import { buildPexModel } from "../services/pexModel";
-import { canPostProgress, workingDaysBetween, type WeightMode } from "../services/planning";
+import { workingDaysBetween, type WeightMode } from "../services/planning";
 import { getSchedule, type ApiSchedule } from "../services/pexApiClient";
 import BreakdownBuilder from "./BreakdownBuilder";
 import OilfieldWorkStages from "./OilfieldWorkStages";
@@ -11,6 +13,10 @@ import ContractWorkshop from "./ContractWorkshop";
 import InteractiveGantt, { type GanttActivity } from "./InteractiveGantt";
 import BaselineSCurvePanel from "./BaselineSCurvePanel";
 import CpmWorkspace from "./CpmWorkspace";
+import DailyReportWorkspace from "./DailyReportWorkspace";
+import DprProgressFallback from "./DprProgressFallback";
+import DprSupportTables from "./DprSupportTables";
+import { isDprFormatActive, isDprSupportBoxActive } from "../data/dprScope";
 import MspAnalysisPanel from "./MspAnalysisPanel";
 
 export type PexTab =
@@ -86,13 +92,19 @@ export default function PlanningWorkspace({
   hideTabs?: boolean;
 }) {
   const rtl = lang === "fa";
+  const { can } = useAuth();
+  const { projectsByCluster } = useSystem();
+  /* کد پروژه برای کلید API باکس پشتیبان؛ بازگشت امن به شناسه. */
+  const dprProjectCode =
+    (clusterId && projectId ? projectsByCluster[clusterId]?.find((pj) => pj.id === projectId)?.code : undefined) ??
+    projectId ?? "";
+  const dprCanEdit = can("report.daily.edit", projectId);
   const [tab, setTab] = useState<PexTab>(initialTab);
   const [weightMode, setWeightMode] = useState<WeightMode>("Cost");
   const [alpha, setAlpha] = useState(0.6);
   const [ack, setAck] = useState<Record<string, boolean>>({});
   const [fmt, setFmt] = useState("PDF");
   const [kind, setKind] = useState("External");
-  const [dprDate, setDprDate] = useState("2026-09-04");
 
   useEffect(() => {
     setTab(initialTab);
@@ -213,7 +225,6 @@ export default function PlanningWorkspace({
     [rtl, m]
   );
 
-  const postGate = canPostProgress(m.openPeriod, dprDate);
   /** قالب مقدار بر پایهٔ واحد؛ بدون آن عدد بی‌معناست. */
   const formatDcma = (c: { value: number; unit: "pct" | "count" | "ratio" }) => {
     const v = Math.round(c.value * 100) / 100;
@@ -1069,60 +1080,17 @@ export default function PlanningWorkspace({
           </div>
         )}
 
+        {/* تب گزارش روزانه: راهسازی زیرساخت = فرمت کامل؛ نفت/پتروشیمی/حفاری =
+            فقط باکس پشتیبان؛ بقیهٔ دامنه‌ها = نمای «ثبت پیشرفت واقعی». */}
         {tab === "dpr" && (
-          <div className="fade-rise space-y-2">
-            <div className="glass-dark flex flex-wrap items-center gap-2 rounded-2xl p-3 text-[11px]">
-              <span className="tx3">{rtl ? "تاریخ گزارش" : "Report date"}</span>
-              <input
-                value={dprDate}
-                onChange={(e) => setDprDate(e.target.value)}
-                className="rounded border b-line-soft bg-black/20 px-2 py-1 tx1"
-                dir="ltr"
-              />
-              <span className="tx3">{rtl ? "دوره باز" : "Open period"}</span>
-              <span className="rounded border b-line-soft px-2 py-1 tx1" dir="ltr">{m.openPeriod.code} · {m.openPeriod.from} → {m.openPeriod.to}</span>
-              <span
-                className="ms-auto rounded-lg px-2 py-1 text-[10px]"
-                style={{ background: postGate.ok ? "#8FE3C822" : "#FF9F9F22", color: postGate.ok ? "#8FE3C8" : "#FF9F9F" }}
-              >
-                {postGate.ok
-                  ? rtl ? "ثبت پیشرفت مجاز" : "posting allowed"
-                  : postGate.reason === "period_closed"
-                    ? rtl ? "دوره بسته است" : "period closed"
-                    : rtl ? "خارج از دوره" : "out of period"}
-              </span>
-            </div>
-
-            <div className="glass-dark overflow-x-auto rounded-2xl p-3">
-              <div className="mb-2 text-[11.5px] tx1">{rtl ? "خطوط پیشرفت گام‌های RoC" : "RoC step progress lines"}</div>
-              <table className="w-full min-w-[640px] border-collapse text-[11px]">
-                <thead>
-                  <tr className="border-b b-line-soft text-[10px] tx3">
-                    <th className="px-2 py-1.5 text-start">{rtl ? "فعالیت" : "Activity"}</th>
-                    <th className="px-2 py-1.5 text-start">RoC</th>
-                    <th className="px-2 py-1.5 text-center">{rtl ? "درصد فیزیکی" : "Physical %"}</th>
-                    <th className="px-2 py-1.5 text-start">{rtl ? "گام مسدود (بدون IR)" : "Blocked (no IR)"}</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y b-line-soft">
-                  {m.rows.filter((r) => !r.isMilestone).map((r) => (
-                    <tr key={r.id}>
-                      <td className="px-2 py-1.5 font-mono tx2" dir="ltr">{r.id}</td>
-                      <td className="px-2 py-1.5 tx3" dir="ltr">{r.roc}</td>
-                      <td className="px-2 py-1.5 text-center tabular-nums tx1">{r.physicalPct}%</td>
-                      <td className="px-2 py-1.5 text-[10px]" style={{ color: r.blockedSteps.length ? "#FF9F9F" : undefined }}>
-                        {r.blockedSteps.length ? r.blockedSteps.join(" · ") : "—"}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              <p className="mt-2 text-[9.5px] tx4">
-                {rtl
-                  ? "گام دارای الزام بازرسی بدون IR تأییدشده وارد پیشرفت و EV نمی‌شود؛ فقط پیشرفت Approved محاسبه می‌گردد."
-                  : "Steps requiring inspection without an approved IR are excluded from progress and EV."}
-              </p>
-            </div>
+          <div className="fade-rise">
+            {isDprFormatActive(clusterId, projectId) ? (
+              <DailyReportWorkspace lang={lang} />
+            ) : isDprSupportBoxActive(clusterId) ? (
+              <DprSupportTables lang={lang} projectCode={dprProjectCode} canEdit={dprCanEdit} />
+            ) : (
+              <DprProgressFallback lang={lang} model={m} />
+            )}
           </div>
         )}
 
