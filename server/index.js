@@ -30,6 +30,7 @@ import nodemailer from "nodemailer";
 import { createWorker } from "tesseract.js";
 import { registerRccWorkspaceRoutes } from "./rccWorkspaceApi.js";
 import { registerDprDocRoutes } from "./dprDocApi.js";
+import { registerDprTablesRoutes } from "./dprTablesApi.js";
 import { registerFinWorkspaceRoutes } from "./finWorkspaceApi.js";
 import { registerCkmWorkspaceRoutes } from "./ckmWorkspaceApi.js";
 import { registerScmWorkspaceRoutes } from "./scmWorkspaceApi.js";
@@ -861,6 +862,8 @@ app.use((req, res, next) => {
 /* پیوست‌های DPR (FIX-3) — پس از میان‌افزارهای امنیتی و requestId ثبت می‌شود
  * تا helmet، محدودیت نرخ و traceId روی این مسیرها هم اعمال شود. */
 registerDprDocRoutes(app, { storageRoot, acceptedMimeTypes, maxFileBytes });
+/* جداول پشتیبان گزارش روزانه (dprt-v1) — ماندگاری JSON زیر DATA_DIR. */
+registerDprTablesRoutes(app, { dataDir: path.resolve(process.cwd(), process.env.DATA_DIR || "server/data") });
 /* LIVE-1: میز کار هزینه و تأمین d5 روی دادهٔ ماندگار (/api/fin/:projectId/...). */
 registerFinWorkspaceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
 registerCkmWorkspaceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
