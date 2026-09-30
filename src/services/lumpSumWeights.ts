@@ -33,7 +33,7 @@ export const LUMPSUM_VERSION = "lsw-v1";
 /* ══════════════════════════ نوع‌ها ══════════════════════════ */
 
 /** نوع قرارداد؛ فازهای پیش‌فرض از این تعیین می‌شود. */
-export type LumpSumContractType = "EPC" | "EPCC";
+export type LumpSumContractType = "EPC" | "EPCC" | "PC" | "C";
 
 /**
  * فاز استاندارد.
@@ -72,8 +72,22 @@ export const EPCC_PHASES: PhaseMeta[] = [
   { code: "CM", titleFa: "راه‌اندازی", titleEn: "Commissioning", typicalPct: 8 },
 ];
 
+/** PC و C نیز همان کد فازهای P/C را دارند؛ درصدها صرفاً پیشنهاد اولیه‌اند. */
+export const PC_PHASES: PhaseMeta[] = [
+  { code: "P", titleFa: "تدارکات", titleEn: "Procurement", typicalPct: 50 },
+  { code: "C", titleFa: "اجرا", titleEn: "Construction", typicalPct: 50 },
+];
+export const C_PHASES: PhaseMeta[] = [
+  { code: "C", titleFa: "اجرا", titleEn: "Construction", typicalPct: 100 },
+];
+
 export function phasesFor(type: LumpSumContractType): PhaseMeta[] {
-  return type === "EPCC" ? EPCC_PHASES : EPC_PHASES;
+  switch (type) {
+    case "EPCC": return EPCC_PHASES;
+    case "EPC": return EPC_PHASES;
+    case "PC": return PC_PHASES;
+    case "C": return C_PHASES;
+  }
 }
 
 /** پشتوانهٔ یک وزن توافقی. */

@@ -15,10 +15,11 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { type Lang } from "../data/framework";
 import SystemBadge from "./SystemBadge";
+import HseFieldWorkspace, { type HseTab as FieldTab } from "./HseFieldWorkspace";
 import { useAuth } from "../context/AuthContext";
 import { logAudit } from "../services/auditLogger";
 
-export type HseTab = "jsa" | "permit" | "incident" | "violation" | "training" | "dashboard";
+export type HseTab = "jsa" | "permit" | "incident" | "violation" | "training" | "dashboard" | "field";
 
 const TABS: { id: HseTab; fa: string; en: string; icon: string }[] = [
   { id: "jsa", fa: "ارزیابی ریسک", en: "Risk Assessment", icon: "🧭" },
@@ -27,12 +28,13 @@ const TABS: { id: HseTab; fa: string; en: string; icon: string }[] = [
   { id: "violation", fa: "بازرسی و توقف کار", en: "Inspections & SWO", icon: "🛑" },
   { id: "training", fa: "آموزش و محیط‌زیست", en: "Training & Environment", icon: "🎓" },
   { id: "dashboard", fa: "شاخص‌ها", en: "KPIs", icon: "📊" },
+  { id: "field", fa: "HSE کارگاهی", en: "Field HSE", icon: "🏗️" },
 ];
 
 const PROJECT_ID = "p1";
 const ACCENT = "#DC2626";
 
-type Props = { lang: Lang; onBack: () => void; initialTab?: HseTab };
+type Props = { lang: Lang; onBack: () => void; initialTab?: HseTab; initialFieldTab?: FieldTab };
 type Json = Record<string, any>;
 
 /* ═════════════════════ ارتباط با سرور ═════════════════════ */
@@ -204,7 +206,7 @@ const num = (n: unknown, d = 2): string =>
 
 /* ═════════════════════ کامپوننت اصلی ═════════════════════ */
 
-export default function HSEWorkspace({ lang, onBack, initialTab }: Props) {
+export default function HSEWorkspace({ lang, onBack, initialTab, initialFieldTab }: Props) {
   const rtl = lang === "fa";
   const { user } = useAuth();
   const userId = user?.id ?? "";
@@ -399,6 +401,7 @@ export default function HSEWorkspace({ lang, onBack, initialTab }: Props) {
 
       {/* محتوا */}
       <div className="min-h-0 flex-1 overflow-y-auto pe-1">
+        {tab === "field" && <HseFieldWorkspace key={initialFieldTab ?? "dashboard"} lang={lang} initialTab={initialFieldTab ?? "dashboard"} />}
         {tab === "jsa" && <JsaTab f={jsa} rtl={rtl} />}
         {tab === "permit" && <PermitTab f={permits} rtl={rtl} onAct={act} />}
         {tab === "incident" && <IncidentTab f={incidents} rtl={rtl} onAct={act} />}

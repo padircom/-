@@ -308,3 +308,36 @@ html[data-theme="light"] ::placeholder {
   border-radius: 99px;
 }
 .thin-scroll::-webkit-scrollbar-track { background: transparent; }
+
+/* Oilfield catalogue dropdowns: an opaque navy surface in BOTH themes.
+   Light-mode's global button colour uses !important, so explicitly override it. */
+.oilfield-select-trigger,
+.oilfield-select-menu {
+  background: #172341;
+  border-color: #4b638e;
+  box-shadow: 0 16px 36px rgba(5, 11, 29, 0.72);
+}
+.oilfield-select-trigger,
+.oilfield-select-trigger span,
+.oilfield-select-option {
+  color: #f4f7ff !important;
+}
+.oilfield-select-option { background: #172341; }
+.oilfield-select-option:hover,
+.oilfield-select-option:focus-visible { background: #304773; }
+.oilfield-select-option[aria-selected="true"] { background: #395482; }
+.oilfield-select-trigger:focus-visible { border-color: #a9c4ff; }
+
+/* The light theme's global black !important rule is more specific than the
+   catalogue option class; keep light text on the opaque portal menu. */
+html[data-theme="light"] .oilfield-select-menu,
+html[data-theme="light"] .oilfield-select-menu button,
+html[data-theme="light"] .oilfield-select-menu button span,
+html[data-theme="light"] .oilfield-select-trigger,
+html[data-theme="light"] .oilfield-select-trigger span {
+  color: #f4f7ff !important;
+}
+html[data-theme="light"] .oilfield-select-trigger {
+  background: #172341;
+  border-color: #4b638e;
+}

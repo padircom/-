@@ -11,8 +11,24 @@ var EPCC_PHASES = [
   { code: "C", titleFa: "\u0627\u062C\u0631\u0627", titleEn: "Construction", typicalPct: 36 },
   { code: "CM", titleFa: "\u0631\u0627\u0647\u200C\u0627\u0646\u062F\u0627\u0632\u06CC", titleEn: "Commissioning", typicalPct: 8 }
 ];
+var PC_PHASES = [
+  { code: "P", titleFa: "\u062A\u062F\u0627\u0631\u06A9\u0627\u062A", titleEn: "Procurement", typicalPct: 50 },
+  { code: "C", titleFa: "\u0627\u062C\u0631\u0627", titleEn: "Construction", typicalPct: 50 }
+];
+var C_PHASES = [
+  { code: "C", titleFa: "\u0627\u062C\u0631\u0627", titleEn: "Construction", typicalPct: 100 }
+];
 function phasesFor(type) {
-  return type === "EPCC" ? EPCC_PHASES : EPC_PHASES;
+  switch (type) {
+    case "EPCC":
+      return EPCC_PHASES;
+    case "EPC":
+      return EPC_PHASES;
+    case "PC":
+      return PC_PHASES;
+    case "C":
+      return C_PHASES;
+  }
 }
 function roundMoney(n, digits = 2) {
   const f = 10 ** digits;
@@ -154,9 +170,11 @@ function normalizeToHundred(nodes) {
   });
 }
 export {
+  C_PHASES,
   EPCC_PHASES,
   EPC_PHASES,
   LUMPSUM_VERSION,
+  PC_PHASES,
   WEIGHT_SUM_TOLERANCE,
   allocateCost,
   checkWeightSum,

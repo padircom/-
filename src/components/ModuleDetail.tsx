@@ -25,10 +25,12 @@ import VendorRatingPanel from "./VendorRatingPanel";
 import GeoProjectsPanel from "./GeoProjectsPanel";
 import EfqmPanel from "./EfqmPanel";
 import StrategyWorkspace from "./StrategyWorkspace";
+import StrategyDashboard from "./StrategyDashboard";
 import TaxonomyEditor from "./TaxonomyEditor";
 import CntIpcPanel from "./CntIpcPanel";
 import { loadProcessTreeFull, type ProcessTreeResult } from "../services/taxonomyApi";
 import SystemBadge from "./SystemBadge";
+import InitiatingGuide from "./InitiatingGuide";
 import { EDITABLE_TAXONOMY_DOMAINS } from "../services/taxonomyApi";
 
 /** Extra submodules only on the d1 inner page — not in the main right sidebar. */
@@ -83,24 +85,19 @@ const D2_TAB_BY_SUB: Record<string, PexTab> = {
   "d2-p6-al": "alerts",
 };
 
-/** Extra HSE submodules only on the d2 inner page — not in the main right sidebar. */
-const HSE_PAGE_SUBS: Record<string, { id: string; title: Bi; tab: HseFieldTab; sql: string[] }[]> = {
-  "d2-p4": [
-    { id: "d2-p4-hse", title: { fa: "ایمنی، بهداشت و محیط‌زیست (HSE)", en: "HSE" }, tab: "dashboard", sql: ["hse_incident", "hse_permit", "hse_inspection"] },
-    { id: "d2-p4-hse-inc", title: { fa: "HSE — رجیستر حوادث", en: "HSE Incidents" }, tab: "incidents", sql: ["hse_incident"] },
-    { id: "d2-p4-hse-ptw", title: { fa: "HSE — پروانه کار", en: "HSE Permits" }, tab: "ptw", sql: ["hse_permit"] },
-    { id: "d2-p4-hse-insp", title: { fa: "HSE — بازرسی‌ها", en: "HSE Inspections" }, tab: "inspections", sql: ["hse_inspection"] },
-    { id: "d2-p4-hse-he", title: { fa: "HSE — بهداشت/محیط", en: "HSE Health/Env" }, tab: "healthenv", sql: ["hse_tbt"] },
-    { id: "d2-p4-hse-act", title: { fa: "HSE — اقدامات اصلاحی", en: "HSE Actions" }, tab: "actions", sql: ["hse_action"] },
-  ],
+/** Old d2 deep links redirect to the HSE module after the field workspace move. */
+const LEGACY_HSE_SUBS: Record<string, string> = {
+  "d2-p4-hse": "d16-p7-s1",
+  "d2-p4-hse-inc": "d16-p7-s2",
+  "d2-p4-hse-ptw": "d16-p7-s3",
+  "d2-p4-hse-insp": "d16-p7-s4",
+  "d2-p4-hse-he": "d16-p7-s5",
+  "d2-p4-hse-act": "d16-p7-s6",
 };
-const HSE_TAB_BY_SUB: Record<string, HseFieldTab> = {
-  "d2-p4-hse": "dashboard",
-  "d2-p4-hse-inc": "incidents",
-  "d2-p4-hse-ptw": "ptw",
-  "d2-p4-hse-insp": "inspections",
-  "d2-p4-hse-he": "healthenv",
-  "d2-p4-hse-act": "actions",
+const FIELD_HSE_TAB_BY_SUB: Record<string, HseFieldTab> = {
+  "d16-p7-s1": "dashboard", "d16-p7-s2": "incidents",
+  "d16-p7-s3": "ptw", "d16-p7-s4": "inspections",
+  "d16-p7-s5": "healthenv", "d16-p7-s6": "actions",
 };
 
 const D3_PAGE_SUBS: Record<string, { id: string; title: Bi; tab: PmaTab; sql: string[] }[]> = {
@@ -274,6 +271,7 @@ const D16_TAB_BY_PROCESS: Record<string, HseTab> = {
   "d16-p4": "violation",
   "d16-p5": "training",
   "d16-p6": "dashboard",
+  "d16-p7": "field",
 };
 
 const D9_TAB_BY_SUB: Record<string, EqmTab> = {
@@ -413,6 +411,8 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
   const [selected, setSelected] = useState<{ pId: string; sId: string } | null>(
     target.processId && target.subId ? { pId: target.processId, sId: target.subId } : null
   );
+  const [d6Guide, setD6Guide] = useState(false);
+  const [strategyWorkspaceOpen, setStrategyWorkspaceOpen] = useState(false);
   const [taxonomyProcesses, setTaxonomyProcesses] = useState<Process[] | null>(null);
   const [taxonomyEditorOpen, setTaxonomyEditorOpen] = useState(false);
   const [taxonomyCanEdit, setTaxonomyCanEdit] = useState(false);
@@ -420,8 +420,9 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
   useEffect(() => {
     let alive = true;
     setTaxonomyProcesses(null);
-    /* بدون مجوز کلاینتی درخواست نمی‌فرستیم؛ مرجع نهایی همان پاسخ سرور است. */
-    if (!dom || !EDITABLE_TAXONOMY_DOMAINS.includes(dom.id) || !target.projectId || !can("gov.process.edit", target.projectId)) {
+    /* خواندن درخت برای همهٔ بینندگان مجاز است؛ ویرایش همچنان به مجوز
+     * کلاینت و تأیید مستقل سرور نیاز دارد. */
+    if (!dom || !EDITABLE_TAXONOMY_DOMAINS.includes(dom.id) || !target.projectId || !can("project.view", target.projectId)) {
       setTaxonomyCanEdit(false);
       return () => { alive = false; };
     }
@@ -429,10 +430,15 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
       const result = await loadProcessTreeFull(target.projectId, dom.id, user?.id);
       if (!alive || !result) return;
       setTaxonomyProcesses(result.processes);
-      setTaxonomyCanEdit(result.canEdit === true);
+      setTaxonomyCanEdit(result.canEdit === true && can("gov.process.edit", target.projectId));
     })();
     return () => { alive = false; };
   }, [dom?.id, target.projectId, user?.id, can]);
+
+  useEffect(() => {
+    const destination = target.moduleId === "d2" && target.subId ? LEGACY_HSE_SUBS[target.subId] : undefined;
+    if (destination) onNavigate?.({ ...target, moduleId: "d16", processId: "d16-p7", subId: destination });
+  }, [target, onNavigate]);
 
   if (!dom) return null;
 
@@ -579,12 +585,6 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
     return "workshop";
   })();
 
-  const hseTab = ((): HseFieldTab | null => {
-    const sid = selected?.sId ?? target.subId;
-    if (sid && HSE_TAB_BY_SUB[sid]) return HSE_TAB_BY_SUB[sid];
-    return null;
-  })();
-
   if (dom.id === "d2") {
     return (
       <div className="flex h-full min-h-0 flex-col gap-3 overflow-hidden" dir={rtl ? "rtl" : "ltr"}>
@@ -628,11 +628,7 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
 
         <div className="workspace-columns flex min-h-0 flex-1 gap-3 overflow-hidden">
           <div dir={rtl ? "rtl" : "ltr"} className="glass flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl p-3">
-            {hseTab ? (
-              <HseWorkspace lang={lang} initialTab={hseTab} hideTabs />
-            ) : (
-              <PlanningWorkspace lang={lang} initialTab={d2Tab} hideTabs />
-            )}
+            <PlanningWorkspace lang={lang} clusterId={target.clusterId} projectId={target.projectId} initialTab={d2Tab} hideTabs />
           </div>
           <aside dir={rtl ? "rtl" : "ltr"} className="glass-dark flex w-[300px] shrink-0 flex-col overflow-hidden rounded-2xl">
             <div className="b-line border-b px-3 py-2.5">
@@ -644,20 +640,19 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
                 <div className="text-[10.5px] font-normal tx1">{t(dom.title, lang)}</div>
               </div>
             </div>
-            <div className="thin-scroll flex-1 overflow-y-auto p-2 space-y-2">
+            <div className="thin-scroll flex-1 overflow-y-auto p-1.5 space-y-1">
               {dom.processes.map((p, i) => (
-                <div key={p.id} className="rounded-xl border b-line-soft bg-black/10 p-1.5">
-                  <div className="flex items-center gap-1.5 px-1 py-1">
+                <div key={p.id} className="rounded-xl border b-line-soft bg-black/10 p-1">
+                  <div className="flex items-center gap-1.5 px-1 py-0.5">
                     <span className="text-[8px] font-light tabular-nums tx4">
                       {(i + 1).toLocaleString(rtl ? "fa-IR" : "en-US")}
                     </span>
                     <span className="text-[10.5px] font-normal" style={{ color: dom.accent }}>{t(p.title, lang)}</span>
                   </div>
-                  <div className="mt-1 space-y-1">
+                  <div className="mt-0.5 space-y-0.5">
                     {[
                       ...p.subs.map((s) => ({ id: s.id, title: s.title, sql: s.sql })),
                       ...(D2_PAGE_SUBS[p.id] ?? []),
-                      ...(HSE_PAGE_SUBS[p.id] ?? []),
                     ].map((s) => (
                       <button
                         key={s.id}
@@ -665,7 +660,7 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
                           audit("OPEN_SUBPROCESS", { projectId: target.projectId, entity: dom.id, entityId: s.id });
                           setSelected({ pId: p.id, sId: s.id });
                         }}
-                        className={`group flex w-full items-start gap-2 rounded-lg px-2 py-2 text-start transition hover:-translate-y-px glass-row ${selected?.sId === s.id ? "row-on" : ""}`}
+                        className={`group flex w-full items-start gap-2 rounded-lg px-2 py-1 text-start transition hover:-translate-y-px glass-row ${selected?.sId === s.id ? "row-on" : ""}`}
                       >
                         <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: dom.accent }} />
                         <div className="min-w-0 flex-1">
@@ -1019,7 +1014,7 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
   if (dom.id === "d16") {
     const sid = selected?.sId ?? target.subId ?? "";
     const pid = sid.split("-").slice(0, 2).join("-");
-    return <HSEWorkspace lang={lang} onBack={onBack} initialTab={D16_TAB_BY_PROCESS[pid]} />;
+    return <HSEWorkspace lang={lang} onBack={onBack} initialTab={D16_TAB_BY_PROCESS[pid]} initialFieldTab={FIELD_HSE_TAB_BY_SUB[sid]} />;
   }
 
   /* مدیریت پیمان و صورت‌وضعیت (d14).
@@ -1578,6 +1573,9 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
             <span className="inline-block rotate-180 rtl:rotate-0">→</span>
             {rtl ? "بازگشت به داشبورد" : "Back to dashboard"}
           </button>
+          <button type="button" onClick={() => { if (d6Guide) { setSelected(null); setD6View("gov"); } setD6Guide(v => !v); }} aria-pressed={d6Guide} className="glass-row shrink-0 rounded-lg px-3 py-2 text-[10.5px] tx1">
+            {d6Guide ? (rtl ? "نقشهٔ فرایند" : "Process map") : (rtl ? "راهنمای ماژول" : "Module guide")}
+          </button>
           {cluster && (
             <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl text-[20px]"
                   style={{ background: `${cluster.color}1f`, border: `1px solid ${cluster.color}55` }}>
@@ -1616,6 +1614,7 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
+          {selected && <button type="button" onClick={() => { setSelected(null); setD6View("gov"); setD6Guide(false); }} className="glass-row rounded-lg px-2.5 py-1 text-[10px] tx1">{rtl ? "← بازگشت به نقشه" : "← Back to map"}</button>}
           {([
             ["gov", rtl ? "حاکمیت و فرآیندها (GOV)" : "Governance (GOV)"],
             ["pmo", rtl ? "دفتر پروژه (PMO)" : "PMO desk"],
@@ -1623,7 +1622,7 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
             <button
               key={k}
               type="button"
-              onClick={() => setD6View(k)}
+              onClick={() => { setD6View(k); setD6Guide(false); }}
               className={`rounded-lg px-2.5 py-1 text-[10px] font-light transition ${
                 d6View === k ? "toggle-on tx1" : "tx3 hover:tx2"
               }`}
@@ -1634,7 +1633,9 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
         </div>
         <div className="workspace-columns flex min-h-0 flex-1 gap-3 overflow-hidden">
           <div dir={rtl ? "rtl" : "ltr"} className="glass flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl p-3">
-            {d6View === "pmo" ? (
+            {d6Guide || (d6View === "gov" && !selected) ? (
+              <InitiatingGuide lang={lang} processes={activeProcesses} projectName={project ? t(project.name, lang) : target.projectId} currentRole={user?.role} canEditStructure={canEditTaxonomy} guide={d6Guide} onSelect={(pId, sId) => { setSelected({ pId, sId }); setD6Guide(false); setD6View("gov"); audit("OPEN_SUBPROCESS", { projectId: target.projectId, entity: dom.id, entityId: sId }); }} />
+            ) : d6View === "pmo" ? (
               <PmoWorkspace lang={lang} />
             ) : (
               <GovernanceWorkspace lang={lang} initialTab={d6Tab} hideTabs />
@@ -1650,24 +1651,25 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
                 <div className="text-[10.5px] font-normal tx1">{t(dom.title, lang)}</div>
               </div>
             </div>
-            <div className="thin-scroll flex-1 overflow-y-auto p-2 space-y-2">
+            <div className="thin-scroll flex-1 overflow-y-auto p-1.5 space-y-1">
               {activeProcesses.map((p, i) => (
-                <div key={p.id} className="rounded-xl border b-line-soft bg-black/10 p-1.5">
-                  <div className="flex items-center gap-1.5 px-1 py-1">
+                <div key={p.id} className="rounded-xl border b-line-soft bg-black/10 p-1">
+                  <div className="flex items-center gap-1.5 px-1 py-0.5">
                     <span className="text-[8px] font-light tabular-nums tx4">
                       {(i + 1).toLocaleString(rtl ? "fa-IR" : "en-US")}
                     </span>
                     <span className="text-[10.5px] font-normal" style={{ color: dom.accent }}>{t(p.title, lang)}</span>
                   </div>
-                  <div className="mt-1 space-y-1">
+                  <div className="mt-0.5 space-y-0.5">
                     {p.subs.map((s) => (
                       <button
                         key={s.id}
                         onClick={() => {
                           audit("OPEN_SUBPROCESS", { projectId: target.projectId, entity: dom.id, entityId: s.id });
                           setSelected({ pId: p.id, sId: s.id });
+                          setD6Guide(false);
                         }}
-                        className={`group flex w-full items-start gap-2 rounded-lg px-2 py-2 text-start transition hover:-translate-y-px glass-row ${selected?.sId === s.id ? "row-on" : ""}`}
+                        className={`group flex w-full items-start gap-2 rounded-lg px-2 py-1.5 text-start transition hover:-translate-y-px glass-row ${selected?.sId === s.id ? "row-on" : ""}`}
                       >
                         <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: dom.accent }} />
                         <div className="min-w-0 flex-1">
@@ -1713,6 +1715,7 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
             <span className="inline-block rotate-180 rtl:rotate-0">→</span>
             {rtl ? "بازگشت به داشبورد" : "Back to dashboard"}
           </button>
+          {(selected || strategyWorkspaceOpen) && <button type="button" onClick={() => { setSelected(null); setStrategyWorkspaceOpen(false); }} className="glass-row rounded-lg px-3 py-2 text-[10.5px] tx1">{rtl ? "بازگشت به داشبورد استراتژی" : "Back to strategy dashboard"}</button>}
           <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl text-[20px]"
                 style={{ background: `${dom.accent}1f`, border: `1px solid ${dom.accent}55` }}>
             {dom.icon}
@@ -1748,8 +1751,10 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
                 processes={activeProcesses}
                 onBack={() => setSelected(null)}
               />
-            ) : (
+            ) : strategyWorkspaceOpen ? (
               <StrategyWorkspace projectId={target.projectId} lang={lang} />
+            ) : (
+              <StrategyDashboard projectId={target.projectId} lang={lang} processes={activeProcesses} onOpenWorkspace={() => setStrategyWorkspaceOpen(true)} onOpenProcess={(id) => { const process = activeProcesses.find(p => p.subs.some(s => s.id === id)); if (process) { setSelected({ pId: process.id, sId: id }); audit("OPEN_SUBPROCESS", { projectId: target.projectId, entity: dom.id, entityId: id }); } }} />
             )}
           </div>
           <aside dir={rtl ? "rtl" : "ltr"} className="glass-dark flex w-[300px] shrink-0 flex-col overflow-hidden rounded-2xl">
