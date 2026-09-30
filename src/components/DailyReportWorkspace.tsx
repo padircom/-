@@ -5,6 +5,7 @@ import { useSystem } from "../context/SystemContext";
 import { useAuth } from "../context/AuthContext";
 import ReportWorkflowPanel from "./ReportWorkflowPanel";
 import DprSupportTables, { type DprGeneralInfo, type DprIdentityInfo } from "./DprSupportTables";
+import { isDprFormatActive } from "../data/dprScope";
 
 type TemplateKind = "internal" | "mandated";
 type FormatInfo = { label: string; icon: string; color: string; previewable: "pdf" | "image" | "text" | "none" };
@@ -91,6 +92,7 @@ export default function DailyReportWorkspace({ lang }: { lang: Lang }) {
     : undefined;
   const activeProjectCode = scopeProject?.code ?? projectScope?.projectId ?? "";
   const canManageTemplates = can("report.daily.edit", projectScope?.projectId);
+  const dprScopeOk = isDprFormatActive(projectScope?.clusterId, projectScope?.projectId);
 
   useEffect(() => {
     try {
@@ -241,7 +243,8 @@ export default function DailyReportWorkspace({ lang }: { lang: Lang }) {
 
   return (
     <div className="mt-4 flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto" dir={rtl ? "rtl" : "ltr"}>
-      {/* ── بنر ورود به جداول پشتیبان (dprt-v1) ── */}
+      {/* ── بنر ورود به جداول پشتیبان (dprt-v1) — فقط در دامنهٔ فرمت ── */}
+      {dprScopeOk && (
       <section className="glass-dark shrink-0 rounded-2xl border border-emerald-400/30 bg-emerald-400/[0.06] p-3">
         <div className="flex flex-wrap items-center gap-2">
           <span className="grid h-8 w-8 place-items-center rounded-lg border border-emerald-400/40 bg-emerald-400/10 text-[15px]">✨</span>
@@ -263,6 +266,7 @@ export default function DailyReportWorkspace({ lang }: { lang: Lang }) {
           </button>
         </div>
       </section>
+      )}
       {/* ── Template selection: Internal vs Mandated ── */}
       <section className="glass-dark shrink-0 rounded-2xl p-3">
         <div className="mb-3 flex flex-wrap items-center gap-2">
@@ -445,6 +449,7 @@ export default function DailyReportWorkspace({ lang }: { lang: Lang }) {
       </section>
 
       {/* ── جداول پشتیبان گزارش روزانه (dprt-v1): مالک هویت و وضعیت عمومی ── */}
+      {dprScopeOk && (
       <DprSupportTables
         lang={lang}
         projectCode={activeProjectCode}
@@ -465,6 +470,7 @@ export default function DailyReportWorkspace({ lang }: { lang: Lang }) {
           }));
         }}
       />
+      )}
 
       {savedReportId && (
         <ReportWorkflowPanel lang={lang} reportId={savedReportId} reportNo={header.reportNo} />

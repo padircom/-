@@ -12,6 +12,8 @@ import InteractiveGantt, { type GanttActivity } from "./InteractiveGantt";
 import BaselineSCurvePanel from "./BaselineSCurvePanel";
 import CpmWorkspace from "./CpmWorkspace";
 import DailyReportWorkspace from "./DailyReportWorkspace";
+import DprProgressFallback from "./DprProgressFallback";
+import { isDprFormatActive } from "../data/dprScope";
 import MspAnalysisPanel from "./MspAnalysisPanel";
 
 export type PexTab =
@@ -1068,12 +1070,15 @@ export default function PlanningWorkspace({
           </div>
         )}
 
-        {/* ماژول ۷زبانهٔ گزارش روزانه (dprt-v1): کاور + ۶ تب جداول پشتیبان.
-            جعبهٔ «خطوط پیشرفت گام‌های RoC» در ۱۴۰۵/۰۷/۰۸ به دستور کاربر از
-            این صفحه برداشته شد: در فرایند گزارش روزانه کاربردی نداشت. */}
+        {/* تب گزارش روزانه: فقط در پروژه‌های راهسازی خوشهٔ زیرساخت (c5)،
+            ماژول ۷زبانهٔ dprt-v1؛ در بقیهٔ دامنه‌ها نمای «ثبت پیشرفت واقعی». */}
         {tab === "dpr" && (
           <div className="fade-rise">
-            <DailyReportWorkspace lang={lang} />
+            {isDprFormatActive(clusterId, projectId) ? (
+              <DailyReportWorkspace lang={lang} />
+            ) : (
+              <DprProgressFallback lang={lang} model={m} />
+            )}
           </div>
         )}
 
