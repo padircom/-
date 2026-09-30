@@ -1,11 +1,13 @@
 /** Reference transcription from the 15 user-provided work-step sheets.
  * Original labels/weights are retained (including totals that are not 100).
  * This is a selectable reference catalogue, not project progress or approved weights. */
-export type WorkStep = { name: string; weight: number };
-export type WorkJob = { name: string; steps: WorkStep[] };
-export type WorkCategory = { name: string; jobs: WorkJob[] };
+import { buildWorkStages, type WorkStageRow } from "./workStages";
 
-const rows: [string, string, string][] = [
+/* نوع‌ها از `workStages` می‌آیند و اینجا فقط بازصادر می‌شوند تا
+ * واردکننده‌های قبلی این فایل نشکنند. */
+export type { WorkStep, WorkJob, WorkCategory } from "./workStages";
+
+const rows: WorkStageRow[] = [
   ["Mobilization & Demobilization", "Designing Office Layout", "Office Layout:40|Shop Layout:40|Sub area Layout:20"],
   ["Mobilization & Demobilization", "Office", "Foundation:15|Structure:20|Architecture:40|Mechanical Installation:5|Electrical Installation:10|Septic:2|Mobilization:8"],
   ["Mobilization & Demobilization", "Installation Conex (main office)", "Main Office:80|Installation Conex:20"],
@@ -167,15 +169,4 @@ const rows: [string, string, string][] = [
   ["Pre Commissioning", "Pre Commissioning - Instrument", "Documentation:20|Loop Check:60|Dry Functional Check:20"],
 ];
 
-export const oilfieldWorkStages: WorkCategory[] = [];
-for (const [categoryName, jobName, rawSteps] of rows) {
-  let category = oilfieldWorkStages.find(c => c.name === categoryName);
-  if (!category) {
-    category = { name: categoryName, jobs: [] };
-    oilfieldWorkStages.push(category);
-  }
-  category.jobs.push({ name: jobName, steps: rawSteps.split("|").map(entry => {
-    const splitAt = entry.lastIndexOf(":");
-    return { name: entry.slice(0, splitAt), weight: Number(entry.slice(splitAt + 1)) };
-  }) });
-}
+export const oilfieldWorkStages = buildWorkStages(rows);
