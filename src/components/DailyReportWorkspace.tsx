@@ -250,12 +250,12 @@ export default function DailyReportWorkspace({ lang }: { lang: Lang }) {
           <span className="grid h-8 w-8 place-items-center rounded-lg border border-emerald-400/40 bg-emerald-400/10 text-[15px]">✨</span>
           <div className="min-w-0 flex-1">
             <h3 className="text-[12px] font-semibold text-emerald-200">
-              {rtl ? "بخش جدید: جداول پشتیبان گزارش روزانه (۶ تب)" : "New: daily report supporting tables (6 tabs)"}
+              {rtl ? "بخش جدید: پشتیبان گزارش روزانه (۷ تب)" : "New: daily report support (7 tabs)"}
             </h3>
             <p className="text-[8.5px] font-extralight tx3">
               {rtl
-                ? "وضعیت کارگاه، شرح تشریحی، نیروی انسانی (۱۴۴ ردیف)، ماشین‌آلات، تغییرات و فعالیت‌های اصلی — پایین همین صفحه"
-                : "Site status, narrative, manpower (144 rows), machinery, changes & main activities — below on this page"}
+                ? "وضعیت کارگاه، شرح تشریحی، نیروی انسانی (۱۴۴ ردیف)، ماشین‌آلات، متریال وارده، تغییرات و فعالیت‌های اصلی — پایین همین صفحه"
+                : "Site status, narrative, manpower (144 rows), machinery, materials, changes & main activities — below on this page"}
             </p>
           </div>
           <button

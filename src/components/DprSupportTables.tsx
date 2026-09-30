@@ -12,10 +12,12 @@ import {
   jalaliMonthNameFa,
   machineryTotals,
   manpowerTotals,
+  normalizeReport,
   splitReportDate,
   type DprChangeRow,
   type DprHistory,
   type DprMainActivityRow,
+  type DprMaterialRow,
   type DprReportStatus,
   type DprTablesReport,
 } from "../services/dprTables";
@@ -40,13 +42,14 @@ export interface DprGeneralInfo {
   humidity: number | null;
 }
 
-type TabId = "site" | "narrative" | "manpower" | "machinery" | "changes" | "activities";
+type TabId = "site" | "narrative" | "manpower" | "machinery" | "materials" | "changes" | "activities";
 
 const TABS: Array<{ id: TabId; fa: string; en: string }> = [
   { id: "site", fa: "وضعیت کارگاه", en: "Site status" },
   { id: "narrative", fa: "شرح تشریحی", en: "Narrative" },
   { id: "manpower", fa: "نیروی انسانی", en: "Manpower" },
   { id: "machinery", fa: "ماشین‌آلات", en: "Machinery" },
+  { id: "materials", fa: "متریال وارده", en: "Materials" },
   { id: "changes", fa: "تغییرات و فعالیت", en: "Changes" },
   { id: "activities", fa: "فعالیت‌های اصلی", en: "Main activities" },
 ];
@@ -240,7 +243,7 @@ export default function DprSupportTables({
       .then((payload) => {
         setHistory(payload.history);
         if (payload.exists) {
-          setReport(payload.report);
+          setReport(normalizeReport(payload.report));
           setLocalOnly(false);
           try {
             localStorage.removeItem(draftKey);
@@ -252,7 +255,7 @@ export default function DprSupportTables({
             if (raw) draft = JSON.parse(raw) as DprTablesReport;
           } catch { /* ignore */ }
           if (draft && draft.reportDate === date) {
-            setReport(draft);
+            setReport(normalizeReport(draft));
             setLocalOnly(true);
           } else {
             const shell = emptyReport(projectCode, date, payload.suggestedNo);
@@ -268,7 +271,7 @@ export default function DprSupportTables({
           if (raw) draft = JSON.parse(raw) as DprTablesReport;
         } catch { /* ignore */ }
         if (draft && draft.reportDate === date) {
-          setReport(draft);
+          setReport(normalizeReport(draft));
           setHistory({ changes: {}, activities: {} });
           setLocalOnly(true);
           setError("");
@@ -401,6 +404,10 @@ export default function DprSupportTables({
     patch((r) => ({ ...r, activities: r.activities.map((a, j) => (j === i ? fn(a) : a)) }));
   };
 
+  const patchMaterial = (i: number, fn: (m: DprMaterialRow) => DprMaterialRow) => {
+    patch((r) => ({ ...r, materials: r.materials.map((m, j) => (j === i ? fn(m) : m)) }));
+  };
+
   const matchFilter = (title: string, code: string) => {
     const f = filter.trim().toLowerCase();
     if (!f) return true;
@@ -421,8 +428,8 @@ export default function DprSupportTables({
         <h3 className="text-sm font-semibold tx1">{rtl ? "پشتیبان گزارش روزانه" : "Daily report support"}</h3>
         <p className="mt-1 text-[10px] tx3">
           {rtl
-            ? "وضعیت کارگاه، شرح تشریحی، نیروی انسانی، ماشین‌آلات، تغییرات و فعالیت‌های اصلی — با کلید مشترک تاریخ و شماره گزارش."
-            : "Site status, narrative, manpower, machinery, changes and main activities — keyed by date and report number."}
+            ? "وضعیت کارگاه، شرح تشریحی، نیروی انسانی، ماشین‌آلات، متریال وارده، تغییرات و فعالیت‌های اصلی — با کلید مشترک تاریخ و شماره گزارش."
+            : "Site status, narrative, manpower, machinery, materials, changes and main activities — keyed by date and report number."}
         </p>
       </div>
 
@@ -793,7 +800,85 @@ export default function DprSupportTables({
         </div>
       )}
 
-      {/* ═══ تب ۵: تغییرات و فعالیت تشریحی ═══ */}
+      {/* ═══ تب ۵: متریال وارده به کارگاه ═══ */}
+      {tab === "materials" && report && (
+        <div className="space-y-2">
+          <div className="overflow-x-auto rounded-xl border b-line-soft">
+            <table className="w-full min-w-max border-separate border-spacing-0 text-[10px]">
+              <thead className="bg-[var(--bg-c)] tx1">
+                <tr>
+                  <th className={th}>#</th>
+                  <th className={th}>{rtl ? "گروه" : "Group"}</th>
+                  <th className={th}>{rtl ? "کد کالا" : "Item code"}</th>
+                  <th className={th}>{rtl ? "شرح" : "Description"}</th>
+                  <th className={th}>{rtl ? "شماره کامیون/تراک" : "Truck no."}</th>
+                  <th className={th}>{rtl ? "قبض انبار/باسکول" : "Ticket no."}</th>
+                  <th className={th}>{rtl ? "رده" : "Grade"}</th>
+                  <th className={th}>{rtl ? "واحد" : "Unit"}</th>
+                  <th className={th}>{rtl ? "پر" : "Gross"}</th>
+                  <th className={th}>{rtl ? "خالی" : "Tare"}</th>
+                  <th className={th}>{rtl ? "خالص" : "Net"}</th>
+                  <th className={th}>{rtl ? "(حجم/تعداد/وزن)" : "(Vol/Cnt/Wt)"}</th>
+                  <th className={th}>{rtl ? "تناز" : "Tonnage"}</th>
+                  <th className={th}>{rtl ? "تاریخ ورود" : "Entry date"}</th>
+                  <th className={th}>{rtl ? "ساعت ورود" : "Entry time"}</th>
+                  <th className={th}>{rtl ? "پیمانکار/شخص" : "Contractor"}</th>
+                  <th className={th}>{rtl ? "موقعیت مصرف" : "Usage"}</th>
+                  <th className={th}>—</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y b-line-soft">
+                {report.materials.map((m, i) => (
+                  <tr key={i} className="bg-[var(--bg-b)]">
+                    <td className={`${td} tx4 tabular-nums`} dir="ltr">{i + 1}</td>
+                    <td className={td}><CellText value={m.group} disabled={locked} resetKey={resetKey} align="center" onCommit={(v) => patchMaterial(i, (x) => ({ ...x, group: v }))} /></td>
+                    <td className={td}><CellText value={m.itemCode} disabled={locked} resetKey={resetKey} align="center" onCommit={(v) => patchMaterial(i, (x) => ({ ...x, itemCode: v }))} /></td>
+                    <td className={td}><CellText value={m.desc} disabled={locked} resetKey={resetKey} onCommit={(v) => patchMaterial(i, (x) => ({ ...x, desc: v }))} /></td>
+                    <td className={td}><CellText value={m.truckNo} disabled={locked} resetKey={resetKey} align="center" onCommit={(v) => patchMaterial(i, (x) => ({ ...x, truckNo: v }))} /></td>
+                    <td className={td}><CellText value={m.ticketNo} disabled={locked} resetKey={resetKey} align="center" onCommit={(v) => patchMaterial(i, (x) => ({ ...x, ticketNo: v }))} /></td>
+                    <td className={td}><CellText value={m.grade} disabled={locked} resetKey={resetKey} align="center" onCommit={(v) => patchMaterial(i, (x) => ({ ...x, grade: v }))} /></td>
+                    <td className={td}><CellText value={m.unit} disabled={locked} resetKey={resetKey} align="center" onCommit={(v) => patchMaterial(i, (x) => ({ ...x, unit: v }))} /></td>
+                    <td className={td}><CellNum wide value={m.gross} disabled={locked} resetKey={resetKey} onCommit={(v) => patchMaterial(i, (x) => ({ ...x, gross: v }))} /></td>
+                    <td className={td}><CellNum wide value={m.tare} disabled={locked} resetKey={resetKey} onCommit={(v) => patchMaterial(i, (x) => ({ ...x, tare: v }))} /></td>
+                    <td className={td}><CellNum wide value={m.net} disabled={locked} resetKey={resetKey} onCommit={(v) => patchMaterial(i, (x) => ({ ...x, net: v }))} /></td>
+                    <td className={td}><CellNum wide value={m.qtyVcn} disabled={locked} resetKey={resetKey} onCommit={(v) => patchMaterial(i, (x) => ({ ...x, qtyVcn: v }))} /></td>
+                    <td className={td}><CellNum wide value={m.tonnage} disabled={locked} resetKey={resetKey} onCommit={(v) => patchMaterial(i, (x) => ({ ...x, tonnage: v }))} /></td>
+                    <td className={td}><CellText value={m.entryDate} disabled={locked} resetKey={resetKey} align="center" onCommit={(v) => patchMaterial(i, (x) => ({ ...x, entryDate: v }))} /></td>
+                    <td className={td}><CellText value={m.entryTime} disabled={locked} resetKey={resetKey} align="center" onCommit={(v) => patchMaterial(i, (x) => ({ ...x, entryTime: v }))} /></td>
+                    <td className={td}><CellText value={m.contractor} disabled={locked} resetKey={resetKey} align="center" onCommit={(v) => patchMaterial(i, (x) => ({ ...x, contractor: v }))} /></td>
+                    <td className={td}><CellText value={m.usage} disabled={locked} resetKey={resetKey} onCommit={(v) => patchMaterial(i, (x) => ({ ...x, usage: v }))} /></td>
+                    <td className={td}>
+                      <button disabled={locked} onClick={() => patch((r) => ({ ...r, materials: r.materials.filter((_, j) => j !== i) }))} className="px-1 text-rose-300 disabled:opacity-40">✕</button>
+                    </td>
+                  </tr>
+                ))}
+                {!report.materials.length && (
+                  <tr className="bg-[var(--bg-b)]">
+                    <td colSpan={18} className="px-2 py-3 text-center tx4">{rtl ? "ردیفی ثبت نشده — «+ ردیف»" : "No rows — press + row"}</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              disabled={locked}
+              onClick={() =>
+                patch((r) => ({
+                  ...r,
+                  materials: [...r.materials, { group: "", itemCode: "", desc: "", truckNo: "", ticketNo: "", grade: "", unit: "", gross: null, tare: null, net: null, qtyVcn: null, tonnage: null, entryDate: date, entryTime: "", contractor: "", usage: "" }],
+                }))
+              }
+              className="rounded-lg border b-line-soft px-3 py-1.5 text-[10px] tx2 disabled:opacity-40"
+            >
+              + {rtl ? "ردیف" : "Row"}
+            </button>
+            <p className="text-[9px] tx4">{rtl ? `تعداد ردیف: ${report.materials.length} · سرستون «(حجم/تعداد/وزن)» از روی عکس خوانده شد؛ اگر دقیق نیست اعلام کنید.` : `Rows: ${report.materials.length} · The "(Vol/Cnt/Wt)" header was read from the photo; report if inaccurate.`}</p>
+          </div>
+        </div>
+      )}
+
+      {/* ═══ تب ۶: تغییرات و فعالیت تشریحی ═══ */}
       {tab === "changes" && report && (
         <div className="space-y-2">
           <datalist id="dpr-change-ids">
@@ -872,7 +957,7 @@ export default function DprSupportTables({
         </div>
       )}
 
-      {/* ═══ تب ۶: فعالیت‌های اصلی ═══ */}
+      {/* ═══ تب ۷: فعالیت‌های اصلی ═══ */}
       {tab === "activities" && report && (
         <div className="space-y-2">
           <div className="overflow-x-auto rounded-xl border b-line-soft">

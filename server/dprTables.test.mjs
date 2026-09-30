@@ -22,6 +22,7 @@ import {
   machineryTotals,
   manpowerTotals,
   nextReportStatus,
+  normalizeReport,
   splitReportDate,
   validateReport,
 } from "./dprTablesLogic.js";
@@ -166,6 +167,26 @@ test("dprt: پوستهٔ خالی معتبر است (ذخیرهٔ تدریجی)"
   const v = validateReport(emptyReport("PC-2401", "1403/08/26", "DRT-1"));
   assert.equal(v.ok, true);
   assert.deepEqual(v.issues, []);
+});
+
+test("dprt: متریال وارده — شرح لازم و اعداد نامنفی", () => {
+  const r = emptyReport("PC-2401", "1403/08/26", "DRT-1");
+  assert.deepEqual(r.materials, []);
+  r.materials = [{ group: "مصالح", itemCode: "AGG-01", desc: "شن بادامی", truckNo: "12ع345", ticketNo: "B-9", grade: "", unit: "تن", gross: 30, tare: 12, net: 18, qtyVcn: null, tonnage: 18, entryDate: "1403/08/26", entryTime: "08:30", contractor: "الف", usage: "قطعه ۲" }];
+  assert.equal(validateReport(r).ok, true);
+  const bad = emptyReport("PC-2401", "1403/08/26", "DRT-1");
+  bad.materials = [{ ...r.materials[0], desc: "  " }];
+  assert.ok(validateReport(bad).issues.some((m) => m.includes("شرح")));
+  const bad2 = emptyReport("PC-2401", "1403/08/26", "DRT-1");
+  bad2.materials = [{ ...r.materials[0], gross: -5 }];
+  assert.ok(validateReport(bad2).issues.some((m) => m.includes("پر")));
+  const bad3 = emptyReport("PC-2401", "1403/08/26", "DRT-1");
+  bad3.materials = [{ ...r.materials[0], entryDate: "26/08" }];
+  assert.ok(validateReport(bad3).issues.some((m) => m.includes("تاریخ ورود")));
+  // گزارش قدیمی بدون فیلد متریال نرمال می‌شود
+  const legacy = emptyReport("PC-2401", "1403/08/26", "DRT-1");
+  delete legacy.materials;
+  assert.deepEqual(normalizeReport(legacy).materials, []);
 });
 
 test("dprt: خطاهای هویتی", () => {

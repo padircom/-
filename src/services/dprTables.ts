@@ -37,6 +37,7 @@ export const DPR_LIMITS = {
   activityTextMax: 300,
   maxChangeRows: 200,
   maxActivityRows: 500,
+  maxMaterialRows: 500,
   countMax: 100000,
   qtyMax: 1e12,
 } as const;
@@ -101,6 +102,29 @@ export interface DprMainActivityRow {
   note: string;
 }
 
+/** ردیف متریال وارده به کارگاه — عین سرستون‌های شیت اکسل کاربر (۱۷ ستون).
+ * «تناز» و «تراک» املای عین شیت است. سرستون دوازدهم (حجم/تعداد/وزن) از
+ * روی عکس خوانده شد و نیاز به کنترل با اکسل دارد. خالص فعلاً ورود دستی
+ * است؛ اگر در شیت فرمول (پر − خالی) است با اعلام کاربر محاسباتی می‌شود. */
+export interface DprMaterialRow {
+  group: string;
+  itemCode: string;
+  desc: string;
+  truckNo: string;
+  ticketNo: string;
+  grade: string;
+  unit: string;
+  gross: number | null;
+  tare: number | null;
+  net: number | null;
+  qtyVcn: number | null;
+  tonnage: number | null;
+  entryDate: string;
+  entryTime: string;
+  contractor: string;
+  usage: string;
+}
+
 export interface DprTablesReport {
   projectCode: string;
   reportDate: string;
@@ -113,6 +137,7 @@ export interface DprTablesReport {
   machinery: Record<string, DprMachineryEntry>;
   changes: DprChangeRow[];
   activities: DprMainActivityRow[];
+  materials: DprMaterialRow[];
   createdAt?: string;
   updatedAt?: string;
 }
@@ -182,6 +207,22 @@ export function emptyReport(projectCode: string, date: string, reportNo: string)
     machinery: {},
     changes: [],
     activities: [],
+    materials: [],
+  };
+}
+
+/** نرمال‌سازی گزارش خوانده‌شده از ذخیره‌سازی قدیمی.
+ * گزارش‌های ذخیره‌شده پیش از افزوده شدن تب متریال، فیلد materials را
+ * ندارند؛ بدون این نرمال‌سازی، رندر روی `.map` می‌افتد. */
+export function normalizeReport(r: DprTablesReport): DprTablesReport {
+  const p = r as Partial<DprTablesReport>;
+  return {
+    ...r,
+    manpower: p.manpower ?? {},
+    machinery: p.machinery ?? {},
+    changes: p.changes ?? [],
+    activities: p.activities ?? [],
+    materials: p.materials ?? [],
   };
 }
 
@@ -511,6 +552,40 @@ export function validateReport(input: unknown): DprValidation {
       }
       if (a.todayQty !== null && a.todayQty !== undefined && !isQty(a.todayQty)) {
         issues.push(`ردیف ${n} فعالیت‌ها: مقدار امروز باید عدد نامنفی باشد`);
+      }
+    });
+  }
+
+  const mats = r.materials ?? [];
+  if (!Array.isArray(mats)) issues.push("بخش متریال وارده نامعتبر است");
+  else {
+    if (mats.length > DPR_LIMITS.maxMaterialRows) issues.push("تعداد ردیف‌های متریال بیش از حد مجاز است");
+    mats.forEach((m, i) => {
+      const n = i + 1;
+      if (!m || typeof m !== "object") {
+        issues.push(`ردیف ${n} متریال نامعتبر است`);
+        return;
+      }
+      if (!m.desc || typeof m.desc !== "string" || !m.desc.trim() || m.desc.length > DPR_LIMITS.activityTextMax) {
+        issues.push(`ردیف ${n} متریال: شرح لازم است`);
+      }
+      for (const [k, label] of [["group", "گروه"], ["itemCode", "کد کالا"], ["truckNo", "شماره کامیون"], ["ticketNo", "قبض انبار/باسکول"], ["grade", "رده"], ["unit", "واحد"], ["contractor", "پیمانکار/شخص"], ["usage", "موقعیت مصرف"]] as const) {
+        const v = (m as unknown as Record<string, unknown>)[k];
+        if (v !== undefined && (typeof v !== "string" || v.length > DPR_LIMITS.textShortMax)) {
+          issues.push(`ردیف ${n} متریال: «${label}» نامعتبر است`);
+        }
+      }
+      if (m.entryDate !== "" && m.entryDate !== undefined && !splitReportDate(m.entryDate ?? "")) {
+        issues.push(`ردیف ${n} متریال: تاریخ ورود نامعتبر است`);
+      }
+      if (m.entryTime !== undefined && (typeof m.entryTime !== "string" || m.entryTime.length > DPR_LIMITS.textShortMax)) {
+        issues.push(`ردیف ${n} متریال: ساعت ورود نامعتبر است`);
+      }
+      for (const [k, label] of [["gross", "پر"], ["tare", "خالی"], ["net", "خالص"], ["qtyVcn", "حجم/تعداد/وزن"], ["tonnage", "تناز"]] as const) {
+        const v = (m as unknown as Record<string, unknown>)[k];
+        if (v !== null && v !== undefined && !isQty(v)) {
+          issues.push(`ردیف ${n} متریال: «${label}» باید عدد نامنفی باشد`);
+        }
       }
     });
   }
