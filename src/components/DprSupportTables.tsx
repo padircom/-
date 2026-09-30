@@ -418,7 +418,7 @@ export default function DprSupportTables({
   return (
     <section id="dpr-support-tables" className="glass-dark scroll-mt-4 space-y-3 rounded-2xl p-3" dir={rtl ? "rtl" : "ltr"}>
       <div>
-        <h3 className="text-sm font-semibold tx1">{rtl ? "جداول پشتیبان گزارش روزانه" : "Daily report supporting tables"}</h3>
+        <h3 className="text-sm font-semibold tx1">{rtl ? "پشتیبان گزارش روزانه" : "Daily report support"}</h3>
         <p className="mt-1 text-[10px] tx3">
           {rtl
             ? "وضعیت کارگاه، شرح تشریحی، نیروی انسانی، ماشین‌آلات، تغییرات و فعالیت‌های اصلی — با کلید مشترک تاریخ و شماره گزارش."
@@ -513,7 +513,7 @@ export default function DprSupportTables({
       )}
 
       {/* ── تب‌ها ── */}
-      <div className="flex flex-wrap items-center gap-1 border-b b-line-soft pb-2" role="tablist">
+      <nav className="flex flex-wrap items-center gap-1 rounded-xl bg-black/15 p-1" role="tablist">
         {TABS.map((t) => (
           <button
             key={t.id}
@@ -526,7 +526,7 @@ export default function DprSupportTables({
           </button>
         ))}
         {loading && <span className="ms-auto text-[9px] tx4">{rtl ? "در حال بارگذاری…" : "Loading…"}</span>}
-      </div>
+      </nav>
 
       {/* ═══ تب ۱: وضعیت کارگاه ═══ */}
       {tab === "site" && report && (

@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { t, type Lang } from "../data/framework";
+import { useAuth } from "../context/AuthContext";
+import { useSystem } from "../context/SystemContext";
 import { PEX_SCURVE } from "../data/pexProject";
 import { buildPexModel } from "../services/pexModel";
 import { workingDaysBetween, type WeightMode } from "../services/planning";
@@ -13,7 +15,8 @@ import BaselineSCurvePanel from "./BaselineSCurvePanel";
 import CpmWorkspace from "./CpmWorkspace";
 import DailyReportWorkspace from "./DailyReportWorkspace";
 import DprProgressFallback from "./DprProgressFallback";
-import { isDprFormatActive } from "../data/dprScope";
+import DprSupportTables from "./DprSupportTables";
+import { isDprFormatActive, isDprSupportBoxActive } from "../data/dprScope";
 import MspAnalysisPanel from "./MspAnalysisPanel";
 
 export type PexTab =
@@ -89,6 +92,13 @@ export default function PlanningWorkspace({
   hideTabs?: boolean;
 }) {
   const rtl = lang === "fa";
+  const { can } = useAuth();
+  const { projectsByCluster } = useSystem();
+  /* کد پروژه برای کلید API باکس پشتیبان؛ بازگشت امن به شناسه. */
+  const dprProjectCode =
+    (clusterId && projectId ? projectsByCluster[clusterId]?.find((pj) => pj.id === projectId)?.code : undefined) ??
+    projectId ?? "";
+  const dprCanEdit = can("report.daily.edit", projectId);
   const [tab, setTab] = useState<PexTab>(initialTab);
   const [weightMode, setWeightMode] = useState<WeightMode>("Cost");
   const [alpha, setAlpha] = useState(0.6);
@@ -1070,12 +1080,14 @@ export default function PlanningWorkspace({
           </div>
         )}
 
-        {/* تب گزارش روزانه: فقط در پروژه‌های راهسازی خوشهٔ زیرساخت (c5)،
-            ماژول ۷زبانهٔ dprt-v1؛ در بقیهٔ دامنه‌ها نمای «ثبت پیشرفت واقعی». */}
+        {/* تب گزارش روزانه: راهسازی زیرساخت = فرمت کامل؛ نفت/پتروشیمی/حفاری =
+            فقط باکس پشتیبان؛ بقیهٔ دامنه‌ها = نمای «ثبت پیشرفت واقعی». */}
         {tab === "dpr" && (
           <div className="fade-rise">
             {isDprFormatActive(clusterId, projectId) ? (
               <DailyReportWorkspace lang={lang} />
+            ) : isDprSupportBoxActive(clusterId) ? (
+              <DprSupportTables lang={lang} projectCode={dprProjectCode} canEdit={dprCanEdit} />
             ) : (
               <DprProgressFallback lang={lang} model={m} />
             )}
