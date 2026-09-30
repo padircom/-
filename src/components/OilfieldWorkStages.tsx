@@ -1,68 +1,7 @@
-import { useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { useEffect, useState } from "react";
 import type { Lang } from "../data/framework";
 import { oilfieldWorkStages } from "../data/oilfieldWorkStages";
-
-type Choice = { label: string; value: string };
-
-/** A themed listbox instead of the OS select popup (which can render white on Windows). */
-function StageDropdown({ label, placeholder, value, choices, disabled, onChange }: {
-  label: string; placeholder: string; value: string; choices: Choice[];
-  disabled?: boolean; onChange: (value: string) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const wrapper = useRef<HTMLDivElement>(null);
-  const menu = useRef<HTMLDivElement>(null);
-  const [rect, setRect] = useState<DOMRect | null>(null);
-  const toggle = () => {
-    if (!open) setRect(wrapper.current?.getBoundingClientRect() ?? null);
-    setOpen(current => !current);
-  };
-  useEffect(() => {
-    if (!open) return;
-    const closeOutside = (event: PointerEvent) => {
-      if (!wrapper.current?.contains(event.target as Node) && !menu.current?.contains(event.target as Node)) setOpen(false);
-    };
-    const closeEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false);
-    };
-    const closeOnScroll = (event: Event) => {
-      if (!menu.current?.contains(event.target as Node)) setOpen(false);
-    };
-    document.addEventListener("pointerdown", closeOutside);
-    document.addEventListener("keydown", closeEscape);
-    window.addEventListener("resize", closeEscapeOrResize);
-    document.addEventListener("scroll", closeOnScroll, true);
-    function closeEscapeOrResize() { setOpen(false); }
-    return () => {
-      document.removeEventListener("pointerdown", closeOutside);
-      document.removeEventListener("keydown", closeEscape);
-      window.removeEventListener("resize", closeEscapeOrResize);
-      document.removeEventListener("scroll", closeOnScroll, true);
-    };
-  }, [open]);
-  const selected = choices.find(item => item.value === value);
-  return (
-    <div ref={wrapper} className="relative min-w-0 space-y-1 text-[11px] tx2">
-      <span id={`stage-label-${label}`}>{label}</span>
-      <button type="button" disabled={disabled} aria-labelledby={`stage-label-${label}`}
-        aria-expanded={open} aria-haspopup="listbox"
-        onClick={toggle}
-        className="oilfield-select-trigger flex w-full items-center justify-between gap-2 rounded-lg border px-3 py-2 text-start text-[11px] outline-none disabled:opacity-50">
-        <span className="truncate">{selected?.label ?? placeholder}</span><span aria-hidden="true">⌄</span>
-      </button>
-      {open && rect && !disabled && createPortal(<div ref={menu} role="listbox" aria-label={label}
-        className="oilfield-select-menu fixed max-h-64 overflow-y-auto rounded-lg border p-1"
-        style={{ zIndex: 99999, top: rect.bottom + 264 > window.innerHeight && rect.top > 264 ? rect.top - 264 : rect.bottom + 4, left: Math.max(8, Math.min(rect.left, window.innerWidth - rect.width - 8)), width: Math.min(rect.width, window.innerWidth - 16), backgroundColor: "#172341" }}>
-        {choices.map(choice => <button type="button" role="option" aria-selected={value === choice.value}
-          key={choice.value} onClick={() => { onChange(choice.value); setOpen(false); }}
-          className="oilfield-select-option block w-full rounded-md px-3 py-2 text-start text-[11px] focus:outline-none">
-          {choice.label}
-        </button>)}
-      </div>, document.body)}
-    </div>
-  );
-}
+import StageDropdown from "./StageDropdown";
 
 export default function OilfieldWorkStages({ lang }: { lang: Lang }) {
   const fa = lang === "fa";
@@ -88,9 +27,7 @@ export default function OilfieldWorkStages({ lang }: { lang: Lang }) {
     setWeightEdits(current => ({ ...current, [stepKey(category, jobIndex, stepIndex)]: value }));
   };
   const selectedCategory = category === "" ? undefined : oilfieldWorkStages[Number(category)];
-  const groupFor = (name: string) => name.includes(" / ") ? name.slice(0, name.indexOf(" / ")) : name;
-  const phaseFor = (name: string) => name.includes(" / ") ? name.slice(name.indexOf(" / ") + 3) : name;
-  const groups = [...new Set(selectedCategory?.jobs.map(item => groupFor(item.name)) ?? [])];
+  const groups = [...new Set(selectedCategory?.jobs.map(item => item.group) ?? [])];
   const selectedGroup = group === "" ? undefined : groups[Number(group)];
   const selectedJob = job === "" ? undefined : selectedCategory?.jobs[Number(job)];
   const jobIndex = Number(job);
@@ -114,12 +51,12 @@ export default function OilfieldWorkStages({ lang }: { lang: Lang }) {
           onChange={value => { setGroup(value); setJob(""); }} />
         <StageDropdown label={fa ? "۳. ردیف کاری" : "3. Work row"} placeholder={fa ? "انتخاب ردیف" : "Select row"}
           value={job} disabled={!selectedGroup}
-          choices={selectedCategory?.jobs.flatMap((item, i) => groupFor(item.name) === selectedGroup
-            ? [{ label: phaseFor(item.name), value: String(i) }] : []) ?? []}
+          choices={selectedCategory?.jobs.flatMap((item, i) => item.group === selectedGroup
+              ? [{ label: item.name, value: String(i) }] : []) ?? []}
           onChange={setJob} />
       </div>
       {selectedJob && <div className="space-y-2">
-        <h4 className="text-[11px] font-semibold tx1">{selectedGroup === phaseFor(selectedJob.name) ? selectedGroup : `${selectedGroup} · ${phaseFor(selectedJob.name)}`}</h4>
+        <h4 className="text-[11px] font-semibold tx1">{selectedJob.group === selectedJob.name ? selectedJob.name : `${selectedJob.group} · ${selectedJob.name}`}</h4>
         <div className="overflow-x-auto rounded-xl border b-line-soft">
           <table className="w-full min-w-max border-separate border-spacing-0 text-[10px]">
             <thead><tr className="bg-[var(--bg-c)] text-[var(--ink)]">

@@ -6,8 +6,10 @@ import { canPostProgress, workingDaysBetween, type WeightMode } from "../service
 import { getSchedule, type ApiSchedule } from "../services/pexApiClient";
 import BreakdownBuilder from "./BreakdownBuilder";
 import OilfieldWorkStages from "./OilfieldWorkStages";
+import PetrochemicalWorkStages from "./PetrochemicalWorkStages";
 import ContractWorkshop from "./ContractWorkshop";
 import InteractiveGantt, { type GanttActivity } from "./InteractiveGantt";
+import BaselineSCurvePanel from "./BaselineSCurvePanel";
 import CpmWorkspace from "./CpmWorkspace";
 import MspAnalysisPanel from "./MspAnalysisPanel";
 
@@ -137,7 +139,7 @@ export default function PlanningWorkspace({
    * گانت، مایلستون، مسیر بحرانی و نگاه‌به‌جلو همه روی همان برنامهٔ
    * زمان‌بندی کار می‌کنند، پس کنار هم بودنشان یعنی مقایسه بدون ترک
    * صفحه ممکن است. */
-  type PlanView = "baseline" | "gantt" | "milestone" | "cp" | "lookahead";
+  type PlanView = "baseline" | "scurve" | "gantt" | "milestone" | "cp" | "lookahead";
   const [planView, setPlanView] = useState<PlanView>("baseline");
 
   /* تب‌های موازی داخل «کارگاه برنامه‌ریزی».
@@ -145,7 +147,22 @@ export default function PlanningWorkspace({
    * کارگاه و ساختار شکست دو ماژول جدا بودند ولی یک زنجیره‌اند: قرارداد
    * وارد می‌شود، ساختار از آن درمی‌آید و وزن می‌گیرد. جدا بودنشان یعنی
    * کاربر برای دیدن نتیجهٔ استخراج باید ماژول عوض می‌کرد. */
-  const [shopView, setShopView] = useState<"contract" | "wbs" | "oilfield" | "roc">("contract");
+  const [shopView, setShopView] = useState<"contract" | "wbs" | "oilfield" | "petrochemical" | "roc">("contract");
+
+  /* کاتالوگ مراحل کاری وابسته به صنعت است.
+   *
+   * نفتی به یک پروژه بسته است (c1-p1)، پتروشیمی به کل خوشهٔ c2 و هر پنج
+   * پروژهٔ زیرمجموعه‌اش. پس شرط نمایش یکسان نیست و جدا نگه داشته شده. */
+  const showOilfield = clusterId === "c1" && projectId === "c1-p1";
+  const showPetrochemical = clusterId === "c2";
+
+  /* اگر دامنه عوض شود در حالی که زیرتبِ صنعتی باز است، آن زیرتب دیگر
+   * رندر نمی‌شود و کاربر پنل خالی می‌بیند بی‌آنکه بفهمد چرا. برگرداندن
+   * به «قرارداد» تنها حالتی است که همیشه محتوا دارد. */
+  useEffect(() => {
+    if (shopView === "oilfield" && !showOilfield) setShopView("contract");
+    if (shopView === "petrochemical" && !showPetrochemical) setShopView("contract");
+  }, [shopView, showOilfield, showPetrochemical]);
 
   /* ورود مستقیم با شناسهٔ قدیمی.
    *
@@ -393,7 +410,8 @@ export default function PlanningWorkspace({
             {([
               { id: "contract" as const, fa: "قرارداد", en: "Contract" },
               { id: "wbs" as const, fa: "ساختار شکست", en: "Breakdown" },
-              ...(clusterId === "c1" && projectId === "c1-p1" ? [{ id: "oilfield" as const, fa: "مراحل کاری میدان نفتی", en: "Oilfield work stages" }] : []),
+              ...(showOilfield ? [{ id: "oilfield" as const, fa: "مراحل کاری میدان نفتی", en: "Oilfield work stages" }] : []),
+              ...(showPetrochemical ? [{ id: "petrochemical" as const, fa: "مراحل کاری پتروشیمی", en: "Petrochemical work stages" }] : []),
               /* RoC به ساختار شکست می‌چسبد، نه به گزارش روزانه: وزن گام
                * و وزن بسته یک محاسبه‌اند — درصد بسته از گام‌ها، درصد
                * پروژه از بسته‌ها. */
@@ -412,7 +430,11 @@ export default function PlanningWorkspace({
           </nav>
         )}
 
-        {tab === "workshop" && shopView === "oilfield" && clusterId === "c1" && projectId === "c1-p1" && <OilfieldWorkStages lang={lang} />}
+        {tab === "workshop" && shopView === "oilfield" && showOilfield && <OilfieldWorkStages lang={lang} />}
+
+        {tab === "workshop" && shopView === "petrochemical" && showPetrochemical && (
+          <PetrochemicalWorkStages lang={lang} clusterId={clusterId} />
+        )}
 
         {tab === "workshop" && shopView === "contract" && <ContractWorkshop lang={lang} />}
 
@@ -473,6 +495,7 @@ export default function PlanningWorkspace({
             <nav className="flex flex-wrap items-center gap-1 rounded-xl bg-black/15 p-1">
               {([
                 { id: "baseline" as const, fa: "برنامه پایه", en: "Baseline" },
+                { id: "scurve" as const, fa: "نمودار اسکرو", en: "S-Curve" },
                 { id: "gantt" as const, fa: "گانت تعاملی", en: "Interactive Gantt" },
                 { id: "milestone" as const, fa: "ردیابی مایلستون", en: "Milestones" },
                 { id: "cp" as const, fa: "تحلیل مسیر بحرانی", en: "Critical Path" },
@@ -490,6 +513,21 @@ export default function PlanningWorkspace({
               ))}
             </nav>
           </div>
+        )}
+
+        {tab === "baseline" && planView === "scurve" && (
+          /* همان منحنی و همان اعداد موتور — عمداً از مدل گرفته می‌شود نه
+           * از سری نمونه، وگرنه درصدِ این تب با درصد داشبورد در همین
+           * ماژول یکی نبود. */
+          <BaselineSCurvePanel
+            lang={lang}
+            curve={PEX_SCURVE}
+            dataDate={dataDate}
+            actualPct={m.overallPct}
+            plannedPct={m.plannedPct}
+            baselineFinish={m.baseline.projectFinish}
+            forecastFinish={m.cpm.projectFinish}
+          />
         )}
 
         {tab === "baseline" && planView === "gantt" && (
