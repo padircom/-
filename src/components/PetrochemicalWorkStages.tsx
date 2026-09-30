@@ -47,9 +47,7 @@ export default function PetrochemicalWorkStages({ lang, clusterId = "c2" }: { la
   };
 
   const selectedCategory = category === "" ? undefined : petrochemicalWorkStages[Number(category)];
-  const groupFor = (name: string) => name.includes(" / ") ? name.slice(0, name.indexOf(" / ")) : name;
-  const phaseFor = (name: string) => name.includes(" / ") ? name.slice(name.indexOf(" / ") + 3) : name;
-  const groups = [...new Set(selectedCategory?.jobs.map(item => groupFor(item.name)) ?? [])];
+  const groups = [...new Set(selectedCategory?.jobs.map(item => item.group) ?? [])];
   const selectedGroup = group === "" ? undefined : groups[Number(group)];
   const selectedJob = job === "" ? undefined : selectedCategory?.jobs[Number(job)];
   const jobIndex = Number(job);
@@ -89,14 +87,14 @@ export default function PetrochemicalWorkStages({ lang, clusterId = "c2" }: { la
             onChange={value => { setGroup(value); setJob(""); }} />
           <StageDropdown label={fa ? "۳. ردیف کاری" : "3. Work row"} placeholder={fa ? "انتخاب ردیف" : "Select row"}
             value={job} disabled={!selectedGroup}
-            choices={selectedCategory?.jobs.flatMap((item, i) => groupFor(item.name) === selectedGroup
-              ? [{ label: phaseFor(item.name), value: String(i) }] : []) ?? []}
+            choices={selectedCategory?.jobs.flatMap((item, i) => item.group === selectedGroup
+              ? [{ label: item.name, value: String(i) }] : []) ?? []}
             onChange={setJob} />
         </div>
       )}
 
       {selectedJob && <div className="space-y-2">
-        <h4 className="text-[11px] font-semibold tx1">{selectedGroup === phaseFor(selectedJob.name) ? selectedGroup : `${selectedGroup} · ${phaseFor(selectedJob.name)}`}</h4>
+        <h4 className="text-[11px] font-semibold tx1">{selectedJob.group === selectedJob.name ? selectedJob.name : `${selectedJob.group} · ${selectedJob.name}`}</h4>
         <div className="overflow-x-auto rounded-xl border b-line-soft">
           <table className="w-full min-w-max border-separate border-spacing-0 text-[10px]">
             <thead><tr className="bg-[var(--bg-c)] text-[var(--ink)]">
