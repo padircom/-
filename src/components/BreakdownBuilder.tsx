@@ -53,7 +53,6 @@ type Row = WeightedNode & { plannedPct?: number | null; actualPct?: number | nul
 const VIEWS: { id: BreakdownView; fa: string; en: string }[] = [
   { id: "wbs", fa: "WBS ساختار کار", en: "WBS" },
   { id: "cbs", fa: "CBS ساختار هزینه", en: "CBS" },
-  { id: "wpa", fa: "WPA لامپ‌سام", en: "WPA" },
   { id: "pms", fa: "PMS وزنی", en: "PMS" },
 ];
 
@@ -74,7 +73,7 @@ export default function BreakdownBuilder({ lang, projectCode = "PRJ", projectTit
   const [contractType, setContractType] = useState<LumpSumContractType>("EPCC");
   const [amount, setAmount] = useState<number>(167000);
   const [currency, setCurrency] = useState("MUSD");
-  const [view, setView] = useState<BreakdownView>("wpa");
+  const [view, setView] = useState<BreakdownView>("wbs");
   const [rows, setRows] = useState<Row[]>(() => seedRows("EPCC"));
   const [preview, setPreview] = useState<{ title: string; head: string[]; body: (string | number | null)[][] } | null>(null);
 
@@ -142,8 +141,12 @@ export default function BreakdownBuilder({ lang, projectCode = "PRJ", projectTit
   };
 
   const changeType = (next: LumpSumContractType) => {
+    if (next === contractType) return;
+    if (rows.some((r) => r.basis === "agreed" || r.actualPct != null) &&
+        !window.confirm(rtl ? "با تغییر نوع قرارداد، وزن‌ها و پیشرفت‌های واردشده با فازهای پیشنهادی نوع جدید جایگزین می‌شوند. ادامه می‌دهید؟" : "Changing contract type resets entered weights and progress to the new type's suggested phases. Continue?")) return;
     setContractType(next);
     setRows(seedRows(next));
+    setPreview(null);
   };
 
   const normalizeBranch = (parent: string | null) => {
@@ -225,15 +228,9 @@ export default function BreakdownBuilder({ lang, projectCode = "PRJ", projectTit
       {/* ── نوار قرارداد ── */}
       <div className="glass-dark flex flex-wrap items-center gap-3 rounded-2xl p-3 text-[10px]">
         <span className="tx3">{rtl ? "نوع قرارداد" : "Contract"}</span>
-        {(["EPC", "EPCC"] as LumpSumContractType[]).map((ct) => (
-          <button
-            key={ct}
-            onClick={() => changeType(ct)}
-            className={`rounded-lg px-2.5 py-1 text-[9.5px] transition ${contractType === ct ? "toggle-on tx1" : "border b-line-soft tx3"}`}
-          >
-            {ct}
-          </button>
-        ))}
+        <select aria-label={rtl ? "نوع قرارداد" : "Contract type"} value={contractType} onChange={(e) => changeType(e.target.value as LumpSumContractType)} className="rounded-lg border b-line-soft bg-[var(--bg-c)] px-2 py-1.5 text-[10px] tx1 outline-none focus:border-[var(--accent)]" dir="ltr">
+          {(["C", "PC", "EPC", "EPCC"] as const).map((type) => <option key={type} value={type}>{type}</option>)}
+        </select>
 
         <span className="ms-2 tx3">{rtl ? "مبلغ کل" : "Contract value"}</span>
         <input
@@ -250,6 +247,13 @@ export default function BreakdownBuilder({ lang, projectCode = "PRJ", projectTit
           dir="ltr"
         />
 
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border b-line-soft px-2 py-1" aria-live="polite">
+          <span className={rootGate.ok ? "ok-t" : "text-rose-300"}>{rootGate.ok ? "✓" : "⚠"}</span>
+          <span className="tx2">{rtl ? "جمع درصد فازها" : "Phase weight sum"}</span>
+          <strong className={rootGate.ok ? "ok-t" : "text-rose-300"} dir="ltr">{rootGate.sum}%</strong>
+          {!rootGate.ok && <button type="button" onClick={() => normalizeBranch(null)} className="connect-btn rounded-lg px-2 py-0.5 text-[9px]">{rtl ? "نرمال‌سازی به ۱۰۰" : "Normalize to 100"}</button>}
+        </div>
+
         <div className="ms-auto flex flex-wrap items-center gap-1">
           {VIEWS.map((v) => (
             <button
@@ -264,28 +268,11 @@ export default function BreakdownBuilder({ lang, projectCode = "PRJ", projectTit
       </div>
 
       {/* ── گیت جمع وزن ── */}
-      <div
+      {(!allGatesOk || alloc.warningsFa.length > 0 || earned.unweightedCodes.length > 0) && <div
         className="glass-dark rounded-2xl p-3"
         style={{ borderColor: allGatesOk ? "rgba(110,231,183,.45)" : "rgba(255,159,159,.5)" }}
       >
-        <div className="flex flex-wrap items-center gap-2 text-[10px]">
-          <span className={allGatesOk ? "ok-t" : "text-rose-300"}>{allGatesOk ? "✓" : "⚠"}</span>
-          <span className="tx1">
-            {rtl ? "جمع درصد فازها" : "Phase weight sum"}: <b dir="ltr">{rootGate.sum}</b>
-          </span>
-          {!rootGate.ok && rootGate.messageFa && <span className="text-rose-300">{rootGate.messageFa}</span>}
-          {!rootGate.ok && Math.abs(rootGate.deltaAmount) > 0 && (
-            <span className="text-rose-300" dir="ltr">
-              Δ {fmtMoney(Math.abs(rootGate.deltaAmount))} {currency}
-            </span>
-          )}
-          {!rootGate.ok && (
-            <button onClick={() => normalizeBranch(null)} className="connect-btn rounded-lg px-2 py-0.5 text-[9px]">
-              {rtl ? "نرمال‌سازی به ۱۰۰" : "Normalize to 100"}
-            </button>
-          )}
-        </div>
-
+        {!rootGate.ok && rootGate.messageFa && <p className="text-[9.5px] text-rose-300">⚠ {rootGate.messageFa}{Math.abs(rootGate.deltaAmount) > 0 ? ` · Δ ${fmtMoney(Math.abs(rootGate.deltaAmount))} ${currency}` : ""}</p>}
         {branchGates.filter((b) => !b.gate.ok).map((b) => (
           <div key={b.parent} className="mt-1 flex flex-wrap items-center gap-2 text-[9.5px] text-rose-300">
             <span>⚠ {rtl ? "زیرشاخهٔ" : "Branch"} {b.parent}: {b.gate.sum}</span>
@@ -304,7 +291,7 @@ export default function BreakdownBuilder({ lang, projectCode = "PRJ", projectTit
             ⚠ {rtl ? "پیشرفت بدون وزن (در عدد کل دیده نمی‌شود)" : "Progress on unweighted packages"}: {earned.unweightedCodes.join("، ")}
           </div>
         )}
-      </div>
+      </div>}
 
       {/* ── جدول درخت ── */}
       <div className="glass-dark overflow-x-auto rounded-2xl p-2">
@@ -315,8 +302,8 @@ export default function BreakdownBuilder({ lang, projectCode = "PRJ", projectTit
               <th className="px-2 py-2 text-start">{rtl ? "شرح" : "Description"}</th>
               <th className="px-2 py-2 text-center">WF%</th>
               <th className="px-2 py-2 text-center">WV%</th>
-              <th className="px-2 py-2 text-end">{rtl ? "مبلغ" : "Amount"}</th>
-              <th className="px-2 py-2 text-center">{rtl ? "پیشرفت" : "Actual"}</th>
+              {view !== "wbs" && <th className="px-2 py-2 text-end">{rtl ? "مبلغ" : "Amount"}</th>}
+              {view !== "cbs" && view !== "wbs" && <th className="px-2 py-2 text-center">{rtl ? "پیشرفت" : "Actual"}</th>}
               <th className="px-2 py-2 text-center">{rtl ? "مبنا" : "Basis"}</th>
             </tr>
           </thead>
@@ -341,10 +328,10 @@ export default function BreakdownBuilder({ lang, projectCode = "PRJ", projectTit
                     />
                   </td>
                   <td className="px-2 py-1.5 text-center tabular-nums tx3" dir="ltr">{a ? a.weightValue : "—"}</td>
-                  <td className="px-2 py-1.5 text-end tabular-nums" dir="ltr">
+                  {view !== "wbs" && <td className="px-2 py-1.5 text-end tabular-nums" dir="ltr">
                     {isLeaf && amt !== undefined ? <span className="tx1">{fmtMoney(amt)}</span> : <span className="tx4">—</span>}
-                  </td>
-                  <td className="px-2 py-1.5 text-center">
+                  </td>}
+                  {view !== "cbs" && view !== "wbs" && <td className="px-2 py-1.5 text-center">
                     {isLeaf ? (
                       <input
                         value={r.actualPct ?? ""}
@@ -356,7 +343,7 @@ export default function BreakdownBuilder({ lang, projectCode = "PRJ", projectTit
                     ) : (
                       <span className="tx4">—</span>
                     )}
-                  </td>
+                  </td>}
                   <td className="px-2 py-1.5 text-center text-[8.5px]">
                     <span className={r.basis === "agreed" ? "ok-dim-t" : r.basis === "typical" ? "text-amber-300" : "tx4"}>
                       {r.basis === "agreed" ? (rtl ? "توافقی" : "agreed")
@@ -369,8 +356,12 @@ export default function BreakdownBuilder({ lang, projectCode = "PRJ", projectTit
               );
             })}
           </tbody>
-          <tfoot>
-            <tr className="border-t b-line text-[10px]">
+          {view !== "wbs" && <tfoot>
+            {view === "cbs" ? <tr className="border-t b-line text-[10px]">
+              <td className="px-2 py-2 tx3" colSpan={4}>{rtl ? "جمع تخصیص‌یافته" : "Allocated"}</td>
+              <td className="px-2 py-2 text-end tabular-nums tx1" dir="ltr">{fmtMoney(alloc.allocated)}</td>
+              <td className="px-2 py-2 text-center text-[8.5px] tx4">{alloc.roundingFixApplied !== 0 && (rtl ? `جبران ${alloc.roundingFixApplied}` : `fix ${alloc.roundingFixApplied}`)}</td>
+            </tr> : <><tr className="border-t b-line text-[10px]">
               <td className="px-2 py-2 tx3" colSpan={4}>{rtl ? "جمع تخصیص‌یافته" : "Allocated"}</td>
               <td className="px-2 py-2 text-end tabular-nums tx1" dir="ltr">{fmtMoney(alloc.allocated)}</td>
               <td className="px-2 py-2 text-center tabular-nums" dir="ltr" style={{ color: "#8FE3C8" }}>{earned.overallPct}%</td>
@@ -382,8 +373,8 @@ export default function BreakdownBuilder({ lang, projectCode = "PRJ", projectTit
               <td className="px-2 pb-2" colSpan={4}>{rtl ? "ارزش کسب‌شده" : "Earned value"}</td>
               <td className="px-2 pb-2 text-end tabular-nums ok-t" dir="ltr">{fmtMoney(earned.earnedAmount)}</td>
               <td colSpan={2} />
-            </tr>
-          </tfoot>
+            </tr></>}
+          </tfoot>}
         </table>
       </div>
 

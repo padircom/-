@@ -5,6 +5,7 @@ import { buildPexModel } from "../services/pexModel";
 import { canPostProgress, workingDaysBetween, type WeightMode } from "../services/planning";
 import { getSchedule, type ApiSchedule } from "../services/pexApiClient";
 import BreakdownBuilder from "./BreakdownBuilder";
+import OilfieldWorkStages from "./OilfieldWorkStages";
 import ContractWorkshop from "./ContractWorkshop";
 import InteractiveGantt, { type GanttActivity } from "./InteractiveGantt";
 import CpmWorkspace from "./CpmWorkspace";
@@ -73,8 +74,12 @@ export default function PlanningWorkspace({
   lang,
   initialTab = "dashboard",
   hideTabs = false,
+  clusterId,
+  projectId,
 }: {
   lang: Lang;
+  clusterId?: string;
+  projectId?: string;
   initialTab?: PexTab;
   hideTabs?: boolean;
 }) {
@@ -140,7 +145,7 @@ export default function PlanningWorkspace({
    * کارگاه و ساختار شکست دو ماژول جدا بودند ولی یک زنجیره‌اند: قرارداد
    * وارد می‌شود، ساختار از آن درمی‌آید و وزن می‌گیرد. جدا بودنشان یعنی
    * کاربر برای دیدن نتیجهٔ استخراج باید ماژول عوض می‌کرد. */
-  const [shopView, setShopView] = useState<"contract" | "wbs" | "roc">("contract");
+  const [shopView, setShopView] = useState<"contract" | "wbs" | "oilfield" | "roc">("contract");
 
   /* ورود مستقیم با شناسهٔ قدیمی.
    *
@@ -388,6 +393,7 @@ export default function PlanningWorkspace({
             {([
               { id: "contract" as const, fa: "قرارداد", en: "Contract" },
               { id: "wbs" as const, fa: "ساختار شکست", en: "Breakdown" },
+              ...(clusterId === "c1" && projectId === "c1-p1" ? [{ id: "oilfield" as const, fa: "مراحل کاری میدان نفتی", en: "Oilfield work stages" }] : []),
               /* RoC به ساختار شکست می‌چسبد، نه به گزارش روزانه: وزن گام
                * و وزن بسته یک محاسبه‌اند — درصد بسته از گام‌ها، درصد
                * پروژه از بسته‌ها. */
@@ -405,6 +411,8 @@ export default function PlanningWorkspace({
             ))}
           </nav>
         )}
+
+        {tab === "workshop" && shopView === "oilfield" && clusterId === "c1" && projectId === "c1-p1" && <OilfieldWorkStages lang={lang} />}
 
         {tab === "workshop" && shopView === "contract" && <ContractWorkshop lang={lang} />}
 

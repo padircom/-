@@ -878,6 +878,18 @@ export const domains: Domain[] = [
           { id: "d16-p6-s3", title: { fa: "نمره ایمنی و تغذیه شاخص سلامت پروژه", en: "HSE Score & Project Health Feed" }, activity: { fa: "تولید نمره ایمنی و تزریق آن به شاخص سلامت ترکیبی پروژه به‌جای مقدار ثابت پیشین", en: "Produce the HSE score and feed it into the composite project health index, replacing the former fixed value" }, source: "Metric Snapshot", sql: ["HSE_MetricSnapshot", "KpiSnapshot"], output: "HSE Score", connectsTo: "Monitoring, Portfolio", ai: "AI Health Scorer" },
         ],
       },
+      {
+        id: "d16-p7",
+        title: { fa: "ایمنی، بهداشت و محیط‌زیست کارگاهی", en: "Field Health, Safety & Environment" },
+        subs: [
+          { id: "d16-p7-s1", title: { fa: "نمای کلی HSE کارگاهی", en: "Field HSE Overview" }, activity: { fa: "نمای کلی ایمنی کارگاه", en: "Field safety overview" }, source: "HSE Field", sql: ["hse_incident", "hse_permit", "hse_inspection"], output: "Field HSE Dashboard", connectsTo: "Daily Planning", ai: "" },
+          { id: "d16-p7-s2", title: { fa: "رجیستر حوادث", en: "Incident Register" }, activity: { fa: "ثبت و پیگیری حوادث کارگاهی", en: "Record and track field incidents" }, source: "HSE Field", sql: ["hse_incident"], output: "Incident Register", connectsTo: "HSE", ai: "" },
+          { id: "d16-p7-s3", title: { fa: "پروانه‌های کار", en: "Work Permits" }, activity: { fa: "گردش پروانه‌های کارگاهی", en: "Field permit workflow" }, source: "HSE Field", sql: ["hse_permit"], output: "Permit Register", connectsTo: "HSE", ai: "" },
+          { id: "d16-p7-s4", title: { fa: "بازرسی‌های کارگاهی", en: "Field Inspections" }, activity: { fa: "بازرسی و یافته‌های کارگاهی", en: "Field inspection and findings" }, source: "HSE Field", sql: ["hse_inspection"], output: "Inspection Register", connectsTo: "HSE", ai: "" },
+          { id: "d16-p7-s5", title: { fa: "بهداشت و محیط‌زیست کارگاهی", en: "Field Health & Environment" }, activity: { fa: "پایش بهداشت و محیط‌زیست", en: "Field health and environment" }, source: "HSE Field", sql: ["hse_tbt"], output: "Health & Environment", connectsTo: "HSE", ai: "" },
+          { id: "d16-p7-s6", title: { fa: "اقدامات اصلاحی کارگاهی", en: "Field Corrective Actions" }, activity: { fa: "پیگیری اقدامات اصلاحی", en: "Track corrective actions" }, source: "HSE Field", sql: ["hse_action"], output: "Corrective Actions", connectsTo: "HSE", ai: "" },
+        ],
+      },
     ],
   },
   {

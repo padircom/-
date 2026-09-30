@@ -361,8 +361,8 @@ export default function CapabilityDetail({
         </div>
       </header>
 
-      {/* 4 metadata cards */}
-      <div className="grid grid-cols-2 gap-2 xl:grid-cols-4">
+      {/* اطلاعات متادیتا برای سایر حوزه‌ها؛ کارت‌های بالای زیرفرایندهای استراتژی نمایش داده نمی‌شوند. */}
+      {domainId !== "d20" && <div className="grid grid-cols-2 gap-2 xl:grid-cols-4">
         <div className="rounded-xl border b-line-soft bg-[var(--row)] p-3">
           <div className="text-[8.5px] font-extralight tx4">{rtl ? "منبع داده" : "Data Source"}</div>
           <div className="mt-1 text-[10.5px] font-light tx1" dir="ltr">{sub.source}</div>
@@ -385,7 +385,7 @@ export default function CapabilityDetail({
             {rtl ? "اجرای AI" : "Run AI"}
           </button>
         </div>
-      </div>
+      </div>}
 
       {/* ══ پیوندهای میان‌دامنه‌ای (مثل «کد ۴ → صدور نسخه در d1») ══ */}
       {sub?.links && sub.links.length > 0 && (
