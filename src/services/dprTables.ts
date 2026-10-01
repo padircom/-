@@ -195,6 +195,18 @@ export function emptyNarrative(): DprNarrative {
   return { siteActivities: "", workFront: "", areaOfConcerns: "" };
 }
 
+export const MATERIAL_CATALOG: Array<[string, string]> = [
+  ["001", "ماسه بادی"], ["002", "قالب فلزی"], ["003", "آرماتور"], ["004", "آجر"], ["005", "بلوک"],
+  ["006", "قلوه سنگ"], ["007", "مخلوط"], ["008", "انگلوریت شماره ۱۶"], ["009", "بتن ۱۵۰"], ["010", "بتن ۲۵۰"],
+  ["011", "بتن ۳۵۰"], ["012", "بتن ۲۵۰"], ["013", "سیمان متعادل آرماسیون‌بندی"], ["014", "سیمان متعادل قالب‌بندی"], ["015", "شن سه هشتم"],
+  ["016", "شن سه چهارم"], ["017", "لوله دو جداره ۱۰۰۰"], ["018", "لوله دو جداره ۸۰۰"], ["019", "لوله دو جداره ۶۰۰"], ["020", "درب منهول"],
+  ["021", "ماسه شسته"], ["022", "سیـمان تیپ ۲"], ["023", "الیاف بتن"], ["024", "ورق"], ["025", "ورق ۲۵"],
+];
+
+function emptyMaterials(date: string): DprMaterialRow[] {
+  return MATERIAL_CATALOG.map(([itemCode, desc]) => ({ group: "", itemCode, desc, truckNo: "", ticketNo: "", grade: "", unit: "", gross: null, tare: null, net: null, qtyVcn: null, tonnage: null, entryDate: date, entryTime: "", contractor: "", usage: "" }));
+}
+
 export function emptyReport(projectCode: string, date: string, reportNo: string): DprTablesReport {
   return {
     projectCode,

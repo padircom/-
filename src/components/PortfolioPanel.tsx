@@ -179,7 +179,7 @@ export default function PortfolioPanel({ lang, selected, onSelect, activeProject
                     key={p.id}
                     onClick={() => onOpenProject(activeCluster.id, p.id)}
                     aria-pressed={isActiveProject}
-                    className={`glass-row grid w-full grid-cols-12 items-center gap-2 rounded-xl px-3 py-2 text-start ${isActiveProject ? "row-on" : ""}`}
+                    className={`glass-row premium-project-card grid w-full grid-cols-12 items-center gap-2 rounded-xl px-3 py-2 text-start ${isActiveProject ? "row-on" : ""}`}
                     style={{
                       borderInlineStartWidth: 2,
                       borderInlineStartColor: meta.color,

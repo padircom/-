@@ -30,7 +30,7 @@ export function KpiRingBar({ lang }: { lang: Lang }) {
     { label: { fa: "ریسک بحرانی", en: "Critical Risks" }, value: 22, color: "#FF9F9F", suffix: "", display: "11", inverted: true },
   ];
   return (
-    <div className="glass-dark flex shrink-0 items-stretch gap-2 rounded-2xl px-3 py-2">
+    <div className="glass-dark premium-kpi-panel flex shrink-0 items-stretch gap-2 rounded-2xl px-3 py-2">
       {rings.map((k) => {
         const capped = Math.min(100, k.value);
         return (
@@ -51,7 +51,7 @@ function Dial({ value, color, display }: { value: number; color: string; display
   const r = 16;
   const c = 2 * Math.PI * r;
   return (
-    <svg viewBox="0 0 40 40" className="h-10 w-10 shrink-0 -rotate-90">
+    <svg viewBox="0 0 40 40" className="kpi-dial h-12 w-12 shrink-0 -rotate-90">
       <circle className="s-track" cx="20" cy="20" r={r} fill="none" strokeWidth="2.5" />
       <circle
         cx="20" cy="20" r={r} fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round"

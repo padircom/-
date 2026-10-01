@@ -78,6 +78,8 @@ const rows: Array<[title: string, group: string, note?: string]> = [
   /* ── Batching (5) ── */
   ["Silevv Plant", "batching", "عین عکس؛ با اکسل کنترل شود"],
   ["Batching Plant", "batching", "تکرار دوم در شیت"],
+  ["Cement Silo", "batching"],
+  ["Cement Mixer", "batching"],
   ["Truck Mixer", "batching"],
   ["Vibrator", "batching"],
   ["Truck Spray Bar", "batching"],

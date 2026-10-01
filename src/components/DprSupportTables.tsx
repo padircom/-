@@ -20,6 +20,7 @@ import {
   type DprMaterialRow,
   type DprReportStatus,
   type DprTablesReport,
+  MATERIAL_CATALOG,
 } from "../services/dprTables";
 import {
   DprTablesError,
@@ -206,10 +207,19 @@ export default function DprSupportTables({
   const [error, setError] = useState("");
   const [localOnly, setLocalOnly] = useState(false);
   const [filter, setFilter] = useState("");
+  const [changeFilter, setChangeFilter] = useState("");
+  const [activityFilter, setActivityFilter] = useState("");
+  const [materialFilter, setMaterialFilter] = useState("");
+  const [materialCatalog, setMaterialCatalog] = useState<Array<[string, string]>>([...MATERIAL_CATALOG]);
+  const [newMaterialCode, setNewMaterialCode] = useState("");
+  const [newMaterialDesc, setNewMaterialDesc] = useState("");
   const [hideEmpty, setHideEmpty] = useState(false);
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
 
-  const locked = !report || report.status !== "draft" || !canEdit;
+  // جدول‌های روزانه در وضعیت پیش‌نویس برای ورود و محاسبهٔ محلی قابل ویرایش‌اند؛
+  // مجوز همچنان فقط ذخیره/ارسال را کنترل می‌کند.
+  const locked = !report || report.status !== "draft";
+  const canPersist = canEdit;
   const resetKey = `${projectCode}:${date}:${report?.updatedAt ?? "new"}`;
   const draftKey = `dpr-tables-draft:${projectCode}:${date}`;
 
@@ -320,7 +330,7 @@ export default function DprSupportTables({
   const patch = (fn: (r: DprTablesReport) => DprTablesReport) => setReport((r) => (r ? fn(r) : r));
 
   const save = async () => {
-    if (!report || locked) return;
+    if (!report || locked || !canPersist) return;
     setSaving(true);
     setError("");
     const payload: DprTablesReport = {
@@ -483,7 +493,7 @@ export default function DprSupportTables({
         )}
         <span className="ms-auto flex items-center gap-1.5">
           {report?.status === "draft" && (
-            <button onClick={() => void save()} disabled={locked || saving || loading} className="rounded-lg border border-emerald-400/40 bg-emerald-400/10 px-3 py-1 text-emerald-200 disabled:opacity-40">
+            <button onClick={() => void save()} disabled={locked || !canPersist || saving || loading} className="rounded-lg border border-emerald-400/40 bg-emerald-400/10 px-3 py-1 text-emerald-200 disabled:opacity-40">
               💾 {saving ? "…" : rtl ? "ذخیره" : "Save"}
             </button>
           )}
@@ -630,6 +640,9 @@ export default function DprSupportTables({
             <table className="w-full border-separate border-spacing-0 text-[10px]">
               <thead className="sticky top-0 z-10 bg-[var(--bg-c)] tx1">
                 <tr>
+                  <th className={th}>#</th>
+                  <th className={th}>{rtl ? "کد" : "Code"}</th>
+                  <th className={th}>{rtl ? "مستقیم / غیرمستقیم" : "Direct / Indirect"}</th>
                   <th className={th}>{rtl ? "شغل" : "Craft"}</th>
                   <th className={th}>{rtl ? "حاضر روز" : "Present (day)"}</th>
                   <th className={th}>{rtl ? "غایب روز" : "Absent (day)"}</th>
@@ -652,7 +665,7 @@ export default function DprSupportTables({
                   return (
                     <Fragment key={g}>
                       <tr className="bg-black/15">
-                        <td colSpan={7} className="px-2 py-1.5">
+                        <td colSpan={10} className="px-2 py-1.5">
                           <button onClick={() => toggleGroup(`man:${g}`)} className="flex w-full items-center gap-2 text-[10px] font-medium tx1">
                             <span className="tx3">{open ? "▾" : "▸"}</span>
                             <span dir="ltr">{rtl ? DPR_MANPOWER_GROUPS[g]?.fa : DPR_MANPOWER_GROUPS[g]?.en}</span>
@@ -663,14 +676,16 @@ export default function DprSupportTables({
                         </td>
                       </tr>
                       {open &&
-                        rows.map((m) => {
+                        rows.map((m, i) => {
                           const e = report.manpower[m.code];
                           const t = manTotals.rows[m.code];
                           return (
                             <tr key={m.code} className="bg-[var(--bg-b)]">
+                              <td className={`${td} tx4 tabular-nums`} dir="ltr">{i + 1}</td>
+                              <td className={`${td} font-mono text-[8.5px] tx4`} dir="ltr">{m.code}</td>
+                              <td className={`${td} whitespace-nowrap text-[9px] tx3`}>{m.kind === "direct" ? (rtl ? "مستقیم" : "Direct") : (rtl ? "غیرمستقیم" : "Indirect")}</td>
                               <td className={tdL}>
-                                <span className="tx1" dir="ltr">{m.title}</span>{" "}
-                                <span className="font-mono text-[8.5px] tx4" dir="ltr">{m.code}</span>
+                                <span className="tx1" dir="ltr">{m.title}</span>
                               </td>
                               <td className={td}><CellNum value={e?.pd ?? null} disabled={locked} resetKey={resetKey} onCommit={(v) => setMan(m.code, "pd", v)} /></td>
                               <td className={td}><CellNum value={e?.ad ?? null} disabled={locked} resetKey={resetKey} onCommit={(v) => setMan(m.code, "ad", v)} /></td>
@@ -688,6 +703,9 @@ export default function DprSupportTables({
               <tfoot className="sticky bottom-0 bg-[var(--bg-c)] tx1">
                 <tr className="border-t b-line-soft text-[10px] font-semibold">
                   <td className="px-2 py-2 text-start">{rtl ? "جمع کل" : "Total"}</td>
+                  <td className="px-1 py-2 text-center tx4">—</td>
+                  <td className="px-1 py-2 text-center tx4">—</td>
+                  <td className="px-1 py-2 text-center tx4">—</td>
                   <td className="px-1 py-2 text-center tabular-nums" dir="ltr">{manTotals.grand.pd}</td>
                   <td className="px-1 py-2 text-center tabular-nums" dir="ltr">{manTotals.grand.ad}</td>
                   <td className="px-1 py-2 text-center tabular-nums" dir="ltr">{manTotals.grand.pn}</td>
@@ -733,6 +751,8 @@ export default function DprSupportTables({
             <table className="w-full border-separate border-spacing-0 text-[10px]">
               <thead className="sticky top-0 z-10 bg-[var(--bg-c)] tx1">
                 <tr>
+                  <th className={th}>#</th>
+                  <th className={th}>{rtl ? "کد" : "Code"}</th>
                   <th className={th}>{rtl ? "دستگاه" : "Machine"}</th>
                   <th className={th}>{rtl ? "فعال" : "Active"}</th>
                   <th className={th}>{rtl ? "آماده" : "Ready"}</th>
@@ -753,7 +773,7 @@ export default function DprSupportTables({
                   return (
                     <Fragment key={g}>
                       <tr className="bg-black/15">
-                        <td colSpan={6} className="px-2 py-1.5">
+                        <td colSpan={8} className="px-2 py-1.5">
                           <button onClick={() => toggleGroup(`mac:${g}`)} className="flex w-full items-center gap-2 text-[10px] font-medium tx1">
                             <span className="tx3">{open ? "▾" : "▸"}</span>
                             <span dir="ltr">{rtl ? DPR_MACHINERY_GROUPS[g]?.fa : DPR_MACHINERY_GROUPS[g]?.en}</span>
@@ -762,13 +782,14 @@ export default function DprSupportTables({
                         </td>
                       </tr>
                       {open &&
-                        rows.map((m) => {
+                        rows.map((m, i) => {
                           const e = report.machinery[m.code];
                           return (
                             <tr key={m.code} className="bg-[var(--bg-b)]">
+                              <td className={`${td} tx4 tabular-nums`} dir="ltr">{i + 1}</td>
+                              <td className={`${td} font-mono text-[8.5px] tx4`} dir="ltr">{m.code}</td>
                               <td className={tdL}>
-                                <span className="tx1" dir="ltr">{m.title}</span>{" "}
-                                <span className="font-mono text-[8.5px] tx4" dir="ltr">{m.code}</span>
+                                <span className="tx1" dir="ltr">{m.title}</span>
                               </td>
                               <td className={td}><CellNum value={e?.active ?? null} disabled={locked} resetKey={resetKey} onCommit={(v) => setMac(m.code, "active", v)} /></td>
                               <td className={td}><CellNum value={e?.ready ?? null} disabled={locked} resetKey={resetKey} onCommit={(v) => setMac(m.code, "ready", v)} /></td>
@@ -787,6 +808,8 @@ export default function DprSupportTables({
               <tfoot className="sticky bottom-0 bg-[var(--bg-c)] tx1">
                 <tr className="border-t b-line-soft text-[10px] font-semibold">
                   <td className="px-2 py-2 text-start">{rtl ? "جمع کل" : "Total"}</td>
+                  <td className="px-1 py-2 text-center tx4">—</td>
+                  <td className="px-1 py-2 text-center tx4">—</td>
                   <td className="px-1 py-2 text-center tabular-nums" dir="ltr">{macTotals.active}</td>
                   <td className="px-1 py-2 text-center tabular-nums" dir="ltr">{macTotals.ready}</td>
                   <td className="px-1 py-2 text-center tabular-nums" dir="ltr">{macTotals.repair}</td>
@@ -803,6 +826,29 @@ export default function DprSupportTables({
       {/* ═══ تب ۵: متریال وارده به کارگاه ═══ */}
       {tab === "materials" && report && (
         <div className="space-y-2">
+          <datalist id="dpr-material-codes">
+            {materialCatalog.map(([code, desc]) => <option key={code} value={code}>{code} — {desc}</option>)}
+          </datalist>
+          <div className="flex flex-wrap items-center gap-2 text-[10px]">
+            <label className="tx3">{rtl ? "کد کالای ثابت:" : "Fixed material code:"}</label>
+            <select className="rounded-lg border b-line-soft bg-black/20 px-2 py-1 tx1" onChange={(e) => {
+              const code = e.target.value; if (!code) return;
+              const desc = materialCatalog.find(([c]) => c === code)?.[1] ?? "";
+              patch((r) => ({ ...r, materials: [...r.materials, { group: "", itemCode: code, desc, truckNo: "", ticketNo: "", grade: "", unit: "", gross: null, tare: null, net: null, qtyVcn: null, tonnage: null, entryDate: date, entryTime: "", contractor: "", usage: "" }] })); e.currentTarget.value = "";
+            }}>
+              <option value="">{rtl ? "انتخاب کد برای افزودن ردیف…" : "Choose code to add a row…"}</option>
+              {materialCatalog.map(([code, desc]) => <option key={code} value={code}>{code} — {desc}</option>)}
+            </select>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 text-[10px]">
+            <input value={newMaterialCode} onChange={(e) => setNewMaterialCode(e.target.value)} placeholder={rtl ? "کد جدید" : "New code"} className="w-24 rounded-lg border b-line-soft bg-black/20 px-2 py-1 tx1" />
+            <input value={newMaterialDesc} onChange={(e) => setNewMaterialDesc(e.target.value)} placeholder={rtl ? "شرح کد جدید" : "New description"} className="w-44 rounded-lg border b-line-soft bg-black/20 px-2 py-1 tx1" />
+            <button disabled={!newMaterialCode.trim() || !newMaterialDesc.trim()} onClick={() => { const code = newMaterialCode.trim(); const desc = newMaterialDesc.trim(); setMaterialCatalog((prev) => [...prev.filter(([c]) => c !== code), [code, desc]]); setNewMaterialCode(""); setNewMaterialDesc(""); }} className="rounded-lg border b-line-soft px-2 py-1 tx2 disabled:opacity-40">+ {rtl ? "افزودن کد" : "Add code"}</button>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 text-[10px]">
+            <input value={materialFilter} onChange={(e) => setMaterialFilter(e.target.value)} placeholder={rtl ? "فیلتر کد، شرح، گروه یا پیمانکار…" : "Filter code, description, group or contractor…"} className="w-72 rounded-lg border b-line-soft bg-black/20 px-2 py-1 tx1 outline-none focus:border-[var(--accent)]" />
+            <span className="tx4">{report.materials.filter((m) => !materialFilter || [m.itemCode,m.desc,m.group,m.contractor,m.usage].join(" ").toLowerCase().includes(materialFilter.toLowerCase())).length} / {report.materials.length}</span>
+          </div>
           <div className="overflow-x-auto rounded-xl border b-line-soft">
             <table className="w-full min-w-max border-separate border-spacing-0 text-[10px]">
               <thead className="bg-[var(--bg-c)] tx1">
@@ -828,11 +874,11 @@ export default function DprSupportTables({
                 </tr>
               </thead>
               <tbody className="divide-y b-line-soft">
-                {report.materials.map((m, i) => (
+                {report.materials.map((m, originalIndex) => ({ m, originalIndex })).filter(({ m }) => !materialFilter || [m.itemCode,m.desc,m.group,m.contractor,m.usage].join(" ").toLowerCase().includes(materialFilter.toLowerCase())).map(({ m, originalIndex: i }) => (
                   <tr key={i} className="bg-[var(--bg-b)]">
                     <td className={`${td} tx4 tabular-nums`} dir="ltr">{i + 1}</td>
                     <td className={td}><CellText value={m.group} disabled={locked} resetKey={resetKey} align="center" onCommit={(v) => patchMaterial(i, (x) => ({ ...x, group: v }))} /></td>
-                    <td className={td}><CellText value={m.itemCode} disabled={locked} resetKey={resetKey} align="center" onCommit={(v) => patchMaterial(i, (x) => ({ ...x, itemCode: v }))} /></td>
+                    <td className={td}><CellText value={m.itemCode} disabled={locked} resetKey={resetKey} listId="dpr-material-codes" align="center" onCommit={(v) => patchMaterial(i, (x) => ({ ...x, itemCode: v }))} /></td>
                     <td className={td}><CellText value={m.desc} disabled={locked} resetKey={resetKey} onCommit={(v) => patchMaterial(i, (x) => ({ ...x, desc: v }))} /></td>
                     <td className={td}><CellText value={m.truckNo} disabled={locked} resetKey={resetKey} align="center" onCommit={(v) => patchMaterial(i, (x) => ({ ...x, truckNo: v }))} /></td>
                     <td className={td}><CellText value={m.ticketNo} disabled={locked} resetKey={resetKey} align="center" onCommit={(v) => patchMaterial(i, (x) => ({ ...x, ticketNo: v }))} /></td>
@@ -907,8 +953,15 @@ export default function DprSupportTables({
                 </tr>
               </thead>
               <tbody className="divide-y b-line-soft">
-                {report.changes.map((c, i) => {
-                  const prev = history.changes[c.refId.trim()] ?? 0;
+                {report.changes.map((c, originalIndex) => ({ c, originalIndex })).filter(({ c }) => !changeFilter || [c.refId,c.location,c.unit,c.discipline,c.activity,c.contractor].join(" ").toLowerCase().includes(changeFilter.toLowerCase())).map(({ c, originalIndex: i }) => {
+                  // اگر یک فعالیت در همان گزارش بیش از یک بار آمده باشد، هر ردیف ادامهٔ
+                  // ردیف قبلی همان شناسه است؛ بنابراین تجمعی و درصد از صفر شروع نمی‌شود.
+                  const ref = c.refId.trim();
+                  const sameActivityToday = report.changes
+                    .slice(0, i)
+                    .filter((x) => x.refId.trim() === ref)
+                    .reduce((sum, x) => sum + (Number(x.thisQty) || 0), 0);
+                  const prev = (history.changes[ref] ?? 0) + sameActivityToday;
                   const calcR = changeCalc(c.totalQty, prev, c.thisQty);
                   return (
                     <tr key={i} className="bg-[var(--bg-b)]">
@@ -960,6 +1013,10 @@ export default function DprSupportTables({
       {/* ═══ تب ۷: فعالیت‌های اصلی ═══ */}
       {tab === "activities" && report && (
         <div className="space-y-2">
+          <div className="flex flex-wrap items-center gap-2 text-[10px]">
+            <input value={activityFilter} onChange={(e) => setActivityFilter(e.target.value)} placeholder={rtl ? "فیلتر کد، فعالیت، فاز، ناحیه یا مجری…" : "Filter code, activity, phase, area or executor…"} className="w-72 rounded-lg border b-line-soft bg-black/20 px-2 py-1 tx1 outline-none focus:border-[var(--accent)]" />
+            <span className="tx4">{report.activities.filter((a) => !activityFilter || [a.acCode,a.activity,a.subPhase,a.dis,a.area,a.workPackage,a.subPackage,a.executor].join(" ").toLowerCase().includes(activityFilter.toLowerCase())).length} / {report.activities.length}</span>
+          </div>
           <div className="overflow-x-auto rounded-xl border b-line-soft">
             <table className="w-full min-w-max border-separate border-spacing-0 text-[10px]">
               <thead className="bg-[var(--bg-c)] tx1">
@@ -989,7 +1046,7 @@ export default function DprSupportTables({
                 </tr>
               </thead>
               <tbody className="divide-y b-line-soft">
-                {report.activities.map((a, i) => {
+                {report.activities.map((a, originalIndex) => ({ a, originalIndex })).filter(({ a }) => !activityFilter || [a.acCode,a.activity,a.subPhase,a.dis,a.area,a.workPackage,a.subPackage,a.executor].join(" ").toLowerCase().includes(activityFilter.toLowerCase())).map(({ a, originalIndex: i }) => {
                   const last = history.activities[activityHistoryKey(a.acCode, a.activity)] ?? 0;
                   const calcR = activityCalc(a.estimated, last, a.todayQty);
                   return (

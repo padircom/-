@@ -48,6 +48,11 @@ const loadTemplates = (): Partial<Record<TemplateKind, StoredTemplate>> => {
 };
 
 export default function DailyReportWorkspace({ lang }: { lang: Lang }) {
+  useEffect(() => {
+    const openCover = () => document.getElementById("daily-report-cover")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    window.addEventListener("open-daily-report-cover", openCover);
+    return () => window.removeEventListener("open-daily-report-cover", openCover);
+  }, []);
   const rtl = lang === "fa";
   const { projectScope, projectsByCluster } = useSystem();
   const { can, audit } = useAuth();
@@ -242,7 +247,7 @@ export default function DailyReportWorkspace({ lang }: { lang: Lang }) {
   };
 
   return (
-    <div className="mt-4 flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto" dir={rtl ? "rtl" : "ltr"}>
+    <div className="daily-report-a4 mt-4 flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto" dir={rtl ? "rtl" : "ltr"}>
       {/* ── بنر ورود به جداول پشتیبان (dprt-v1) — فقط در دامنهٔ فرمت ── */}
       {dprScopeOk && (
       <section className="glass-dark shrink-0 rounded-2xl border border-emerald-400/30 bg-emerald-400/[0.06] p-3">
@@ -369,8 +374,11 @@ export default function DailyReportWorkspace({ lang }: { lang: Lang }) {
       </section>
 
       {/* ── Official Letterhead / Header only ── */}
-      <section className="glass-dark shrink-0 rounded-2xl border-2 border-dashed border-sky-400/30 bg-black/20 p-3">
+      <section id="daily-report-cover" data-daily-cover="true" tabIndex={-1} className="glass-dark relative shrink-0 rounded-2xl border-2 border-dashed border-sky-400/30 bg-black/20 p-3">
         <div className="mb-3 grid grid-cols-[auto_1fr_auto] items-center gap-3 border-b b-line-soft pb-3">
+          <button onClick={() => document.getElementById("dpr-support-tables")?.scrollIntoView({ behavior: "smooth", block: "start" })} className="absolute end-4 top-2 rounded-lg border border-sky-400/50 bg-sky-400/15 px-3 py-1.5 text-[10px] font-medium text-sky-200 transition hover:bg-sky-400/25">
+            {rtl ? "ورود به جداول پشتیبان ↓" : "Open support tables ↓"}
+          </button>
           {logoBox("client", rtl ? "لوگو کارفرما" : "Client Logo")}
           <div className="text-center">
             <div className="text-[10px] font-medium tx1">{rtl ? "جمهوری اسلامی ایران — وزارت راه و شهرسازی" : "Ministry of Roads & Urban Development"}</div>

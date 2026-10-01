@@ -1,0 +1,12 @@
+@page { size: A4 portrait; margin: 8mm; }
+@media print {
+  html, body, #root { height: auto !important; background: #fff !important; }
+  body { color: #111 !important; font-family: Arial, sans-serif !important; }
+  .daily-report-a4 { display: block !important; overflow: visible !important; margin: 0 !important; width: 194mm !important; min-height: 281mm !important; }
+  .daily-report-a4 > section { break-inside: avoid; page-break-inside: avoid; box-shadow: none !important; border-color: #777 !important; background: #fff !important; color: #111 !important; }
+  .daily-report-a4 .glass-dark, .daily-report-a4 .glass { background: #fff !important; backdrop-filter: none !important; }
+  .daily-report-a4 button, .daily-report-a4 input[type=file], .daily-report-a4 select { display: none !important; }
+  .daily-report-a4 input, .daily-report-a4 textarea { border: 0 !important; background: transparent !important; color: #111 !important; }
+  .daily-report-a4 .tx1, .daily-report-a4 .tx2, .daily-report-a4 .tx3, .daily-report-a4 .tx4 { color: #111 !important; }
+  .daily-report-a4 .b-line-soft, .daily-report-a4 .b-line { border-color: #999 !important; }
+}
