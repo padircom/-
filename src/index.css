@@ -3,6 +3,8 @@
 @import "./i18n.css";
 @import "./sidebars.css";
 @import "./workspace-typography.css";
+@import "../premium-dashboard.css";
+@import "../daily-report-print.css";
 
 /* ══════════════════════════════════════════════════════════════
    THEME VARIABLE ENGINE

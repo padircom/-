@@ -1,0 +1,18 @@
+
+/* Premium executive dashboard treatment — presentation only */
+.premium-kpi-panel,
+.premium-chart-card {
+  border-color: color-mix(in srgb, var(--accent) 24%, var(--panel-border));
+  box-shadow: 0 14px 34px -22px rgba(3, 8, 24, .9), inset 0 1px 0 rgba(255,255,255,.12);
+}
+.premium-kpi-panel { background: linear-gradient(135deg, color-mix(in srgb, var(--panel) 92%, #6d8cff 8%), var(--panel2)); }
+.premium-kpi-panel > div { position: relative; }
+.kpi-dial { filter: drop-shadow(0 0 7px color-mix(in srgb, currentColor 35%, transparent)); }
+.kpi-dial circle:last-of-type { filter: drop-shadow(0 0 3px currentColor); }
+.premium-chart-card { transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease; }
+.premium-chart-card:hover { transform: translateY(-1px); box-shadow: 0 18px 42px -22px rgba(3,8,24,.95), inset 0 1px 0 rgba(255,255,255,.16); }
+.budget-track { box-shadow: inset 0 1px 2px rgba(0,0,0,.22); }
+.budget-fill { background-image: linear-gradient(90deg, color-mix(in srgb, var(--accent) 76%, white 8%), color-mix(in srgb, var(--accent) 92%, white 20%)); box-shadow: 0 0 12px -2px currentColor; }
+.premium-project-card { transition: transform .18s ease, box-shadow .18s ease, background .18s ease; }
+.premium-project-card:hover { transform: translateY(-2px); box-shadow: 0 10px 24px -16px rgba(0,0,0,.9), inset 0 0 0 1px rgba(255,255,255,.12); }
+.status-dot { box-shadow: 0 0 0 2px color-mix(in srgb, var(--status-color) 18%, transparent), 0 0 9px color-mix(in srgb, var(--status-color) 70%, transparent); }
