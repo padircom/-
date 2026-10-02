@@ -1,12 +1,192 @@
-@page { size: A4 portrait; margin: 8mm; }
+@page {
+  size: A4 portrait;
+  margin: 4mm;
+}
+
 @media print {
-  html, body, #root { height: auto !important; background: #fff !important; }
-  body { color: #111 !important; font-family: Arial, sans-serif !important; }
-  .daily-report-a4 { display: block !important; overflow: visible !important; margin: 0 !important; width: 194mm !important; min-height: 281mm !important; }
-  .daily-report-a4 > section { break-inside: avoid; page-break-inside: avoid; box-shadow: none !important; border-color: #777 !important; background: #fff !important; color: #111 !important; }
-  .daily-report-a4 .glass-dark, .daily-report-a4 .glass { background: #fff !important; backdrop-filter: none !important; }
-  .daily-report-a4 button, .daily-report-a4 input[type=file], .daily-report-a4 select { display: none !important; }
-  .daily-report-a4 input, .daily-report-a4 textarea { border: 0 !important; background: transparent !important; color: #111 !important; }
-  .daily-report-a4 .tx1, .daily-report-a4 .tx2, .daily-report-a4 .tx3, .daily-report-a4 .tx4 { color: #111 !important; }
-  .daily-report-a4 .b-line-soft, .daily-report-a4 .b-line { border-color: #999 !important; }
+  *,
+  *::before,
+  *::after {
+    transform: none !important;
+    animation: none !important;
+    filter: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+
+  html,
+  body,
+  #root {
+    width: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    background: #fff !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  body * {
+    visibility: hidden !important;
+  }
+
+  #daily-report-cover,
+  #daily-report-cover * {
+    visibility: visible !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  #daily-report-cover {
+    position: fixed !important;
+    inset: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    min-height: 288mm !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    background: #fff !important;
+    z-index: 2147483647 !important;
+    display: flex !important;
+    flex-direction: column !important;
+  }
+
+  #daily-report-cover > div {
+    flex: 1 1 auto !important;
+    width: 100% !important;
+    height: 100% !important;
+    min-height: 288mm !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
+    margin: 0 !important;
+    box-shadow: none !important;
+    display: flex !important;
+    flex-direction: column !important;
+  }
+
+  #daily-report-cover .no-print-placeholder,
+  #daily-report-cover input[type="file"] {
+    visibility: hidden !important;
+  }
+
+  #daily-report-cover .has-logo {
+    border: 0 !important;
+    background: transparent !important;
+  }
+
+  #daily-report-cover select {
+    appearance: none !important;
+    -webkit-appearance: none !important;
+    border: 0 !important;
+  }
+
+  #daily-report-cover input {
+    border-bottom-color: transparent !important;
+  }
+
+  #daily-report-cover > div.daily-report-sheet-fit {
+    width: 100% !important;
+    min-height: 288mm !important;
+    height: 288mm !important;
+    max-height: 288mm !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+    justify-content: space-between !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  #daily-report-cover .daily-report-sub-header {
+    margin-bottom: 2px !important;
+  }
+
+  #daily-report-cover .daily-report-sub-header tr {
+    height: 14px !important;
+  }
+
+  #daily-report-cover .daily-report-manpower-table,
+  #daily-report-cover .daily-report-machinery-table {
+    table-layout: fixed !important;
+    width: 100% !important;
+    font-size: 8.8px !important;
+    line-height: 1 !important;
+  }
+
+  #daily-report-cover .daily-report-manpower-table tr {
+    height: 9.8px !important;
+  }
+
+  #daily-report-cover .daily-report-machinery-table thead tr:first-child {
+    height: 28px !important;
+  }
+
+  #daily-report-cover .daily-report-machinery-table tbody tr {
+    height: 11px !important;
+  }
+
+  #daily-report-cover .daily-report-manpower-table td,
+  #daily-report-cover .daily-report-manpower-table th,
+  #daily-report-cover .daily-report-machinery-table td,
+  #daily-report-cover .daily-report-machinery-table th {
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+    line-height: 1 !important;
+  }
+
+  #daily-report-cover .daily-report-manpower-table input,
+  #daily-report-cover .daily-report-manpower-table textarea,
+  #daily-report-cover .daily-report-machinery-table input,
+  #daily-report-cover .daily-report-machinery-table textarea {
+    display: block !important;
+    font-size: 8.8px !important;
+    line-height: 1 !important;
+    height: 9.2px !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+  }
+
+  #daily-report-cover .daily-report-material-subtable {
+    table-layout: fixed !important;
+    width: 100% !important;
+    font-size: 9px !important;
+    line-height: 1 !important;
+  }
+
+  #daily-report-cover .daily-report-material-subtable thead tr:first-child {
+    height: 17px !important;
+  }
+
+  #daily-report-cover .daily-report-material-subtable thead tr:last-child {
+    height: 22px !important;
+  }
+
+  #daily-report-cover .daily-report-material-subtable tbody tr {
+    height: 15px !important;
+  }
+
+  #daily-report-cover .daily-report-material-subtable td,
+  #daily-report-cover .daily-report-material-subtable th {
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+    line-height: 1 !important;
+  }
+
+  #daily-report-cover .daily-report-material-subtable input {
+    display: block !important;
+    font-size: 9px !important;
+    line-height: 1 !important;
+    height: 14px !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+  }
 }
