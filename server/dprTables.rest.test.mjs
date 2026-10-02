@@ -12,6 +12,7 @@ import { spawn } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { buildSampleThreeDayReports, activityHistoryKey } from "./dprTablesLogic.js";
 
 const PORT = 4751;
 const BASE = `http://localhost:${PORT}`;
@@ -93,7 +94,7 @@ test("dprt-rest: گزارش ناموجود ← پوسته + پیشنهاد خا�
   assert.equal(body.data.exists, false);
   assert.equal(body.data.report.reportDate, "1403/08/26");
   assert.equal(body.data.suggestedNo, "");
-  assert.deepEqual(body.data.history, { changes: {}, activities: {} });
+  assert.deepEqual(body.data.history, { changes: {}, activities: {}, manpower: {}, machinery: {}, materialsByBlock: {} });
 });
 
 test("dprt-rest: تاریخ و پروژهٔ بد ← ۴۰۰", async () => {
@@ -112,6 +113,22 @@ test("dprt-rest: ذخیره و بازخوانی همان داده", async () => 
   assert.equal(again.body.data.exists, true);
   assert.equal(again.body.data.report.manpower["MP-001"].pd, 3);
   assert.equal(again.body.data.report.machinery["MC-003"].active, 2);
+});
+
+test("dprt-rest: ورود داده نمونه سه‌روزه و خروجی خودکار با تاریخ انتخابی", async () => {
+  const sampleProject = "PC-SAMPLE-1";
+  const samples = buildSampleThreeDayReports(sampleProject);
+  for (const [date, report] of Object.entries(samples)) {
+    const saved = await put(`/api/dpr/projects/${sampleProject}/reports/${enc(date)}`, report);
+    assert.equal(saved.status, 200, JSON.stringify(saved.body));
+  }
+  const selected = await get(`/api/dpr/projects/${sampleProject}/reports/${enc("1403/08/26")}`);
+  assert.equal(selected.body.data.report.site.minTemp, 16);
+  assert.equal(selected.body.data.report.narrative.areaOfConcerns2.length > 0, true);
+  assert.equal(selected.body.data.history.manpower["MP-001"], 7);
+  assert.equal(selected.body.data.history.machinery["MC-001"], 8);
+  assert.equal(selected.body.data.history.materialsByBlock.rebar["Rebar Φ16 (AIII)"].qty, 53);
+  assert.equal(selected.body.data.history.activities[activityHistoryKey("CIV-01", samples["1403/08/24"].activities[0].activity)], 110);
 });
 
 test("dprt-rest: اعتبارسنجی سرور (کد ناشناخته و عدد منفی)", async () => {

@@ -14,9 +14,12 @@ import {
   JALALI_MONTHS_FA,
   activityCalc,
   activityHistoryKey,
+  buildSampleThreeDayReports,
   changeCalc,
   emptyReport,
   historyFromReports,
+  materialBlockForRow,
+  materialRowQty,
   incrementTrailingNumber,
   jalaliMonthNameFa,
   machineryTotals,
@@ -42,12 +45,9 @@ test("dprt: نسخه و یکتایی کدها", () => {
   }
 });
 
-test("dprt: شمارش فهرست‌ها (نیروی انسانی ۱۴۴؛ ماشین‌آلات ۲ ردیف کم دارد)", () => {
-  // نیروی انسانی با عکس دوم کامل شد (۱۴۴). ماشین‌آلات از روی عکس‌ها ۱۴۲
-  // عنوان خوانده شد و ۲ ردیف هنوز نامشخص است؛ عمداً با حدس پر نشد و پس
-  // از اعلام، همین عدد به ۱۴۴ به‌روز می‌شود.
-  assert.equal(DPR_MANPOWER.length, 144);
-  assert.equal(DPR_MACHINERY.length, 142);
+test("dprt: شمارش فهرست‌ها (نیروی انسانی ۱۶۰؛ ماشین‌آلات ۱۶۰)", () => {
+  assert.equal(DPR_MANPOWER.length, 160);
+  assert.equal(DPR_MACHINERY.length, 160);
   const kinds = new Set(DPR_MANPOWER.map((r) => r.kind));
   assert.deepEqual([...kinds].sort(), ["direct", "indirect"]);
   assert.ok(DPR_MANPOWER.some((r) => r.kind === "direct"));
@@ -148,6 +148,24 @@ test("dprt: سابقه از گزارش‌های قبلی (نه خود روز)", 
   assert.equal(h.changes["CO-1"], 120);
   assert.equal(h.activities[activityHistoryKey("A", "بتن")], 60);
   assert.equal(activityHistoryKey(" A ", "بتن "), activityHistoryKey("A", "بتن"));
+});
+
+test("dprt: داده فرضی سه‌روزه معتبر است و خروجی روزانه تاریخ‌محور می‌ماند", () => {
+  const seeded = buildSampleThreeDayReports("PC-2401");
+  assert.deepEqual(Object.keys(seeded), ["1403/08/24", "1403/08/25", "1403/08/26"]);
+  for (const report of Object.values(seeded)) assert.equal(validateReport(report).ok, true);
+
+  assert.equal(seeded["1403/08/24"].site.minTemp, 17);
+  assert.equal(seeded["1403/08/26"].site.workShift, "Day & Night Shift");
+  assert.ok(seeded["1403/08/26"].narrative.areaOfConcerns2.includes("جرثقیل"));
+  const reports = Object.values(seeded);
+  const history = historyFromReports(reports, "1403/08/26");
+  assert.equal(history.manpower["MP-001"], 7);
+  assert.equal(history.machinery["MC-001"], 8);
+  assert.equal(history.activities[activityHistoryKey("CIV-01", reports[0].activities[0].activity)], 110);
+  assert.equal(history.materialsByBlock.rebar["Rebar Φ16 (AIII)"].qty, 53);
+  assert.equal(materialBlockForRow({ group: "Electrical& instrument", desc: "Cable Shoe" }), "elec-inst");
+  assert.equal(materialRowQty(reports[0].materials[0]), 24);
 });
 
 /* ── گذار وضعیت ─────────────────────────────────────────────────── */

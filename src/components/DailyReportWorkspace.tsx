@@ -90,7 +90,7 @@ export default function DailyReportWorkspace({ lang }: { lang: Lang }) {
 
   /* آینهٔ هویت و وضعیت عمومی از تب «وضعیت کارگاه» — سربرگ فقط نمایش می‌دهد. */
   const [dprIdentity, setDprIdentity] = useState<DprIdentityInfo>({ reportNo: "", reportDate: "" });
-  const [dprGeneral, setDprGeneral] = useState<DprGeneralInfo>({ siteStatus: "", weather: "", avgTemp: null, humidity: null });
+  const [dprGeneral, setDprGeneral] = useState<DprGeneralInfo>({ siteStatus: "", weather: "", avgTemp: null, minTemp: null, maxTemp: null, humidity: null, workShift: "", landStatus: "" });
 
   const scopeProject = projectScope
     ? projectsByCluster[projectScope.clusterId]?.find((project) => project.id === projectScope.projectId)
@@ -472,8 +472,8 @@ export default function DailyReportWorkspace({ lang }: { lang: Lang }) {
             ...prev,
             siteActive: g.siteStatus !== "In Active",
             weather: g.weather || prev.weather,
-            maxTemp: g.avgTemp === null ? prev.maxTemp : String(g.avgTemp),
-            minTemp: g.avgTemp === null ? prev.minTemp : String(g.avgTemp),
+            maxTemp: g.maxTemp === null ? prev.maxTemp : String(g.maxTemp),
+            minTemp: g.minTemp === null ? prev.minTemp : String(g.minTemp),
             humidity: g.humidity === null ? prev.humidity : String(g.humidity),
           }));
         }}
