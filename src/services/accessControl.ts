@@ -1063,7 +1063,7 @@ export const ROLE_CATALOG: RoleDef[] = [
     // core.ai.run داده شده چون همین نقش سرویس هوش مصنوعی را پیکربندی
     // می‌کند؛ بدون آن، مدیر سامانه کلید را وارد می‌کرد ولی خودش اجازهٔ
     // آزمودنش را نداشت و پنل دانش پروژه برایش قفل می‌ماند.
-    grants: ["sys.config.manage", "sys.user.manage", "sys.audit.purge", "sys.backup.export", "sys.backup.restore", "report.export.bulk", "core.portfolio.view", "core.project.view", "core.ai.run",
+    grants: ["sys.config.manage", "sys.user.manage", "sys.audit.purge", "sys.backup.export", "sys.backup.restore", "report.export.bulk", "core.portfolio.view", "core.project.view", "plan.progress.report", "core.ai.run",
       "scm.vendor.view", "scm.vendor.manage", "scm.package.view", "scm.package.edit", "scm.bidder.view", "scm.bidder.manage", "scm.mr.view", "scm.mrr.view", "scm.mrr.post",
       /* P10: مدیر سامانه سرویس هوش مصنوعی را پیکربندی و می‌آزماید، ولی
        * تاریخچهٔ پرسش کسب‌وکار و خروجی سند به او داده نمی‌شود. */

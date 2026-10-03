@@ -14,6 +14,7 @@ import InteractiveGantt, { type GanttActivity } from "./InteractiveGantt";
 import BaselineSCurvePanel from "./BaselineSCurvePanel";
 import CpmWorkspace from "./CpmWorkspace";
 import DailyReportWorkspace from "./DailyReportWorkspace";
+import WeeklyReportWorkspace from "./WeeklyReportWorkspace";
 import DprProgressFallback from "./DprProgressFallback";
 import DprSupportTables from "./DprSupportTables";
 import { isDprFormatActive, isDprSupportBoxActive } from "../data/dprScope";
@@ -46,7 +47,7 @@ const TABS: { id: PexTab; fa: string; en: string }[] = [
   { id: "workshop", fa: "کارگاه برنامه‌ریزی", en: "Planning Workshop" },
   { id: "baseline", fa: "برنامه پایه", en: "Baseline" },
   { id: "dpr", fa: "گزارش روزانه", en: "DPR" },
-  { id: "weekly", fa: "هفتگی", en: "Weekly" },
+  { id: "weekly", fa: "گزارش هفتگی", en: "Weekly Report" },
   { id: "mpr", fa: "ماهانه", en: "MPR" },
   { id: "reports", fa: "گزارش‌ساز", en: "Reports" },
   { id: "alerts", fa: "هشدار", en: "Alerts" },
@@ -1116,36 +1117,8 @@ export default function PlanningWorkspace({
         )}
 
         {tab === "weekly" && (
-          <div className="fade-rise space-y-2">
-            <div className="glass-dark rounded-2xl p-3 text-[11.5px] tx2">
-              {rtl ? "درصد تعهدات انجام‌شده هفته (PPC)" : "Percent Plan Complete"} — <span className="tx1">{m.ppcPct}%</span>
-            </div>
-            <div className="glass-dark overflow-x-auto rounded-2xl p-3">
-              <table className="w-full min-w-[520px] border-collapse text-[11px]">
-                <thead>
-                  <tr className="border-b b-line-soft text-[10px] tx3">
-                    <th className="px-2 py-1.5 text-start">{rtl ? "هفته" : "Week"}</th>
-                    <th className="px-2 py-1.5 text-start">{rtl ? "فعالیت" : "Activity"}</th>
-                    <th className="px-2 py-1.5 text-center">{rtl ? "تعهد" : "Committed"}</th>
-                    <th className="px-2 py-1.5 text-center">{rtl ? "انجام" : "Completed"}</th>
-                    <th className="px-2 py-1.5 text-center">PPC</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y b-line-soft">
-                  {m.commitments.map((c) => (
-                    <tr key={c.activityId}>
-                      <td className="px-2 py-1.5 tx3" dir="ltr">{c.week}</td>
-                      <td className="px-2 py-1.5 font-mono tx2" dir="ltr">{c.activityId}</td>
-                      <td className="px-2 py-1.5 text-center tabular-nums tx2">{c.committed}</td>
-                      <td className="px-2 py-1.5 text-center tabular-nums tx2">{c.completed}</td>
-                      <td className="px-2 py-1.5 text-center tabular-nums" style={{ color: c.completed / c.committed < 0.8 ? "#FFD48A" : "#8FE3C8" }}>
-                        {Math.round((c.completed / c.committed) * 100)}%
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+          <div className="fade-rise">
+            <WeeklyReportWorkspace lang={lang} projectId={projectId} />
           </div>
         )}
 

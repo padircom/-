@@ -51,7 +51,7 @@ export interface DprGeneralInfo {
   landStatus: string;
 }
 
-type TabId = "site" | "narrative" | "manpower" | "machinery" | "materials" | "changes" | "activities";
+type TabId = "site" | "narrative" | "manpower" | "machinery" | "materials" | "changes" | "mainActivities";
 type ReportTabId = "cover" | "narrative" | "manpower" | "machinery" | "materials" | "changes" | "activities";
 
 const TABS: Array<{ id: TabId; fa: string; en: string }> = [
@@ -61,7 +61,7 @@ const TABS: Array<{ id: TabId; fa: string; en: string }> = [
   { id: "machinery", fa: "ماشین‌آلات", en: "Machinery" },
   { id: "materials", fa: "متریال وارده", en: "Materials" },
   { id: "changes", fa: "تغییرات و فعالیت", en: "Changes" },
-  { id: "activities", fa: "PMS", en: "PMS" },
+  { id: "mainActivities", fa: "فعالیت‌های اصلی", en: "Main Activities" },
 ];
 
 const REPORT_TABS: Array<{ id: ReportTabId; fa: string; en: string }> = [
@@ -482,6 +482,149 @@ const td = "border-e b-line-soft px-1.5 py-1 text-center";
 const tdL = "border-e b-line-soft px-1.5 py-1 text-start";
 const calc = "bg-black/10 tx2 tabular-nums";
 
+function MainActivitiesSheet({
+  report,
+  history,
+  locked,
+  resetKey,
+  rtl,
+  filter,
+  onFilterChange,
+  onPatchActivity,
+  onAddActivity,
+  onRemoveActivity,
+}: {
+  report: DprTablesReport;
+  history: DprHistory;
+  locked: boolean;
+  resetKey: string;
+  rtl: boolean;
+  filter: string;
+  onFilterChange: (value: string) => void;
+  onPatchActivity: (index: number, update: (activity: DprMainActivityRow) => DprMainActivityRow) => void;
+  onAddActivity: () => void;
+  onRemoveActivity: (index: number) => void;
+}) {
+  const disabled = locked;
+  const needle = filter.trim().toLowerCase();
+  const rows = report.activities
+    .map((activity, index) => ({ activity, index }))
+    .filter(({ activity }) =>
+      !needle ||
+      [
+        activity.activityId ?? "",
+        activity.activityType ?? "",
+        activity.acCode,
+        activity.subPhase,
+        activity.dis,
+        activity.area,
+        activity.workPackage,
+        activity.subPackage,
+        activity.activity,
+        activity.unit,
+        activity.executor,
+        activity.note,
+      ]
+        .join(" ")
+        .toLowerCase()
+        .includes(needle),
+    );
+  const sheetTh = th;
+  const sheetTd = `${td} align-middle`;
+
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-center gap-2 text-[10px]">
+        <span className="font-semibold tx1">{rtl ? "فعالیت‌های اصلی" : "Main Activities"}</span>
+        <span className="tx4" dir="ltr">{report.reportNo} · {rtl ? toPersianDigits(report.reportDate) : report.reportDate}</span>
+        <input
+          value={filter}
+          onChange={(e) => onFilterChange(e.target.value)}
+          placeholder={rtl ? "فیلتر کد، فاز، ناحیه یا فعالیت…" : "Filter code, phase, area or activity…"}
+          className="ms-auto w-72 rounded-lg border b-line-soft bg-black/20 px-2 py-1 tx1 outline-none focus:border-[var(--accent)]"
+        />
+        <span className="tx4">{rows.length} / {report.activities.length}</span>
+      </div>
+      <div className="overflow-x-auto rounded-xl border b-line-soft" dir="ltr">
+        <table className="w-full min-w-max border-separate border-spacing-0 text-[10px]">
+          <thead className="bg-[var(--bg-c)] tx1">
+            <tr>
+              <th className={sheetTh}>{rtl ? "کد فعالیت" : "AC.Code"}</th>
+              <th className={sheetTh}>{rtl ? "زیر فاز" : "Sub Phase"}</th>
+              <th className={sheetTh}>{rtl ? "دیسپلین" : "Discipline"}</th>
+              <th className={sheetTh}>{rtl ? "ناحیه" : "Area"}</th>
+              <th className={sheetTh}>{rtl ? "بسته کاری" : "Work package"}</th>
+              <th className={sheetTh}>{rtl ? "زیر بسته کاری" : "Sub Work package"}</th>
+              <th className={sheetTh}>{rtl ? "فعالیت" : "Activity"}</th>
+              <th className={sheetTh}>{rtl ? "واحد" : "Unit"}</th>
+              <th className={sheetTh}>{rtl ? "برآورد" : "Estimated"}</th>
+              <th className={sheetTh}>{rtl ? "تا دوره قبل" : "Last"}</th>
+              <th className={sheetTh}>{rtl ? "این دوره" : "Today"}</th>
+              <th className={sheetTh}>{rtl ? "تجمعی" : "Cumulative"}</th>
+              <th className={sheetTh}>{rtl ? "باقی‌مانده" : "Remaining"}</th>
+              <th className={sheetTh}>{rtl ? "درصد تا قبل" : "Last Pct."}</th>
+              <th className={sheetTh}>{rtl ? "درصد این دوره" : "Today Pct."}</th>
+              <th className={sheetTh}>{rtl ? "درصد تجمعی" : "Cum. Pct."}</th>
+              <th className={sheetTh}>{rtl ? "تاریخ شروع" : "Start date"}</th>
+              <th className={sheetTh}>{rtl ? "تاریخ پایان" : "Finish date"}</th>
+              <th className={sheetTh}>{rtl ? "مجری" : "Executor"}</th>
+              <th className={sheetTh}>{rtl ? "توضیحات" : "Remarks"}</th>
+              <th className={sheetTh}>{rtl ? "حذف" : "Remove"}</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y b-line-soft">
+            {rows.map(({ activity: a, index: i }) => {
+              const last = history.activities[activityHistoryKey(a.acCode, a.activity)] ?? 0;
+              const calcRow = activityCalc(a.estimated, last, a.todayQty);
+              return (
+                <tr key={i} className="bg-[var(--bg-b)]">
+                  <td className={sheetTd}><CellText value={a.acCode} disabled={disabled} resetKey={resetKey} align="center" onCommit={(v) => onPatchActivity(i, (x) => ({ ...x, acCode: v }))} /></td>
+                  <td className={sheetTd}><CellText value={a.subPhase} disabled={disabled} resetKey={resetKey} align="center" onCommit={(v) => onPatchActivity(i, (x) => ({ ...x, subPhase: v }))} /></td>
+                  <td className={sheetTd}><CellText value={a.dis} disabled={disabled} resetKey={resetKey} align="center" onCommit={(v) => onPatchActivity(i, (x) => ({ ...x, dis: v }))} /></td>
+                  <td className={sheetTd}><CellText value={a.area} disabled={disabled} resetKey={resetKey} align="center" onCommit={(v) => onPatchActivity(i, (x) => ({ ...x, area: v }))} /></td>
+                  <td className={sheetTd}><CellText value={a.workPackage} disabled={disabled} resetKey={resetKey} onCommit={(v) => onPatchActivity(i, (x) => ({ ...x, workPackage: v }))} /></td>
+                  <td className={sheetTd}><CellText value={a.subPackage} disabled={disabled} resetKey={resetKey} onCommit={(v) => onPatchActivity(i, (x) => ({ ...x, subPackage: v }))} /></td>
+                  <td className={sheetTd}><CellText value={a.activity} disabled={disabled} resetKey={resetKey} onCommit={(v) => onPatchActivity(i, (x) => ({ ...x, activity: v }))} /></td>
+                  <td className={sheetTd}><CellText value={a.unit} disabled={disabled} resetKey={resetKey} align="center" onCommit={(v) => onPatchActivity(i, (x) => ({ ...x, unit: v }))} /></td>
+                  <td className={sheetTd}><CellNum wide value={a.estimated} disabled={disabled} resetKey={resetKey} onCommit={(v) => onPatchActivity(i, (x) => ({ ...x, estimated: v }))} /></td>
+                  <td className={`${sheetTd} ${calc}`} dir="ltr">{fmtQty(calcRow.lastCum)}</td>
+                  <td className={sheetTd}><CellNum wide value={a.todayQty} disabled={disabled} resetKey={resetKey} onCommit={(v) => onPatchActivity(i, (x) => ({ ...x, todayQty: v }))} /></td>
+                  <td className={`${sheetTd} ${calc}`} dir="ltr">{fmtQty(calcRow.cum)}</td>
+                  <td className={`${sheetTd} ${calc}`} dir="ltr">{fmtQty(calcRow.rem)}</td>
+                  <td className={`${sheetTd} ${calc}`} dir="ltr">{fmtPct(calcRow.lastPct)}</td>
+                  <td className={`${sheetTd} ${calc}`} dir="ltr">{fmtPct(calcRow.todayPct)}</td>
+                  <td className={`${sheetTd} ${calc}`} dir="ltr">{fmtPct(calcRow.cumPct)}</td>
+                  <td className={sheetTd}><CellText value={a.startDate} disabled={disabled} resetKey={resetKey} align="center" placeholder="1403/.." onCommit={(v) => onPatchActivity(i, (x) => ({ ...x, startDate: v }))} /></td>
+                  <td className={sheetTd}><CellText value={a.endDate} disabled={disabled} resetKey={resetKey} align="center" placeholder="1403/.." onCommit={(v) => onPatchActivity(i, (x) => ({ ...x, endDate: v }))} /></td>
+                  <td className={sheetTd}><CellText value={a.executor} disabled={disabled} resetKey={resetKey} align="center" onCommit={(v) => onPatchActivity(i, (x) => ({ ...x, executor: v }))} /></td>
+                  <td className={sheetTd}><CellText value={a.note} disabled={disabled} resetKey={resetKey} onCommit={(v) => onPatchActivity(i, (x) => ({ ...x, note: v }))} /></td>
+                  <td className={sheetTd}>
+                    <button type="button" disabled={disabled} onClick={() => onRemoveActivity(i)} className="px-1 text-rose-300 disabled:opacity-40">✕</button>
+                  </td>
+                </tr>
+              );
+            })}
+            {!rows.length && (
+              <tr className="bg-[var(--bg-b)]">
+                <td colSpan={21} className="px-2 py-3 text-center tx4">
+                  {rtl ? "فعالیتی ثبت نشده؛ برای افزودن روی «+ ردیف» بزنید." : "No main activities yet — press + Row to add one."}
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+      <button
+        type="button"
+        onClick={onAddActivity}
+        className="rounded-lg border b-line-soft px-3 py-1.5 text-[10px] tx2"
+      >
+        + {rtl ? "ردیف" : "Row"}
+      </button>
+    </div>
+  );
+}
+
 export default function DprSupportTables({
   lang,
   projectCode,
@@ -518,6 +661,7 @@ export default function DprSupportTables({
   const [filter, setFilter] = useState("");
   const [changeFilter, setChangeFilter] = useState("");
   const [activityFilter, setActivityFilter] = useState("");
+  const [mainActivityFilter, setMainActivityFilter] = useState("");
   const [materialFilter, setMaterialFilter] = useState("");
   const [materialCatalog, setMaterialCatalog] = useState<Array<[string, string]>>([...MATERIAL_CATALOG]);
   const [newMaterialCode, setNewMaterialCode] = useState("");
@@ -907,6 +1051,44 @@ export default function DprSupportTables({
     patch((r) => ({ ...r, activities: r.activities.map((a, j) => (j === i ? fn(a) : a)) }));
   };
 
+  const addActivity = () =>
+    patch((r) => ({
+      ...r,
+      activities: [
+        ...r.activities,
+        {
+          activityId: "",
+          activityType: "",
+          acCode: "",
+          subPhase: "",
+          dis: "",
+          area: "",
+          workPackage: "",
+          subPackage: "",
+          wbsCode: "",
+          level: "",
+          activity: "",
+          wv: null,
+          wf: null,
+          duration: null,
+          unit: "",
+          boq: null,
+          estimated: null,
+          todayQty: null,
+          startDate: "",
+          endDate: "",
+          planPct: null,
+          actPct: null,
+          varPct: null,
+          executor: "",
+          note: "",
+        },
+      ],
+    }));
+
+  const removeActivity = (i: number) =>
+    patch((r) => ({ ...r, activities: r.activities.filter((_, j) => j !== i) }));
+
   const patchMaterial = (i: number, fn: (m: DprMaterialRow) => DprMaterialRow) => {
     patch((r) => ({ ...r, materials: r.materials.map((m, j) => (j === i ? fn(m) : m)) }));
   };
@@ -982,14 +1164,31 @@ export default function DprSupportTables({
   const macPluralDefault = macHistCum + macActDefault;
   const macPluralVal = macPluralDefault ? String(macPluralDefault) : "";
 
+  /* نگاشت ردیف‌های ثابت کاور (Main Quantity Table Project) به فعالیت‌های تب
+   * PMS. کلیدواژه‌ها اول بررسی می‌شوند تا هر ردیف مقدار خودش را بگیرد؛ اگر
+   * هیچ فعالیتی با هیچ کلیدواژه‌ای نخواند، ترتیب ردیف‌ها (رفتار قبلی) حفظ
+   * می‌شود و در نبود فعالیت، برچسب پیش‌فرض ردیف دست‌نخورده می‌ماند —
+   * قبلاً در این حالت شرح هم پاک و ردیف‌ها بی‌برچسب می‌شدند. */
+  const coverActivities = report?.activities ?? [];
+  const coverKeywords: Array<RegExp> = [
+    /excavat|level|earthwork|grading|خاکبرداری|خاکریزی|تسطیح|گودبرداری|خاک/i,
+    /rebar|reinforc|reinforcement|آرماتور|میلگرد|آرماتوربندی/i,
+    /form\s*-?\s*work|formwork|shutter|قالب/i,
+    /concrete|pour|curing|بتن|بتن‌ریزی|کیورینگ|درزگیری/i,
+  ];
+  const coverMatched = coverKeywords.map((re) => coverActivities.find((a) => re.test(`${a.activity} ${a.subPhase} ${a.workPackage} ${a.dis}`)));
+  const useOrderFallback = coverMatched.every((a) => !a) && coverActivities.length > 0;
   const coverMainQuantities = coverSheet.mainQuantities.map((row, idx) => {
-    const activity = report?.activities[idx];
-    if (!activity) return { ...row, desc: "", contractQty: "", unit: "", lastPeriod: "", today: "", upToNow: "" };
+    const activity = coverMatched[idx] ?? (useOrderFallback ? coverActivities[idx] : undefined);
+    if (!activity) {
+      // بدون فعالیت متناظر: برچسب ردیف می‌ماند، فقط ستون‌های مقداری خالی‌اند.
+      return { ...row, contractQty: "", unit: "", lastPeriod: "", today: "", upToNow: "" };
+    }
     const key = activityHistoryKey(activity.acCode, activity.activity);
     const calc = activityCalc(activity.estimated, history.activities[key] ?? 0, activity.todayQty);
     return {
       ...row,
-      desc: activity.activity,
+      desc: activity.activity || row.desc,
       contractQty: String(activity.boq ?? activity.estimated ?? ""),
       unit: activity.unit,
       lastPeriod: String(calc.lastCum),
@@ -1536,12 +1735,12 @@ export default function DprSupportTables({
                 <tbody>
                   {coverMainQuantities.map((row, idx) => (
                     <tr key={idx}>
-                      <td className="border border-black px-2 py-1 text-start">{row.desc}</td>
-                      <td className="border border-black px-2 py-1 text-center tabular-nums">{row.contractQty}</td>
-                      <td className="border border-black px-2 py-1 text-center">{row.unit}</td>
-                      <td className="border border-black px-2 py-1 text-center tabular-nums">{row.lastPeriod}</td>
-                      <td className="border border-black px-2 py-1 text-center tabular-nums">{row.today}</td>
-                      <td className="border border-black px-2 py-1 text-center tabular-nums">{row.upToNow}</td>
+                      <td className="border border-black px-2 py-1 align-middle text-start">{row.desc}</td>
+                      <td className="border border-black px-2 py-1 align-middle text-center tabular-nums">{row.contractQty}</td>
+                      <td className="border border-black px-2 py-1 align-middle text-center">{row.unit}</td>
+                      <td className="border border-black px-2 py-1 align-middle text-center tabular-nums">{row.lastPeriod}</td>
+                      <td className="border border-black px-2 py-1 align-middle text-center tabular-nums">{row.today}</td>
+                      <td className="border border-black px-2 py-1 align-middle text-center tabular-nums">{row.upToNow}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -1719,7 +1918,7 @@ export default function DprSupportTables({
         <div id="daily-report-cover" dir="ltr" className="w-full overflow-x-auto">
           <div className="mx-auto box-border flex min-h-[285mm] w-full flex-col border-2 border-[#0000cc] bg-white font-serif text-[#111] shadow-xl">
             {/* ═══ هدر بالای شیت شرح تشریحی (مشابه شیت نیروی انسانی) ═══ */}
-            <table className="w-full table-fixed border-collapse border-b-2 border-black font-serif text-[10px] text-black">
+            <table className="mb-1 w-full table-fixed border-collapse border-2 border-black font-serif text-[10px] text-black">
               <colgroup>
                 <col style={{ width: "6%" }} />
                 <col style={{ width: "16%" }} />
@@ -3835,6 +4034,22 @@ export default function DprSupportTables({
             <p className="text-[9px] tx4">{rtl ? "تجمعی هر شناسه = جمع «این دوره» همان شناسه در گزارش‌های قبلی + امروز." : "Cumulative per ID = prior history + today."}</p>
           </div>
         </div>
+      )}
+
+      {/* شیت فعالیت‌های اصلی — جدا از نمای PMS و متصل به همان ردیف‌های فعالیت */}
+      {activeTab === "mainActivities" && report && (
+        <MainActivitiesSheet
+          report={report}
+          history={history}
+          locked={locked}
+          resetKey={resetKey}
+          rtl={rtl}
+          filter={mainActivityFilter}
+          onFilterChange={setMainActivityFilter}
+          onPatchActivity={patchActivity}
+          onAddActivity={addActivity}
+          onRemoveActivity={removeActivity}
+        />
       )}
 
       {/* ═══ تب ۷: PMS ═══ */}
