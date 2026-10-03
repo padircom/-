@@ -39,8 +39,14 @@ test("دامنهٔ تولید کارخانه‌محور است و وابستگی
   const order = tableDef("MfgProductionOrder");
   assert.equal(order.columns.find((column) => column.name === "PlantId").nullable, false);
   assert.equal(order.columns.find((column) => column.name === "ProjectId").nullable, true);
-  assert.ok(order.foreignKeys.some((foreignKey) => foreignKey.refTable === "ContractMaster"));
-  assert.ok(order.foreignKeys.some((foreignKey) => foreignKey.refTable === "Project"));
+  for (const table of tablesOfModule("mfg")) {
+    for (const foreignKey of table.foreignKeys ?? []) {
+      assert.ok(
+        foreignKey.refTable.startsWith("Mfg"),
+        `${table.name}.${foreignKey.column} نباید به جدول بیرونی ${foreignKey.refTable} وابسته باشد`,
+      );
+    }
+  }
 });
 
 test("مهاجرت 0046 همهٔ جدول‌ها، ایندکس‌ها، کلیدهای خارجی و CHECKها را می‌سازد", () => {

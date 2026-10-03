@@ -18,6 +18,7 @@ import QualityWorkspace, { type QmsTab } from "./QualityWorkspace";
 import WorkforceWorkspace, { type HrmTab } from "./WorkforceWorkspace";
 import CommunicationWorkspace, { type CkmTab } from "./CommunicationWorkspace";
 import MachineryWorkspace, { type EqmTab } from "./MachineryWorkspace";
+import ManufacturingWorkspace from "./ManufacturingWorkspace";
 import CommissioningWorkspace, { type ComTab } from "./CommissioningWorkspace";
 import EngineeringWorkspace from "./EngineeringWorkspace";
 import HSEWorkspace, { type HseTab } from "./HSEWorkspace";
@@ -888,6 +889,10 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
     target.processId === "d14-p8" ? "rating" : "contract",
   );
 
+  /* MFG/MES: دسترسی به فضای کاری سامانهٔ مستقل تولید کارگاهی (Standalone MES)
+     در کنار نمای ماشین‌آلات (d9)، بدون تغییر فایل حفاظت‌شدهٔ framework.ts. */
+  const [d9View, setD9View] = useState<"eqm" | "mfg">("eqm");
+
   const d5Tab = ((): FinTab => {
     const sid = selected?.sId ?? target.subId;
     if (sid && D5_TAB_BY_SUB[sid]) return D5_TAB_BY_SUB[sid];
@@ -1139,9 +1144,30 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
             </div>
           </div>
         </div>
+        <div className="flex shrink-0 items-center gap-1.5">
+          {([
+            ["eqm", rtl ? "مدیریت ماشین‌آلات و تجهیزات (EQM)" : "Machinery & Equipment (EQM)"],
+            ["mfg", rtl ? "سامانهٔ مستقل تولید کارگاهی (Standalone MES)" : "Standalone Manufacturing (MES)"],
+          ] as const).map(([k, label]) => (
+            <button
+              key={k}
+              type="button"
+              onClick={() => setD9View(k)}
+              className={`rounded-lg px-2.5 py-1 text-[10px] font-light transition ${
+                d9View === k ? "toggle-on tx1" : "tx3 hover:tx2"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
         <div className="workspace-columns flex min-h-0 flex-1 gap-3 overflow-hidden">
           <div dir={rtl ? "rtl" : "ltr"} className="glass flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl p-3">
-            <MachineryWorkspace projectId={target.projectId} lang={lang} initialTab={d9Tab} hideTabs />
+            {d9View === "mfg" ? (
+              <ManufacturingWorkspace lang={lang} />
+            ) : (
+              <MachineryWorkspace projectId={target.projectId} lang={lang} initialTab={d9Tab} hideTabs />
+            )}
           </div>
           <aside dir={rtl ? "rtl" : "ltr"} className="glass-dark flex w-[300px] shrink-0 flex-col overflow-hidden rounded-2xl">
             <div className="b-line border-b px-3 py-2.5">

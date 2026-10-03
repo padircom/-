@@ -17,10 +17,10 @@ const issues = validateSchema();
 if (issues.length) throw new Error(`اسکیما نامعتبر:\n${issues.join("\n")}`);
 
 const lines = [
-  "-- MFG · Operation-Based Production Planning & Control",
+  "-- MFG · Standalone Operation-Based Production Planning & Control (MES)",
   "-- تولیدشده از src/services/manufacturingSchema.ts و persistence.ts؛ ویرایش دستی نکنید.",
-  "-- پیش‌نیاز: جداول پایهٔ Project، ContractMaster و Equipment باید نصب شده باشند.",
-  "-- ProjectId اختیاری است؛ PlantId دامنهٔ اجباری داده‌های تولید است.",
+  "-- دیتابیس کاملاً مستقل MES: بدون هیچ وابستگی یا کلید خارجی به جداول سامانهٔ کنترل پروژه.",
+  "-- PlantId دامنهٔ اجباری داده‌های تولید است؛ ارجاع به سامانه‌های دیگر فقط از طریق کلید نرم و REST API است.",
   "",
 ];
 for (const table of tables) {

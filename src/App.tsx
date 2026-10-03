@@ -18,6 +18,7 @@ import {
 } from "./data/framework";
 
 const ModuleDetail = lazy(() => import("./components/ModuleDetail"));
+const ManufacturingWorkspace = lazy(() => import("./components/ManufacturingWorkspace"));
 
 type Theme = "dark" | "light";
 
@@ -144,6 +145,11 @@ export default function App() {
   const [cluster, setCluster] = useState<string | null>("c1");
   const [source, setSource] = useState<string | null>("p6");
   const [moduleNav, setModuleNav] = useState<ModuleNavTarget | null>(null);
+  const [standaloneMes, setStandaloneMes] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    const params = new URLSearchParams(window.location.search);
+    return params.get("app") === "mes" || window.location.hash === "#mes";
+  });
 
   useEffect(() => {
     document.documentElement.lang = lang;
@@ -159,6 +165,26 @@ export default function App() {
   }, [projectScope?.clusterId]);
 
   const rtl = lang === "fa";
+
+  if (standaloneMes) {
+    return (
+      <Suspense fallback={<div className="glass flex h-screen w-screen items-center justify-center text-xs tx3">…</div>}>
+        <ManufacturingWorkspace
+          lang={lang}
+          standalone
+          onExitStandalone={() => {
+            if (typeof window !== "undefined") {
+              const url = new URL(window.location.href);
+              url.searchParams.delete("app");
+              if (url.hash === "#mes") url.hash = "";
+              window.history.replaceState({}, "", url.toString());
+            }
+            setStandaloneMes(false);
+          }}
+        />
+      </Suspense>
+    );
+  }
 
   const changeScope = (clusterId: string, projectId: string) => {
     setProjectScope({ clusterId, projectId });

@@ -138,7 +138,7 @@ export const MANUFACTURING_TABLES: TableDef[] = [
     columns: [
       id(), plant(), req("WorkCenterId", "text", { len: 60 }), code("ResourceCode"), req("NameFa", "text", { len: 200 }),
       req("ResourceKind", "text", { len: 12, comment: "machine|labor" }), qty("CapacityUnits"), pct("AvailabilityPct", false),
-      c("EquipmentId", "text", { len: 60, comment: "پیوند اختیاری به دارایی EQM" }),
+      c("EquipmentId", "text", { len: 60, comment: "کلید نرم تجهیز بیرونی برای تبادل REST API؛ بدون وابستگی FK" }),
       c("CostCenterId", "text", { len: 60 }), req("IsActive", "bool", { default: "1" }),
       c("EffectiveFrom", "date"), c("EffectiveTo", "date"),
     ],
@@ -148,7 +148,6 @@ export const MANUFACTURING_TABLES: TableDef[] = [
     ],
     foreignKeys: [
       { column: "WorkCenterId", refTable: "MfgWorkCenter", refColumn: "Id" },
-      { column: "EquipmentId", refTable: "Equipment", refColumn: "Id" },
       { column: "CostCenterId", refTable: "MfgCostCenter", refColumn: "Id" },
     ],
     checks: [
@@ -246,7 +245,8 @@ export const MANUFACTURING_TABLES: TableDef[] = [
       req("DispatchWeight", "decimal", { precision: 12, scale: 4, default: "1", comment: "وزن سفارش برای WSPT؛ بزرگ‌تر یعنی اولویت بیشتر" }),
       req("DemandSource", "text", { len: 16, comment: "sales-order|contract|forecast|manual" }), c("DemandRef", "text", { len: 80 }),
       c("CustomerRef", "text", { len: 80, comment: "کلید نرم؛ جدول مشتری در مخزن فعلی وجود ندارد" }), c("CustomerNameSnapshot", "text", { len: 240 }),
-      c("ContractId", "text", { len: 60 }), c("ProjectId", "text", { len: 60 }),
+      c("ContractId", "text", { len: 60, comment: "کلید نرم قرارداد بیرونی برای تبادل REST API؛ بدون وابستگی FK" }),
+      c("ProjectId", "text", { len: 60, comment: "کلید نرم مرجع بیرونی برای تبادل REST API؛ بدون وابستگی FK" }),
       c("BomHeaderId", "text", { len: 60 }), c("RoutingId", "text", { len: 60 }),
       c("BomRevisionSnapshot", "text", { len: 40 }), c("RoutingRevisionSnapshot", "text", { len: 40 }),
       c("ReleasedAt", "datetime"), c("ReleasedBy", "text", { len: 60 }), c("CompletedAt", "datetime"), c("ClosedAt", "datetime"),
@@ -263,8 +263,6 @@ export const MANUFACTURING_TABLES: TableDef[] = [
     ],
     foreignKeys: [
       { column: "PartId", refTable: "MfgPart", refColumn: "Id" },
-      { column: "ContractId", refTable: "ContractMaster", refColumn: "Id" },
-      { column: "ProjectId", refTable: "Project", refColumn: "Id" },
       { column: "BomHeaderId", refTable: "MfgBomHeader", refColumn: "Id" },
       { column: "RoutingId", refTable: "MfgRouting", refColumn: "Id" },
     ],

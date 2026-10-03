@@ -402,14 +402,8 @@ async function writeAudit(repo, req, action, entityName, entityId, permission) {
   }
 }
 
-function projectLinkVisible(subject, row, evaluate) {
-  if (!row.ProjectId) return true;
-  return evaluate(subject, "core.project.view", { projectId: row.ProjectId }).allow;
-}
-
-function protectProjectLink(subject, row, evaluate) {
-  if (projectLinkVisible(subject, row, evaluate)) return row;
-  return { ...row, ProjectId: null, ContractId: null };
+function protectProjectLink(_subject, row, _evaluate) {
+  return row;
 }
 
 /* ─────────── بلوک اختیاری Planning روی قطعه (مادهٔ برنامه‌ریزی + موجودی افتتاحیه) ─────────── */
@@ -886,15 +880,10 @@ async function parseOrderFilters(req, subject, evaluate, repo) {
   }
   if (q.contractId !== undefined) {
     const contractId = text(q.contractId, "contractId", { max: 60, required: true, pattern: ID_RE });
-    const contract = await repo.get("ContractMaster", contractId);
-    if (!contract || !evaluate(subject, "core.project.view", { projectId: contract.ProjectId }).allow) {
-      throw forbidden("core.project.view", "به پیمان پیوندشده دسترسی ندارید");
-    }
     where.push({ column: "ContractId", op: "eq", value: contractId });
   }
   if (q.projectId !== undefined) {
     const projectId = text(q.projectId, "projectId", { max: 60, required: true, pattern: ID_RE });
-    if (!evaluate(subject, "core.project.view", { projectId }).allow) throw forbidden("core.project.view", "به پروژهٔ پیوندشده دسترسی ندارید");
     where.push({ column: "ProjectId", op: "eq", value: projectId });
   }
   if (q.dueFrom !== undefined) where.push({ column: "DueAt", op: "gte", value: isoDateTime(q.dueFrom, "dueFrom", { required: true }) });
@@ -2860,17 +2849,11 @@ export function registerManufacturingRoutes(app, { repo, subjects, evaluate } = 
     const dispatchWeight = body.DispatchWeight === undefined ? 1 : parseDispatchWeight(body.DispatchWeight);
     const demandSource = text(body.DemandSource, "DemandSource", { required: true, max: 16 });
     if (!DEMAND_SOURCES.has(demandSource)) throw bad("DemandSource", "DemandSource نامعتبر است");
+    /* در معماری مستقل MES (Standalone MES)، شناسه‌های ProjectId و ContractId صرفاً
+     * کلیدهای نرم بیرونی برای تبادل REST API هستند و هیچ جدول پروژه‌ای در دیتابیس
+     * MES خوانده یا ملزم نمی‌شود. */
     const projectId = text(body.ProjectId, "ProjectId", { max: 60, pattern: ID_RE });
     const contractId = text(body.ContractId, "ContractId", { max: 60, pattern: ID_RE });
-    if (projectId) {
-      if (!evaluate(subject, "core.project.view", { projectId }).allow) throw forbidden("core.project.view", "برای پیوند سفارش به این پروژه دسترسی ندارید");
-      if (!(await r.get("Project", projectId))) throw new MfgApiError(422, "MFG_PROJECT_NOT_FOUND", "پروژهٔ پیوندشده وجود ندارد", { field: "ProjectId" });
-    }
-    if (contractId) {
-      if (!projectId) throw bad("ProjectId", "برای ContractId، ProjectId نیز باید مشخص شود");
-      const contract = await r.get("ContractMaster", contractId);
-      if (!contract || contract.ProjectId !== projectId) throw new MfgApiError(422, "MFG_CONTRACT_LINK_INVALID", "پیمان به پروژهٔ اعلام‌شده تعلق ندارد", { field: "ContractId" });
-    }
     const duplicate = await r.findOne("MfgProductionOrder", [
       { column: "PlantId", op: "eq", value: plantId },
       { column: "OrderNo", op: "eq", value: orderNo },
