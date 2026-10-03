@@ -2553,10 +2553,6 @@ test("MFG REST: بلوک Planning روی قطعه، مادهٔ برنامه‌ر
   assert.equal(repo.tables.get("MfgMaterial").some((row) => row.PartNo === "RM-ROLLBACK-01"), false);
 });
 
-/** عنصر سربار در همان پاسخ عملیات — برای محاسبهٔ جمع مورد انتظار. */
-function machineElementActualOverhead(operationCost) {
-  return operationCost.body.data.items.find((row) => row.CostElement === "overhead").ActualAmount;
-}
 const round3 = (value) => Math.round((value + Number.EPSILON) * 1000) / 1000;
 
 test("MFG REST: رول‌آپ هزینه از دادهٔ واقعی، تطبیق و بستن سفارش را ممکن می‌کند", async () => {
@@ -2565,17 +2561,38 @@ test("MFG REST: رول‌آپ هزینه از دادهٔ واقعی، تطبیق
   const costView = { "x-user-id": "u-mfg-cost" };
   const manager = { "x-user-id": "u-mfg-manager" };
 
-  const workCenter = await repo.create("MfgWorkCenter", {
-    PlantId: plantId,
-    Code: "WC-COST",
-    NameFa: "مرکز ماشین‌کاری هزینه",
-    Kind: "machine",
-    NominalCapacityMinutesPerDay: 960,
-    EfficiencyPct: 100,
-    StandardHourlyRate: 1_200,
-    OverheadHourlyRate: 300,
-    Status: "active",
+  /* نرخ‌ها فقط در MfgCostCenter نگه داشته می‌شوند و قرارداد مسیر جداگانه‌ای برای
+   * ساخت آن‌ها ندارد؛ بلوک اختیاری Rates روی همان مرکز کاری این کار را می‌کند. */
+  const workCenterResponse = await call("POST", WORK_CENTERS, {
+    params: { plantId },
+    headers: { "x-user-id": "u-mfg-eng" },
+    body: {
+      Code: "WC-COST",
+      NameFa: "مرکز ماشین‌کاری هزینه",
+      Kind: "machine",
+      NominalCapacityMinutesPerDay: 960,
+      EfficiencyPct: 100,
+      TimeZoneId: "Asia/Tehran",
+      Status: "active",
+      Rates: [
+        { CostElement: "machine", HourlyRate: 1_200 },
+        { CostElement: "overhead", HourlyRate: 300 },
+      ],
+    },
   });
+  assert.equal(workCenterResponse.statusCode, 201);
+  const workCenter = workCenterResponse.body.data;
+  assert.equal(workCenter.CostCenters.length, 2);
+  assert.equal(workCenter.CostCenterId, workCenter.CostCenters.find((row) => row.CostElement === "machine").Id);
+  assert.equal(repo.tables.get("MfgCostCenter").length, 2);
+
+  const duplicateRate = await call("POST", WORK_CENTERS, {
+    params: { plantId },
+    headers: { "x-user-id": "u-mfg-eng" },
+    body: { Code: "WC-COST", NameFa: "تکراری", Kind: "machine", TimeZoneId: "Asia/Tehran", Rates: [{ CostElement: "labor", HourlyRate: 10 }] },
+  });
+  assert.equal(duplicateRate.statusCode, 409);
+  assert.equal(repo.tables.get("MfgCostCenter").length, 2);
   const part = await repo.create("MfgPart", {
     PlantId: plantId,
     PartNo: "FG-COST-01",
@@ -2629,7 +2646,7 @@ test("MFG REST: رول‌آپ هزینه از دادهٔ واقعی، تطبیق
     ActualRunMinutes: 300,
     InspectionRequired: false,
   });
-  await repo.create("MfgOperationExecution", {
+  const execution = await repo.create("MfgOperationExecution", {
     PlantId: plantId,
     ProductionOrderOperationId: operation.Id,
     Status: "completed",
@@ -2680,8 +2697,30 @@ test("MFG REST: رول‌آپ هزینه از دادهٔ واقعی، تطبیق
   assert.equal(materialElement.ActualAmount, 5_000);
   assert.equal(materialElement.StandardAmount, 6_000);
   const machineElement = operationCost.body.data.items.find((row) => row.CostElement === "machine");
-  assert.ok(machineElement.ActualAmount > 0);
+  /* نرخ ماشین از مرکز هزینه می‌آید: ۳۵۰ دقیقهٔ واقعی ÷ ۶۰ × ۱۲۰۰ */
+  const hours = (minutes) => Math.round((minutes / 60 + Number.EPSILON) * 1000) / 1000;
+  assert.equal(machineElement.ActualAmount, round3(hours(350) * 1_200));
+  assert.equal(machineElement.StandardAmount, round3(hours(365) * 1_200));
+  assert.equal(machineElement.ActualRate, 1_200);
+  /* بدون مرکز هزینهٔ نیروی کار، این عنصر صفر می‌ماند — نه نرخ حدسی */
   assert.equal(operationCost.body.data.items.find((row) => row.CostElement === "labor").ActualAmount, 0);
+
+  /* حالا دقیقهٔ واقعی روی خود «اجرا» ثبت می‌شود؛ این مقدار بر فیلدهای عملیات
+   * اولویت دارد و مبنای هزینهٔ واقعی ماشین می‌شود. */
+  const patchedExecution = await repo.patch("MfgOperationExecution", execution.Id, {
+    SetupActualMinutes: 20,
+    RunActualMinutes: 40,
+  }, "u-mfg-supervisor", execution.RowVersion);
+  assert.equal(patchedExecution.ok, true);
+  const fromExecutions = await call("GET", OPERATION_COST, {
+    params: { plantId, operationId: operation.Id },
+    headers: costView,
+  });
+  const actualMachineAmount = round3(hours(60) * 1_200);
+  assert.equal(
+    fromExecutions.body.data.items.find((row) => row.CostElement === "machine").ActualAmount,
+    actualMachineAmount,
+  );
 
   // ۲. تطبیق: ردیف‌های هزینه ساخته و روی سفارش Reconciled می‌شود
   const refreshed = await call("GET", ORDER, { params: { plantId, orderId: order.Id }, headers: manager });
@@ -2694,9 +2733,15 @@ test("MFG REST: رول‌آپ هزینه از دادهٔ واقعی، تطبیق
   assert.equal(reconciled.statusCode, 200, JSON.stringify(reconciled.body));
   assert.equal(reconciled.body.data.Reconciled, true);
   assert.equal(reconciled.body.data.ActualMaterialCost, 5_000);
-  assert.equal(reconciled.body.data.ActualTotalCost, round3(5_000 + machineElement.ActualAmount + machineElementActualOverhead(operationCost)));
+  assert.equal(
+    reconciled.body.data.ActualTotalCost,
+    round3(5_000 + actualMachineAmount + fromExecutions.body.data.items.find((row) => row.CostElement === "overhead").ActualAmount),
+  );
   assert.equal(reconciled.body.data.GrossMargin, 100_000 - reconciled.body.data.ActualTotalCost);
   assert.equal(repo.tables.get("MfgOperationCost").length, 4);
+  const persistedMachine = repo.tables.get("MfgOperationCost").find((row) => row.CostElement === "machine");
+  assert.equal(persistedMachine.ActualAmount, actualMachineAmount);
+  assert.equal(persistedMachine.SourceRef, "derived-from-actuals");
   assert.equal(repo.tables.get("MfgOrderCost").length, 1);
 
   // ۳. بستن نهایی سفارش پس از تطبیق هزینه ممکن می‌شود (پیش‌تر به گیت هزینه می‌خورد)

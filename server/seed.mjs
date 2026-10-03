@@ -313,13 +313,23 @@ const isoAt = (dayOffset, minuteOfDay = 480) => {
 
 async function seedMfgWorkCenters() {
   console.log("\n── تولید: مراکز کاری، منابع و تقویم ──");
+  /* هر مرکز کاری نرخ‌های هزینهٔ خودش را می‌آورد؛ تنها جای نگه‌داری نرخ،
+   * MfgCostCenter است و بدون این بلوک رول‌آپ ماشین/دستمزد/سربار صفر می‌ماند. */
   const centers = [
-    ["WC-CNC", "مرکز ماشین‌کاری CNC", "machine", 960, 92, "machine"],
-    ["WC-ASM", "ایستگاه مونتاژ", "assembly", 960, 95, "labor"],
-    ["WC-QC", "ایستگاه بازرسی کیفی", "inspection", 720, 100, "labor"],
+    ["WC-CNC", "مرکز ماشین‌کاری CNC", "machine", 960, 92, "machine", [
+      { CostElement: "machine", HourlyRate: 1_250_000, AllocationBasis: "machine_hours" },
+      { CostElement: "overhead", HourlyRate: 480_000, AllocationBasis: "machine_hours" },
+    ]],
+    ["WC-ASM", "ایستگاه مونتاژ", "assembly", 960, 95, "labor", [
+      { CostElement: "labor", HourlyRate: 900_000, AllocationBasis: "labor_hours" },
+      { CostElement: "overhead", HourlyRate: 350_000, AllocationBasis: "machine_hours" },
+    ]],
+    ["WC-QC", "ایستگاه بازرسی کیفی", "inspection", 720, 100, "labor", [
+      { CostElement: "labor", HourlyRate: 750_000, AllocationBasis: "labor_hours" },
+    ]],
   ];
   const created = {};
-  for (const [code, nameFa, kind, capacity, efficiency, resourceKind] of centers) {
+  for (const [code, nameFa, kind, capacity, efficiency, resourceKind, rates] of centers) {
     const center = await mfgStep(`مرکز کاری ${code}`, async () => {
       try {
         return await mfg("/work-centers", {
@@ -334,6 +344,7 @@ async function seedMfgWorkCenters() {
             TimeZoneId: "Asia/Tehran",
             Status: "active",
             DescriptionFa: "دادهٔ نمونهٔ کارخانهٔ نمایشی",
+            Rates: rates,
           },
         });
       } catch (err) {

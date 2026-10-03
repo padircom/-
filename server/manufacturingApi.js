@@ -221,6 +221,59 @@ function roundTo3(value) {
   return Math.round((value + Number.EPSILON) * 1000) / 1000;
 }
 
+const WORK_CENTER_RATE_FIELDS = new Set([
+  "CostElement", "HourlyRate", "Currency", "AllocationBasis", "EffectiveFrom", "EffectiveTo", "Code", "NameFa",
+]);
+const ALLOCATION_BASES = new Set(["machine_hours", "labor_hours", "units", "percent"]);
+
+/**
+ * اعتبارسنجی بلوک اختیاری `Rates` روی `POST /work-centers`.
+ * هر ردیف یک مرکز هزینهٔ نرخی برای یکی از عناصر machine|labor|overhead می‌سازد.
+ */
+function parseWorkCenterRates(raw, { code }) {
+  if (raw === undefined || raw === null) return [];
+  if (!Array.isArray(raw)) throw bad("Rates", "Rates باید آرایه باشد");
+  if (raw.length > 3) throw bad("Rates", "حداکثر سه ردیف نرخ (machine/labor/overhead) پذیرفته می‌شود");
+  const seen = new Set();
+  return raw.map((item, index) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) throw bad(`Rates[${index}]`, "هر ردیف Rates باید یک شیء باشد");
+    assertOnlyKeys(item, WORK_CENTER_RATE_FIELDS);
+    const element = text(item.CostElement, `Rates[${index}].CostElement`, { required: true, max: 16 });
+    if (!["machine", "labor", "overhead"].includes(element)) {
+      throw bad(`Rates[${index}].CostElement`, "CostElement باید machine/labor/overhead باشد");
+    }
+    if (seen.has(element)) throw bad("Rates", `عنصر ${element} تکراری است`);
+    seen.add(element);
+    const hourlyRate = number(item.HourlyRate, `Rates[${index}].HourlyRate`, { required: true, min: 0 });
+    const currency = text(item.Currency ?? "IRR", `Rates[${index}].Currency`, { required: true, max: 8, pattern: CURRENCY_RE });
+    const allocationBasis = text(
+      item.AllocationBasis ?? (element === "labor" ? "labor_hours" : "machine_hours"),
+      `Rates[${index}].AllocationBasis`,
+      { required: true, max: 20 },
+    );
+    if (!ALLOCATION_BASES.has(allocationBasis)) {
+      throw bad(`Rates[${index}].AllocationBasis`, "AllocationBasis باید machine_hours/labor_hours/units/percent باشد");
+    }
+    const effectiveFrom = isoDate(item.EffectiveFrom ?? "2026-01-01", `Rates[${index}].EffectiveFrom`, { required: true });
+    const effectiveTo = item.EffectiveTo === undefined || item.EffectiveTo === null
+      ? null
+      : isoDate(item.EffectiveTo, `Rates[${index}].EffectiveTo`, { required: true });
+    if (effectiveTo && effectiveTo < effectiveFrom) {
+      throw bad(`Rates[${index}].EffectiveTo`, "EffectiveTo نباید پیش از EffectiveFrom باشد");
+    }
+    return {
+      Code: text(item.Code ?? `${code}-${element.toUpperCase()}`, `Rates[${index}].Code`, { required: true, max: 60, pattern: CODE_RE }),
+      NameFa: text(item.NameFa ?? `نرخ ${element}` , `Rates[${index}].NameFa`, { required: true, max: 240 }),
+      CostElement: element,
+      HourlyRate: hourlyRate,
+      Currency: currency,
+      AllocationBasis: allocationBasis,
+      EffectiveFrom: effectiveFrom,
+      EffectiveTo: effectiveTo,
+    };
+  });
+}
+
 function localDateAt(timestamp, timeZone) {
   let formatter = localDayFormatterCache.get(timeZone);
   if (!formatter) {
@@ -500,13 +553,16 @@ async function persistPartPlanning(tx, { plantId, partId, partType, planning, su
  */
 async function deriveOperationCostRows(db, { plantId, operations, costVersion }) {
   if (!Array.isArray(operations) || operations.length === 0) return [];
-  const [consumptions, requirements, parts, materials, workCenters, costCenters] = await Promise.all([
+  const [consumptions, requirements, parts, materials, workCenters, costCenters, executions] = await Promise.all([
     db.list("MfgMaterialConsumption", { where: [{ column: "PlantId", op: "eq", value: plantId }] }),
     db.list("MfgMaterialRequirement", { where: [{ column: "PlantId", op: "eq", value: plantId }] }),
     db.list("MfgPart", { where: [{ column: "PlantId", op: "eq", value: plantId }] }),
     db.list("MfgMaterial", { where: [{ column: "PlantId", op: "eq", value: plantId }] }),
     db.list("MfgWorkCenter", { where: [{ column: "PlantId", op: "eq", value: plantId }] }),
     db.list("MfgCostCenter", { where: [{ column: "PlantId", op: "eq", value: plantId }] }),
+    /* دقیقهٔ واقعی روی «اجرا» ثبت می‌شود نه روی خود عملیات؛ بدون این جدول
+     * عناصر ماشین/دستمزد/سربار همیشه هزینهٔ واقعی صفر می‌گرفتند. */
+    db.list("MfgOperationExecution", { where: [{ column: "PlantId", op: "eq", value: plantId }] }),
   ]);
 
   const materialById = new Map(materials.filter((row) => row.PlantId === plantId).map((row) => [row.Id, row]));
@@ -514,19 +570,27 @@ async function deriveOperationCostRows(db, { plantId, operations, costVersion })
   const centerById = new Map(workCenters.filter((row) => row.PlantId === plantId).map((row) => [row.Id, row]));
   const costCenterById = new Map(costCenters.filter((row) => row.PlantId === plantId).map((row) => [row.Id, row]));
 
-  const rateFor = (workCenter, costCenterId, element) => {
-    const explicit = costCenterId ? costCenterById.get(costCenterId) : null;
-    if (explicit && explicit.IsActive !== false && explicit.CostElement === element && explicit.HourlyRate !== null && explicit.HourlyRate !== undefined) {
-      return storedNumber(explicit.HourlyRate);
-    }
-    if (element === "overhead") return storedNumber(workCenter?.OverheadHourlyRate);
-    const standardRate = storedNumber(workCenter?.StandardHourlyRate);
-    /* نرخ واحد مرکز کاری یا نرخ ماشین است یا نرخ دستمزد؛ بر پایهٔ نوع مرکز
-     * به یکی از دو عنصر نگاشت می‌شود تا در جمع هزینه دوبار شمرده نشود. */
-    const laborCenter = workCenter?.Kind === "labor";
-    if (element === "labor") return laborCenter ? standardRate : 0;
-    return laborCenter ? 0 : standardRate;
+  /* نرخ‌ها از مرکز هزینه می‌آیند: هر عنصر نرخ ساعتی خودش را دارد و
+   * CostCenterId عملیات/مرکز کاری فقط مرکز ترجیحی همان عنصر را انتخاب می‌کند.
+   * نبود نرخ یعنی صفر — نه نرخ حدسی. */
+  const costCenterFor = (costCenterId, element) => {
+    const candidates = costCenters.filter(
+      (row) => row.PlantId === plantId && row.IsActive !== false && row.CostElement === element,
+    );
+    return (costCenterId ? candidates.find((row) => row.Id === costCenterId) : null) ?? candidates[0] ?? null;
   };
+  const rateFor = (costCenterId, element) => {
+    const chosen = costCenterFor(costCenterId, element);
+    return chosen && chosen.HourlyRate !== null && chosen.HourlyRate !== undefined ? storedNumber(chosen.HourlyRate) : 0;
+  };
+
+  const executionsByOperation = new Map();
+  for (const row of executions) {
+    if (row.PlantId !== plantId) continue;
+    const list = executionsByOperation.get(row.ProductionOrderOperationId) ?? [];
+    list.push(row);
+    executionsByOperation.set(row.ProductionOrderOperationId, list);
+  }
 
   const hours = (minutes) => roundTo3(storedNumber(minutes) / 60);
   const rows = [];
@@ -540,12 +604,19 @@ async function deriveOperationCostRows(db, { plantId, operations, costVersion })
       (row) => row.PlantId === plantId && row.ProductionOrderOperationId === operation.Id,
     );
 
+    /* نرخ استاندارد ماده = بهای واحد هر جزء در فهرست مواد/قطعه؛ مقدار
+     * استاندارد = مجموع مقدار خالص نیازمندی‌ها. تقسیم نرخ بر تعداد ردیف
+     * اشتباه است، چون هر ردیف بهای واحد خودش را دارد. */
     const standardMaterialQty = roundTo3(operationRequirements.reduce((sum, row) => sum + storedNumber(row.NetQuantity), 0));
-    const standardMaterialRate = roundTo3(operationRequirements.reduce((sum, row) => {
+    const standardMaterialAmount = roundTo3(operationRequirements.reduce((sum, row) => {
       const material = materialById.get(row.MaterialId);
       const part = material ? partById.get(material.PartId) : null;
-      return sum + storedNumber(material?.StandardUnitCost ?? part?.StandardUnitCost);
-    }, 0) / Math.max(1, operationRequirements.length));
+      const unitCost = storedNumber(material?.StandardUnitCost ?? part?.StandardUnitCost);
+      return sum + storedNumber(row.NetQuantity) * unitCost;
+    }, 0));
+    const standardMaterialRate = standardMaterialQty > 0
+      ? roundTo3(standardMaterialAmount / standardMaterialQty)
+      : 0;
     const actualMaterialQty = roundTo3(operationConsumptions.reduce((sum, row) => sum + storedNumber(row.Quantity), 0));
     const actualMaterialAmount = roundTo3(operationConsumptions.reduce(
       (sum, row) => sum + storedNumber(row.Quantity) * storedNumber(row.UnitCost),
@@ -565,7 +636,7 @@ async function deriveOperationCostRows(db, { plantId, operations, costVersion })
       ActualQuantity: actualMaterialQty,
       StandardRate: standardMaterialRate,
       ActualRate: actualMaterialRate,
-      StandardAmount: roundTo3(standardMaterialQty * standardMaterialRate),
+      StandardAmount: standardMaterialAmount,
       ActualAmount: actualMaterialAmount,
       Currency: operationConsumptions[0]?.Currency ?? "IRR",
       CalculatedAt: new Date().toISOString(),
@@ -576,13 +647,21 @@ async function deriveOperationCostRows(db, { plantId, operations, costVersion })
       storedNumber(operation.PlannedSetupMinutes)
       + storedNumber(operation.PlannedRunMinutesPerUnit) * storedNumber(operation.PlannedQuantity),
     );
-    const actualMinutes = roundTo3(
-      storedNumber(operation.ActualSetupMinutes) + storedNumber(operation.ActualRunMinutes),
-    );
+    /* منبع اصلی دقیقهٔ واقعی، ردیف‌های اجراست؛ اگر اجراها هنوز دقیقه‌ای
+     * ثبت نکرده باشند، مقدار خود عملیات (اگر پر شده باشد) جایگزین می‌شود. */
+    const operationExecutions = executionsByOperation.get(operation.Id) ?? [];
+    const executionMinutes = roundTo3(operationExecutions.reduce(
+      (sum, row) => sum + storedNumber(row.SetupActualMinutes) + storedNumber(row.RunActualMinutes),
+      0,
+    ));
+    const actualMinutes = executionMinutes > 0
+      ? executionMinutes
+      : roundTo3(storedNumber(operation.ActualSetupMinutes) + storedNumber(operation.ActualRunMinutes));
     const costCenterId = operation.CostCenterId ?? workCenter?.CostCenterId ?? null;
 
     for (const element of ["machine", "labor", "overhead"]) {
-      const rate = rateFor(workCenter, costCenterId, element);
+      const center = costCenterFor(costCenterId, element);
+      const rate = rateFor(costCenterId, element);
       const standardQty = hours(plannedMinutes);
       const actualQty = hours(actualMinutes);
       rows.push({
@@ -597,7 +676,7 @@ async function deriveOperationCostRows(db, { plantId, operations, costVersion })
         ActualRate: rate,
         StandardAmount: roundTo3(standardQty * rate),
         ActualAmount: roundTo3(actualQty * rate),
-        Currency: workCenter?.Currency ?? "IRR",
+        Currency: center?.Currency ?? "IRR",
         CalculatedAt: new Date().toISOString(),
         SourceRef: "derived-from-actuals",
       });
@@ -2129,7 +2208,7 @@ export function registerManufacturingRoutes(app, { repo, subjects, evaluate } = 
     const body = req.body ?? {};
     assertOnlyKeys(body, new Set([
       "Code", "NameFa", "NameEn", "Kind", "NominalCapacityMinutesPerDay",
-      "EfficiencyPct", "CostCenterId", "TimeZoneId", "Status", "DescriptionFa",
+      "EfficiencyPct", "CostCenterId", "TimeZoneId", "Status", "DescriptionFa", "Rates",
     ]));
 
     const code = text(body.Code, "Code", { required: true, max: 60, pattern: CODE_RE });
@@ -2164,27 +2243,62 @@ export function registerManufacturingRoutes(app, { repo, subjects, evaluate } = 
     if (!WORK_CENTER_STATUSES.has(status)) throw bad("Status", "Status باید active/inactive/maintenance باشد");
     const descriptionFa = text(body.DescriptionFa, "DescriptionFa", { max: 1000 });
 
-    const duplicate = await r.findOne("MfgWorkCenter", [
-      { column: "PlantId", op: "eq", value: plantId },
-      { column: "Code", op: "eq", value: code },
-    ]);
-    if (duplicate) throw conflict("MFG_DUPLICATE", "کد مرکز کاری در این کارخانه تکراری است");
+    /* نرخ ساعتی عناصر هزینه فقط در `MfgCostCenter` نگه داشته می‌شود و قرارداد
+     * ۵.۳ مسیری برای ساخت آن ندارد؛ بدون این بلوک، رول‌آپ هزینه در عناصر
+     * ماشین/نیروی کار/سربار همیشه صفر می‌ماند. بلوک اختیاری `Rates` همان
+     * ردیف‌ها را در UoW مرکز کاری می‌سازد. */
+    const rates = parseWorkCenterRates(body.Rates, { code });
 
-    const row = await r.create("MfgWorkCenter", {
-      PlantId: plantId,
-      Code: code,
-      NameFa: nameFa,
-      NameEn: nameEn,
-      Kind: kind,
-      NominalCapacityMinutesPerDay: nominalCapacityMinutesPerDay,
-      EfficiencyPct: efficiencyPct,
-      CostCenterId: costCenterId,
-      TimeZoneId: timeZoneId,
-      Status: status,
-      DescriptionFa: descriptionFa,
-    }, requestActor(req));
-    await writeAudit(r, req, "MFG_WORK_CENTER_CREATED", "MfgWorkCenter", row.Id, "mfg.workcenter.edit");
-    return row;
+    const created = await r.transaction(async (tx) => {
+      const duplicate = await tx.findOne("MfgWorkCenter", [
+        { column: "PlantId", op: "eq", value: plantId },
+        { column: "Code", op: "eq", value: code },
+      ]);
+      if (duplicate) throw conflict("MFG_DUPLICATE", "کد مرکز کاری در این کارخانه تکراری است");
+
+      const costCenters = [];
+      for (const rate of rates) {
+        const existing = await tx.findOne("MfgCostCenter", [
+          { column: "PlantId", op: "eq", value: plantId },
+          { column: "Code", op: "eq", value: rate.Code },
+          { column: "EffectiveFrom", op: "eq", value: rate.EffectiveFrom },
+        ]);
+        if (existing) throw conflict("MFG_DUPLICATE", `مرکز هزینهٔ ${rate.Code} در این کارخانه و تاریخ تکراری است`);
+        costCenters.push(await tx.create("MfgCostCenter", {
+          PlantId: plantId,
+          Code: rate.Code,
+          NameFa: rate.NameFa,
+          CostElement: rate.CostElement,
+          HourlyRate: rate.HourlyRate,
+          Currency: rate.Currency,
+          AllocationBasis: rate.AllocationBasis,
+          EffectiveFrom: rate.EffectiveFrom,
+          EffectiveTo: rate.EffectiveTo,
+          IsActive: true,
+        }, requestActor(req)));
+      }
+
+      const row = await tx.create("MfgWorkCenter", {
+        PlantId: plantId,
+        Code: code,
+        NameFa: nameFa,
+        NameEn: nameEn,
+        Kind: kind,
+        NominalCapacityMinutesPerDay: nominalCapacityMinutesPerDay,
+        EfficiencyPct: efficiencyPct,
+        CostCenterId: costCenterId ?? costCenters.find((center) => center.CostElement === "machine")?.Id ?? costCenters[0]?.Id ?? null,
+        TimeZoneId: timeZoneId,
+        Status: status,
+        DescriptionFa: descriptionFa,
+      }, requestActor(req));
+      await createAuditRecord(tx, req, "MFG_WORK_CENTER_CREATED", "MfgWorkCenter", row.Id, "mfg.workcenter.edit", {
+        costCenterIds: costCenters.map((center) => center.Id),
+      });
+      return { row, costCenters };
+    });
+
+    if (rates.length === 0) return created.row;
+    return { ...created.row, CostCenters: created.costCenters };
   }, 201));
 
   app.get(`${ROOT}/work-centers/:workCenterId`, route("mfg.workcenter.view", async ({ repo: r, req, plantId }) => {
