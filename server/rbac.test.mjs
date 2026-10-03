@@ -614,6 +614,10 @@ test("buildAuditRecord: بدون پروژه مقدار تهی می‌گذارد"
 
 /* ══════════ ۱۲. سناریوهای واقعی ══════════ */
 
+test("سناریو: مدیر سامانه می‌تواند گزارش روزانه را ثبت کند", () => {
+  assert.equal(can(subj("u-admin"), "plan.progress.report", { projectId: "c1-p1" }), true);
+});
+
 test("سناریو: پیمانکار جزء به هزینه و نرخ دسترسی ندارد", () => {
   assert.equal(can(subj("u-sub"), "fin.cost.view", { projectId: "c1-p1" }), false);
   assert.equal(can(subj("u-sub"), "fin.rate.view", { projectId: "c1-p1" }), false);
