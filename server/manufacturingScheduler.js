@@ -510,6 +510,154 @@ function assignmentFrom(operation, order, segments, preserved = false) {
   };
 }
 
+function summarizeScheduleSegments(segments = []) {
+  const normalized = [...segments]
+    .filter((segment) => segment && segment.Status !== "cancelled" && instant(segment.PlannedStartAt) !== null && instant(segment.PlannedEndAt) !== null)
+    .sort((left, right) => instant(left.PlannedStartAt) - instant(right.PlannedStartAt)
+      || instant(left.PlannedEndAt) - instant(right.PlannedEndAt)
+      || Number(left.SegmentNo ?? 0) - Number(right.SegmentNo ?? 0))
+    .map((segment, index) => ({
+      SegmentNo: Number(segment.SegmentNo) > 0 ? Number(segment.SegmentNo) : index + 1,
+      WorkCenterId: segment.WorkCenterId,
+      ResourceId: segment.ResourceId ?? null,
+      PlannedStartAt: new Date(instant(segment.PlannedStartAt)).toISOString(),
+      PlannedEndAt: new Date(instant(segment.PlannedEndAt)).toISOString(),
+      PlannedCapacityMinutes: round3(finiteNumber(segment.PlannedCapacityMinutes, 0)),
+      QueueMinutes: round3(finiteNumber(segment.QueueMinutes, 0)),
+      MoveMinutes: round3(finiteNumber(segment.MoveMinutes, 0)),
+      Status: segment.Status ?? "tentative",
+    }));
+  if (!normalized.length) return null;
+  return {
+    WorkCenterId: normalized[0].WorkCenterId,
+    ResourceId: normalized[0].ResourceId ?? null,
+    PlannedStartAt: normalized[0].PlannedStartAt,
+    PlannedEndAt: normalized.at(-1).PlannedEndAt,
+    PlannedCapacityMinutes: round3(normalized.reduce((sum, item) => sum + item.PlannedCapacityMinutes, 0)),
+    SegmentCount: normalized.length,
+    Status: normalized.some((item) => item.Status === "firm") ? "firm" : normalized[0].Status,
+    Segments: normalized,
+  };
+}
+
+function normalizedSegmentsEqual(left = [], right = []) {
+  if (left.length !== right.length) return false;
+  for (let index = 0; index < left.length; index++) {
+    const a = left[index];
+    const b = right[index];
+    if (
+      a.WorkCenterId !== b.WorkCenterId
+      || (a.ResourceId ?? null) !== (b.ResourceId ?? null)
+      || Date.parse(a.PlannedStartAt) !== Date.parse(b.PlannedStartAt)
+      || Date.parse(a.PlannedEndAt) !== Date.parse(b.PlannedEndAt)
+      || round3(a.PlannedCapacityMinutes) !== round3(b.PlannedCapacityMinutes)
+      || a.Status !== b.Status
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+export function diffManufacturingSchedules({
+  previousScheduleVersion = 0,
+  scheduleVersion,
+  operations = [],
+  orders = [],
+  previousSegments = [],
+  currentSegments = [],
+  requestedOperationIds = [],
+  rescheduledOperationIds = [],
+  preservedOperationIds = new Set(),
+}) {
+  const orderById = new Map(orders.map((order) => [order.Id, order]));
+  const previousByOperation = new Map();
+  for (const segment of previousSegments) {
+    if (!segment || segment.Status === "cancelled") continue;
+    const opId = segment.ProductionOrderOperationId;
+    if (!previousByOperation.has(opId)) previousByOperation.set(opId, []);
+    previousByOperation.get(opId).push(segment);
+  }
+  const currentByOperation = new Map();
+  for (const segment of currentSegments) {
+    if (!segment || segment.Status === "cancelled") continue;
+    const opId = segment.ProductionOrderOperationId;
+    if (!currentByOperation.has(opId)) currentByOperation.set(opId, []);
+    currentByOperation.get(opId).push(segment);
+  }
+
+  const rescheduledSet = new Set(rescheduledOperationIds);
+  const preservedSet = preservedOperationIds instanceof Set ? preservedOperationIds : new Set(preservedOperationIds);
+  const sortedOperations = [...operations].sort((left, right) => {
+    const leftOrder = orderById.get(left.ProductionOrderId);
+    const rightOrder = orderById.get(right.ProductionOrderId);
+    return String(leftOrder?.OrderNo ?? "").localeCompare(String(rightOrder?.OrderNo ?? ""))
+      || Number(left.SequenceNo ?? 0) - Number(right.SequenceNo ?? 0)
+      || String(left.Id).localeCompare(String(right.Id));
+  });
+
+  const operationDiffs = sortedOperations.map((operation) => {
+    const order = orderById.get(operation.ProductionOrderId);
+    const before = summarizeScheduleSegments(previousByOperation.get(operation.Id) ?? []);
+    const after = summarizeScheduleSegments(currentByOperation.get(operation.Id) ?? []);
+    let changeType = "unchanged";
+    let changed = false;
+    if (!before && after) {
+      changeType = "added";
+      changed = true;
+    } else if (before && !after) {
+      changeType = "removed";
+      changed = true;
+    } else if (before && after && !normalizedSegmentsEqual(before.Segments, after.Segments)) {
+      changeType = "moved";
+      changed = true;
+    }
+    const startDeltaMinutes = before && after
+      ? round3((Date.parse(after.PlannedStartAt) - Date.parse(before.PlannedStartAt)) / MINUTE_MS)
+      : null;
+    const endDeltaMinutes = before && after
+      ? round3((Date.parse(after.PlannedEndAt) - Date.parse(before.PlannedEndAt)) / MINUTE_MS)
+      : null;
+    return {
+      ProductionOrderOperationId: operation.Id,
+      ProductionOrderId: order?.Id ?? operation.ProductionOrderId,
+      OrderNo: order?.OrderNo ?? null,
+      SequenceNo: operation.SequenceNo,
+      OperationCode: operation.OperationCode ?? null,
+      WorkCenterId: after?.WorkCenterId ?? before?.WorkCenterId ?? operation.WorkCenterId,
+      ChangeType: changeType,
+      Changed: changed,
+      Rescheduled: rescheduledSet.has(operation.Id),
+      Preserved: preservedSet.has(operation.Id),
+      PreviousResourceId: before?.ResourceId ?? null,
+      CurrentResourceId: after?.ResourceId ?? null,
+      PreviousPlannedStartAt: before?.PlannedStartAt ?? null,
+      CurrentPlannedStartAt: after?.PlannedStartAt ?? null,
+      PreviousPlannedEndAt: before?.PlannedEndAt ?? null,
+      CurrentPlannedEndAt: after?.PlannedEndAt ?? null,
+      StartDeltaMinutes: startDeltaMinutes,
+      EndDeltaMinutes: endDeltaMinutes,
+      before,
+      after,
+    };
+  });
+
+  const changedOperations = operationDiffs.filter((item) => item.Changed);
+  return {
+    fromScheduleVersion: previousScheduleVersion,
+    toScheduleVersion: scheduleVersion,
+    requestedOperationIds: [...requestedOperationIds],
+    rescheduledOperationIds: [...rescheduledOperationIds],
+    changedOperationCount: changedOperations.length,
+    unchangedOperationCount: operationDiffs.length - changedOperations.length,
+    addedCount: operationDiffs.filter((item) => item.ChangeType === "added").length,
+    removedCount: operationDiffs.filter((item) => item.ChangeType === "removed").length,
+    movedCount: operationDiffs.filter((item) => item.ChangeType === "moved").length,
+    operations: operationDiffs,
+    changedOperations,
+  };
+}
+
 function validatePredecessors(operations) {
   const operationById = new Map(operations.map((operation) => [operation.Id, operation]));
   const successors = new Map(operations.map((operation) => [operation.Id, []]));
@@ -545,6 +693,7 @@ export function planManufacturingSchedule({
   dispatchRule,
   fromMs,
   toMs,
+  previousScheduleVersion = 0,
   scheduleVersion,
   orders,
   operations,
@@ -555,8 +704,41 @@ export function planManufacturingSchedule({
   executions = [],
   downtime = [],
   selectedOrderIds,
+  selectedOperationIds,
 }) {
-  const orderById = new Map(orders.map((order) => [order.Id, order]));
+  const allOrderById = new Map(orders.map((order) => [order.Id, order]));
+  const activeOrders = orders.filter((order) => order.PlantId === plantId && ["released", "in-progress"].includes(order.Status));
+  const orderById = new Map(activeOrders.map((order) => [order.Id, order]));
+
+  const hasExplicitOperationSelection = selectedOperationIds !== undefined && selectedOperationIds !== null;
+  const requestedOperationIdList = hasExplicitOperationSelection ? [...selectedOperationIds] : [];
+  if (hasExplicitOperationSelection) {
+    if (requestedOperationIdList.length === 0) {
+      invalid("MFG_SCHEDULE_OPERATION_EMPTY", "حداقل یک شناسهٔ عملیات برای باززمان‌بندی الزامی است");
+    }
+    const allOperationById = new Map(operations.map((operation) => [operation.Id, operation]));
+    for (const operationId of requestedOperationIdList) {
+      const operation = allOperationById.get(operationId);
+      if (!operation || operation.PlantId !== plantId) {
+        invalid("MFG_OPERATION_NOT_FOUND", `عملیات ${operationId} در کارخانهٔ جاری یافت نشد`, { operationId });
+      }
+      const order = allOrderById.get(operation.ProductionOrderId);
+      if (!order || order.PlantId !== plantId || !["released", "in-progress"].includes(order.Status)) {
+        invalid("MFG_ORDER_NOT_RELEASED", `سفارش عملیات ${operation.OperationCode ?? operation.Id} آزادشده یا درحال‌تولید نیست`, {
+          operationId: operation.Id,
+          orderId: operation.ProductionOrderId,
+        });
+      }
+      if (!["pending", "queued", "ready"].includes(operation.Status)) {
+        invalid("MFG_OPERATION_NOT_DISPATCHABLE", `عملیات ${operation.OperationCode ?? operation.Id} در وضعیت ${operation.Status} قابل‌اعزام نیست`, {
+          operationId: operation.Id,
+          orderId: order.Id,
+          status: operation.Status,
+        });
+      }
+    }
+  }
+
   const operationsInScope = operations.filter((operation) => orderById.has(operation.ProductionOrderId));
   if (operationsInScope.length > MAX_PLANNED_OPERATIONS) {
     invalid("MFG_SCHEDULE_OPERATION_LIMIT", `در هر اجرا حداکثر ${MAX_PLANNED_OPERATIONS} عملیات زمان‌بندی می‌شود`);
@@ -602,6 +784,72 @@ export function planManufacturingSchedule({
     }
   }
 
+  const currentOperationIds = new Set(operationsInScope.map((operation) => operation.Id));
+  const existingScheduledOpIds = new Set();
+  const existingFirmOpIds = new Set();
+  for (const existing of existingSchedules) {
+    if (existing.PlantId !== plantId || existing.Status === "cancelled") continue;
+    const operation = operationById.get(existing.ProductionOrderOperationId);
+    const order = operation && orderById.get(operation.ProductionOrderId);
+    if (!operation || !order || !currentOperationIds.has(operation.Id)) continue;
+    const start = instant(existing.PlannedStartAt);
+    const end = instant(existing.PlannedEndAt);
+    if (start === null || end === null || end <= start) continue;
+    existingScheduledOpIds.add(operation.Id);
+    if (existing.Status === "firm") existingFirmOpIds.add(operation.Id);
+  }
+  const hasExistingTiming = (operationId) =>
+    existingScheduledOpIds.has(operationId)
+    || (operationById.get(operationId)?.Status === "completed" && completedByOperation.has(operationId));
+
+  const effectiveSelectedOrderIds = selectedOrderIds instanceof Set
+    ? selectedOrderIds
+    : new Set(selectedOrderIds ?? activeOrders.map((order) => order.Id));
+
+  const targetOperationIds = new Set();
+  if (hasExplicitOperationSelection) {
+    const queue = [...requestedOperationIdList];
+    while (queue.length) {
+      const currentId = queue.shift();
+      if (!currentId || targetOperationIds.has(currentId)) continue;
+      const currentOp = operationById.get(currentId);
+      if (!currentOp) continue;
+      targetOperationIds.add(currentId);
+
+      const predecessorId = currentOp.PredecessorOperationId;
+      if (predecessorId && !targetOperationIds.has(predecessorId)) {
+        const predecessor = operationById.get(predecessorId);
+        if (predecessor && predecessor.Status !== "completed" && !existingFirmOpIds.has(predecessorId)) {
+          if (direction === "backward" || !hasExistingTiming(predecessorId)) {
+            queue.push(predecessorId);
+          }
+        }
+      }
+    }
+    const downQueue = [...targetOperationIds];
+    while (downQueue.length) {
+      const currentId = downQueue.shift();
+      const currentOp = operationById.get(currentId);
+      if (!currentOp || currentOp.Status === "completed" || existingFirmOpIds.has(currentId)) continue;
+      for (const successorId of successors.get(currentId) ?? []) {
+        const successor = operationById.get(successorId);
+        if (!successor || successor.Status === "completed" || existingFirmOpIds.has(successorId)) continue;
+        if (direction === "forward" || !hasExistingTiming(successorId)) {
+          if (!targetOperationIds.has(successorId)) {
+            targetOperationIds.add(successorId);
+            downQueue.push(successorId);
+          }
+        }
+      }
+    }
+  } else {
+    for (const operation of operationsInScope) {
+      if (effectiveSelectedOrderIds.has(operation.ProductionOrderId)) {
+        targetOperationIds.add(operation.Id);
+      }
+    }
+  }
+
   const operationSegments = new Map();
   const reservations = [];
   const downtimeReservations = [];
@@ -622,13 +870,12 @@ export function planManufacturingSchedule({
     reservations.push(reservation);
   }
   const copiedSegments = [];
-  const currentOperationIds = new Set(operationsInScope.map((operation) => operation.Id));
   for (const existing of existingSchedules) {
     if (existing.PlantId !== plantId || existing.Status === "cancelled") continue;
     const operation = operationById.get(existing.ProductionOrderOperationId);
     const order = operation && orderById.get(operation.ProductionOrderId);
     if (!operation || !order || !currentOperationIds.has(operation.Id)) continue;
-    const isSelected = selectedOrderIds.has(order.Id);
+    const isSelected = targetOperationIds.has(operation.Id);
     const keep = isSelected
       ? existing.Status === "firm"
       : ["released", "in-progress"].includes(order.Status);
@@ -671,6 +918,7 @@ export function planManufacturingSchedule({
   for (const [operationId, segments] of operationSegments) {
     if (segments.some((segment) => segment.Status === "firm")) fixedOperationIds.add(operationId);
   }
+  const preservedOperationIds = new Set();
   const states = new Map();
   const scheduledTimes = new Map();
   const unscheduled = [];
@@ -726,20 +974,27 @@ export function planManufacturingSchedule({
 
   for (const operation of operationsInScope) {
     const order = orderById.get(operation.ProductionOrderId);
-    if (!selectedOrderIds.has(order.Id)) {
+    if (!targetOperationIds.has(operation.Id)) {
+      preservedOperationIds.add(operation.Id);
       states.set(operation.Id, { status: "done", fixed: true });
       const segments = operationSegments.get(operation.Id) ?? [];
       const timing = segmentsForOperation(operation, { segments });
       if (timing) scheduledTimes.set(operation.Id, timing);
+      else if (operation.Status === "completed") {
+        const execution = completedByOperation.get(operation.Id);
+        if (execution) scheduledTimes.set(operation.Id, { start: execution.startedAt, end: execution.finishedAt, operation });
+      }
       continue;
     }
     if (operation.Status === "completed") {
+      preservedOperationIds.add(operation.Id);
       states.set(operation.Id, { status: "done", completed: true });
       const execution = completedByOperation.get(operation.Id);
       if (execution) scheduledTimes.set(operation.Id, { start: execution.startedAt, end: execution.finishedAt, operation });
       continue;
     }
     if (fixedOperationIds.has(operation.Id)) {
+      preservedOperationIds.add(operation.Id);
       states.set(operation.Id, { status: "done", fixed: true });
       const segments = operationSegments.get(operation.Id) ?? [];
       const timing = segmentsForOperation(operation, { segments });
@@ -775,10 +1030,28 @@ export function planManufacturingSchedule({
 
   const remainingByOrder = new Map();
   for (const operation of operationsInScope) {
-    if (!selectedOrderIds.has(operation.ProductionOrderId) || !["pending", "queued", "ready"].includes(operation.Status)) continue;
+    if (!targetOperationIds.has(operation.Id) || fixedOperationIds.has(operation.Id) || !["pending", "queued", "ready"].includes(operation.Status)) continue;
     remainingByOrder.set(operation.ProductionOrderId, (remainingByOrder.get(operation.ProductionOrderId) ?? 0) + processingMinutes(operation));
   }
   const operationsById = new Map(operationsInScope.map((operation) => [operation.Id, operation]));
+  const fixedSuccessorUpperBound = (opId) => {
+    let bound = Infinity;
+    for (const succId of successors.get(opId) ?? []) {
+      const succ = operationsById.get(succId);
+      if (!succ) continue;
+      const lagMs = (finiteNumber(succ.PlannedQueueMinutes, 0) + finiteNumber(succ.PlannedMoveMinutes, 0)) * MINUTE_MS;
+      const succTime = scheduledTimes.get(succId);
+      if (succTime && Number.isFinite(succTime.start)) {
+        bound = Math.min(bound, succTime.start - lagMs);
+      } else {
+        const downstreamBound = fixedSuccessorUpperBound(succId);
+        if (Number.isFinite(downstreamBound)) {
+          bound = Math.min(bound, downstreamBound - processingMinutes(succ) * MINUTE_MS - lagMs);
+        }
+      }
+    }
+    return bound;
+  };
   const compare = priorityCompare(dispatchRule, direction, fromMs, orderById, remainingByOrder);
   const planableCount = [...states.values()].filter((state) => state.status === "pending").length;
   let processed = 0;
@@ -835,6 +1108,8 @@ export function planManufacturingSchedule({
         lowerBound = Math.max(lowerBound, predecessorTime.end);
       }
       lowerBound += (finiteNumber(operation.PlannedQueueMinutes, 0) + finiteNumber(operation.PlannedMoveMinutes, 0)) * MINUTE_MS;
+      const fixedBound = fixedSuccessorUpperBound(operation.Id);
+      if (Number.isFinite(fixedBound)) upperBound = Math.min(upperBound, fixedBound);
     } else {
       const dueAt = instant(order.DueAt);
       if (dueAt !== null) upperBound = Math.min(upperBound, dueAt);
@@ -962,11 +1237,36 @@ export function planManufacturingSchedule({
     || Number(a.SequenceNo ?? 0) - Number(b.SequenceNo ?? 0)
     || String(a.ProductionOrderOperationId).localeCompare(String(b.ProductionOrderOperationId)));
 
+  const rescheduledOperationIds = operationsInScope
+    .filter((operation) => targetOperationIds.has(operation.Id) && !preservedOperationIds.has(operation.Id))
+    .sort((left, right) => {
+      const leftOrder = orderById.get(left.ProductionOrderId);
+      const rightOrder = orderById.get(right.ProductionOrderId);
+      return String(leftOrder?.OrderNo ?? "").localeCompare(String(rightOrder?.OrderNo ?? ""))
+        || Number(left.SequenceNo ?? 0) - Number(right.SequenceNo ?? 0)
+        || String(left.Id).localeCompare(String(right.Id));
+    })
+    .map((operation) => operation.Id);
+
+  const diff = diffManufacturingSchedules({
+    previousScheduleVersion,
+    scheduleVersion,
+    operations: operationsInScope,
+    orders: activeOrders,
+    previousSegments: existingSchedules.filter((segment) => segment.PlantId === plantId && currentOperationIds.has(segment.ProductionOrderOperationId)),
+    currentSegments: scheduleSegments,
+    requestedOperationIds: hasExplicitOperationSelection ? requestedOperationIdList : [...targetOperationIds],
+    rescheduledOperationIds,
+    preservedOperationIds,
+  });
+
   return {
     scheduleSegments,
     capacityRows,
     assignments,
     unscheduled,
+    rescheduledOperationIds,
+    diff,
     summary: {
       scheduledOperationCount: [...assignmentsByOperation.values()].filter((assignment) => assignment.Segments.length > 0).length,
       unscheduledOperationCount: unscheduled.length,
