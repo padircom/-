@@ -501,6 +501,46 @@ export const PERMISSION_CATALOG: PermissionDef[] = [
   P("itg.export.run", "core", "ساخت خروجی XER و XML پروژه", "Run XER / Project XML export", "confidential", true),
   P("itg.primavera.push", "core", "ارسال فعالیت‌ها به API پریماورا", "Push activities to Primavera API", "confidential", true),
   P("itg.calendar.sync", "core", "خروجی و همگام‌سازی تقویم Outlook/Exchange", "Outlook/Exchange calendar export & sync", "confidential", true),
+
+  /* ── d17 تولید عملیات‌محور؛ Plant دامنهٔ دسترسی است، نه Project. ── */
+  P("mfg.part.view", "mfg", "مشاهدهٔ قطعه و محصول", "View parts and products", "internal"),
+  P("mfg.part.edit", "mfg", "ثبت و ویرایش قطعه و محصول", "Create and edit parts", "confidential", true),
+  P("mfg.bom.view", "mfg", "مشاهدهٔ نسخه‌های BOM", "View BOM revisions", "internal"),
+  P("mfg.bom.edit", "mfg", "ویرایش BOM پیش‌نویس", "Edit draft BOMs", "confidential", true),
+  P("mfg.bom.release", "mfg", "آزادسازی نسخهٔ BOM", "Release BOM revision", "restricted", true),
+  P("mfg.routing.view", "mfg", "مشاهدهٔ مسیرهای تولید", "View routings", "internal"),
+  P("mfg.routing.edit", "mfg", "ویرایش Routing پیش‌نویس", "Edit draft routings", "confidential", true),
+  P("mfg.routing.release", "mfg", "آزادسازی Routing", "Release routing revision", "restricted", true),
+  P("mfg.workcenter.view", "mfg", "مشاهدهٔ مراکز کاری و منابع", "View work centers and resources", "internal"),
+  P("mfg.workcenter.edit", "mfg", "مدیریت مراکز کاری و منابع", "Manage work centers and resources", "confidential", true),
+  P("mfg.calendar.edit", "mfg", "مدیریت تقویم و شیفت تولید", "Manage production calendars and shifts", "confidential", true),
+  P("mfg.order.view", "mfg", "مشاهدهٔ سفارش‌های تولید", "View production orders", "internal"),
+  P("mfg.order.create", "mfg", "ثبت سفارش تولید", "Create production order", "confidential", true),
+  P("mfg.order.release", "mfg", "آزادسازی سفارش تولید", "Release production order", "restricted", true),
+  P("mfg.order.reprioritize", "mfg", "تغییر اولویت اعزام سفارش", "Change order dispatch priority", "confidential", true),
+  P("mfg.order.close", "mfg", "بستن سفارش تولید", "Close production order", "restricted", true),
+  P("mfg.schedule.view", "mfg", "مشاهدهٔ برنامهٔ عملیات و گانت", "View operation schedule and Gantt", "internal"),
+  P("mfg.schedule.run", "mfg", "اجرای برنامه‌ریزی ظرفیت تولید", "Run finite-capacity scheduling", "confidential", true),
+  P("mfg.schedule.resequence", "mfg", "تغییر توالی صف عملیات", "Resequence operation queue", "confidential", true),
+  P("mfg.capacity.view", "mfg", "مشاهدهٔ بار و گلوگاه ظرفیت", "View capacity load and bottlenecks", "internal"),
+  P("mfg.execution.view", "mfg", "مشاهدهٔ وضعیت اجرای عملیات", "View operation execution", "internal"),
+  P("mfg.execution.start", "mfg", "شروع اجرای عملیات", "Start operation execution", "confidential", true),
+  P("mfg.execution.report", "mfg", "ثبت مقدار تولید و پیشرفت عملیات", "Report operation production and progress", "internal", true),
+  P("mfg.execution.finish", "mfg", "اتمام اجرای عملیات", "Finish operation execution", "confidential", true),
+  P("mfg.downtime.report", "mfg", "ثبت توقف مرکز کاری", "Report work-center downtime", "internal", true),
+  P("mfg.scrap.report", "mfg", "ثبت ضایعات تولید", "Report production scrap", "confidential", true),
+  P("mfg.rework.report", "mfg", "ثبت دوباره‌کاری تولید", "Report production rework", "confidential", true),
+  P("mfg.material.view", "mfg", "مشاهدهٔ مواد و موجودی برنامه‌ریزی", "View materials and planning inventory", "internal"),
+  P("mfg.mrp.view", "mfg", "مشاهدهٔ نیاز و کمبود مواد", "View material requirements and shortages", "internal"),
+  P("mfg.mrp.run", "mfg", "اجرای محاسبهٔ MRP", "Run material requirements planning", "confidential", true),
+  P("mfg.material.consume", "mfg", "ثبت مصرف واقعی مواد", "Post actual material consumption", "confidential", true),
+  P("mfg.requisition.create", "mfg", "ایجاد پیشنهاد تأمین مواد", "Create material procurement proposal", "confidential", true),
+  P("mfg.cost.view", "mfg", "مشاهدهٔ بهای تمام‌شدهٔ تولید", "View manufacturing costs", "confidential"),
+  P("mfg.cost.reconcile", "mfg", "تطبیق و بستن بهای تمام‌شدهٔ سفارش", "Reconcile and close production cost", "restricted", true),
+  P("mfg.dashboard.view", "mfg", "مشاهدهٔ داشبورد تولید", "View manufacturing dashboard", "internal"),
+  P("mfg.alert.view", "mfg", "مشاهدهٔ هشدارهای تولید", "View manufacturing alerts", "internal"),
+  P("mfg.alert.ack", "mfg", "رسیدگی و تأیید هشدار تولید", "Acknowledge manufacturing alert", "confidential", true),
+
   /* P10/AI-1..4: دستیار هوشمند. پرسش فقط‌خواندنی است، ولی چهار اقتدار جدا
    * دارد و یکی گرفته نمی‌شوند: پرسیدن (ai.assistant.ask)، دیدن بینش آماده
    * (ai.insight.view)، خواندن تاریخچهٔ پرسش‌وپاسخ (ai.history.view — می‌تواند
@@ -664,6 +704,7 @@ export const ROLE_CATALOG: RoleDef[] = [
        * موتور، ثبت‌کنندهٔ درخواست را از آزادسازی همان درخواست منع می‌کند. */
       "cpm.workarea.view", "cpm.dpr.view", "cpm.discipline.view",
       "cpm.inspection.view", "cpm.inspection.release",
+      "mfg.execution.view",
       /* گیت کیفیت در زنجیرهٔ کارکرد: تطبیق ساعت ثبت‌شده با پیشرفت
        * تأییدشده. بدون این، ساعت روی فعالیتی می‌نشیند که اصلاً اجرا
        * نشده است. */
@@ -1051,6 +1092,91 @@ export const ROLE_CATALOG: RoleDef[] = [
        * خوانده شده؛ ولی خودش خروجی سند نمی‌گیرد. */
       "ai.history.view"
     ],
+  },
+  /* d17 — نقش‌های تولید مستقل از نقش‌های پروژه‌ای‌اند. دسترسی هر نقش
+   * علاوه بر این مجوزها، در زمان ارزیابی به plantIds کاربر هم محدود می‌شود. */
+  {
+    code: "manufacturing_engineer",
+    title: { fa: "مهندس ساخت و فرایند", en: "Manufacturing Engineer" },
+    inherits: ["viewer"],
+    clearance: "restricted",
+    party: "contractor",
+    grants: [
+      "mfg.part.view", "mfg.part.edit", "mfg.bom.view", "mfg.bom.edit", "mfg.bom.release",
+      "mfg.routing.view", "mfg.routing.edit", "mfg.routing.release",
+      "mfg.workcenter.view", "mfg.workcenter.edit", "mfg.calendar.edit", "mfg.capacity.view",
+      "mfg.alert.view",
+    ],
+  },
+  {
+    code: "production_planner",
+    title: { fa: "برنامه‌ریز تولید", en: "Production Planner" },
+    inherits: ["viewer"],
+    clearance: "confidential",
+    party: "contractor",
+    grants: [
+      "mfg.part.view", "mfg.bom.view", "mfg.routing.view", "mfg.workcenter.view",
+      "mfg.order.view", "mfg.order.create", "mfg.order.reprioritize",
+      "mfg.schedule.view", "mfg.schedule.run", "mfg.schedule.resequence", "mfg.capacity.view",
+      "mfg.material.view", "mfg.mrp.view", "mfg.mrp.run", "mfg.requisition.create",
+      "mfg.dashboard.view", "mfg.alert.view",
+    ],
+  },
+  {
+    code: "production_manager",
+    title: { fa: "مدیر تولید", en: "Production Manager" },
+    inherits: ["viewer"],
+    clearance: "restricted",
+    party: "contractor",
+    grants: [
+      "mfg.order.view", "mfg.order.release", "mfg.order.close",
+      "mfg.schedule.view", "mfg.schedule.run", "mfg.capacity.view", "mfg.execution.view",
+      "mfg.dashboard.view", "mfg.alert.view", "mfg.alert.ack",
+    ],
+  },
+  {
+    code: "shop_floor_supervisor",
+    title: { fa: "سرپرست سالن تولید", en: "Shop-floor Supervisor" },
+    inherits: ["viewer"],
+    clearance: "confidential",
+    party: "contractor",
+    grants: [
+      "mfg.order.view", "mfg.schedule.view", "mfg.capacity.view", "mfg.execution.view",
+      "mfg.execution.start", "mfg.execution.report", "mfg.execution.finish",
+      "mfg.downtime.report", "mfg.scrap.report", "mfg.rework.report",
+      "mfg.material.view", "mfg.material.consume", "mfg.dashboard.view", "mfg.alert.view", "mfg.alert.ack",
+    ],
+  },
+  {
+    code: "production_operator",
+    title: { fa: "اپراتور تولید", en: "Production Operator" },
+    inherits: [],
+    clearance: "internal",
+    party: "contractor",
+    grants: [
+      "mfg.execution.view", "mfg.execution.start", "mfg.execution.report", "mfg.execution.finish",
+      "mfg.downtime.report", "mfg.scrap.report", "mfg.rework.report",
+      "mfg.material.view", "mfg.material.consume", "mfg.alert.view",
+    ],
+  },
+  {
+    code: "material_planner",
+    title: { fa: "برنامه‌ریز مواد", en: "Material Planner" },
+    inherits: ["viewer"],
+    clearance: "confidential",
+    party: "contractor",
+    grants: [
+      "mfg.part.view", "mfg.order.view", "mfg.material.view", "mfg.mrp.view", "mfg.mrp.run",
+      "mfg.requisition.create", "mfg.dashboard.view", "mfg.alert.view",
+    ],
+  },
+  {
+    code: "industrial_accountant",
+    title: { fa: "حسابدار صنعتی", en: "Industrial Accountant" },
+    inherits: ["viewer"],
+    clearance: "restricted",
+    party: "contractor",
+    grants: ["mfg.order.view", "mfg.cost.view", "mfg.cost.reconcile", "mfg.dashboard.view"],
   },
   {
     code: "admin",
@@ -1567,6 +1693,8 @@ export type Subject = {
   roles: string[];
   /** ["*"] یعنی همهٔ پروژه‌ها */
   projectIds: string[];
+  /** دامنهٔ کارخانه؛ برای ارزیابی با ctx.plantId، نبودن یا خالی‌بودن یعنی هیچ کارخانه‌ای مجاز نیست. */
+  plantIds?: string[];
   /** ["*"] یعنی همهٔ دیسیپلین‌ها؛ خالی هم یعنی بدون محدودیت */
   disciplines?: string[];
   /** مجوزهای اضافه‌شدهٔ موردی */
@@ -1581,6 +1709,8 @@ export type Subject = {
 
 export type AccessContext = {
   projectId?: string | null;
+  /** اگر برای درخواست تعیین شود، دامنهٔ plantIds کاربر به‌صورت fail-closed اعمال می‌شود. */
+  plantId?: string | null;
   discipline?: string | null;
   classification?: Classification;
   /** برای بررسی تفکیک وظیفه در سطح رکورد */
@@ -1597,6 +1727,7 @@ export type DecisionCode =
   | "DENY_EXPLICIT"
   | "DENY_NO_PERMISSION"
   | "DENY_PROJECT_SCOPE"
+  | "DENY_PLANT_SCOPE"
   | "DENY_DISCIPLINE_SCOPE"
   | "DENY_CLEARANCE"
   | "DENY_SOD"
@@ -1617,6 +1748,7 @@ const DECISION_REASON: Record<DecisionCode, Bi> = {
   DENY_EXPLICIT: { fa: "این مجوز صریحاً برای کاربر ممنوع شده است", en: "Permission explicitly denied for this user" },
   DENY_NO_PERMISSION: { fa: "هیچ‌یک از نقش‌های کاربر این مجوز را ندارد", en: "None of the user roles grant this permission" },
   DENY_PROJECT_SCOPE: { fa: "کاربر به این پروژه دسترسی ندارد", en: "User is not assigned to this project" },
+  DENY_PLANT_SCOPE: { fa: "کاربر به این کارخانه دسترسی ندارد", en: "User is not assigned to this plant" },
   DENY_DISCIPLINE_SCOPE: { fa: "کاربر به این دیسیپلین دسترسی ندارد", en: "User is not assigned to this discipline" },
   DENY_CLEARANCE: { fa: "سطح دسترسی کاربر برای این طبقه‌بندی کافی نیست", en: "User clearance is insufficient for this classification" },
   DENY_SOD: { fa: "تفکیک وظایف نقض می‌شود: تهیه‌کننده نمی‌تواند تأییدکننده باشد", en: "Segregation of duties violated: preparer cannot approve" },
@@ -1645,6 +1777,13 @@ function inScope(list: string[] | undefined, value: string | null | undefined): 
   return list.includes(value);
 }
 
+/** دامنهٔ کارخانه عمداً fail-closed است؛ نبود plantIds به معنای دسترسی سراسری نیست. */
+function inPlantScope(list: string[] | undefined, value: string | null | undefined): boolean {
+  if (!value) return true;
+  if (!list || list.length === 0) return false;
+  return list.includes("*") || list.includes(value);
+}
+
 /**
  * تصمیم‌گیری واحد. ترتیب بررسی عمداً «رد غالب» است:
  * غیرفعال ← ممنوعیت صریح ← دامنه ← سطح دسترسی ← مجوز ← تفکیک وظیفه.
@@ -1655,6 +1794,7 @@ export function evaluate(subject: Subject, permission: string, ctx: AccessContex
   if (!subject.active) return deny("DENY_INACTIVE");
   if ((subject.denies ?? []).includes(permission)) return deny("DENY_EXPLICIT");
   if (!inScope(subject.projectIds, ctx.projectId)) return deny("DENY_PROJECT_SCOPE");
+  if (!inPlantScope(subject.plantIds, ctx.plantId)) return deny("DENY_PLANT_SCOPE");
   if (!inScope(subject.disciplines, ctx.discipline)) return deny("DENY_DISCIPLINE_SCOPE");
 
   const required = ctx.classification ?? def.touches;
@@ -1961,6 +2101,14 @@ export const DEMO_SUBJECTS: Subject[] = [
   // کاربر عمداً پرمجوز: دو نقش هم‌زمان که تفکیک وظیفه را نقض می‌کند — ورودی آزمون وضعیت امنیتی.
   { id: "u-over", displayName: "سرپرست مالی کارگاه (دو نقش)", roles: ["cost_controller", "project_manager"], projectIds: ["c1-p1"], active: true, party: "contractor" },
   { id: "u-left", displayName: "کارشناس منتقل‌شده", roles: ["planner"], projectIds: ["c1-p1"], active: false, party: "contractor" },
+  /* هویت‌های نمایشی MFG فقط برای توسعه/آزمون‌اند؛ در استقرار واقعی از IdP و تخصیص Plant می‌آیند. */
+  { id: "u-mfg-eng", displayName: "مهندس ساخت (آزمایشی)", roles: ["manufacturing_engineer"], projectIds: ["*"], plantIds: ["PLANT-DEMO"], active: true, party: "contractor" },
+  { id: "u-mfg-plan", displayName: "برنامه‌ریز تولید (آزمایشی)", roles: ["production_planner"], projectIds: ["*"], plantIds: ["PLANT-DEMO"], active: true, party: "contractor" },
+  { id: "u-mfg-manager", displayName: "مدیر تولید (آزمایشی)", roles: ["production_manager"], projectIds: ["*"], plantIds: ["PLANT-DEMO"], active: true, party: "contractor" },
+  { id: "u-mfg-supervisor", displayName: "سرپرست سالن (آزمایشی)", roles: ["shop_floor_supervisor"], projectIds: ["*"], plantIds: ["PLANT-DEMO"], active: true, party: "contractor" },
+  { id: "u-mfg-operator", displayName: "اپراتور تولید (آزمایشی)", roles: ["production_operator"], projectIds: ["*"], plantIds: ["PLANT-DEMO"], active: true, party: "contractor" },
+  { id: "u-mfg-material", displayName: "برنامه‌ریز مواد (آزمایشی)", roles: ["material_planner"], projectIds: ["*"], plantIds: ["PLANT-DEMO"], active: true, party: "contractor" },
+  { id: "u-mfg-cost", displayName: "حسابدار صنعتی (آزمایشی)", roles: ["industrial_accountant"], projectIds: ["*"], plantIds: ["PLANT-DEMO"], active: true, party: "contractor" },
 ];
 
 export const DEMO_DELEGATIONS: Delegation[] = [

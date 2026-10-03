@@ -12,6 +12,8 @@
  * می‌بندد: PEX-G1 (داده در TS بود نه SQL) · PEX-G2 (POST progress ذخیره نمی‌شد)
  */
 
+import { MANUFACTURING_TABLES } from "./manufacturingSchema";
+
 export const PERSISTENCE_VERSION = "sql-v1";
 
 export type Bi = { fa: string; en: string };
@@ -39,6 +41,9 @@ export type ForeignKey = { column: string; refTable: string; refColumn: string; 
 
 export type IndexDef = { name: string; columns: string[]; unique?: boolean };
 
+/** قید CHECK هم در DDL و هم در اعتبارسنجی ساختاری اسکیما ثبت می‌شود. */
+export type CheckDef = { name: string; expression: string; columns: string[] };
+
 export type TableDef = {
   name: string;
   module: string;
@@ -47,6 +52,7 @@ export type TableDef = {
   columns: ColumnDef[];
   indexes?: IndexDef[];
   foreignKeys?: ForeignKey[];
+  checks?: CheckDef[];
 };
 
 /** ستون‌های حسابرسی که به هر جدول اضافه می‌شوند. */
@@ -155,6 +161,9 @@ export function tableDdl(table: TableDef, dialect: SqlDialect = "mssql"): string
         ` REFERENCES ${qualifiedName(fk.refTable, dialect)} (${quoteIdent(fk.refColumn, dialect)})` +
         ` ON DELETE ${fk.onDelete ?? "NO ACTION"}`
     );
+  }
+  for (const check of table.checks ?? []) {
+    cols.push(`  CONSTRAINT ${quoteIdent(check.name, dialect)} CHECK (${check.expression})`);
   }
   const head =
     dialect === "mssql"
@@ -5317,6 +5326,9 @@ export const SCHEMA: TableDef[] = [
       { name: "IX_CntIpcCertificate_Status", columns: ["ProjectId", "Status"] },
     ],
   },
+
+  /* MFG operation-based manufacturing schema — جدا از جداول PEX/WBS. */
+  ...MANUFACTURING_TABLES,
 ];
 
 
@@ -5368,7 +5380,18 @@ export function validateSchema(tables: TableDef[] = SCHEMA): string[] {
     }
     for (const fk of t.foreignKeys ?? []) {
       if (!cols.has(fk.column)) errs.push(`${t.name}: کلید خارجی روی ستون ناموجود ${fk.column}`);
-      if (!tables.some((x) => x.name === fk.refTable)) errs.push(`${t.name}: کلید خارجی به جدول ناموجود ${fk.refTable}`);
+      const target = tables.find((x) => x.name === fk.refTable);
+      if (!target) errs.push(`${t.name}: کلید خارجی به جدول ناموجود ${fk.refTable}`);
+      else if (!allColumns(target).some((col) => col.name === fk.refColumn)) {
+        errs.push(`${t.name}: ستون مرجع ${fk.refTable}.${fk.refColumn} وجود ندارد`);
+      }
+    }
+    for (const check of t.checks ?? []) {
+      if (!isSafeIdentifier(check.name)) errs.push(`${t.name}: نام CHECK ناامن ${check.name}`);
+      if (!check.expression.trim() || /;|--|\/\*/.test(check.expression)) {
+        errs.push(`${t.name}.${check.name}: عبارت CHECK خالی یا ناامن است`);
+      }
+      for (const cn of check.columns) if (!cols.has(cn)) errs.push(`${t.name}.${check.name}: ستون ${cn} وجود ندارد`);
     }
   }
   return errs;
@@ -5412,6 +5435,39 @@ export function addColumnDdl(tableName: string, columnName: string, dialect: Sql
     `IF COL_LENGTH('dbo.${assertIdentifier(t.name)}', '${assertIdentifier(col.name)}') IS NULL\n` +
     `  ${body}`
   );
+}
+
+/**
+ * اسکیمای تثبیت‌شدهٔ 0046؛ تغییرات بعدی MFG باید فقط در migration تازه بیایند.
+ * MfgScheduleRun و ستون‌های WSPT/BreakStart در 0047 اضافه می‌شوند.
+ */
+function manufacturingTablesFor0046(): TableDef[] {
+  return MANUFACTURING_TABLES
+    .filter((table) => table.name !== "MfgScheduleRun")
+    .map((table) => {
+      if (table.name === "MfgProductionOrder") {
+        return {
+          ...table,
+          columns: table.columns.filter((column) => column.name !== "DispatchWeight"),
+          checks: table.checks?.filter((check) => check.name !== "CK_MfgProdOrder_DispatchWeight"),
+        };
+      }
+      if (table.name === "MfgWorkCenterCalendar") {
+        return {
+          ...table,
+          columns: table.columns.filter((column) => column.name !== "BreakStartMinuteOfDay"),
+          checks: table.checks?.filter((check) => check.name !== "CK_MfgWcCalendar_BreakStart"),
+        };
+      }
+      return table;
+    });
+}
+
+function columnDefFor(tableName: string, columnName: string): ColumnDef {
+  const table = TABLE_BY_NAME.get(tableName);
+  const column = table && allColumns(table).find((item) => item.name === columnName);
+  if (!table || !column) throw new Error(`Migration column is missing: ${tableName}.${columnName}`);
+  return column;
 }
 
 export const MIGRATIONS: Migration[] = [
@@ -6001,6 +6057,29 @@ export const MIGRATIONS: Migration[] = [
       const t = TABLE_BY_NAME.get(n)!;
       return [tableDdl(t, "mssql"), ...(t.indexes ?? []).map(i => indexDdl(t, i, "mssql"))];
     }),
+  },
+  {
+    /* MFG-1: مهندسی، سفارش، زمان‌بندی، اجرا، مواد و هزینهٔ عملیات‌محور. */
+    version: "0046", name: "manufacturing_operation_based_planning",
+    statements: manufacturingTablesFor0046().flatMap((t) => [
+      tableDdl(t, "mssql"),
+      ...(t.indexes ?? []).map((i) => indexDdl(t, i, "mssql")),
+    ]),
+  },
+  {
+    /* MFG-2: نسخهٔ سراسری ScheduleRun و ورودی‌های لازم برای WSPT و بازهٔ دقیق استراحت.
+     * این migration افزایشی است؛ 0046 دست‌نخورده می‌ماند. */
+    version: "0047", name: "manufacturing_schedule_runs_and_capacity_inputs",
+    statements: [
+      `IF COL_LENGTH('dbo.MfgProductionOrder','DispatchWeight') IS NULL ALTER TABLE dbo.MfgProductionOrder ADD ${columnDdl(columnDefFor("MfgProductionOrder", "DispatchWeight"), "mssql")};`,
+      `IF COL_LENGTH('dbo.MfgWorkCenterCalendar','BreakStartMinuteOfDay') IS NULL ALTER TABLE dbo.MfgWorkCenterCalendar ADD ${columnDdl(columnDefFor("MfgWorkCenterCalendar", "BreakStartMinuteOfDay"), "mssql")};`,
+      `IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_MfgProdOrder_DispatchWeight' AND parent_object_id = OBJECT_ID(N'dbo.MfgProductionOrder')) ALTER TABLE dbo.MfgProductionOrder WITH CHECK ADD CONSTRAINT CK_MfgProdOrder_DispatchWeight CHECK (DispatchWeight > 0);`,
+      `IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_MfgWcCalendar_BreakStart' AND parent_object_id = OBJECT_ID(N'dbo.MfgWorkCenterCalendar')) ALTER TABLE dbo.MfgWorkCenterCalendar WITH CHECK ADD CONSTRAINT CK_MfgWcCalendar_BreakStart CHECK (BreakStartMinuteOfDay IS NULL OR (IsWorking = 1 AND BreakMinutes > 0 AND BreakStartMinuteOfDay >= StartMinuteOfDay AND BreakStartMinuteOfDay + BreakMinutes <= EndMinuteOfDay));`,
+      ...(() => {
+        const table = TABLE_BY_NAME.get("MfgScheduleRun")!;
+        return [tableDdl(table, "mssql"), ...(table.indexes ?? []).map((index) => indexDdl(table, index, "mssql"))];
+      })(),
+    ],
   },
 ];
 

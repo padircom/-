@@ -50,23 +50,9 @@ const TODAY = "2026-09-08";
 
 test("کاتالوگ: نسخه موتور و اندازه‌ها", () => {
   assert.equal(RBAC_ENGINE_VERSION, "rbac-v1");
-  /* ۵۹ پایه + ۱۲ مهندسی + ۹ پیمان + ۳ تحویل نهایی + ۳ تفکیک سیستمی
-     + ۲ بستهٔ آزمون + ۹ ایمنی و بهداشت + ۴ سامانهٔ پروانهٔ کار
-     + ۲ گزارش پیمان (دیدن و صدور رسمی)
-     + ۸ تایم‌شیت نیروی انسانی (سه گیت تأیید، قفل دوره، دو سند
-       اصلاحی، حل تعارض، ارسال هزینه)
-     + ۵ بهره‌وری نیروی انسانی (اجرای محاسبه، ثبت علت افت، پیوند به
-       ادعا، نهایی‌سازی متریک، کالیبراسیون نرخ)
-     + ۹ اکیپ و نیروی پیمانکاری (سه اکیپ: دیدن، ترکیب، انحلال؛
-       شش پیمانکاری: دیدن و مدیریت قرارداد، ثبت و تأیید حضور
-       گروهی، تهیه و تأیید صورت‌کارکرد)
-     + ۹ پذیرش و انطباق (چهار پرونده: دیدن، مدیریت، فعال‌سازی،
-       تخلیه؛ دو مدرک: بارگذاری و تأیید اصالت؛ ارزیابی مهارت؛
-       دو تجهیز: درخواست و تأیید)
-     + ۳ تحلیل نیرو (مشاهده، صدور رسمی، ثبت مبنا) + ۱ پایش دستگاه میدانی
-     + ۴ میز کار هزینه و تأمین LIVE-1 (ثبت هزینه، ثبت خرید/موجودی،
-       تأیید PR، آزادسازی ذخیره)؛
-     ۲۰ نقش پیشین + افسر ایمنی و بهداشت. */
+  /* ۲۳۸ مجوزهای پیشین + ۳۷ مجوز مستقل d17 برای مهندسی ساخت، سفارش،
+     برنامه‌ریزی ظرفیت، اجرای عملیات، مواد و بهای تمام‌شده؛ Plant scope
+     جدا از Project scope در context ارزیابی می‌شود. */
   // LIVE-4 adds three explicit machinery permissions; existing roles are not made superusers.
   // LIVE-6: four explicit strategy/excellence view/edit permissions.
   // P5 SCM adds ten explicit procurement permissions: scm.vendor.view/manage,
@@ -90,8 +76,8 @@ test("کاتالوگ: نسخه موتور و اندازه‌ها", () => {
   // Asking and reading ready insights are internal; the interaction history and
   // producing a document/table export are confidential (history may expose other
   // people's questions, export leaves the system as a file).
-  assert.equal(PERMISSION_CATALOG.length, 238);
-  assert.equal(ROLE_CATALOG.length, 21);
+  assert.equal(PERMISSION_CATALOG.length, 275);
+  assert.equal(ROLE_CATALOG.length, 28);
 });
 
 test("کاتالوگ: کد مجوزها یکتا و با قالب domain.resource.action هستند", () => {
@@ -235,6 +221,24 @@ test("evaluate: دامنه پروژه رعایت می‌شود", () => {
   const no = evaluate(subj("u-pm"), "core.project.edit", { projectId: "c9-p9" });
   assert.equal(ok.allow, true);
   assert.equal(no.code, "DENY_PROJECT_SCOPE");
+});
+
+test("evaluate: Plant scope مستقل و fail-closed از Project scope است", () => {
+  const planner = subj("u-mfg-plan");
+  assert.equal(evaluate(planner, "mfg.schedule.run", { plantId: "PLANT-DEMO" }).allow, true);
+  assert.equal(evaluate(planner, "mfg.schedule.run", { plantId: "PLANT-OTHER" }).code, "DENY_PLANT_SCOPE");
+  assert.equal(evaluate({ ...planner, plantIds: undefined }, "mfg.schedule.view", { plantId: "PLANT-DEMO" }).code, "DENY_PLANT_SCOPE");
+  assert.equal(evaluate(subj("u-admin"), "mfg.part.view", { plantId: "PLANT-DEMO" }).code, "DENY_PLANT_SCOPE");
+  assert.equal(evaluate({ ...planner, plantIds: ["*"] }, "mfg.schedule.view", { plantId: "PLANT-OTHER" }).allow, true);
+});
+
+test("نقش‌های تولید بر اساس وظیفه تفکیک شده‌اند", () => {
+  assert.ok(effectivePermissions("production_planner").includes("mfg.schedule.run"));
+  assert.ok(!effectivePermissions("production_planner").includes("mfg.order.close"));
+  assert.ok(effectivePermissions("production_manager").includes("mfg.order.release"));
+  assert.ok(!effectivePermissions("production_operator").includes("mfg.order.release"));
+  assert.ok(effectivePermissions("industrial_accountant").includes("mfg.cost.reconcile"));
+  assert.ok(!effectivePermissions("industrial_accountant").includes("mfg.schedule.run"));
 });
 
 test("evaluate: ستاره یعنی همه پروژه‌ها", () => {
