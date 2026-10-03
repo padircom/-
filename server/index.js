@@ -8,6 +8,7 @@ import { registerAiAssistantRoutes, AI_DEDICATED_ROUTES } from "./aiAssistantApi
 import { registerDrillRoutes } from "./mcsDrillApi.js";
 import { registerMonitoringWorkspaceRoutes } from "./monitoringWorkspaceApi.js";
 import { registerEqmWorkspaceRoutes, EQM_TABLES } from "./eqmWorkspaceApi.js";
+import { registerManufacturingRoutes } from "./manufacturingApi.js";
 import { authorizeData, scopeData } from "./dataAccess.js";
 import "dotenv/config";
 import express from "express";
@@ -866,6 +867,8 @@ registerDprDocRoutes(app, { storageRoot, acceptedMimeTypes, maxFileBytes });
 registerDprTablesRoutes(app, { dataDir: path.resolve(process.cwd(), process.env.DATA_DIR || "server/data") });
 /* LIVE-1: میز کار هزینه و تأمین d5 روی دادهٔ ماندگار (/api/fin/:projectId/...). */
 registerFinWorkspaceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
+/* d17/MFG: Plant-scoped API پایه؛ عملیات چندجدولی پس از Unit of Work افزوده می‌شوند. */
+registerManufacturingRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
 registerCkmWorkspaceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
 registerScmWorkspaceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
 registerRccWorkspaceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
