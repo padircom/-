@@ -134,6 +134,8 @@ const DOWNTIME = "/api/mfg/plants/:plantId/downtime";
 const SCRAP = "/api/mfg/plants/:plantId/scrap";
 const REWORK = "/api/mfg/plants/:plantId/rework";
 const OPERATION_VARIANCE = "/api/mfg/plants/:plantId/operations/:operationId/variance";
+const OPERATION_COST = "/api/mfg/plants/:plantId/cost/operations/:operationId";
+const ORDER_COST_RECONCILE = "/api/mfg/plants/:plantId/cost/orders/:orderId/reconcile";
 const MATERIALS = "/api/mfg/plants/:plantId/materials";
 const MRP_CALCULATE = "/api/mfg/plants/:plantId/mrp/calculate";
 const MRP_SHORTAGES = "/api/mfg/plants/:plantId/mrp/shortages";
@@ -2411,4 +2413,300 @@ test("MFG REST: مدیریت تقویم مراکز کاری (GET/POST/PATCH cale
   });
   assert.equal(patchBlockedByFirm.statusCode, 422);
   assert.equal(patchBlockedByFirm.body.error.code, "MFG_CALENDAR_USED_BY_FIRM_SCHEDULE");
+});
+
+test("MFG REST: بلوک Planning روی قطعه، مادهٔ برنامه‌ریزی و موجودی افتتاحیه را در همان تراکنش می‌سازد", async () => {
+  const { repo, call } = makeApi();
+  const plantId = "PLANT-DEMO";
+  const eng = { "x-user-id": "u-mfg-eng" };
+
+  // ۱. قطعهٔ خریدنی با بلوک Planning کامل
+  const created = await call("POST", PARTS, {
+    params: { plantId },
+    headers: eng,
+    body: {
+      PartNo: "RM-PLAN-01",
+      NameFa: "ورق فولادی",
+      PartType: "purchased",
+      BaseUom: "kg",
+      StandardUnitCost: 9_500,
+      Currency: "IRR",
+      Planning: {
+        LeadTimeDays: 12,
+        SafetyStockQty: 40,
+        LotSize: 100,
+        OrderMultiple: 25,
+        DefaultWarehouseCode: "WH-RAW",
+        OpeningInventory: { WarehouseCode: "WH-RAW", LocationCode: "A-01", OnHandQty: 250, ReservedQty: 10 },
+      },
+    },
+  });
+  assert.equal(created.statusCode, 201);
+  const partId = created.body.data.Id;
+  // نوع تأمین از نوع قطعه مشتق می‌شود: purchased → buy
+  assert.equal(created.body.data.Material.ProcurementType, "buy");
+  assert.equal(created.body.data.Material.LeadTimeDays, 12);
+  assert.equal(created.body.data.Material.StandardUnitCost, 9_500);
+  assert.equal(created.body.data.Inventory.OnHandQty, 250);
+  assert.equal(created.body.data.Inventory.ReservedQty, 10);
+  assert.equal(created.body.data.Inventory.MaterialId, created.body.data.Material.Id);
+  assert.equal(repo.tables.get("MfgMaterial").length, 1);
+  assert.equal(repo.tables.get("MfgInventoryLevel").length, 1);
+
+  // ۲. مواد فهرست‌شده همان ردیف را با پیوند قطعه برمی‌گرداند
+  const materials = await call("GET", MATERIALS, { params: { plantId }, headers: { "x-user-id": "u-mfg-material" }, query: { procurementType: "buy" } });
+  assert.equal(materials.statusCode, 200);
+  assert.equal(materials.body.data.page.total, 1);
+  assert.equal(materials.body.data.items[0].PartNo, "RM-PLAN-01");
+  assert.equal(materials.body.data.items[0].PartNameFa, "ورق فولادی");
+
+  // ۳. بدون بلوک Planning هیچ ردیف ماده‌ای ساخته نمی‌شود (رفتار پیشین دست‌نخورده)
+  const plain = await call("POST", PARTS, {
+    params: { plantId },
+    headers: eng,
+    body: { PartNo: "FG-PLAIN-01", NameFa: "قطعهٔ بدون برنامه‌ریزی", PartType: "manufactured", BaseUom: "ea" },
+  });
+  assert.equal(plain.statusCode, 201);
+  assert.equal(plain.body.data.Material, undefined);
+  assert.equal(repo.tables.get("MfgMaterial").length, 1);
+
+  // ۴. کلید ناشناخته در Planning و ProcurementType نامعتبر رد می‌شوند
+  const unknownField = await call("POST", PARTS, {
+    params: { plantId },
+    headers: eng,
+    body: {
+      PartNo: "RM-BAD-01", NameFa: "نامعتبر", PartType: "purchased", BaseUom: "kg",
+      Planning: { ProcurementType: "buy", Unexpected: true },
+    },
+  });
+  assert.equal(unknownField.statusCode, 400);
+  assert.equal(unknownField.body.error.code, "MFG_UNKNOWN_FIELDS");
+  const badType = await call("POST", PARTS, {
+    params: { plantId },
+    headers: eng,
+    body: { PartNo: "RM-BAD-02", NameFa: "نامعتبر", PartType: "purchased", BaseUom: "kg", Planning: { ProcurementType: "lease" } },
+  });
+  assert.equal(badType.statusCode, 400);
+  const badInventory = await call("POST", PARTS, {
+    params: { plantId },
+    headers: eng,
+    body: {
+      PartNo: "RM-BAD-03", NameFa: "نامعتبر", PartType: "purchased", BaseUom: "kg",
+      Planning: { OpeningInventory: { WarehouseCode: "WH-RAW", OnHandQty: 5, BlockedQty: 9 } },
+    },
+  });
+  assert.equal(badInventory.statusCode, 400);
+  assert.equal(repo.tables.get("MfgPart").length, 2);
+
+  // ۵. تکرار همان PartNo ردیف ماده/موجودی دوم نمی‌سازد
+  const duplicate = await call("POST", PARTS, {
+    params: { plantId },
+    headers: eng,
+    body: { PartNo: "RM-PLAN-01", NameFa: "تکراری", PartType: "purchased", BaseUom: "kg", Planning: { LeadTimeDays: 1 } },
+  });
+  assert.equal(duplicate.statusCode, 409);
+  assert.equal(repo.tables.get("MfgMaterial").length, 1);
+  assert.equal(repo.tables.get("MfgInventoryLevel").length, 1);
+
+  // ۶. PATCH فقط-Planning روی قطعهٔ بدون ماده، ماده را می‌سازد و موجودی را دوباره درج نمی‌کند
+  const plainId = plain.body.data.Id;
+  const patchPlanning = await call("PATCH", PART, {
+    params: { plantId, partId: plainId },
+    headers: { "x-user-id": "u-mfg-eng", "if-match": "1" },
+    body: {
+      Planning: {
+        LotSize: 5,
+        OpeningInventory: { WarehouseCode: "WH-FG", OnHandQty: 30 },
+      },
+    },
+  });
+  assert.equal(patchPlanning.statusCode, 200);
+  assert.equal(patchPlanning.body.data.Material.PartId, plainId);
+  assert.equal(patchPlanning.body.data.Material.ProcurementType, "make");
+  assert.equal(patchPlanning.body.data.Inventory.OnHandQty, 30);
+  assert.equal(repo.tables.get("MfgInventoryLevel").length, 2);
+
+  const replay = await call("PATCH", PART, {
+    params: { plantId, partId: plainId },
+    headers: { "x-user-id": "u-mfg-eng", "if-match": "1" },
+    body: { Planning: { LotSize: 7, OpeningInventory: { WarehouseCode: "WH-FG", OnHandQty: 30 } } },
+  });
+  assert.equal(replay.statusCode, 200);
+  assert.equal(replay.body.data.Material.LotSize, 7);
+  // موجودی افتتاحیه تکرار نمی‌شود؛ انبار با فراخوانی دوباره دو برابر نمی‌شود
+  assert.equal(repo.tables.get("MfgInventoryLevel").length, 2);
+  assert.equal(replay.body.data.Inventory.OnHandQty, 30);
+
+  // ۷. شکست درج موجودی، قطعه و ماده را هم rollback می‌کند
+  repo.failCreateOn = "MfgInventoryLevel";
+  const rolledBack = await call("POST", PARTS, {
+    params: { plantId },
+    headers: eng,
+    body: {
+      PartNo: "RM-ROLLBACK-01", NameFa: "باید برگردد", PartType: "purchased", BaseUom: "kg",
+      Planning: { OpeningInventory: { WarehouseCode: "WH-RAW", OnHandQty: 5 } },
+    },
+  });
+  assert.equal(rolledBack.statusCode, 500);
+  repo.failCreateOn = null;
+  assert.equal(repo.tables.get("MfgPart").some((row) => row.PartNo === "RM-ROLLBACK-01"), false);
+  assert.equal(repo.tables.get("MfgMaterial").some((row) => row.PartNo === "RM-ROLLBACK-01"), false);
+});
+
+/** عنصر سربار در همان پاسخ عملیات — برای محاسبهٔ جمع مورد انتظار. */
+function machineElementActualOverhead(operationCost) {
+  return operationCost.body.data.items.find((row) => row.CostElement === "overhead").ActualAmount;
+}
+const round3 = (value) => Math.round((value + Number.EPSILON) * 1000) / 1000;
+
+test("MFG REST: رول‌آپ هزینه از دادهٔ واقعی، تطبیق و بستن سفارش را ممکن می‌کند", async () => {
+  const { repo, call } = makeApi();
+  const plantId = "PLANT-DEMO";
+  const costView = { "x-user-id": "u-mfg-cost" };
+  const manager = { "x-user-id": "u-mfg-manager" };
+
+  const workCenter = await repo.create("MfgWorkCenter", {
+    PlantId: plantId,
+    Code: "WC-COST",
+    NameFa: "مرکز ماشین‌کاری هزینه",
+    Kind: "machine",
+    NominalCapacityMinutesPerDay: 960,
+    EfficiencyPct: 100,
+    StandardHourlyRate: 1_200,
+    OverheadHourlyRate: 300,
+    Status: "active",
+  });
+  const part = await repo.create("MfgPart", {
+    PlantId: plantId,
+    PartNo: "FG-COST-01",
+    NameFa: "قطعهٔ هزینه",
+    PartType: "manufactured",
+    BaseUom: "ea",
+    StandardUnitCost: 100_000,
+    Currency: "IRR",
+    IsActive: true,
+  });
+  const material = await repo.create("MfgMaterial", {
+    PlantId: plantId,
+    PartId: part.Id,
+    ProcurementType: "make",
+    LeadTimeDays: 0,
+    SafetyStockQty: 0,
+    LotSize: 1,
+    OrderMultiple: 1,
+    StandardUnitCost: 600,
+    Currency: "IRR",
+    IsActive: true,
+  });
+  const order = await repo.create("MfgProductionOrder", {
+    PlantId: plantId,
+    OrderNo: "MO-COST-01",
+    PartId: part.Id,
+    OrderQuantity: 40,
+    Uom: "ea",
+    DueAt: "2026-10-30T12:00:00.000Z",
+    Status: "in-progress",
+    PriorityRule: "EDD",
+    ManualRank: null,
+    DispatchWeight: 1,
+    DemandSource: "manual",
+    DemandRef: null,
+    AllowOverrun: false,
+    CreatedBy: "u-mfg-plan",
+  });
+  const operation = await repo.create("MfgProductionOrderOperation", {
+    PlantId: plantId,
+    ProductionOrderId: order.Id,
+    SequenceNo: 10,
+    OperationCode: "OP-10",
+    OperationNameFa: "ماشین‌کاری",
+    WorkCenterId: workCenter.Id,
+    Status: "completed",
+    PlannedQuantity: 40,
+    PlannedSetupMinutes: 45,
+    PlannedRunMinutesPerUnit: 8,
+    ActualSetupMinutes: 50,
+    ActualRunMinutes: 300,
+    InspectionRequired: false,
+  });
+  await repo.create("MfgOperationExecution", {
+    PlantId: plantId,
+    ProductionOrderOperationId: operation.Id,
+    Status: "completed",
+    InputQuantity: 40,
+    GoodQuantity: 40,
+    ReworkQuantity: 0,
+    ScrapQuantity: 0,
+    StartedAt: "2026-10-05T04:30:00.000Z",
+    FinishedAt: "2026-10-05T10:00:00.000Z",
+  });
+  await repo.create("MfgMaterialRequirement", {
+    PlantId: plantId,
+    ProductionOrderId: order.Id,
+    ProductionOrderOperationId: operation.Id,
+    BomItemId: "bomitem-cost-1",
+    MaterialId: material.Id,
+    RequirementKey: `${order.Id}:${operation.Id}:bomitem-cost-1:v1`,
+    RequiredAt: "2026-10-05T04:30:00.000Z",
+    GrossQuantity: 10,
+    ScrapAllowanceQty: 0,
+    NetQuantity: 10,
+    Uom: "ea",
+    ScheduleVersion: 1,
+    AvailableQuantity: 10,
+    ReservedQuantity: 0,
+    ShortageQuantity: 0,
+    Status: "issued",
+  });
+  await repo.create("MfgMaterialConsumption", {
+    PlantId: plantId,
+    ProductionOrderOperationId: operation.Id,
+    MaterialId: material.Id,
+    Quantity: 10,
+    Uom: "ea",
+    UnitCost: 500,
+    Currency: "IRR",
+    ConsumptionMethod: "manual",
+  });
+
+  // ۱. خواندن هزینهٔ عملیات بدون ردیف ذخیره‌شده، رول‌آپ لحظه‌ای می‌دهد
+  const operationCost = await call("GET", OPERATION_COST, {
+    params: { plantId, operationId: operation.Id },
+    headers: costView,
+  });
+  assert.equal(operationCost.statusCode, 200);
+  assert.equal(operationCost.body.data.items.length, 4);
+  const materialElement = operationCost.body.data.items.find((row) => row.CostElement === "material");
+  assert.equal(materialElement.ActualAmount, 5_000);
+  assert.equal(materialElement.StandardAmount, 6_000);
+  const machineElement = operationCost.body.data.items.find((row) => row.CostElement === "machine");
+  assert.ok(machineElement.ActualAmount > 0);
+  assert.equal(operationCost.body.data.items.find((row) => row.CostElement === "labor").ActualAmount, 0);
+
+  // ۲. تطبیق: ردیف‌های هزینه ساخته و روی سفارش Reconciled می‌شود
+  const refreshed = await call("GET", ORDER, { params: { plantId, orderId: order.Id }, headers: manager });
+  assert.equal(refreshed.statusCode, 200);
+  const reconciled = await call("POST", ORDER_COST_RECONCILE, {
+    params: { plantId, orderId: order.Id },
+    headers: { ...costView, "if-match": String(refreshed.body.data.RowVersion), "idempotency-key": "cost-reconcile-1" },
+    body: { CostVersion: 1, ReconcileThrough: "2026-10-06T00:00:00.000Z", ContractRevenue: 100_000 },
+  });
+  assert.equal(reconciled.statusCode, 200, JSON.stringify(reconciled.body));
+  assert.equal(reconciled.body.data.Reconciled, true);
+  assert.equal(reconciled.body.data.ActualMaterialCost, 5_000);
+  assert.equal(reconciled.body.data.ActualTotalCost, round3(5_000 + machineElement.ActualAmount + machineElementActualOverhead(operationCost)));
+  assert.equal(reconciled.body.data.GrossMargin, 100_000 - reconciled.body.data.ActualTotalCost);
+  assert.equal(repo.tables.get("MfgOperationCost").length, 4);
+  assert.equal(repo.tables.get("MfgOrderCost").length, 1);
+
+  // ۳. بستن نهایی سفارش پس از تطبیق هزینه ممکن می‌شود (پیش‌تر به گیت هزینه می‌خورد)
+  const closeable = await call("GET", ORDER, { params: { plantId, orderId: order.Id }, headers: manager });
+  const closed = await call("POST", ORDER_CLOSE, {
+    params: { plantId, orderId: order.Id },
+    headers: { ...manager, "if-match": String(closeable.body.data.RowVersion) },
+    body: { CloseReason: "تکمیل و تطبیق هزینه" },
+  });
+  assert.equal(closed.statusCode, 200, JSON.stringify(closed.body));
+  assert.equal(closed.body.data.Status, "closed");
+  assert.equal(closed.body.data.ClosedBy, "u-mfg-manager");
 });

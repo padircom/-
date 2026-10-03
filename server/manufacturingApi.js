@@ -31,6 +31,20 @@ const WORK_CENTER_KINDS = new Set(["machine", "labor", "assembly", "inspection"]
 const WORK_CENTER_STATUSES = new Set(["active", "inactive", "maintenance"]);
 const RESOURCE_KINDS = new Set(["machine", "labor"]);
 const CALENDAR_RULE_TYPES = new Set(["weekly", "date-override"]);
+/* بلوک اختیاری `Planning` روی قطعه: هویت کالا از MfgPart می‌آید و ویژگی‌های
+ * برنامه‌ریزی مواد (make/buy، LeadTime، LotSize، موجودی افتتاحیه) در همان
+ * UoW روی MfgMaterial/MfgInventoryLevel ثبت می‌شود. بدون این بلوک، MRP برای
+ * جزئی که ردیف مادهٔ برنامه‌ریزی ندارد بی‌صدا از آن عبور می‌کند و کمبودی
+ * گزارش نمی‌شود؛ پس مسیر ساخت ماده باید بخشی از همان قرارداد قطعه باشد. */
+const PART_PLANNING_FIELDS = new Set([
+  "ProcurementType", "LeadTimeDays", "SafetyStockQty", "LotSize", "OrderMultiple",
+  "ShelfLifeDays", "StandardUnitCost", "Currency", "DefaultWarehouseCode", "IsActive",
+  "OpeningInventory",
+]);
+const OPENING_INVENTORY_FIELDS = new Set([
+  "WarehouseCode", "LocationCode", "LotNo", "OnHandQty",
+  "ReservedQty", "BlockedQty", "InTransitQty", "SafetyStockQty",
+]);
 const IDEMPOTENCY_KEY_RE = /^[A-Za-z0-9._:-]{1,160}$/;
 const CURRENCY_RE = /^[A-Z]{3,8}$/;
 const MAX_SCHEDULE_WINDOW_MS = 365 * 24 * 60 * 60 * 1000;
@@ -345,6 +359,270 @@ function protectProjectLink(subject, row, evaluate) {
   return { ...row, ProjectId: null, ContractId: null };
 }
 
+/* ─────────── بلوک اختیاری Planning روی قطعه (مادهٔ برنامه‌ریزی + موجودی افتتاحیه) ─────────── */
+
+/** نوع تأمین پیش‌فرض از نوع قطعه مشتق می‌شود تا ماده بدون تصمیم دستی هم قابل برنامه‌ریزی باشد. */
+function defaultProcurementType(partType) {
+  return partType === "purchased" ? "buy" : "make";
+}
+
+function optionalNumber(value, field, opts = {}) {
+  if (value === undefined || value === null) return null;
+  return number(value, field, opts);
+}
+
+/**
+ * اعتبارسنجی بلوک `Planning` روی `POST/PATCH /parts`.
+ * خروجی نرمال‌شده: `{ material, openingInventory }` — نبودن بلوک یعنی `null`.
+ */
+function parsePartPlanning(raw, { partType, standardUnitCost, currency }) {
+  if (raw === undefined || raw === null) return null;
+  if (typeof raw !== "object" || Array.isArray(raw)) throw bad("Planning", "Planning باید یک شیء باشد");
+  assertOnlyKeys(raw, PART_PLANNING_FIELDS);
+
+  let procurementType = raw.ProcurementType === undefined
+    ? defaultProcurementType(partType)
+    : text(raw.ProcurementType, "Planning.ProcurementType", { required: true, max: 8 });
+  if (!PROCUREMENT_TYPES.has(procurementType)) throw bad("Planning.ProcurementType", "ProcurementType باید make یا buy باشد");
+
+  const leadTimeDays = optionalNumber(raw.LeadTimeDays, "Planning.LeadTimeDays", { min: 0, integer: true }) ?? 0;
+  const safetyStockQty = optionalNumber(raw.SafetyStockQty, "Planning.SafetyStockQty", { min: 0 }) ?? 0;
+  const lotSize = optionalNumber(raw.LotSize, "Planning.LotSize", { min: Number.MIN_VALUE }) ?? 1;
+  const orderMultiple = optionalNumber(raw.OrderMultiple, "Planning.OrderMultiple", { min: Number.MIN_VALUE }) ?? 1;
+  const shelfLifeDays = optionalNumber(raw.ShelfLifeDays, "Planning.ShelfLifeDays", { min: 0, integer: true });
+  const planningCost = optionalNumber(raw.StandardUnitCost, "Planning.StandardUnitCost", { min: 0 });
+  const unitCost = planningCost ?? standardUnitCost ?? null;
+  const planningCurrency = raw.Currency === undefined
+    ? (currency || "IRR")
+    : text(raw.Currency, "Planning.Currency", { required: true, max: 8, pattern: CURRENCY_RE });
+  const defaultWarehouseCode = text(raw.DefaultWarehouseCode, "Planning.DefaultWarehouseCode", { max: 40, pattern: CODE_RE });
+  const isActive = raw.IsActive === undefined ? true : bool(raw.IsActive, "Planning.IsActive");
+
+  const material = {
+    ProcurementType: procurementType,
+    LeadTimeDays: leadTimeDays,
+    SafetyStockQty: safetyStockQty,
+    LotSize: lotSize,
+    OrderMultiple: orderMultiple,
+    ShelfLifeDays: shelfLifeDays,
+    StandardUnitCost: unitCost,
+    Currency: planningCurrency,
+    DefaultWarehouseCode: defaultWarehouseCode || null,
+    IsActive: isActive,
+  };
+
+  const rawOpening = raw.OpeningInventory;
+  let openingInventory = null;
+  if (rawOpening !== undefined && rawOpening !== null) {
+    if (typeof rawOpening !== "object" || Array.isArray(rawOpening)) throw bad("Planning.OpeningInventory", "OpeningInventory باید یک شیء باشد");
+    assertOnlyKeys(rawOpening, OPENING_INVENTORY_FIELDS);
+    const warehouseCode = text(rawOpening.WarehouseCode, "Planning.OpeningInventory.WarehouseCode", { required: true, max: 40, pattern: CODE_RE });
+    const locationCode = text(rawOpening.LocationCode, "Planning.OpeningInventory.LocationCode", { max: 40, pattern: CODE_RE });
+    const lotNo = text(rawOpening.LotNo, "Planning.OpeningInventory.LotNo", { max: 60, pattern: CODE_RE });
+    const onHandQty = number(rawOpening.OnHandQty, "Planning.OpeningInventory.OnHandQty", { required: true, min: Number.MIN_VALUE });
+    const reservedQty = optionalNumber(rawOpening.ReservedQty, "Planning.OpeningInventory.ReservedQty", { min: 0 }) ?? 0;
+    const blockedQty = optionalNumber(rawOpening.BlockedQty, "Planning.OpeningInventory.BlockedQty", { min: 0 }) ?? 0;
+    const inTransitQty = optionalNumber(rawOpening.InTransitQty, "Planning.OpeningInventory.InTransitQty", { min: 0 }) ?? 0;
+    const invSafetyStock = optionalNumber(rawOpening.SafetyStockQty, "Planning.OpeningInventory.SafetyStockQty", { min: 0 }) ?? safetyStockQty;
+    if (roundTo3(reservedQty + blockedQty) > roundTo3(onHandQty)) {
+      throw bad("Planning.OpeningInventory.OnHandQty", "ReservedQty + BlockedQty نباید از OnHandQty بیشتر باشد");
+    }
+    openingInventory = {
+      WarehouseCode: warehouseCode,
+      LocationCode: locationCode || null,
+      LotNo: lotNo || null,
+      OnHandQty: onHandQty,
+      ReservedQty: reservedQty,
+      BlockedQty: blockedQty,
+      InTransitQty: inTransitQty,
+      SafetyStockQty: invSafetyStock,
+    };
+  }
+
+  return { material, openingInventory };
+}
+
+/**
+ * درج/به‌روزرسانی مادهٔ برنامه‌ریزی و (در صورت ارسال) موجودی افتتاحیه در همان
+ * تراکنش قطعه. موجودی افتتاحیه فقط یک‌بار درج می‌شود؛ تکرار همان کلید، موجودی
+ * موجود را دست‌نخورده برمی‌گرداند تا فراخوانی دوبارهٔ همان درخواست، انبار را
+ * دو برابر نکند. تغییر موجودی پس از افتتاح فقط از مسیر مصرف/دریافت مجاز است.
+ */
+async function persistPartPlanning(tx, { plantId, partId, partType, planning, subjectId }) {
+  const existing = await tx.findOne("MfgMaterial", [
+    { column: "PlantId", op: "eq", value: plantId },
+    { column: "PartId", op: "eq", value: partId },
+  ]);
+
+  let material;
+  if (existing) {
+    const patch = await tx.patch("MfgMaterial", existing.Id, planning.material, subjectId, existing.RowVersion);
+    if (!patch.ok) throw conflict("MFG_CONFLICT", "مادهٔ برنامه‌ریزی هم‌زمان تغییر کرده است");
+    material = await tx.get("MfgMaterial", existing.Id);
+  } else {
+    material = await tx.create("MfgMaterial", {
+      PlantId: plantId,
+      PartId: partId,
+      ...planning.material,
+    }, subjectId);
+  }
+
+  let inventory = null;
+  if (planning.openingInventory) {
+    const lotNo = planning.openingInventory.LotNo ?? "";
+    const locationCode = planning.openingInventory.LocationCode ?? "";
+    const inventoryKey = `${material.Id}|${planning.openingInventory.WarehouseCode}|${locationCode}|${lotNo}`;
+    const already = await tx.findOne("MfgInventoryLevel", [
+      { column: "PlantId", op: "eq", value: plantId },
+      { column: "InventoryKey", op: "eq", value: inventoryKey },
+    ]);
+    inventory = already ?? await tx.create("MfgInventoryLevel", {
+      PlantId: plantId,
+      MaterialId: material.Id,
+      InventoryKey: inventoryKey,
+      ...planning.openingInventory,
+      AsOfAt: new Date().toISOString(),
+    }, subjectId);
+  }
+
+  return { material, inventory, defaultProcurementType: defaultProcurementType(partType) };
+}
+
+/* ─────────── رول‌آپ هزینهٔ عملیات از دادهٔ واقعی کارگاه ───────────
+ *
+ * هیچ مسیری در قرارداد، `MfgOperationCost` را پیش از تطبیق نمی‌سازد. اگر
+ * محاسبهٔ هزینه فقط به ردیف‌های از پیش موجود تکیه کند، `reconcile` هرگز
+ * اجرا نمی‌شود و در نتیجه `close` هم هرگز ممکن نیست. این تابع همان ردیف‌ها
+ * را از شواهد واقعی می‌سازد:
+ *   - ماده: نیازمندی‌ها (استاندارد) و مصرف‌های واقعی (واقعی)
+ *   - ماشین/نیروی کار/سربار: دقایق برنامه‌ای و واقعی × نرخ مرکز هزینه،
+ *     و در نبود مرکز هزینه، نرخ خود مرکز کاری بر پایهٔ نوع آن.
+ */
+async function deriveOperationCostRows(db, { plantId, operations, costVersion }) {
+  if (!Array.isArray(operations) || operations.length === 0) return [];
+  const [consumptions, requirements, parts, materials, workCenters, costCenters] = await Promise.all([
+    db.list("MfgMaterialConsumption", { where: [{ column: "PlantId", op: "eq", value: plantId }] }),
+    db.list("MfgMaterialRequirement", { where: [{ column: "PlantId", op: "eq", value: plantId }] }),
+    db.list("MfgPart", { where: [{ column: "PlantId", op: "eq", value: plantId }] }),
+    db.list("MfgMaterial", { where: [{ column: "PlantId", op: "eq", value: plantId }] }),
+    db.list("MfgWorkCenter", { where: [{ column: "PlantId", op: "eq", value: plantId }] }),
+    db.list("MfgCostCenter", { where: [{ column: "PlantId", op: "eq", value: plantId }] }),
+  ]);
+
+  const materialById = new Map(materials.filter((row) => row.PlantId === plantId).map((row) => [row.Id, row]));
+  const partById = new Map(parts.filter((row) => row.PlantId === plantId).map((row) => [row.Id, row]));
+  const centerById = new Map(workCenters.filter((row) => row.PlantId === plantId).map((row) => [row.Id, row]));
+  const costCenterById = new Map(costCenters.filter((row) => row.PlantId === plantId).map((row) => [row.Id, row]));
+
+  const rateFor = (workCenter, costCenterId, element) => {
+    const explicit = costCenterId ? costCenterById.get(costCenterId) : null;
+    if (explicit && explicit.IsActive !== false && explicit.CostElement === element && explicit.HourlyRate !== null && explicit.HourlyRate !== undefined) {
+      return storedNumber(explicit.HourlyRate);
+    }
+    if (element === "overhead") return storedNumber(workCenter?.OverheadHourlyRate);
+    const standardRate = storedNumber(workCenter?.StandardHourlyRate);
+    /* نرخ واحد مرکز کاری یا نرخ ماشین است یا نرخ دستمزد؛ بر پایهٔ نوع مرکز
+     * به یکی از دو عنصر نگاشت می‌شود تا در جمع هزینه دوبار شمرده نشود. */
+    const laborCenter = workCenter?.Kind === "labor";
+    if (element === "labor") return laborCenter ? standardRate : 0;
+    return laborCenter ? 0 : standardRate;
+  };
+
+  const hours = (minutes) => roundTo3(storedNumber(minutes) / 60);
+  const rows = [];
+
+  for (const operation of operations) {
+    const workCenter = centerById.get(operation.WorkCenterId) ?? null;
+    const operationConsumptions = consumptions.filter(
+      (row) => row.PlantId === plantId && row.ProductionOrderOperationId === operation.Id,
+    );
+    const operationRequirements = requirements.filter(
+      (row) => row.PlantId === plantId && row.ProductionOrderOperationId === operation.Id,
+    );
+
+    const standardMaterialQty = roundTo3(operationRequirements.reduce((sum, row) => sum + storedNumber(row.NetQuantity), 0));
+    const standardMaterialRate = roundTo3(operationRequirements.reduce((sum, row) => {
+      const material = materialById.get(row.MaterialId);
+      const part = material ? partById.get(material.PartId) : null;
+      return sum + storedNumber(material?.StandardUnitCost ?? part?.StandardUnitCost);
+    }, 0) / Math.max(1, operationRequirements.length));
+    const actualMaterialQty = roundTo3(operationConsumptions.reduce((sum, row) => sum + storedNumber(row.Quantity), 0));
+    const actualMaterialAmount = roundTo3(operationConsumptions.reduce(
+      (sum, row) => sum + storedNumber(row.Quantity) * storedNumber(row.UnitCost),
+      0,
+    ));
+    const actualMaterialRate = actualMaterialQty > 0
+      ? roundTo3(actualMaterialAmount / actualMaterialQty)
+      : standardMaterialRate;
+
+    rows.push({
+      PlantId: plantId,
+      ProductionOrderOperationId: operation.Id,
+      CostCenterId: operation.CostCenterId ?? workCenter?.CostCenterId ?? null,
+      CostElement: "material",
+      CostVersion: costVersion,
+      StandardQuantity: standardMaterialQty,
+      ActualQuantity: actualMaterialQty,
+      StandardRate: standardMaterialRate,
+      ActualRate: actualMaterialRate,
+      StandardAmount: roundTo3(standardMaterialQty * standardMaterialRate),
+      ActualAmount: actualMaterialAmount,
+      Currency: operationConsumptions[0]?.Currency ?? "IRR",
+      CalculatedAt: new Date().toISOString(),
+      SourceRef: "derived-from-actuals",
+    });
+
+    const plannedMinutes = roundTo3(
+      storedNumber(operation.PlannedSetupMinutes)
+      + storedNumber(operation.PlannedRunMinutesPerUnit) * storedNumber(operation.PlannedQuantity),
+    );
+    const actualMinutes = roundTo3(
+      storedNumber(operation.ActualSetupMinutes) + storedNumber(operation.ActualRunMinutes),
+    );
+    const costCenterId = operation.CostCenterId ?? workCenter?.CostCenterId ?? null;
+
+    for (const element of ["machine", "labor", "overhead"]) {
+      const rate = rateFor(workCenter, costCenterId, element);
+      const standardQty = hours(plannedMinutes);
+      const actualQty = hours(actualMinutes);
+      rows.push({
+        PlantId: plantId,
+        ProductionOrderOperationId: operation.Id,
+        CostCenterId: costCenterId,
+        CostElement: element,
+        CostVersion: costVersion,
+        StandardQuantity: standardQty,
+        ActualQuantity: actualQty,
+        StandardRate: rate,
+        ActualRate: rate,
+        StandardAmount: roundTo3(standardQty * rate),
+        ActualAmount: roundTo3(actualQty * rate),
+        Currency: workCenter?.Currency ?? "IRR",
+        CalculatedAt: new Date().toISOString(),
+        SourceRef: "derived-from-actuals",
+      });
+    }
+  }
+
+  return rows;
+}
+
+function rollupCostElements(rows) {
+  const totals = {
+    material: { standard: 0, actual: 0 },
+    machine: { standard: 0, actual: 0 },
+    labor: { standard: 0, actual: 0 },
+    overhead: { standard: 0, actual: 0 },
+  };
+  for (const row of rows) {
+    const bucket = totals[row.CostElement];
+    if (!bucket) continue;
+    bucket.standard = roundTo3(bucket.standard + storedNumber(row.StandardAmount));
+    bucket.actual = roundTo3(bucket.actual + storedNumber(row.ActualAmount));
+  }
+  return totals;
+}
+
 function dateOnly(value) {
   if (value instanceof Date && Number.isFinite(value.getTime())) return value.toISOString().slice(0, 10);
   if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}/.test(value)) return value.slice(0, 10);
@@ -633,7 +911,7 @@ export function registerManufacturingRoutes(app, { repo, subjects, evaluate } = 
 
   app.post(`${ROOT}/parts`, route("mfg.part.edit", async ({ repo: r, req, plantId }) => {
     const body = req.body ?? {};
-    const fields = new Set(["PartNo", "NameFa", "NameEn", "PartType", "BaseUom", "DescriptionFa", "StandardUnitCost", "Currency", "IsLotTracked"]);
+    const fields = new Set(["PartNo", "NameFa", "NameEn", "PartType", "BaseUom", "DescriptionFa", "StandardUnitCost", "Currency", "IsLotTracked", "Planning"]);
     assertOnlyKeys(body, fields);
     const partNo = text(body.PartNo, "PartNo", { required: true, max: 60, pattern: CODE_RE });
     const nameFa = text(body.NameFa, "NameFa", { required: true, max: 240 });
@@ -645,26 +923,50 @@ export function registerManufacturingRoutes(app, { repo, subjects, evaluate } = 
     const standardUnitCost = number(body.StandardUnitCost, "StandardUnitCost", { min: 0 });
     const currency = text(body.Currency ?? "IRR", "Currency", { required: true, max: 8, pattern: /^[A-Z]{3,8}$/ });
     const isLotTracked = bool(body.IsLotTracked, "IsLotTracked", false);
-    const duplicate = await r.findOne("MfgPart", [
-      { column: "PlantId", op: "eq", value: plantId },
-      { column: "PartNo", op: "eq", value: partNo },
-    ]);
-    if (duplicate) throw conflict("MFG_DUPLICATE", "PartNo در این کارخانه قبلاً ثبت شده است");
-    const row = await r.create("MfgPart", {
-      PlantId: plantId,
-      PartNo: partNo,
-      NameFa: nameFa,
-      NameEn: nameEn,
-      PartType: partType,
-      BaseUom: baseUom,
-      DescriptionFa: descriptionFa,
-      StandardUnitCost: standardUnitCost,
-      Currency: currency,
-      IsLotTracked: isLotTracked,
-      IsActive: true,
-    }, requestActor(req));
-    await writeAudit(r, req, "MFG_PART_CREATED", "MfgPart", row.Id, "mfg.part.edit");
-    return row;
+    const planning = parsePartPlanning(body.Planning, { partType, standardUnitCost, currency });
+
+    const created = await r.transaction(async (tx) => {
+      const duplicate = await tx.findOne("MfgPart", [
+        { column: "PlantId", op: "eq", value: plantId },
+        { column: "PartNo", op: "eq", value: partNo },
+      ]);
+      if (duplicate) throw conflict("MFG_DUPLICATE", "PartNo در این کارخانه قبلاً ثبت شده است");
+      const row = await tx.create("MfgPart", {
+        PlantId: plantId,
+        PartNo: partNo,
+        NameFa: nameFa,
+        NameEn: nameEn,
+        PartType: partType,
+        BaseUom: baseUom,
+        DescriptionFa: descriptionFa,
+        StandardUnitCost: standardUnitCost,
+        Currency: currency,
+        IsLotTracked: isLotTracked,
+        IsActive: true,
+      }, requestActor(req));
+
+      let material = null;
+      let inventory = null;
+      if (planning) {
+        ({ material, inventory } = await persistPartPlanning(tx, {
+          plantId,
+          partId: row.Id,
+          partType,
+          planning,
+          subjectId: requestActor(req),
+        }));
+      }
+
+      await createAuditRecord(tx, req, "MFG_PART_CREATED", "MfgPart", row.Id, "mfg.part.edit", planning
+        ? { materialId: material?.Id ?? null, openingInventoryId: inventory?.Id ?? null }
+        : {});
+      return { row, material, inventory };
+    });
+
+    /* پاسخ پایه همان قطعه است؛ `Material/Inventory` فقط وقتی افزوده می‌شود که
+     * بلوک Planning ارسال شده باشد تا کلاینت‌های موجود بدون تغییر بمانند. */
+    if (!planning) return created.row;
+    return { ...created.row, Material: created.material, Inventory: created.inventory };
   }, 201));
 
   app.get(`${ROOT}/parts/:partId`, route("mfg.part.view", async ({ repo: r, req, plantId }) => {
@@ -679,7 +981,7 @@ export function registerManufacturingRoutes(app, { repo, subjects, evaluate } = 
     const partId = text(req.params.partId, "partId", { required: true, max: 60, pattern: ID_RE });
     const expectedRowVersion = rowVersionFrom(req);
     const body = req.body ?? {};
-    const fields = new Set(["NameFa", "NameEn", "PartType", "BaseUom", "DescriptionFa", "StandardUnitCost", "Currency", "IsLotTracked", "IsActive"]);
+    const fields = new Set(["NameFa", "NameEn", "PartType", "BaseUom", "DescriptionFa", "StandardUnitCost", "Currency", "IsLotTracked", "IsActive", "Planning"]);
     assertOnlyKeys(body, fields);
     if (Object.keys(body).length === 0) throw bad("body", "حداقل یک فیلد قابل‌ویرایش الزامی است");
 
@@ -687,6 +989,11 @@ export function registerManufacturingRoutes(app, { repo, subjects, evaluate } = 
     if (!existing || existing.PlantId !== plantId) throw notFound();
     if (existing.RowVersion !== expectedRowVersion) {
       throw conflict("MFG_CONCURRENCY_CONFLICT", "نسخهٔ قطعه تغییر کرده است؛ آخرین نسخه را بخوانید");
+    }
+    const bodyWithoutPlanning = { ...body };
+    delete bodyWithoutPlanning.Planning;
+    if (Object.keys(bodyWithoutPlanning).length === 0 && body.Planning === undefined) {
+      throw bad("body", "حداقل یک فیلد قابل‌ویرایش الزامی است");
     }
 
     const patchData = {};
@@ -716,11 +1023,47 @@ export function registerManufacturingRoutes(app, { repo, subjects, evaluate } = 
       patchData.IsActive = bool(body.IsActive, "IsActive");
     }
 
-    const resPatch = await r.patch("MfgPart", existing.Id, patchData, requestActor(req), expectedRowVersion);
-    if (!resPatch.ok) throw conflict("MFG_CONCURRENCY_CONFLICT", "نسخهٔ قطعه تغییر کرده است");
-    const updated = await r.get("MfgPart", existing.Id);
-    await writeAudit(r, req, "MFG_PART_UPDATED", "MfgPart", existing.Id, "mfg.part.edit");
-    return updated;
+    const nextPartType = patchData.PartType ?? existing.PartType;
+    const planning = parsePartPlanning(body.Planning, {
+      partType: nextPartType,
+      standardUnitCost: patchData.StandardUnitCost ?? existing.StandardUnitCost ?? null,
+      currency: patchData.Currency ?? existing.Currency ?? "IRR",
+    });
+
+    const applied = await r.transaction(async (tx) => {
+      const current = await tx.get("MfgPart", existing.Id);
+      if (!current || current.PlantId !== plantId) throw notFound();
+      if (current.RowVersion !== expectedRowVersion) throw conflict("MFG_CONCURRENCY_CONFLICT", "نسخهٔ قطعه تغییر کرده است");
+
+      let updated = current;
+      if (Object.keys(patchData).length > 0) {
+        const resPatch = await tx.patch("MfgPart", current.Id, patchData, requestActor(req), expectedRowVersion);
+        if (!resPatch.ok) throw conflict("MFG_CONCURRENCY_CONFLICT", "نسخهٔ قطعه تغییر کرده است");
+        updated = await tx.get("MfgPart", current.Id);
+      } else if (updated.RowVersion !== expectedRowVersion) {
+        throw conflict("MFG_CONCURRENCY_CONFLICT", "نسخهٔ قطعه تغییر کرده است");
+      }
+
+      let material = null;
+      let inventory = null;
+      if (planning) {
+        ({ material, inventory } = await persistPartPlanning(tx, {
+          plantId,
+          partId: current.Id,
+          partType: nextPartType,
+          planning,
+          subjectId: requestActor(req),
+        }));
+      }
+
+      await createAuditRecord(tx, req, "MFG_PART_UPDATED", "MfgPart", current.Id, "mfg.part.edit", planning
+        ? { materialId: material?.Id ?? null, openingInventoryId: inventory?.Id ?? null }
+        : {});
+      return { updated, material, inventory };
+    });
+
+    if (!planning) return applied.updated;
+    return { ...applied.updated, Material: applied.material, Inventory: applied.inventory };
   }));
 
   app.get(`${ROOT}/bom-headers`, route("mfg.bom.view", async ({ repo: r, req, plantId }) => {
@@ -5116,13 +5459,17 @@ export function registerManufacturingRoutes(app, { repo, subjects, evaluate } = 
       };
     }
 
+    const orderOps = operations.filter((op) => op.PlantId === plantId);
+    const effectiveOpCosts = versionOpCosts.length > 0
+      ? versionOpCosts
+      : await deriveOperationCostRows(r, { plantId, operations: orderOps, costVersion: targetVersion });
     const byElement = {
       material: { standard: 0, actual: 0 },
       machine: { standard: 0, actual: 0 },
       labor: { standard: 0, actual: 0 },
       overhead: { standard: 0, actual: 0 },
     };
-    for (const row of versionOpCosts) {
+    for (const row of effectiveOpCosts) {
       if (!byElement[row.CostElement]) continue;
       byElement[row.CostElement].standard = roundTo3(byElement[row.CostElement].standard + storedNumber(row.StandardAmount));
       byElement[row.CostElement].actual = roundTo3(byElement[row.CostElement].actual + storedNumber(row.ActualAmount));
@@ -5176,14 +5523,24 @@ export function registerManufacturingRoutes(app, { repo, subjects, evaluate } = 
         { column: "ProductionOrderOperationId", op: "eq", value: operationId },
       ],
     });
-    const items = rows
+    let items = rows
       .filter((row) => row.PlantId === plantId
         && row.ProductionOrderOperationId === operationId
         && (requestedVersion === null || row.CostVersion === requestedVersion))
       .sort((a, b) => (b.CostVersion ?? 0) - (a.CostVersion ?? 0)
         || String(a.CostElement).localeCompare(String(b.CostElement)));
 
-    return { items };
+    /* خواندن نباید رد شود: نبود ردیف ذخیره‌شده یعنی رول‌آپ لحظه‌ای از
+     * مصرف‌ها، نیازمندی‌ها و دقایق واقعی عملیات. */
+    if (items.length === 0) {
+      items = await deriveOperationCostRows(r, {
+        plantId,
+        operations: [operation],
+        costVersion: requestedVersion ?? 1,
+      });
+    }
+
+    return { items, derived: rows.length === 0 };
   }));
 
   app.post(`${ROOT}/cost/orders/:orderId/reconcile`, route("mfg.cost.reconcile", async ({ repo: r, req, plantId, subject }) => {
@@ -5275,11 +5632,23 @@ export function registerManufacturingRoutes(app, { repo, subjects, evaluate } = 
         throw conflict("MFG_ROW_VERSION_CONFLICT", "رکورد سفارش از زمان خواندن تغییر کرده است؛ تازه‌خوانی کنید");
       }
 
-      const opCostsForVersion = allOpCosts.filter(
+      let opCostsForVersion = allOpCosts.filter(
         (row) => row.PlantId === plantId
           && opIds.has(row.ProductionOrderOperationId)
           && row.CostVersion === costVersion,
       );
+
+      /* اگر هیچ ردیف هزینه‌ای برای این نسخه ثبت نشده باشد، رول‌آپ از شواهد
+       * واقعی ساخته و در همان تراکنش ذخیره می‌شود؛ وگرنه reconcile هیچ‌وقت
+       * اجرا نمی‌شد و گیت `close` هم هرگز باز نمی‌شد. */
+      let derivedCostRows = [];
+      if (opCostsForVersion.length === 0) {
+        derivedCostRows = await deriveOperationCostRows(tx, { plantId, operations: orderOps, costVersion });
+        opCostsForVersion = [];
+        for (const row of derivedCostRows) {
+          opCostsForVersion.push(await tx.create("MfgOperationCost", row, subject.id));
+        }
+      }
 
       let stdMat = 0;
       let actMat = 0;

@@ -347,6 +347,7 @@ CREATE TABLE [dbo].[MfgProductionOrder] (
   [ReleasedBy] NVARCHAR(60) NULL,
   [CompletedAt] DATETIME2 NULL,
   [ClosedAt] DATETIME2 NULL,
+  [ClosedBy] NVARCHAR(60) NULL,
   [AllowOverrun] BIT NOT NULL DEFAULT 0,
   [NoteFa] NVARCHAR(1200) NULL,
   [CreatedAt] DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),

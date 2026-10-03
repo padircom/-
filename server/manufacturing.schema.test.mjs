@@ -72,3 +72,13 @@ test("DDL مستقل MFG شامل ظرفیت، تقویم، هزینه و قید
   assert.match(ddl, /MfgOperationCost/);
   assert.match(ddl, /\[RowVersion\] INT NOT NULL/);
 });
+
+test("مهاجرت 0048 ستون ClosedBy را افزایشی اضافه می‌کند و 0046 یخ‌زده می‌ماند", () => {
+  const migration = MIGRATIONS.find((item) => item.version === "0048");
+  assert.ok(migration);
+  assert.ok(migration.statements.some((sql) => sql.includes("MfgProductionOrder") && sql.includes("ClosedBy")));
+  const frozen = MIGRATIONS.find((item) => item.version === "0046");
+  assert.ok(!frozen.statements.some((sql) => sql.includes("ClosedBy")));
+  const order = tableDef("MfgProductionOrder");
+  assert.ok(order.columns.some((column) => column.name === "ClosedBy"));
+});
