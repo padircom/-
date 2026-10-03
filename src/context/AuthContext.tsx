@@ -10,7 +10,11 @@ export type RoleCode =
   | "admin" | "project_manager" | "planner" | "site_engineer" | "consultant"
   | "client" | "executive" | "contracts_manager" | "cost_controller"
   | "qc_inspector" | "qa_manager" | "hr_manager" | "doc_controller"
-  | "pmo" | "engineering_manager" | "design_lead" | "subcontractor" | "auditor";
+  | "pmo" | "engineering_manager" | "design_lead" | "subcontractor" | "auditor"
+  | "viewer"
+  | "manufacturing_engineer" | "production_planner" | "production_manager"
+  | "shop_floor_supervisor" | "production_operator" | "material_planner"
+  | "industrial_accountant";
 
 export type PermissionCode =
   | "system.manage"
@@ -95,6 +99,7 @@ const ENGINE_TO_UI: Record<string, PermissionCode[]> = {
   "fin.cost.view": ["cost.view"],
   "cnt.contract.view": ["cost.view"],
   "gov.process.edit": ["gov.process.edit"],
+  "mfg.execution.view": ["project.view"],
 };
 
 export const rolePermissions: Record<string, PermissionCode[]> = Object.fromEntries(

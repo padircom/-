@@ -169,3 +169,146 @@ test("زمان محلی Work Center به UTC تبدیل می‌شود و است�
     orders, operations, calendars: [calendar({ breakMinutes: 30, breakStart: null })],
   })), (error) => error instanceof SchedulePlanningError && error.code === "MFG_CALENDAR_BREAK_START_REQUIRED");
 });
+
+test("باززمان‌بندی با selectedOperationIds فقط عملیات هدف و پس‌نیاز وابسته را جابه‌جا می‌کند و diff دقیق می‌دهد", () => {
+  const orders = [order("o-1"), order("o-2")];
+  const operations = [
+    operation("op-10", "o-1", 1, 60),
+    operation("op-20", "o-1", 2, 60, "op-10"),
+    operation("op-30", "o-1", 3, 60, "op-20"),
+    operation("op-other", "o-2", 1, 60),
+  ];
+  const baseCalendars = [calendar({ start: 480, end: 1020 })];
+  const v1 = planManufacturingSchedule(input({
+    orders,
+    operations,
+    calendars: baseCalendars,
+  }));
+  assert.equal(v1.assignments.length, 4);
+
+  const v2 = planManufacturingSchedule({
+    ...input({
+      orders,
+      operations,
+      calendars: baseCalendars,
+      downtime: [{
+        Id: "down-op20", PlantId: PLANT, WorkCenterId: "wc-1", ResourceId: null,
+        StartedAt: "2026-10-05T09:00:00.000Z", FinishedAt: "2026-10-05T11:00:00.000Z", DowntimeType: "unplanned",
+      }],
+    }),
+    previousScheduleVersion: 1,
+    scheduleVersion: 2,
+    existingSchedules: v1.scheduleSegments,
+    selectedOperationIds: ["op-20"],
+  });
+
+  assert.deepEqual(v2.rescheduledOperationIds, ["op-20", "op-30"]);
+  const op10 = v2.assignments.find((item) => item.ProductionOrderOperationId === "op-10");
+  const opOther = v2.assignments.find((item) => item.ProductionOrderOperationId === "op-other");
+  const op20 = v2.assignments.find((item) => item.ProductionOrderOperationId === "op-20");
+  const op30 = v2.assignments.find((item) => item.ProductionOrderOperationId === "op-30");
+
+  assert.equal(op10.Preserved, true);
+  assert.equal(op10.PlannedStartAt, "2026-10-05T08:00:00.000Z");
+  assert.equal(op10.PlannedEndAt, "2026-10-05T09:00:00.000Z");
+  assert.equal(opOther.Preserved, true);
+  assert.equal(op20.Preserved, false);
+  assert.equal(op30.Preserved, false);
+  assert.ok(Date.parse(op20.PlannedStartAt) >= Date.parse("2026-10-05T11:00:00.000Z"));
+  assert.ok(Date.parse(op30.PlannedStartAt) >= Date.parse(op20.PlannedEndAt));
+
+  assert.equal(v2.diff.fromScheduleVersion, 1);
+  assert.equal(v2.diff.toScheduleVersion, 2);
+  assert.equal(v2.diff.changedOperationCount, 2);
+  assert.equal(v2.diff.unchangedOperationCount, 2);
+  assert.equal(v2.diff.movedCount, 2);
+  assert.deepEqual(
+    v2.diff.changedOperations.map((item) => item.ProductionOrderOperationId),
+    ["op-20", "op-30"],
+  );
+  const diffOp10 = v2.diff.operations.find((item) => item.ProductionOrderOperationId === "op-10");
+  assert.equal(diffOp10.Changed, false);
+  assert.equal(diffOp10.Preserved, true);
+});
+
+test("باززمان‌بندی firm blockها را حفظ می‌کند و عملیات غیرقابل‌اعزام یا خارج از Plant را رد می‌کند", () => {
+  const orders = [
+    order("o-firm", { weight: 1 }),
+    order("o-target", { weight: 5 }),
+    { ...order("o-created"), Status: "created" },
+  ];
+  const operations = [
+    operation("op-firm", "o-firm", 1, 120),
+    operation("op-target", "o-target", 1, 60),
+    operation("op-running", "o-target", 2, 60, null, { Status: "running" }),
+    operation("op-unreleased", "o-created", 1, 60),
+  ];
+  const existingSchedules = [{
+    Id: "seg-firm-1",
+    PlantId: PLANT,
+    ProductionOrderOperationId: "op-firm",
+    ScheduleVersion: 1,
+    SegmentNo: 1,
+    WorkCenterId: "wc-1",
+    ResourceId: "res-1",
+    PlannedStartAt: "2026-10-05T08:00:00.000Z",
+    PlannedEndAt: "2026-10-05T10:00:00.000Z",
+    PlannedCapacityMinutes: 120,
+    QueueMinutes: 0,
+    MoveMinutes: 0,
+    CapacityMode: "finite",
+    Direction: "forward",
+    DispatchRule: "EDD",
+    Status: "firm",
+  }, {
+    Id: "seg-target-1",
+    PlantId: PLANT,
+    ProductionOrderOperationId: "op-target",
+    ScheduleVersion: 1,
+    SegmentNo: 1,
+    WorkCenterId: "wc-1",
+    ResourceId: "res-1",
+    PlannedStartAt: "2026-10-05T11:00:00.000Z",
+    PlannedEndAt: "2026-10-05T12:00:00.000Z",
+    PlannedCapacityMinutes: 60,
+    QueueMinutes: 0,
+    MoveMinutes: 0,
+    CapacityMode: "finite",
+    Direction: "forward",
+    DispatchRule: "EDD",
+    Status: "tentative",
+  }];
+
+  const planned = planManufacturingSchedule({
+    ...input({ orders, operations, calendars: [calendar()], dispatchRule: "WSPT", capacityMode: "semi-finite" }),
+    previousScheduleVersion: 1,
+    scheduleVersion: 2,
+    existingSchedules,
+    selectedOperationIds: ["op-firm", "op-target"],
+  });
+
+  const firmAssignment = planned.assignments.find((item) => item.ProductionOrderOperationId === "op-firm");
+  const targetAssignment = planned.assignments.find((item) => item.ProductionOrderOperationId === "op-target");
+  assert.equal(firmAssignment.Status, "firm");
+  assert.equal(firmAssignment.Preserved, true);
+  assert.equal(firmAssignment.PlannedStartAt, "2026-10-05T08:00:00.000Z");
+  assert.equal(firmAssignment.PlannedEndAt, "2026-10-05T10:00:00.000Z");
+  assert.equal(targetAssignment.PlannedStartAt, "2026-10-05T10:00:00.000Z");
+  assert.equal(targetAssignment.PlannedEndAt, "2026-10-05T11:00:00.000Z");
+  assert.equal(planned.capacityRows[0].ReservedMinutes, 120);
+
+  assert.throws(() => planManufacturingSchedule({
+    ...input({ orders, operations, calendars: [calendar()] }),
+    selectedOperationIds: ["op-running"],
+  }), (error) => error instanceof SchedulePlanningError && error.code === "MFG_OPERATION_NOT_DISPATCHABLE");
+
+  assert.throws(() => planManufacturingSchedule({
+    ...input({ orders, operations, calendars: [calendar()] }),
+    selectedOperationIds: ["op-unreleased"],
+  }), (error) => error instanceof SchedulePlanningError && error.code === "MFG_ORDER_NOT_RELEASED");
+
+  assert.throws(() => planManufacturingSchedule({
+    ...input({ orders, operations, calendars: [calendar()] }),
+    selectedOperationIds: ["op-missing"],
+  }), (error) => error instanceof SchedulePlanningError && error.code === "MFG_OPERATION_NOT_FOUND");
+});

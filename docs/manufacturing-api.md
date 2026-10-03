@@ -4,7 +4,7 @@
 
 **دامنهٔ اصلی:** کارخانه (`PlantId`)؛ نه پروژه.
 
-**وضعیت این تحویل:** قرارداد کامل طراحی شده و یازده مسیر در `server/manufacturingApi.js` پیاده و در `server/index.js` ثبت شده‌اند؛ شامل قطعه، سفارش، آزادسازی، زمان‌بندی، Gantt و ظرفیت. مسیرهای باقی‌ماندهٔ جدول‌های پایین همچنان قرارداد هستند و هنوز handler اجرایی ندارند. تغییرات واقعی RBAC و Plant-scope نیز در `src/services/accessControl.ts` انجام شده‌اند. فرمان‌های چندجدولی باید از Unit of Work اتمیک استفاده کنند و نباید با چند `repo.create/patch` مستقل منتشر شوند.
+**وضعیت این تحویل:** قرارداد کامل طراحی شده و هر شصت‌وپنج مسیر (۱۰۰٪ بخش‌های ۵.۳ تا ۵.۸) در `server/manufacturingApi.js` پیاده و در `server/index.js` ثبت شده‌اند؛ شامل داده‌های پایه (قطعه، BOM، مسیر ساخت و عملیات آن، مراکز کاری، منابع و تقویم)، سفارش تولید، زمان‌بندی ظرفیت محدود، باززمان‌بندی، Gantt و ظرفیت، اجرای کارگاهی، توقف، ضایعات، دوباره‌کاری و انحراف، مواد، MRP، مصرف و پیشنهاد تأمین، و بهای تمام‌شده، داشبورد، OEE و هشدارها. تغییرات واقعی RBAC و Plant-scope نیز در `src/services/accessControl.ts` انجام شده‌اند. فرمان‌های چندجدولی از Unit of Work اتمیک استفاده می‌کنند.
 
 ## ۵.۱ قواعد مشترک
 
@@ -133,7 +133,7 @@
 |---|---|---|---|
 | `POST /scheduling/runs` | `{Direction, CapacityMode, DispatchRule, From, To, OrderIds?, ExpectedScheduleVersion?}` → `{ScheduleVersion, assignments[], unscheduled[], capacity[]}` | `Direction=forward/backward`; `CapacityMode=finite/semi-finite`; Rule از EDD/SPT/CR/WSPT/FIFO/MANUAL؛ پنجره حداکثر ۳۶۵ روز؛ فقط سفارش‌های released/in-progress در همان Plant؛ `ExpectedScheduleVersion` با نسخهٔ جاری مقایسه می‌شود؛ run، قطعه‌های عملیات، تصویر ظرفیت و AuditLog در یک UoW ذخیره می‌شوند؛ نسخهٔ تکراری در رقابت هم‌زمان رد می‌شود | `mfg.schedule.run` |
 | `GET /scheduling/gantt` | `from, to, workCenterId?, orderId?, scheduleVersion?` → `{scheduleVersion, lanes:[{workCenter,segments[]}]}` | `to > from`; پنجره حداکثر ۹۰ روز؛ خروجی فقط همان Plant | `mfg.schedule.view` |
-| `POST /scheduling/reschedules` | `{ExpectedScheduleVersion, OperationIds, Reason, DispatchRule?}` → نسخهٔ جدید و diff | فقط عملیات قابل‌اعزام؛ predecessorها، firm blocks و ظرفیت دوباره ارزیابی می‌شوند؛ نسخهٔ ورودی باید هنوز جاری باشد | `mfg.schedule.resequence` |
+| `POST /scheduling/reschedules` | `{ExpectedScheduleVersion, OperationIds, Reason, DispatchRule?}` → `{ScheduleVersion, PreviousScheduleVersion, assignments[], unscheduled[], capacity[], diff}` | `ExpectedScheduleVersion` باید با نسخهٔ جاری همان Plant برابر باشد؛ فقط عملیات موجود در همان Plant، متعلق به سفارش `released/in-progress` و در وضعیت قابل‌اعزام (`pending/queued/ready`) پذیرفته می‌شود؛ فقط عملیات هدف و زنجیرهٔ وابستگی لازم برای حفظ پیش‌نیازها دوباره برنامه‌ریزی می‌شوند و قطعات خارج از دامنه و `firm` حفظ می‌شوند؛ نسخهٔ جدید، Segmentها، ظرفیت و AuditLog اتمیک ثبت می‌شوند | `mfg.schedule.resequence` |
 | `GET /capacity/load` | `from, to, bucket=day/week, workCenterId?` → `{scheduleVersion, bucket, buckets:[{WorkCenterId, PeriodStart, PeriodEnd, AvailableMinutes, PlannedLoadMinutes, UtilizationPct}]}` | آخرین Snapshot همان Plant؛ bucket پیش‌فرض `day` و هفته بر پایهٔ دوشنبهٔ محلی هر Work Center؛ بازهٔ معتبر و مرکز کاری هم‌کارخانه؛ `AvailableMinutes=0` یعنی utilization نامعین (`null`) | `mfg.capacity.view` |
 | `GET /capacity/bottlenecks` | `from, to, minUtilizationPct?` → `{scheduleVersion, items:[{WorkCenterId, PeriodStart, PeriodEnd, OverloadMinutes, UtilizationPct, scheduleVersion}]}` | آخرین Snapshot همان Plant؛ حد درصد ۰..۱۰۰ و پیش‌فرض ۱۰۰؛ bucket با بار غیرصفر و utilization مساوی/بالاتر از حد یا دارای اضافه‌بار گزارش می‌شود؛ بازهٔ معتبر | `mfg.capacity.view` |
 
@@ -290,6 +290,58 @@ Content-Type: application/json
 ```
 
 پاسخ شامل نسخهٔ جدید و قطعه‌های تخصیص است؛ تخصیص ناممکن در `unscheduled[]` و اضافه‌بار در ظرفیت گزارش می‌شود و عملیات به‌طور خام حذف نمی‌شود. برنامه‌ریز از تقویم شیفت و منطقهٔ زمانی هر Work Center استفاده می‌کند، استراحت را با `BreakStartMinuteOfDay` می‌شکند، توقف‌های ثبت‌شده و پیش‌نیازی Operation را در هر دو جهت رعایت می‌کند. `finite` تداخل منبع را محدود می‌کند؛ `semi-finite` اجازهٔ هم‌پوشانی سفارش‌ها را می‌دهد ولی توقف‌های firm را حفظ می‌کند و اضافه‌بار را در تصویر ظرفیت نگه می‌دارد. در `WSPT` ترتیب بر پایهٔ `DispatchWeight / PlannedCapacityMinutes` نزولی است؛ وزن سفارش از API سفارش قابل تنظیم و به‌صورت پیش‌فرض ۱ است. نسخه، assignmentها، ظرفیت روزانه و AuditLog همگی داخل یک Unit of Work ثبت می‌شوند؛ ارسال `ExpectedScheduleVersion` برابر ۰ برای اولین اجرا مجاز است.
+
+### باززمان‌بندی هدفمند عملیات و دریافت Diff
+
+```http
+POST /api/mfg/plants/PLANT-01/scheduling/reschedules
+X-User-Id: u-mfg-plan
+Content-Type: application/json
+```
+
+```json
+{
+  "ExpectedScheduleVersion": 7,
+  "OperationIds": ["operation-20"],
+  "Reason": "توقف ناخواسته در مرکز تراشکاری",
+  "DispatchRule": "WSPT"
+}
+```
+
+این مسیر نسخهٔ مورد انتظار را با آخرین نسخهٔ همان Plant مقایسه می‌کند و نسخهٔ کهنه را با `409 MFG_SCHEDULE_VERSION_CONFLICT` رد می‌کند. شناسه‌های ناموجود یا متعلق به کارخانهٔ دیگر با `404 MFG_NOT_FOUND`، عملیات سفارش‌های غیرفعال با `422 MFG_ORDER_NOT_RELEASED` و عملیات غیرقابل‌اعزام (`setup/running/blocked/completed`) با `422 MFG_OPERATION_NOT_DISPATCHABLE` رد می‌شوند. به‌جای بازبرنامه‌ریزی بی‌دلیل کل سفارش، فقط عملیات هدف و زنجیرهٔ وابستگی لازم برای حفظ پیش‌نیازها دوباره برنامه‌ریزی می‌شوند، Segmentهای خارج از دامنه و بلوک‌های `firm` حفظ می‌شوند، و نسخهٔ جدید همراه با diff ساختاری نسبت به نسخهٔ قبلی داخل یک تراکنش اتمیک ثبت می‌گردد.
+
+```json
+{
+  "ok": true,
+  "data": {
+    "ScheduleVersion": 8,
+    "PreviousScheduleVersion": 7,
+    "RunId": "MfgScheduleRun-...",
+    "Reason": "توقف ناخواسته در مرکز تراشکاری",
+    "RequestedOperationIds": ["operation-20"],
+    "RescheduledOperationIds": ["operation-20", "operation-30"],
+    "diff": {
+      "fromScheduleVersion": 7,
+      "toScheduleVersion": 8,
+      "changedOperationCount": 2,
+      "unchangedOperationCount": 1,
+      "movedCount": 2,
+      "changedOperations": [
+        {
+          "ProductionOrderOperationId": "operation-20",
+          "ChangeType": "moved",
+          "Changed": true,
+          "PreviousPlannedStartAt": "2026-10-05T10:30:00.000Z",
+          "CurrentPlannedStartAt": "2026-10-05T11:30:00.000Z",
+          "StartDeltaMinutes": 60,
+          "EndDeltaMinutes": 60
+        }
+      ]
+    }
+  },
+  "meta": { "traceId": "req-...", "version": "mfg-api-v1" }
+}
+```
 
 ### خواندن Gantt نسخهٔ برنامه
 
@@ -483,12 +535,12 @@ Content-Type: application/json
 
 ## ۵.۱۰ پیاده‌سازی در ساختار فعلی پروژه
 
-- routeها در ماژول جداگانهٔ `server/manufacturingApi.js` با الگوی `registerManufacturingRoutes(app, { repo, subjects, evaluate })` پیاده می‌شوند و در `server/index.js` پس از middlewareهای `requestId` ثبت شده‌اند. یازده مسیر قطعه/سفارش/زمان‌بندی/ظرفیت فعال‌اند؛ از commandهای چندجدولی، آزادسازی و اجرای زمان‌بندی handler اجرایی دارند و مسیرهای Gantt و ظرفیت Snapshot ثبت‌شده را می‌خوانند.
+- routeها در ماژول جداگانهٔ `server/manufacturingApi.js` با الگوی `registerManufacturingRoutes(app, { repo, subjects, evaluate })` پیاده می‌شوند و در `server/index.js` پس از middlewareهای `requestId` ثبت شده‌اند. هر شصت‌وپنج مسیر قرارداد (۱۰۰٪ بخش‌های ۵.۳ تا ۵.۸: قطعه، BOM، مسیر ساخت و عملیات آن، مراکز کاری، منابع و تقویم، سفارش تولید، زمان‌بندی/باززمان‌بندی/Gantt/ظرفیت، اجرای کارگاهی/توقف/ضایعات/دوباره‌کاری/انحراف، مواد/MRP/مصرف/پیشنهاد تأمین، و هزینه/داشبورد/OEE/هشدارها) فعال‌اند.
 - route guard از `subjects` و `evaluate(subject, permission, { plantId })` استفاده می‌کند؛ هیچ `projectId` ساختگی برای سفارش/رویداد MFG تولید نمی‌شود.
 - پاسخ/خطا با الگوی `{ok,data,meta:{traceId}}` و `{ok:false,error:{code,message,traceId}}` است؛ شناسهٔ actor فقط از Subject احراز‌شده می‌آید.
-- مسیرهای فعال: `GET/POST /parts`, `GET/POST /orders`, `GET /orders/{orderId}`, `PATCH /orders/{orderId}/priority`, `POST /orders/{orderId}/release`, `POST /scheduling/runs`, `GET /scheduling/gantt`, `GET /capacity/load` و `GET /capacity/bottlenecks`. آزادسازی، RowVersion سفارش را کنترل می‌کند، جداسازی وظایف سازنده/آزادکننده را enforce می‌کند، BOM چندسطحی را از نظر چرخه/مؤثربودن اعتبارسنجی می‌کند و Operationهای Routing را snapshot می‌کند. زمان‌بندی، نسخه را Plant-scoped کنترل می‌کند، تقویم/استراحت/توقف و پیش‌نیازی Operation را لحاظ می‌کند و گزارش ظرفیت را هم‌زمان می‌نویسد. Gantt بازهٔ حداکثر ۹۰روزه و فیلترهای اختیاری مرکز کاری/سفارش/نسخه را با کنترل Plant scope پشتیبانی می‌کند؛ گزارش‌های ظرفیت نیز از نسخهٔ جاری استفاده می‌کنند.
+- مسیرهای فعال: `GET/POST /parts`, `GET/PATCH /parts/{partId}`, `GET/POST /bom-headers`, `GET/PATCH /bom-headers/{bomId}`, `GET/POST /bom-headers/{bomId}/items`, `PATCH/DELETE /bom-items/{itemId}`, `POST /bom-headers/{bomId}/release`, `POST /bom-headers/{bomId}/explosions`, `GET/POST /routings`, `GET/PATCH /routings/{routingId}`, `GET/POST /routings/{routingId}/operations`, `PATCH/DELETE /routing-operations/{routingOperationId}`, `POST /routings/{routingId}/release`, `GET/POST /work-centers`, `GET/PATCH /work-centers/{workCenterId}`, `GET/POST /work-centers/{workCenterId}/resources`, `PATCH /work-center-resources/{resourceId}`, `GET/POST /work-centers/{workCenterId}/calendars`, `PATCH /work-center-calendars/{calendarId}`, `GET/POST /orders`, `GET /orders/{orderId}`, `PATCH /orders/{orderId}/priority`, `POST /orders/{orderId}/release`, `POST /orders/{orderId}/close`, `POST /scheduling/runs`, `POST /scheduling/reschedules`, `GET /scheduling/gantt`, `GET /capacity/load`, `GET /capacity/bottlenecks`, `GET /operation-queue`, `POST /operations/{operationId}/executions`, `POST /executions/{executionId}/reports`, `POST /executions/{executionId}/finish`, `POST /downtime`, `POST /scrap`, `POST /rework`, `GET /operations/{operationId}/variance`, `GET /materials`, `POST /mrp/calculate`, `GET /mrp/shortages`, `POST /material-consumptions`, `POST /material-procurement-proposals`, `GET /cost/orders/{orderId}`, `GET /cost/operations/{operationId}`, `POST /cost/orders/{orderId}/reconcile`, `GET /dashboard/overview`, `GET /dashboard/work-center-load`, `GET /dashboard/oee`, `GET /alerts` و `POST /alerts/{alertId}/acknowledgements`.
 - migration افزایشی `0047`، جدول سربرگ `MfgScheduleRun` و ستون‌های `DispatchWeight`/`BreakStartMinuteOfDay` را می‌سازد؛ DDL تثبیت‌شدهٔ `0046` عمداً با schema جدید بازتولید نمی‌شود. DDL کامل MFG از `npm run db:mfg` ساخته می‌شود.
-- repository اکنون `transaction(work)` دارد و callback را با repository محدود به همان تراکنش اجرا می‌کند. آزادسازی سفارش snapshot عملیات، تغییر سفارش و AuditLog؛ اجرای زمان‌بندی هم header نسخه، Segmentهای عملیات، تصویر ظرفیت و AuditLog را در یک UoW ثبت می‌کند. استفادهٔ تصادفی از repository بیرونی در callback رد می‌شود و nested transaction پشتیبانی نمی‌شود. ثبت MRP، مصرف هم‌زمان مواد/موجودی، بستن سفارش و تطبیق هزینه هنوز handler فعال ندارند. این قابلیت به معنی Outbox اتمیک نیست؛ Observer فعلی همچنان درون‌فرایندی است. در JSON، mutex فقط درون همان process تضمین می‌دهد و journal redo برای recovery استفاده می‌شود؛ در SQL Server از `sql.Transaction` استفاده می‌شود.
+- repository اکنون `transaction(work)` دارد و callback را با repository محدود به همان تراکنش اجرا می‌کند. آزادسازی BOM و Routing، آزادسازی و بستن سفارش، اجرای زمان‌بندی و باززمان‌بندی، رخدادهای اجرایی کارگاه (شروع/گزارش/اتمام نشست، توقف، ضایعات و دوباره‌کاری)، ثبت MRP، مصرف هم‌زمان مواد و کاهش موجودی، تطبیق نهایی هزینه و رسیدگی به هشدارها تغییرات جدول‌ها و AuditLog را در یک UoW ثبت می‌کنند. استفادهٔ تصادفی از repository بیرونی در callback رد می‌شود و nested transaction پشتیبانی نمی‌شود. این قابلیت به معنی Outbox اتمیک نیست؛ Observer فعلی همچنان درون‌فرایندی است. در JSON، mutex فقط درون همان process تضمین می‌دهد و journal redo برای recovery استفاده می‌شود؛ در SQL Server از `sql.Transaction` استفاده می‌شود.
 - SQL Server این محیط در دسترس نیست؛ آزمون مسیر release روی `JsonFileDriver` واقعی با Unit of Work اجرا شده و آزمون تراکنش SQL صرفاً از harness ساختگی استفاده می‌کند. این نتایج را نباید اجرای integration روی SQL Server تلقی کرد. محدودیت multi-process در JSON نیز پابرجاست.
 
 ### آنچه در کد این بخش تغییر کرده است
@@ -496,4 +548,4 @@ Content-Type: application/json
 1. `Subject.plantIds` و `AccessContext.plantId` به موتور RBAC اضافه شده‌اند؛ Plant-scope با `DENY_PLANT_SCOPE` و سیاست fail-closed اعمال می‌شود، بدون آنکه ارزیابی‌های Project موجود تغییر کنند.
 2. ۳۷ مجوز `mfg.*` و ۷ نقش تخصصی MFG به `ROLE_CATALOG` اضافه شده‌اند؛ `admin` به‌صورت ضمنی مجوز business تولید نمی‌گیرد.
 3. آزمون‌های RBAC برای عدم عبور بین دو Plant، نبود Plant assignment و جداسازی نقش‌های تولید افزوده شده‌اند.
-4. آزمون‌ها: Unit of Work تراکنش `13/13`، API تولید `12/12`، release `4/4`، scheduler خالص `7/7`، schema تولید `6/6` و persistence/SQL موجود `79/79` موفق‌اند. آزمون API، Gantt را با نسخهٔ جاری/صریح، مرتب‌سازی segmentها، بازهٔ نامعتبر/بیش از ۹۰ روز و فیلتر خارج از Plant؛ و گزارش ظرفیت را با Snapshot روزانه/هفتگی، آستانهٔ utilization و اضافه‌بار می‌پوشاند. API زمان‌بندی در mock تراکنشی و یک اجرای دستی با `JsonFileDriver` واقعی آزموده شد؛ SQL Server واقعی در دسترس نبود.
+4. آزمون‌ها: Unit of Work تراکنش `13/13`، API تولید `27/27`، release `4/4`، scheduler خالص `9/9`، schema تولید `6/6` و persistence/SQL موجود `79/79` موفق‌اند. آزمون API، مدیریت قطعه و نسخه‌های BOM پیش‌نویس/آزادشده و انفجار چندسطحی BOM؛ مدیریت Routing پیش‌نویس، عملیات آن و آزادسازی Routing؛ مدیریت مراکز کاری، منابع و تقویم شیفت (با کنترل `BreakStartMinuteOfDay` و قفل تقویم در برنامهٔ `firm`)؛ باززمان‌بندی هدفمند با زنجیرهٔ وابستگی، حفظ بلوک `firm`، تولید `diff`، رد نسخهٔ کهنه/خارج از Plant/عملیات غیرقابل‌اعزام و rollback تراکنش؛ Gantt و گزارش ظرفیت؛ اجرای کارگاهی با صف عملیات، شروع/گزارش تجمعی/اتمام نشست اجرا، کنترل پیش‌نیاز و گیت بازرسی، Idempotency، توقف، ضایعات، دوباره‌کاری و انحراف عملیات (با تفکیک دسترسی هزینه)؛ مواد، محاسبهٔ MRP (پیش‌نمایش و ثبت اتمیک)، کمبودها، پیشنهاد خرید و مصرف واقعی مواد (با کنترل LotNo و کسر اتمیک موجودی)؛ و هزینهٔ سفارش/عملیات، تطبیق هزینه، بستن چندگیتی سفارش، داشبورد خلاصه/OEE و رسیدگی به هشدارها را می‌پوشاند. API زمان‌بندی در mock تراکنشی و یک اجرای دستی با `JsonFileDriver` واقعی آزموده شد؛ SQL Server واقعی در دسترس نبود.

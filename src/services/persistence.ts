@@ -5448,7 +5448,10 @@ function manufacturingTablesFor0046(): TableDef[] {
       if (table.name === "MfgProductionOrder") {
         return {
           ...table,
-          columns: table.columns.filter((column) => column.name !== "DispatchWeight"),
+          /* ClosedBy در 0046 نبود (بعداً افزایشی اضافه شد) و DispatchWeight در 0047.
+           * 0046 یخ‌زده است؛ اگر ستون تازه‌ای اضافه شود باید همین‌جا فیلتر و در
+           * migration تازه آورده شود، وگرنه چک‌سام مهاجرت قبلی می‌شکند. */
+          columns: table.columns.filter((column) => !["DispatchWeight", "ClosedBy"].includes(column.name)),
           checks: table.checks?.filter((check) => check.name !== "CK_MfgProdOrder_DispatchWeight"),
         };
       }
@@ -6079,6 +6082,17 @@ export const MIGRATIONS: Migration[] = [
         const table = TABLE_BY_NAME.get("MfgScheduleRun")!;
         return [tableDdl(table, "mssql"), ...(table.indexes ?? []).map((index) => indexDdl(table, index, "mssql"))];
       })(),
+    ],
+  },
+  {
+    /* MFG-3: ثبت بستن‌کنندهٔ سفارش. قرارداد بخش ۵.۴ ستون `ClosedBy` را سمت
+     * سرور لازم می‌داند، ولی 0046 فقط `ClosedAt` را ساخته بود؛ در نتیجه
+     * `POST /orders/{id}/close` روی مخزن واقعی با ROW_VALIDATION_FAILED رد
+     * می‌شد و گیت بستن هرگز باز نمی‌شد. این migration افزایشی همان یک ستون را
+     * اضافه می‌کند و 0046/0047 دست‌نخورده می‌مانند. */
+    version: "0048", name: "manufacturing_order_closed_by",
+    statements: [
+      `IF COL_LENGTH('dbo.MfgProductionOrder','ClosedBy') IS NULL ALTER TABLE dbo.MfgProductionOrder ADD ${columnDdl(columnDefFor("MfgProductionOrder", "ClosedBy"), "mssql")};`,
     ],
   },
 ];

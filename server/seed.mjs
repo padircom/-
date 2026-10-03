@@ -247,12 +247,604 @@ if (!ping) {
   process.exit(1);
 }
 
+/* ═══════════ تولید عملیات‌محور (mfg-api-v1) ═══════════
+ *
+ * کارخانه `PLANT-DEMO` را از هیچ می‌سازد: دادهٔ پایه، سفارش آزادشده، برنامهٔ
+ * ظرفیت‌محدود، اجرای کارگاهی، MRP و هزینه. همهٔ گام‌ها از مسیرهای REST واقعی
+ * همان قرارداد `docs/manufacturing-api.md` می‌گذرند؛ هیچ رکوردی مستقیم در
+ * فایل نوشته نمی‌شود تا همان اعتبارسنجی و همان UoW مسیر واقعی اجرا شود.
+ */
+
+const PLANT = process.env.PLANT_ID || "PLANT-DEMO";
+const MFG_ROLES = {
+  eng: "u-mfg-eng",
+  plan: "u-mfg-plan",
+  manager: "u-mfg-manager",
+  supervisor: "u-mfg-supervisor",
+  material: "u-mfg-material",
+  cost: "u-mfg-cost",
+};
+
+/** فراخوانی مسیر MFG با هویت، Idempotency-Key و If-Match. */
+async function mfg(path, { user = MFG_ROLES.eng, method = "GET", body, match, idem } = {}) {
+  const headers = { "content-type": "application/json", "x-user-id": user };
+  if (match !== undefined) headers["if-match"] = String(match);
+  if (idem) headers["idempotency-key"] = idem;
+  const res = await fetch(`${BASE}/api/mfg/plants/${PLANT}${path}`, {
+    method,
+    headers,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const text = await res.text();
+  let json = null;
+  try { json = JSON.parse(text); } catch { /* غیر JSON */ }
+  if (res.status >= 400) {
+    const err = new Error(`${res.status} ${json?.error?.code || ""} ${json?.error?.message || text.slice(0, 160)}`);
+    err.status = res.status;
+    err.payload = json;
+    throw err;
+  }
+  return json?.data ?? null;
+}
+
+/** گام MFG که تکرار/وجود قبلی را خطا نمی‌شمارد. */
+async function mfgStep(label, fn) {
+  try {
+    const value = await fn();
+    if (value === "skip") { skip++; console.log(`  ⏭  ${label}`); return null; }
+    ok++; console.log(`  ✅ ${label}`);
+    return value;
+  } catch (err) {
+    if ([409, 422].includes(err.status)) {
+      skip++; console.log(`  ⏭  ${label} — ${err.message.slice(0, 120)}`);
+      return null;
+    }
+    fail++; console.log(`  ⛔ ${label} — ${err.message.slice(0, 200)}`);
+    return null;
+  }
+}
+
+const isoAt = (dayOffset, minuteOfDay = 480) => {
+  const start = new Date(Date.now() + dayOffset * 86_400_000);
+  start.setUTCHours(0, 0, 0, 0);
+  /* تقویم مرکز کاری «Asia/Tehran» است؛ 08:00 محلی = 04:30 UTC. */
+  return new Date(start.getTime() + (minuteOfDay - 210) * 60_000).toISOString();
+};
+
+async function seedMfgWorkCenters() {
+  console.log("\n── تولید: مراکز کاری، منابع و تقویم ──");
+  /* هر مرکز کاری نرخ‌های هزینهٔ خودش را می‌آورد؛ تنها جای نگه‌داری نرخ،
+   * MfgCostCenter است و بدون این بلوک رول‌آپ ماشین/دستمزد/سربار صفر می‌ماند. */
+  const centers = [
+    ["WC-CNC", "مرکز ماشین‌کاری CNC", "machine", 960, 92, "machine", [
+      { CostElement: "machine", HourlyRate: 1_250_000, AllocationBasis: "machine_hours" },
+      { CostElement: "overhead", HourlyRate: 480_000, AllocationBasis: "machine_hours" },
+    ]],
+    ["WC-ASM", "ایستگاه مونتاژ", "assembly", 960, 95, "labor", [
+      { CostElement: "labor", HourlyRate: 900_000, AllocationBasis: "labor_hours" },
+      { CostElement: "overhead", HourlyRate: 350_000, AllocationBasis: "machine_hours" },
+    ]],
+    ["WC-QC", "ایستگاه بازرسی کیفی", "inspection", 720, 100, "labor", [
+      { CostElement: "labor", HourlyRate: 750_000, AllocationBasis: "labor_hours" },
+    ]],
+  ];
+  const created = {};
+  for (const [code, nameFa, kind, capacity, efficiency, resourceKind, rates] of centers) {
+    const center = await mfgStep(`مرکز کاری ${code}`, async () => {
+      try {
+        return await mfg("/work-centers", {
+          user: MFG_ROLES.eng,
+          method: "POST",
+          body: {
+            Code: code,
+            NameFa: nameFa,
+            Kind: kind,
+            NominalCapacityMinutesPerDay: capacity,
+            EfficiencyPct: efficiency,
+            TimeZoneId: "Asia/Tehran",
+            Status: "active",
+            DescriptionFa: "دادهٔ نمونهٔ کارخانهٔ نمایشی",
+            Rates: rates,
+          },
+        });
+      } catch (err) {
+        if (err.status !== 409) throw err;
+        const list = await mfg(`/work-centers?q=${encodeURIComponent(code)}`, { user: MFG_ROLES.eng });
+        return (list?.items ?? []).find((row) => row.Code === code) ?? "skip";
+      }
+    });
+    if (!center) continue;
+    created[code] = center;
+
+    await mfgStep(`منبع ${code}`, () => mfg(`/work-centers/${center.Id}/resources`, {
+      user: MFG_ROLES.eng,
+      method: "POST",
+      body: {
+        ResourceCode: `R-${code}`,
+        NameFa: `${nameFa} — منبع ۱`,
+        ResourceKind: resourceKind,
+        CapacityUnits: 1,
+        AvailabilityPct: kind === "inspection" ? 100 : 92,
+        IsActive: true,
+        EffectiveFrom: "2026-01-01",
+      },
+    }));
+
+    /* هفتهٔ کاری ایرانی: شنبه(۶) تا چهارشنبه(۳) به‌علاوهٔ پنجشنبه(۴)؛ جمعه(۵) تعطیل. */
+    for (const weekday of [6, 7, 1, 2, 3, 4]) {
+      await mfgStep(`تقویم ${code} روز ${weekday}`, () => mfg(`/work-centers/${center.Id}/calendars`, {
+        user: MFG_ROLES.eng,
+        method: "POST",
+        body: {
+          RuleType: "weekly",
+          RuleKey: `${code}-W${weekday}`,
+          WeekdayIso: weekday,
+          ShiftCode: "S1",
+          StartMinuteOfDay: 480,
+          EndMinuteOfDay: 1020,
+          BreakMinutes: 45,
+          BreakStartMinuteOfDay: 720,
+          IsWorking: true,
+          AvailabilityPct: 100,
+          EffectiveFrom: "2026-01-01",
+        },
+      }));
+    }
+  }
+  return created;
+}
+
+async function seedMfgParts() {
+  console.log("\n── تولید: قطعات، مواد و BOM ──");
+  const parts = [
+    {
+      key: "FG", PartNo: "FG-GEARBOX-01", NameFa: "گیربکس صنعتی ۵۰ کیلونیوتن", PartType: "manufactured", BaseUom: "ea",
+      StandardUnitCost: 48_000_000,
+      Planning: { SafetyStockQty: 2, LotSize: 5, OrderMultiple: 1, DefaultWarehouseCode: "WH-FG" },
+    },
+    {
+      key: "SA", PartNo: "SA-HOUSING-01", NameFa: "پوستهٔ ماشین‌کاری‌شدهٔ گیربکس", PartType: "manufactured", BaseUom: "ea",
+      StandardUnitCost: 19_500_000,
+      Planning: { LotSize: 10, OrderMultiple: 5, DefaultWarehouseCode: "WH-WIP", OpeningInventory: { WarehouseCode: "WH-WIP", LocationCode: "WIP-01", OnHandQty: 60 } },
+    },
+    {
+      key: "PLATE", PartNo: "RM-ST37-PLATE", NameFa: "ورق فولادی ST37 — ۲۰ میلی‌متر", PartType: "purchased", BaseUom: "kg",
+      StandardUnitCost: 9_500,
+      Planning: {
+        ProcurementType: "buy", LeadTimeDays: 12, SafetyStockQty: 60, LotSize: 500, OrderMultiple: 50,
+        DefaultWarehouseCode: "WH-RAW",
+        OpeningInventory: { WarehouseCode: "WH-RAW", LocationCode: "A-01", LotNo: "LOT-ST37-01", OnHandQty: 600 },
+      },
+    },
+    {
+      key: "BEARING", PartNo: "RM-BEARING-6208", NameFa: "بلبرینگ ۶۲۰۸", PartType: "purchased", BaseUom: "ea",
+      StandardUnitCost: 2_400_000,
+      Planning: {
+        ProcurementType: "buy", LeadTimeDays: 45, SafetyStockQty: 40, LotSize: 100, OrderMultiple: 10,
+        DefaultWarehouseCode: "WH-RAW",
+        OpeningInventory: { WarehouseCode: "WH-RAW", LocationCode: "B-04", OnHandQty: 200 },
+      },
+    },
+    {
+      key: "BOLT", PartNo: "RM-BOLT-M12", NameFa: "پیچ M12 گالوانیزه", PartType: "purchased", BaseUom: "ea",
+      StandardUnitCost: 18_000,
+      Planning: {
+        ProcurementType: "buy", LeadTimeDays: 7, LotSize: 1000, OrderMultiple: 100,
+        DefaultWarehouseCode: "WH-RAW",
+        OpeningInventory: { WarehouseCode: "WH-RAW", LocationCode: "C-02", OnHandQty: 900 },
+      },
+    },
+    {
+      key: "SEAL", PartNo: "RM-SEAL-NBR", NameFa: "کاسه‌نمد NBR", PartType: "purchased", BaseUom: "ea",
+      StandardUnitCost: 640_000,
+      Planning: {
+        ProcurementType: "buy", LeadTimeDays: 21, LotSize: 50, OrderMultiple: 10,
+        DefaultWarehouseCode: "WH-RAW",
+        OpeningInventory: { WarehouseCode: "WH-RAW", LocationCode: "B-09", OnHandQty: 60 },
+      },
+    },
+  ];
+
+  const byKey = {};
+  for (const part of parts) {
+    const { key, ...body } = part;
+    const created = await mfgStep(`قطعه ${body.PartNo}`, async () => {
+      try {
+        return await mfg("/parts", { user: MFG_ROLES.eng, method: "POST", body });
+      } catch (err) {
+        if (err.status !== 409) throw err;
+        const list = await mfg(`/parts?q=${encodeURIComponent(body.PartNo)}`, { user: MFG_ROLES.eng });
+        return (list?.items ?? []).find((row) => row.PartNo === body.PartNo) ?? null;
+      }
+    });
+    if (created) byKey[key] = created;
+  }
+  return byKey;
+}
+
+async function seedMfgBomAndRouting(parts) {
+  console.log("\n── تولید: BOM و مسیر ساخت ──");
+  if (!parts.SA || !parts.FG) return {};
+
+  const buildBom = async (label, part, lines) => {
+    const header = await mfgStep(label, async () => {
+      try {
+        const created = await mfg("/bom-headers", {
+          user: MFG_ROLES.eng,
+          method: "POST",
+          body: {
+            PartId: part.Id,
+            Revision: "A",
+            BaseQuantity: 1,
+            BaseUom: part.BaseUom,
+            EffectiveFrom: "2026-01-01",
+            IsDefault: true,
+            NoteFa: "نسخهٔ نمونهٔ کارخانهٔ نمایشی",
+          },
+        });
+        for (const [lineNo, component, quantityPer, uom] of lines) {
+          await mfg(`/bom-headers/${created.Id}/items`, {
+            user: MFG_ROLES.eng,
+            method: "POST",
+            body: { LineNo: lineNo, ComponentPartId: component.Id, QuantityPer: quantityPer, Uom: uom, ScrapPct: 2, IssueMethod: "backflush" },
+          });
+        }
+        return created;
+      } catch (err) {
+        if (err.status !== 409) throw err;
+        const list = await mfg(`/bom-headers?partId=${encodeURIComponent(part.Id)}`, { user: MFG_ROLES.eng });
+        return (list?.items ?? [])[0] ?? "skip";
+      }
+    });
+    if (!header) return null;
+    if (header.Status && header.Status !== "draft") {
+      console.log(`  ⏭  ${label} — آزادسازی (قبلاً ${header.Status})`);
+      skip++;
+      return header;
+    }
+    const released = await mfgStep(`${label} — آزادسازی`, () => mfg(`/bom-headers/${header.Id}/release`, {
+      user: MFG_ROLES.eng,
+      method: "POST",
+      match: header.RowVersion,
+      body: { EffectiveAt: "2026-01-01" },
+    }));
+    return released ?? header;
+  };
+
+  const housingBom = await buildBom("BOM پوستهٔ گیربکس", parts.SA, [
+    [10, parts.PLATE, 18, "kg"],
+    [20, parts.SEAL, 2, "ea"],
+  ]);
+  const gearboxBom = await buildBom("BOM گیربکس", parts.FG, [
+    [10, parts.SA, 1, "ea"],
+    [20, parts.BEARING, 4, "ea"],
+    [30, parts.BOLT, 12, "ea"],
+  ]);
+
+  const buildRouting = async (label, part, operations) => {
+    const routing = await mfgStep(label, async () => {
+      try {
+        const created = await mfg("/routings", {
+          user: MFG_ROLES.eng,
+          method: "POST",
+          body: {
+            PartId: part.Id,
+            RoutingCode: `RT-${part.PartNo}`,
+            Revision: "A",
+            BaseQuantity: 1,
+            BaseUom: part.BaseUom,
+            EffectiveFrom: "2026-01-01",
+            IsDefault: true,
+          },
+        });
+        for (const operation of operations) {
+          await mfg(`/routings/${created.Id}/operations`, { user: MFG_ROLES.eng, method: "POST", body: operation });
+        }
+        return created;
+      } catch (err) {
+        if (err.status !== 409) throw err;
+        const list = await mfg(`/routings?partId=${encodeURIComponent(part.Id)}`, { user: MFG_ROLES.eng });
+        return (list?.items ?? [])[0] ?? "skip";
+      }
+    });
+    if (!routing) return null;
+    if (routing.Status && routing.Status !== "draft") {
+      console.log(`  ⏭  ${label} — آزادسازی (قبلاً ${routing.Status})`);
+      skip++;
+      return routing;
+    }
+    const released = await mfgStep(`${label} — آزادسازی`, () => mfg(`/routings/${routing.Id}/release`, {
+      user: MFG_ROLES.eng,
+      method: "POST",
+      match: routing.RowVersion,
+      body: { EffectiveAt: "2026-01-01" },
+    }));
+    return released ?? routing;
+  };
+
+  const gearboxRouting = await buildRouting("مسیر ساخت گیربکس", parts.FG, [
+    { SequenceNo: 10, OperationCode: "OP-10", OperationNameFa: "ماشین‌کاری پوسته", WorkCenterId: parts.WC_CNC, SetupMinutes: 45, RunMinutesPerUnit: 8, QueueMinutes: 15, MoveMinutes: 10 },
+    { SequenceNo: 20, OperationCode: "OP-20", OperationNameFa: "مونتاژ نهایی", WorkCenterId: parts.WC_ASM, SetupMinutes: 20, RunMinutesPerUnit: 14, PredecessorSequence: 10, QueueMinutes: 10 },
+    { SequenceNo: 30, OperationCode: "OP-30", OperationNameFa: "بازرسی کیفی نهایی", WorkCenterId: parts.WC_QC, SetupMinutes: 5, RunMinutesPerUnit: 3, PredecessorSequence: 20, InspectionRequired: true },
+  ]);
+
+  return { housingBom, gearboxBom, gearboxRouting };
+}
+
+async function seedManufacturing(workCenters) {
+  console.log("\n── تولید: سفارش، زمان‌بندی، اجرا، MRP و هزینه ──");
+  if (!workCenters || !workCenters["WC-CNC"]) {
+    console.log("  ⏭  مراکز کاری ساخته نشد؛ بخش تولید رد شد");
+    return;
+  }
+  const parts = await seedMfgParts();
+  const graph = await seedMfgBomAndRouting({
+    ...parts,
+    WC_CNC: workCenters["WC-CNC"].Id,
+    WC_ASM: workCenters["WC-ASM"].Id,
+    WC_QC: workCenters["WC-QC"].Id,
+  });
+  if (!graph?.gearboxBom || !graph?.gearboxRouting || !parts.FG) return;
+
+  const createOrder = async (orderNo, quantity, dueDays, dispatchWeight) => {
+    const order = await mfgStep(`سفارش ${orderNo}`, async () => {
+      try {
+        return await mfg("/orders", {
+          user: MFG_ROLES.plan,
+          method: "POST",
+          body: {
+            OrderNo: orderNo,
+            PartId: parts.FG.Id,
+            OrderQuantity: quantity,
+            Uom: parts.FG.BaseUom,
+            DueAt: isoAt(dueDays, 1020),
+            RequestedStartAt: isoAt(1, 480),
+            PriorityRule: "EDD",
+            DispatchWeight: dispatchWeight,
+            DemandSource: "sales-order",
+            DemandRef: `SO-${orderNo}`,
+            CustomerNameSnapshot: "مشتری نمونهٔ فاز ۱",
+            AllowOverrun: false,
+            NoteFa: "سفارش نمونهٔ کارخانهٔ نمایشی",
+          },
+        });
+      } catch (err) {
+        if (err.status !== 409) throw err;
+        const list = await mfg(`/orders?q=${encodeURIComponent(orderNo)}`, { user: MFG_ROLES.plan });
+        return (list?.items ?? []).find((row) => row.OrderNo === orderNo) ?? "skip";
+      }
+    });
+    if (!order) return null;
+
+    await mfgStep(`آزادسازی ${orderNo} (Snapshot عملیات)`, () => mfg(`/orders/${order.Id}/release`, {
+      user: MFG_ROLES.manager,
+      method: "POST",
+      match: order.RowVersion,
+      body: { BomHeaderId: graph.gearboxBom.Id, RoutingId: graph.gearboxRouting.Id, EffectiveAt: "2026-01-01" },
+    }));
+    return order;
+  };
+
+  const schedule = (label, orderIds) => mfgStep(label, () => mfg("/scheduling/runs", {
+    user: MFG_ROLES.plan,
+    method: "POST",
+    body: {
+      Direction: "forward",
+      CapacityMode: "finite",
+      DispatchRule: "EDD",
+      From: isoAt(0, 480),
+      To: isoAt(30, 1020),
+      OrderIds: orderIds,
+    },
+  }));
+
+  const orderOperations = async (orderId) => {
+    const detail = await mfg(`/orders/${orderId}`, { user: MFG_ROLES.plan });
+    return (detail?.Operations ?? detail?.operations ?? []).sort((a, b) => a.SequenceNo - b.SequenceNo);
+  };
+
+  /** یک نشست کامل روی یک عملیات: شروع، گزارش تجمعی و اتمام. */
+  const runOperation = async (operation, { good, scrap = 0, startedAt, finishedAt }) => {
+    const execution = await mfgStep(`شروع اجرای ${operation.OperationCode}`, () => mfg(`/operations/${operation.Id}/executions`, {
+      user: MFG_ROLES.supervisor,
+      method: "POST",
+      idem: `seed-start-${operation.Id}`,
+      body: { StartedAt: startedAt },
+    }));
+    if (!execution) return null;
+    const reported = await mfgStep(`گزارش ${operation.OperationCode}`, () => mfg(`/executions/${execution.Id}/reports`, {
+      user: MFG_ROLES.supervisor,
+      method: "POST",
+      match: execution.RowVersion,
+      body: {
+        InputQuantity: Number(operation.PlannedQuantity),
+        GoodQuantity: good,
+        ReworkQuantity: 0,
+        ScrapQuantity: scrap,
+        SetupActualMinutes: Number(operation.PlannedSetupMinutes ?? 0) + 5,
+        RunActualMinutes: Math.round(Number(operation.PlannedRunMinutesPerUnit ?? 0) * Number(operation.PlannedQuantity)),
+        NoteFa: "گزارش نمونهٔ کارخانهٔ نمایشی",
+      },
+    }));
+    if (!reported) return null;
+    await mfgStep(`اتمام ${operation.OperationCode}`, () => mfg(`/executions/${execution.Id}/finish`, {
+      user: MFG_ROLES.supervisor,
+      method: "POST",
+      match: reported.RowVersion,
+      idem: `seed-finish-${operation.Id}`,
+      body: { FinishedAt: finishedAt, InspectionApproved: operation.InspectionRequired === true },
+    }));
+    return reported;
+  };
+
+  /* ── سفارش ۱: چرخهٔ کامل تا بستن نهایی (همهٔ نیازمندی‌ها تأمین و مصرف می‌شوند) ── */
+  const closeable = await createOrder("MO-DEMO-0001", 20, 14, 1.25);
+  if (!closeable) return;
+  await schedule("زمان‌بندی MO-DEMO-0001", [closeable.Id]);
+
+  const firstOperations = await orderOperations(closeable.Id);
+  for (const operation of firstOperations) {
+    await runOperation(operation, { good: Number(operation.PlannedQuantity), startedAt: isoAt(1, 480), finishedAt: isoAt(2, 960) });
+  }
+
+  const mrp = await mfgStep("اجرای MRP برای MO-DEMO-0001", () => mfg("/mrp/calculate", {
+    user: MFG_ROLES.plan,
+    method: "POST",
+    body: { OrderIds: [closeable.Id], ThroughDate: isoAt(60, 1020), PreviewOnly: false },
+  }));
+
+  const materialRows = await mfg("/materials?limit=200", { user: MFG_ROLES.material });
+  const materialById = new Map((materialRows?.items ?? []).map((row) => [row.Id, row]));
+  for (const requirement of mrp?.requirements ?? []) {
+    const material = materialById.get(requirement.MaterialId);
+    await mfgStep(`مصرف مواد — ${material?.PartNo ?? requirement.MaterialId}`, () => mfg("/material-consumptions", {
+      user: MFG_ROLES.supervisor,
+      method: "POST",
+      idem: `seed-consume-${requirement.Id}`,
+      body: {
+        OperationId: requirement.ProductionOrderOperationId ?? firstOperations[0]?.Id,
+        RequirementId: requirement.Id,
+        MaterialId: requirement.MaterialId,
+        Quantity: Number(requirement.NetQuantity),
+        Uom: requirement.Uom ?? material?.BaseUom ?? "ea",
+        UnitCost: Number(material?.StandardUnitCost ?? 0),
+        Currency: material?.Currency ?? "IRR",
+        ConsumptionMethod: "manual",
+        WarehouseCode: material?.DefaultWarehouseCode ?? undefined,
+      },
+    }));
+  }
+
+  await mfgStep("مشاهدهٔ هزینهٔ سفارش", () => mfg(`/cost/orders/${closeable.Id}`, { user: MFG_ROLES.cost }));
+  const closeableBefore = await mfg(`/orders/${closeable.Id}`, { user: MFG_ROLES.cost });
+  await mfgStep("تطبیق نهایی هزینهٔ MO-DEMO-0001", () => mfg(`/cost/orders/${closeable.Id}/reconcile`, {
+    user: MFG_ROLES.cost,
+    method: "POST",
+    match: closeableBefore.RowVersion,
+    idem: "seed-reconcile-1",
+    body: { CostVersion: 1, ReconcileThrough: isoAt(3, 1020) },
+  }));
+  const closableOrder = await mfg(`/orders/${closeable.Id}`, { user: MFG_ROLES.manager });
+  await mfgStep("بستن نهایی MO-DEMO-0001", () => mfg(`/orders/${closeable.Id}/close`, {
+    user: MFG_ROLES.manager,
+    method: "POST",
+    match: closableOrder.RowVersion,
+    body: { CloseReason: "تکمیل و تحویل نمونهٔ نمایشی" },
+  }));
+
+  /* ── سفارش ۲: کمبود مواد، توقف، ضایعات و دوباره‌کاری باز روی سالن ── */
+  const shortageOrder = await createOrder("MO-DEMO-0002", 40, 24, 1);
+  if (shortageOrder) {
+    await schedule("زمان‌بندی MO-DEMO-0002", [shortageOrder.Id]);
+    const secondOperations = await orderOperations(shortageOrder.Id);
+    const first = secondOperations[0];
+    if (first) {
+      await runOperation(first, { good: 39, scrap: 1, startedAt: isoAt(2, 480), finishedAt: isoAt(3, 900) });
+      await mfgStep("ثبت توقف ماشین CNC", () => mfg("/downtime", {
+        user: MFG_ROLES.supervisor,
+        method: "POST",
+        idem: "seed-downtime-1",
+        body: {
+          WorkCenterId: first.WorkCenterId,
+          OperationId: first.Id,
+          StartedAt: isoAt(2, 660),
+          FinishedAt: isoAt(2, 705),
+          DowntimeType: "unplanned",
+          ReasonCode: "TOOL-CHANGE",
+          NoteFa: "تعویض ابزار نمونه",
+        },
+      }));
+      await mfgStep("ثبت ضایعات", () => mfg("/scrap", {
+        user: MFG_ROLES.supervisor,
+        method: "POST",
+        idem: "seed-scrap-1",
+        body: {
+          OperationId: first.Id,
+          Quantity: 1,
+          Uom: parts.FG.BaseUom,
+          ReasonCode: "DIMENSION",
+          Disposition: "scrapped",
+          CostAmount: 1_950_000,
+          Currency: "IRR",
+          NoteFa: "خارج از تلورانس نمونه",
+        },
+      }));
+      if (secondOperations[1]) {
+        await mfgStep("ثبت دوباره‌کاری", () => mfg("/rework", {
+          user: MFG_ROLES.supervisor,
+          method: "POST",
+          idem: "seed-rework-1",
+          body: {
+            SourceOperationId: first.Id,
+            TargetOperationId: secondOperations[1].Id,
+            Quantity: 1,
+            Uom: parts.FG.BaseUom,
+            ReasonCode: "DIMENSION",
+            Disposition: "return-to-operation",
+            NoteFa: "اصلاح روی ایستگاه مونتاژ",
+          },
+        }));
+      }
+    }
+
+    const shortageMrp = await mfgStep("اجرای MRP برای MO-DEMO-0002", () => mfg("/mrp/calculate", {
+      user: MFG_ROLES.plan,
+      method: "POST",
+      body: { OrderIds: [shortageOrder.Id], ThroughDate: isoAt(90, 1020), PreviewOnly: false },
+    }));
+    const shortages = await mfgStep("خواندن کمبودهای مواد", () => mfg(`/mrp/shortages?orderId=${encodeURIComponent(shortageOrder.Id)}`, { user: MFG_ROLES.material }));
+    const shortageIds = (shortages?.items ?? [])
+      .filter((row) => Number(row.ShortageQuantity) > 0)
+      .map((row) => row.Id);
+    if (shortageIds.length > 0) {
+      await mfgStep(`پیشنهاد تأمین برای ${shortageIds.length} کمبود`, () => mfg("/material-procurement-proposals", {
+        user: MFG_ROLES.material,
+        method: "POST",
+        body: { ThroughDate: isoAt(120, 1020), RequirementIds: shortageIds.slice(0, 50), NoteFa: "پیشنهاد نمونهٔ کارخانهٔ نمایشی" },
+      }));
+    }
+    void shortageMrp;
+  }
+
+  /* ── گزارش‌های عملیاتی، داشبورد و هشدار ── */
+  const sampleOperation = firstOperations[0];
+  if (sampleOperation) {
+    await mfgStep("مشاهدهٔ هزینهٔ عملیات", () => mfg(`/cost/operations/${sampleOperation.Id}`, { user: MFG_ROLES.cost }));
+    await mfgStep("گزارش انحراف عملیات", () => mfg(`/operations/${sampleOperation.Id}/variance`, { user: MFG_ROLES.supervisor }));
+  }
+
+  const window = `?from=${encodeURIComponent(isoAt(-1, 480))}&to=${encodeURIComponent(isoAt(45, 1020))}`;
+  await mfgStep("داشبورد خلاصه", () => mfg(`/dashboard/overview${window}`, { user: MFG_ROLES.manager }));
+  await mfgStep("بار مراکز کاری", () => mfg(`/dashboard/work-center-load${window}`, { user: MFG_ROLES.manager }));
+  await mfgStep("شاخص OEE", () => mfg(`/dashboard/oee${window}`, { user: MFG_ROLES.manager }));
+  await mfgStep("بار و گلوگاه ظرفیت", () => mfg(`/capacity/load${window}`, { user: MFG_ROLES.plan }));
+  await mfgStep("گلوگاه‌های ظرفیت", () => mfg(`/capacity/bottlenecks${window}`, { user: MFG_ROLES.plan }));
+  await mfgStep("Gantt نسخهٔ جاری", () => mfg(`/scheduling/gantt${window}`, { user: MFG_ROLES.plan }));
+
+  const alerts = await mfgStep("فهرست هشدارها", () => mfg("/alerts", { user: MFG_ROLES.manager }));
+  const firstAlert = (alerts?.items ?? []).find((row) => row.Status === "open");
+  if (firstAlert) {
+    await mfgStep("رسیدگی به هشدار", () => mfg(`/alerts/${firstAlert.Id}/acknowledgements`, {
+      user: MFG_ROLES.manager,
+      method: "POST",
+      match: firstAlert.RowVersion,
+      body: { NoteFa: "رسیدگی نمونهٔ کارخانهٔ نمایشی" },
+    }));
+  }
+}
+
+async function seedMfgAndReport() {
+  const workCenters = await seedMfgWorkCenters();
+  await seedManufacturing(workCenters);
+}
+
 await seedCore();
 await seedRates();
 await seedPeople();
 await seedPlan();
 await seedTimesheets();
 await seedCost();
+await seedMfgAndReport();
 
 console.log(`\n${ok} ساخته شد · ${skip} از قبل بود · ${fail} ناموفق`);
 if (fail > 0) {

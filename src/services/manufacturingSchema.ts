@@ -250,6 +250,9 @@ export const MANUFACTURING_TABLES: TableDef[] = [
       c("BomHeaderId", "text", { len: 60 }), c("RoutingId", "text", { len: 60 }),
       c("BomRevisionSnapshot", "text", { len: 40 }), c("RoutingRevisionSnapshot", "text", { len: 40 }),
       c("ReleasedAt", "datetime"), c("ReleasedBy", "text", { len: 60 }), c("CompletedAt", "datetime"), c("ClosedAt", "datetime"),
+      /* بستن سفارش با «چه کسی» معنا دارد؛ قرارداد ۵.۴ ستون ClosedBy را سمت
+       * سرور الزام می‌کند و AuditLog به‌تنهایی پاسخ گزارش‌های بستن نیست. */
+      c("ClosedBy", "text", { len: 60 }),
       req("AllowOverrun", "bool", { default: "0" }), c("NoteFa", "text", { len: 1200 }),
     ],
     indexes: [
