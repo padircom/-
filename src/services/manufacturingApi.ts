@@ -499,10 +499,22 @@ export interface MfgOrderOperation {
   OrderNo?: string;
   OrderStatus?: MfgOrderStatus;
   PriorityRule?: string;
+  DueDate?: string | null;
+  WorkCenterCode?: string | null;
+  WorkCenterNameFa?: string | null;
   PlannedStartAt?: string | null;
   PlannedEndAt?: string | null;
   ScheduledResourceId?: string | null;
   ScheduleVersion?: number | null;
+  SegmentCount?: number;
+  IsFirmScheduled?: boolean;
+  ActiveExecution?: MfgOperationExecution | null;
+  LatestExecution?: MfgOperationExecution | null;
+  ExecutionCount?: number;
+  CumulativeInputQuantity?: number;
+  CumulativeGoodQuantity?: number;
+  CumulativeScrapQuantity?: number;
+  CumulativeReworkQuantity?: number;
   CreatedAt: string;
   CreatedBy: string;
   RowVersion: number;
@@ -690,12 +702,26 @@ export interface MfgOrderCost {
 
 export interface MfgOperationVariance {
   OperationId?: string;
+  ProductionOrderId?: string;
+  WorkCenterId?: string;
+  OperationCode?: string;
+  OperationNameFa?: string | null;
+  SequenceNo?: number | null;
+  Status?: MfgOperationStatus;
+  InspectionRequired?: boolean;
+  OverlapAllowed?: boolean;
+  TransferBatchQty?: number | null;
   Quantities: {
-    Planned: number;
-    Input: number;
-    Good: number;
-    Scrap: number;
-    Rework: number;
+    PlannedQuantity?: number;
+    InputQuantity?: number;
+    GoodQuantity?: number;
+    ScrapQuantity?: number;
+    ReworkQuantity?: number;
+    Planned?: number;
+    Input?: number;
+    Good?: number;
+    Scrap?: number;
+    Rework?: number;
   };
   TimeMinutes: {
     StandardSetupMinutes?: number;
@@ -706,10 +732,15 @@ export interface MfgOperationVariance {
     ActualTotalMinutes?: number;
     SetupVarianceMinutes?: number;
     RunVarianceMinutes?: number;
+    TotalTimeVarianceMinutes?: number;
     TotalVarianceMinutes?: number;
     DowntimeMinutes?: number;
     [key: string]: number | undefined;
   };
+  Executions?: MfgOperationExecution[];
+  ScrapRecords?: any[];
+  ReworkRecords?: any[];
+  DowntimeLogs?: any[];
   Cost?: any;
   CostRedacted?: boolean;
 }
@@ -1208,6 +1239,7 @@ export const MfgClient = {
       Quantity: number;
       Uom: string;
       ReasonCode: string;
+      Disposition?: "rework-in-place" | "return-to-operation" | "scrap";
       NoteFa?: string | null;
     },
     idempotencyKey: string = makeIdempotencyKey("rework"),

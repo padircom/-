@@ -15,6 +15,7 @@ import {
   type MfgMaterial,
   type MfgMaterialRequirement,
   type MfgOperationCost,
+  type MfgOperationStatus,
   type MfgOperationVariance,
   type MfgOrderCost,
   type MfgOrderDetail,
@@ -25,6 +26,7 @@ import {
   type MfgRouting,
   type MfgRoutingOperation,
   type MfgWorkCenter,
+  type MfgWorkCenterResource,
 } from "../services/manufacturingApi";
 import type { DispatchRule } from "../services/manufacturingModel";
 
@@ -130,7 +132,7 @@ export default function ManufacturingWorkspace({
     DemandRef: "",
   });
 
-  // Scheduling state
+  // Scheduling state (Phase 2: Finite Scheduling + Selective Rescheduling)
   const [gantt, setGantt] = useState<MfgGanttResponse | null>(null);
   const [capacityBuckets, setCapacityBuckets] = useState<MfgCapacityBucket[]>([]);
   const [bottlenecks, setBottlenecks] = useState<Array<MfgCapacityBucket & { OverloadMinutes: number }>>([]);
@@ -143,12 +145,43 @@ export default function ManufacturingWorkspace({
     CapacityMode: "finite",
     DispatchRule: "WSPT",
   });
+  const [schedFilterWorkCenterId, setSchedFilterWorkCenterId] = useState<string>("");
+  const [schedFilterOrderId, setSchedFilterOrderId] = useState<string>("");
+  const [capacityBucketMode, setCapacityBucketMode] = useState<"day" | "week">("day");
+  const [bottleneckThreshold, setBottleneckThreshold] = useState<number>(80);
+  const [selectedRescheduleOpIds, setSelectedRescheduleOpIds] = useState<string[]>([]);
+  const [rescheduleReason, setRescheduleReason] = useState<string>("جبران توقف ناگهانی مرکز کاری و بهینه‌سازی زنجیرهٔ پس‌نیاز");
+  const [rescheduleDispatchRule, setRescheduleDispatchRule] = useState<DispatchRule>("WSPT");
   const [lastScheduleResult, setLastScheduleResult] = useState<any>(null);
+  const [lastRescheduleResult, setLastRescheduleResult] = useState<any>(null);
 
-  // Execution state
+  // Execution state (Phase 2: Operation Control + Cumulative Progress Logging + Quality/Downtime)
   const [queueOps, setQueueOps] = useState<MfgOrderOperation[]>([]);
   const [selectedOpId, setSelectedOpId] = useState<string>("");
   const [opVariance, setOpVariance] = useState<MfgOperationVariance | null>(null);
+  const [execFilterWorkCenterId, setExecFilterWorkCenterId] = useState<string>("");
+  const [execFilterStatus, setExecFilterStatus] = useState<string>("");
+  const [execFilterShiftDate, setExecFilterShiftDate] = useState<string>("");
+  const [wcResources, setWcResources] = useState<MfgWorkCenterResource[]>([]);
+  const [startExecForm, setStartExecForm] = useState({
+    ResourceId: "",
+    OperatorId: "u-mfg-operator",
+    NoteFa: "شروع اجرای عملیات طبق برنامهٔ ظرفیت محدود",
+  });
+  const [progressForm, setProgressForm] = useState({
+    InputQuantity: 1,
+    GoodQuantity: 1,
+    ScrapQuantity: 0,
+    ReworkQuantity: 0,
+    SetupActualMinutes: 15,
+    RunActualMinutes: 45,
+    NoteFa: "ثبت پیشرفت تجمعی شیفت کاری",
+  });
+  const [finishExecForm, setFinishExecForm] = useState({
+    InspectionApproved: true,
+    NoteFa: "تکمیل عملیات و تحویل به ایستگاه بعدی",
+  });
+  const [execEventSubTab, setExecEventSubTab] = useState<"downtime" | "scrap" | "rework">("downtime");
   const [downtimeForm, setDowntimeForm] = useState({
     WorkCenterId: "",
     DowntimeType: "unplanned" as "planned" | "unplanned",
@@ -156,6 +189,22 @@ export default function ManufacturingWorkspace({
     StartedAt: "2026-10-06T08:00:00.000Z",
     FinishedAt: "2026-10-06T08:30:00.000Z",
     NoteFa: "تعویض ابزار برش در شیفت صبح",
+  });
+  const [scrapForm, setScrapForm] = useState({
+    Quantity: 0.5,
+    Uom: "ea",
+    ReasonCode: "DIM-TOL",
+    Disposition: "scrapped" as "scrapped" | "returned-to-stock" | "use-as-is",
+    CostAmount: 150000,
+    NoteFa: "انحراف ابعادی خارج از تلرانس نقشه",
+  });
+  const [reworkForm, setReworkForm] = useState({
+    TargetOperationId: "",
+    Quantity: 0.5,
+    Uom: "ea",
+    ReasonCode: "SURF-BURR",
+    Disposition: "rework-in-place" as "rework-in-place" | "return-to-operation" | "scrap",
+    NoteFa: "پلیسه‌گیری مجدد سطح ماشین‌کاری‌شده",
   });
 
   // MRP state
@@ -257,35 +306,87 @@ export default function ManufacturingWorkspace({
           if (aliveRef.current) setSelectedOrder(detail);
         }
       } else if (tab === "scheduling") {
-        const [gRes, cRes, bRes] = await Promise.all([
-          MfgClient.getGantt(plantId, mfgUserId, { from: fromIso, to: toIso }),
-          MfgClient.getCapacityLoad(plantId, mfgUserId, { from: fromIso, to: toIso, bucket: "day" }),
-          MfgClient.getCapacityBottlenecks(plantId, mfgUserId, { from: fromIso, to: toIso, minUtilizationPct: 80 }),
+        const ganttQuery: { from: string; to: string; workCenterId?: string; orderId?: string } = {
+          from: fromIso,
+          to: toIso,
+        };
+        if (schedFilterWorkCenterId) ganttQuery.workCenterId = schedFilterWorkCenterId;
+        if (schedFilterOrderId) ganttQuery.orderId = schedFilterOrderId;
+
+        const capQuery: { from: string; to: string; bucket?: "day" | "week"; workCenterId?: string } = {
+          from: fromIso,
+          to: toIso,
+          bucket: capacityBucketMode,
+        };
+        if (schedFilterWorkCenterId) capQuery.workCenterId = schedFilterWorkCenterId;
+
+        const [gRes, cRes, bRes, wcRes, oRes, qRes] = await Promise.all([
+          MfgClient.getGantt(plantId, mfgUserId, ganttQuery),
+          MfgClient.getCapacityLoad(plantId, mfgUserId, capQuery),
+          MfgClient.getCapacityBottlenecks(plantId, mfgUserId, {
+            from: fromIso,
+            to: toIso,
+            minUtilizationPct: bottleneckThreshold,
+          }),
+          canMfgAccess(mfgUserId, "mfg.workcenter.view", plantId)
+            ? MfgClient.listWorkCenters(plantId, mfgUserId, { limit: 100 })
+            : Promise.resolve({ items: [], page: { limit: 100, offset: 0, total: 0 } }),
+          canMfgAccess(mfgUserId, "mfg.order.view", plantId)
+            ? MfgClient.listOrders(plantId, mfgUserId, { limit: 100 })
+            : Promise.resolve({ items: [], page: { limit: 100, offset: 0, total: 0 } }),
+          canMfgAccess(mfgUserId, "mfg.execution.view", plantId)
+            ? MfgClient.getOperationQueue(plantId, mfgUserId, { limit: 100 })
+            : Promise.resolve({ items: [], page: { limit: 100, offset: 0, total: 0 } }),
         ]);
         if (!aliveRef.current) return;
         setGantt(gRes);
         setCapacityBuckets(cRes.buckets ?? []);
         setBottlenecks(bRes.items ?? []);
+        if (wcRes.items?.length) setWorkCenters(wcRes.items);
+        if (oRes.items?.length) setOrders(oRes.items);
+        if (qRes.items?.length) setQueueOps(qRes.items);
       } else if (tab === "execution") {
+        const queueQuery: { workCenterId?: string; status?: MfgOperationStatus; shiftDate?: string; limit?: number } = {
+          limit: 100,
+        };
+        if (execFilterWorkCenterId) queueQuery.workCenterId = execFilterWorkCenterId;
+        if (execFilterStatus) queueQuery.status = execFilterStatus as MfgOperationStatus;
+        if (execFilterShiftDate) queueQuery.shiftDate = execFilterShiftDate;
+
         const [qRes, wcRes] = await Promise.all([
-          MfgClient.getOperationQueue(plantId, mfgUserId, { limit: 100 }),
+          MfgClient.getOperationQueue(plantId, mfgUserId, queueQuery),
           canMfgAccess(mfgUserId, "mfg.workcenter.view", plantId)
             ? MfgClient.listWorkCenters(plantId, mfgUserId, { limit: 100 })
             : Promise.resolve({ items: [], page: { limit: 100, offset: 0, total: 0 } }),
         ]);
         if (!aliveRef.current) return;
-        setQueueOps(qRes.items ?? []);
+        const items = qRes.items ?? [];
+        setQueueOps(items);
         if (wcRes.items?.length) {
           setWorkCenters(wcRes.items);
           if (!downtimeForm.WorkCenterId) {
             setDowntimeForm((f) => ({ ...f, WorkCenterId: wcRes.items[0].Id }));
           }
         }
-        if (qRes.items?.length) {
-          const opId = selectedOpId || qRes.items[0].Id;
+        if (items.length) {
+          const targetOp = items.find((o) => o.Id === selectedOpId) ?? items[0];
+          const opId = targetOp.Id;
           setSelectedOpId(opId);
-          const vRes = await MfgClient.getOperationVariance(plantId, mfgUserId, opId);
-          if (aliveRef.current) setOpVariance(vRes);
+          const [vRes, resList] = await Promise.all([
+            MfgClient.getOperationVariance(plantId, mfgUserId, opId),
+            canMfgAccess(mfgUserId, "mfg.workcenter.view", plantId) && targetOp.WorkCenterId
+              ? MfgClient.listWorkCenterResources(plantId, mfgUserId, targetOp.WorkCenterId, { activeOnly: true, limit: 50 })
+              : Promise.resolve({ items: [], page: { limit: 50, offset: 0, total: 0 } }),
+          ]);
+          if (aliveRef.current) {
+            setOpVariance(vRes);
+            setWcResources(resList.items ?? []);
+            if (resList.items?.length && !startExecForm.ResourceId) {
+              setStartExecForm((f) => ({ ...f, ResourceId: resList.items[0].Id }));
+            }
+          }
+        } else {
+          setOpVariance(null);
         }
       } else if (tab === "mrp") {
         const [mRes, sRes] = await Promise.all([
@@ -322,7 +423,26 @@ export default function ManufacturingWorkspace({
     } finally {
       if (aliveRef.current) setLoading(false);
     }
-  }, [tab, plantId, mfgUserId, fromIso, toIso, selectedBomId, selectedRoutingId, selectedOrder?.Id, selectedOpId, costOrderId, downtimeForm.WorkCenterId]);
+  }, [
+    tab,
+    plantId,
+    mfgUserId,
+    fromIso,
+    toIso,
+    selectedBomId,
+    selectedRoutingId,
+    selectedOrder?.Id,
+    selectedOpId,
+    costOrderId,
+    downtimeForm.WorkCenterId,
+    schedFilterWorkCenterId,
+    schedFilterOrderId,
+    capacityBucketMode,
+    bottleneckThreshold,
+    execFilterWorkCenterId,
+    execFilterStatus,
+    execFilterShiftDate,
+  ]);
 
   useEffect(() => {
     void loadActiveTab();
@@ -511,13 +631,150 @@ export default function ManufacturingWorkspace({
     }
   }
 
+  function handleToggleRescheduleOp(opId: string) {
+    setSelectedRescheduleOpIds((prev) =>
+      prev.includes(opId) ? prev.filter((id) => id !== opId) : [...prev, opId],
+    );
+  }
+
+  async function handleRescheduleSelected(e: React.FormEvent) {
+    e.preventDefault();
+    if (!selectedRescheduleOpIds.length) {
+      setError(tr("حداقل یک عملیات قابل‌اعزام (pending / queued / ready) را برای باززمان‌بندی انتخاب کنید.", "Select at least one dispatchable operation to reschedule."));
+      return;
+    }
+    const expectedVersion = gantt?.scheduleVersion ?? lastScheduleResult?.ScheduleVersion ?? 0;
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const res = await MfgClient.reschedule(plantId, mfgUserId, {
+        ExpectedScheduleVersion: expectedVersion,
+        OperationIds: selectedRescheduleOpIds,
+        Reason: rescheduleReason.trim() || "باززمان‌بندی انتخابی از میز کار تولید",
+        DispatchRule: rescheduleDispatchRule,
+      });
+      setLastRescheduleResult(res);
+      setNotice(
+        tr(
+          `باززمان‌بندی از نسخهٔ v${res.PreviousScheduleVersion} به v${res.ScheduleVersion} ثبت شد (${res.diff?.changedOperationCount ?? 0} عملیات تغییریافته، ${res.diff?.movedCount ?? 0} قطعه جابه‌جاشده).`,
+          `Rescheduled v${res.PreviousScheduleVersion} -> v${res.ScheduleVersion} (${res.diff?.changedOperationCount ?? 0} changed).`,
+        ),
+      );
+      await loadActiveTab();
+    } catch (err) {
+      setError(formatError(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function handleInspectOpVariance(opId: string) {
     setSelectedOpId(opId);
     setBusy(true);
     setError("");
     try {
-      const vRes = await MfgClient.getOperationVariance(plantId, mfgUserId, opId);
+      const targetOp = queueOps.find((o) => o.Id === opId);
+      const [vRes, resList] = await Promise.all([
+        MfgClient.getOperationVariance(plantId, mfgUserId, opId),
+        canMfgAccess(mfgUserId, "mfg.workcenter.view", plantId) && targetOp?.WorkCenterId
+          ? MfgClient.listWorkCenterResources(plantId, mfgUserId, targetOp.WorkCenterId, { activeOnly: true, limit: 50 })
+          : Promise.resolve({ items: [], page: { limit: 50, offset: 0, total: 0 } }),
+      ]);
       setOpVariance(vRes);
+      if (targetOp?.WorkCenterId) {
+        setWcResources(resList.items ?? []);
+        if (resList.items?.length) {
+          setStartExecForm((f) => ({ ...f, ResourceId: resList.items[0].Id }));
+        }
+      }
+    } catch (err) {
+      setError(formatError(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleStartExecution(op: MfgOrderOperation) {
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const exec = await MfgClient.startExecution(plantId, mfgUserId, op.Id, {
+        ...(startExecForm.ResourceId ? { ResourceId: startExecForm.ResourceId } : {}),
+        ...(startExecForm.OperatorId ? { OperatorId: startExecForm.OperatorId } : {}),
+        NoteFa: startExecForm.NoteFa || undefined,
+      });
+      setNotice(
+        tr(
+          `نشست اجرای #${exec.ExecutionNo} برای عملیات ${op.OperationCode} آغاز شد (Status: ${exec.Status}).`,
+          `Execution #${exec.ExecutionNo} started for ${op.OperationCode}.`,
+        ),
+      );
+      setSelectedOpId(op.Id);
+      await loadActiveTab();
+    } catch (err) {
+      setError(formatError(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleReportExecution(e: React.FormEvent, op: MfgOrderOperation) {
+    e.preventDefault();
+    const activeExec = op.ActiveExecution ?? opVariance?.Executions?.find((ex) => ex.Status === "running");
+    if (!activeExec) {
+      setError(tr("نشست اجرای فعالی (running) برای این عملیات یافت نشد؛ ابتدا نشست اجرا را آغاز کنید.", "No running execution session found."));
+      return;
+    }
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const updated = await MfgClient.reportExecution(plantId, mfgUserId, activeExec.Id, activeExec.RowVersion, {
+        InputQuantity: Number(progressForm.InputQuantity) || 0,
+        GoodQuantity: Number(progressForm.GoodQuantity) || 0,
+        ScrapQuantity: Number(progressForm.ScrapQuantity) || 0,
+        ReworkQuantity: Number(progressForm.ReworkQuantity) || 0,
+        SetupActualMinutes: Number(progressForm.SetupActualMinutes) || 0,
+        RunActualMinutes: Number(progressForm.RunActualMinutes) || 0,
+        NoteFa: progressForm.NoteFa || undefined,
+      });
+      setNotice(
+        tr(
+          `گزارش پیشرفت روی نشست #${updated.ExecutionNo} ثبت شد (مجموع سالم: ${updated.GoodQuantity}، ورودی: ${updated.InputQuantity}، نسخه: v${updated.RowVersion}).`,
+          `Progress reported on execution #${updated.ExecutionNo} (Good: ${updated.GoodQuantity}, v${updated.RowVersion}).`,
+        ),
+      );
+      await loadActiveTab();
+    } catch (err) {
+      setError(formatError(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleFinishExecution(op: MfgOrderOperation) {
+    const activeExec = op.ActiveExecution ?? opVariance?.Executions?.find((ex) => ex.Status === "running");
+    if (!activeExec) {
+      setError(tr("نشست در حال اجرا برای اتمام یافت نشد.", "No running execution session to finish."));
+      return;
+    }
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const finished = await MfgClient.finishExecution(plantId, mfgUserId, activeExec.Id, activeExec.RowVersion, {
+        InspectionApproved: finishExecForm.InspectionApproved,
+        NoteFa: finishExecForm.NoteFa || undefined,
+      });
+      setNotice(
+        tr(
+          `نشست اجرای #${finished.ExecutionNo} پایان یافت؛ وضعیت عملیات: ${finished.OperationStatus ?? finished.operation?.Status ?? "completed"}.`,
+          `Execution #${finished.ExecutionNo} finished.`,
+        ),
+      );
+      await loadActiveTab();
     } catch (err) {
       setError(formatError(err));
     } finally {
@@ -534,6 +791,7 @@ export default function ManufacturingWorkspace({
     try {
       const res = await MfgClient.reportDowntime(plantId, mfgUserId, {
         WorkCenterId: downtimeForm.WorkCenterId,
+        ...(selectedOpId ? { OperationId: selectedOpId } : {}),
         DowntimeType: downtimeForm.DowntimeType,
         ReasonCode: downtimeForm.ReasonCode,
         StartedAt: downtimeForm.StartedAt,
@@ -541,6 +799,71 @@ export default function ManufacturingWorkspace({
         NoteFa: downtimeForm.NoteFa,
       });
       setNotice(tr(`توقف مرکز کاری با مدت ${res.DurationMinutes ?? "—"} دقیقه ثبت شد.`, `Downtime recorded.`));
+      await loadActiveTab();
+    } catch (err) {
+      setError(formatError(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleReportScrap(e: React.FormEvent) {
+    e.preventDefault();
+    if (!selectedOpId) return;
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const activeOp = queueOps.find((o) => o.Id === selectedOpId);
+      const res = await MfgClient.reportScrap(plantId, mfgUserId, {
+        OperationId: selectedOpId,
+        ...(activeOp?.ActiveExecution?.Id ? { ExecutionId: activeOp.ActiveExecution.Id } : {}),
+        Quantity: Number(scrapForm.Quantity) || 0.1,
+        Uom: scrapForm.Uom || "ea",
+        ReasonCode: scrapForm.ReasonCode.trim() || "DIM-TOL",
+        Disposition: scrapForm.Disposition,
+        CostAmount: Number(scrapForm.CostAmount) || 0,
+        Currency: "IRR",
+        NoteFa: scrapForm.NoteFa || undefined,
+      });
+      setNotice(
+        tr(
+          `ضایعات به مقدار ${res.Quantity} ${res.Uom} با کد علت ${res.ReasonCode} ثبت شد.`,
+          `Scrap (${res.Quantity} ${res.Uom}) recorded.`,
+        ),
+      );
+      await loadActiveTab();
+    } catch (err) {
+      setError(formatError(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleReportRework(e: React.FormEvent) {
+    e.preventDefault();
+    if (!selectedOpId) return;
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const activeOp = queueOps.find((o) => o.Id === selectedOpId);
+      const res = await MfgClient.reportRework(plantId, mfgUserId, {
+        SourceOperationId: selectedOpId,
+        ...(reworkForm.TargetOperationId ? { TargetOperationId: reworkForm.TargetOperationId } : {}),
+        ...(activeOp?.ActiveExecution?.Id ? { ExecutionId: activeOp.ActiveExecution.Id } : {}),
+        Quantity: Number(reworkForm.Quantity) || 0.1,
+        Uom: reworkForm.Uom || "ea",
+        ReasonCode: reworkForm.ReasonCode.trim() || "SURF-BURR",
+        Disposition: reworkForm.Disposition,
+        NoteFa: reworkForm.NoteFa || undefined,
+      });
+      setNotice(
+        tr(
+          `دستور دوباره‌کاری ${res.ReworkNo} برای مقدار ${res.Quantity} ${res.Uom} صادر شد (وضعیت: ${res.Status}).`,
+          `Rework order ${res.ReworkNo} created.`,
+        ),
+      );
       await loadActiveTab();
     } catch (err) {
       setError(formatError(err));
@@ -1184,202 +1507,957 @@ export default function ManufacturingWorkspace({
         </div>
       )}
 
-      {/* ══════════════════════ ۴) تب زمان‌بندی، گانت و ظرفیت ══════════════════════ */}
+      {/* ══════════════════════ ۴) تب زمان‌بندی، گانت و ظرفیت (Phase 2: Finite Scheduling) ══════════════════════ */}
       {!loading && tab === "scheduling" && (
         <div className="space-y-3">
-          <section className="glass-dark rounded-xl p-3 flex flex-wrap items-center justify-between gap-3">
-            <div className="flex flex-wrap items-center gap-2 text-xs">
-              <strong className="tx1">{tr("موتور زمان‌بندی ظرفیت محدود:", "Finite Capacity Scheduler:")}</strong>
-              <select
-                aria-label="Direction"
-                className="rounded border b-line-soft bg-[var(--row)] px-2 py-1 text-xs tx1"
-                value={scheduleForm.Direction}
-                onChange={(e) => setScheduleForm((f) => ({ ...f, Direction: e.target.value as "forward" | "backward" }))}
-              >
-                <option value="forward">forward</option>
-                <option value="backward">backward</option>
-              </select>
-              <select
-                aria-label="CapacityMode"
-                className="rounded border b-line-soft bg-[var(--row)] px-2 py-1 text-xs tx1"
-                value={scheduleForm.CapacityMode}
-                onChange={(e) => setScheduleForm((f) => ({ ...f, CapacityMode: e.target.value as "finite" | "semi-finite" }))}
-              >
-                <option value="finite">finite</option>
-                <option value="semi-finite">semi-finite</option>
-              </select>
-              <select
-                aria-label="DispatchRule"
-                className="rounded border b-line-soft bg-[var(--row)] px-2 py-1 text-xs tx1"
-                value={scheduleForm.DispatchRule}
-                onChange={(e) => setScheduleForm((f) => ({ ...f, DispatchRule: e.target.value as DispatchRule }))}
-              >
-                <option value="WSPT">WSPT</option>
-                <option value="EDD">EDD</option>
-                <option value="SPT">SPT</option>
-                <option value="CR">CR</option>
-                <option value="FIFO">FIFO</option>
-              </select>
-              {canMfgAccess(mfgUserId, "mfg.schedule.run", plantId) && (
-                <button className={btnCls} disabled={busy} onClick={() => void handleRunSchedule()}>
-                  {tr("اجرای زمان‌بندی جدید (POST /scheduling/runs)", "Run Schedule")}
-                </button>
-              )}
+          {/* نوار اجرای موتور زمان‌بندی ظرفیت محدود */}
+          <section className="glass-dark rounded-xl p-3 space-y-2.5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                <strong className="tx1">{tr("موتور زمان‌بندی ظرفیت محدود (Finite Capacity Scheduler):", "Finite Capacity Scheduler:")}</strong>
+                <select
+                  aria-label="Direction"
+                  className="rounded border b-line-soft bg-[var(--row)] px-2 py-1 text-xs tx1"
+                  value={scheduleForm.Direction}
+                  onChange={(e) => setScheduleForm((f) => ({ ...f, Direction: e.target.value as "forward" | "backward" }))}
+                >
+                  <option value="forward">forward (رو به جلو)</option>
+                  <option value="backward">backward (رو به عقب از DueAt)</option>
+                </select>
+                <select
+                  aria-label="CapacityMode"
+                  className="rounded border b-line-soft bg-[var(--row)] px-2 py-1 text-xs tx1"
+                  value={scheduleForm.CapacityMode}
+                  onChange={(e) => setScheduleForm((f) => ({ ...f, CapacityMode: e.target.value as "finite" | "semi-finite" }))}
+                >
+                  <option value="finite">finite (ظرفیت محدود بدون هم‌پوشانی)</option>
+                  <option value="semi-finite">semi-finite (ثبت اضافه‌بار)</option>
+                </select>
+                <select
+                  aria-label="DispatchRule"
+                  className="rounded border b-line-soft bg-[var(--row)] px-2 py-1 text-xs tx1"
+                  value={scheduleForm.DispatchRule}
+                  onChange={(e) => setScheduleForm((f) => ({ ...f, DispatchRule: e.target.value as DispatchRule }))}
+                >
+                  <option value="WSPT">WSPT (نسبت DispatchWeight به زمان)</option>
+                  <option value="EDD">EDD (زودترین سررسید)</option>
+                  <option value="SPT">SPT (کوتاه‌ترین زمان پردازش)</option>
+                  <option value="CR">CR (نسبت بحرانی)</option>
+                  <option value="FIFO">FIFO (نوبت ورود)</option>
+                  <option value="MANUAL">MANUAL (رتبهٔ دستی)</option>
+                </select>
+                {canMfgAccess(mfgUserId, "mfg.schedule.run", plantId) && (
+                  <button className={btnCls} disabled={busy} onClick={() => void handleRunSchedule()}>
+                    {tr("اجرای زمان‌بندی جدید (POST /scheduling/runs)", "Run Schedule")}
+                  </button>
+                )}
+              </div>
+              <div className="flex items-center gap-2 text-xs" dir="ltr">
+                <span className="rounded bg-sky-500/15 border border-sky-500/40 px-2 py-0.5 text-sky-200 font-semibold">
+                  ScheduleVersion: v{gantt?.scheduleVersion ?? lastScheduleResult?.ScheduleVersion ?? 0}
+                </span>
+              </div>
             </div>
-            <span className="tx3 text-xs" dir="ltr">
-              ScheduleVersion: v{gantt?.scheduleVersion ?? lastScheduleResult?.ScheduleVersion ?? 0}
-            </span>
+
+            {/* فیلترهای گانت، سطل ظرفیت و آستانهٔ گلوگاه */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-2 pt-2 border-t b-line-soft text-xs">
+              <div>
+                <label className="tx3 block mb-1">{tr("فیلتر مرکز کاری (workCenterId)", "Filter Work Center")}</label>
+                <select
+                  className={inputCls}
+                  value={schedFilterWorkCenterId}
+                  onChange={(e) => setSchedFilterWorkCenterId(e.target.value)}
+                >
+                  <option value="">{tr("همهٔ مراکز کاری کارخانه", "All Work Centers")}</option>
+                  {workCenters.map((wc) => (
+                    <option key={wc.Id} value={wc.Id}>
+                      {wc.Code} — {wc.NameFa}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="tx3 block mb-1">{tr("فیلتر سفارش تولید (orderId)", "Filter Order")}</label>
+                <select
+                  className={inputCls}
+                  value={schedFilterOrderId}
+                  onChange={(e) => setSchedFilterOrderId(e.target.value)}
+                >
+                  <option value="">{tr("همهٔ سفارش‌های فعال", "All Orders")}</option>
+                  {orders.map((ord) => (
+                    <option key={ord.Id} value={ord.Id}>
+                      {ord.OrderNo} ({ord.Status})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="tx3 block mb-1">{tr("سطل گزارش ظرفیت (bucket)", "Capacity Bucket")}</label>
+                <select
+                  className={inputCls}
+                  value={capacityBucketMode}
+                  onChange={(e) => setCapacityBucketMode(e.target.value as "day" | "week")}
+                >
+                  <option value="day">{tr("روزانه (day)", "Daily (day)")}</option>
+                  <option value="week">{tr("هفتگی (week)", "Weekly (week)")}</option>
+                </select>
+              </div>
+              <div>
+                <label className="tx3 block mb-1">{tr("آستانهٔ گلوگاه ظرفیت (%)", "Bottleneck Threshold (%)")}</label>
+                <input
+                  type="number"
+                  min={1}
+                  max={100}
+                  className={inputCls}
+                  dir="ltr"
+                  value={bottleneckThreshold}
+                  onChange={(e) => setBottleneckThreshold(Math.max(1, Math.min(100, Number(e.target.value) || 80)))}
+                />
+              </div>
+            </div>
           </section>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-            {/* گانت خطوط مراکز کاری */}
-            <section className="glass-dark rounded-xl p-3 space-y-2">
-              <h4 className="tx1 font-semibold">{tr("نمای گانت مراکز کاری (GET /scheduling/gantt)", "Work Center Gantt Lanes")}</h4>
+            {/* گانت خطوط مراکز کاری همراه با نوار زمانی نسبی و انتخاب عملیات برای باززمان‌بندی */}
+            <section className="glass-dark rounded-xl p-3 space-y-2.5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h4 className="tx1 font-semibold">{tr("نمای گانت مراکز کاری و قطعات چندتکه (GET /scheduling/gantt)", "Work Center Gantt Lanes")}</h4>
+                <span className="tx3 text-[11px]">
+                  {tr("شکست خودکار روی استراحت صریح (BreakStartMinuteOfDay) و توقف‌ها", "Splits across explicit breaks & downtime")}
+                </span>
+              </div>
               {!gantt?.lanes?.length ? (
                 <p className="tx3 text-xs">{tr("قطعه‌ای در این پنجرهٔ زمانی یافت نشد.", "No segments in this window.")}</p>
               ) : (
-                <div className="space-y-2">
-                  {gantt.lanes.map((lane) => (
-                    <div key={lane.workCenter.Id} className="rounded-lg border b-line-soft p-2.5 space-y-1.5 text-xs">
-                      <div className="flex justify-between tx1 font-medium">
-                        <span>{lane.workCenter.Code} — {lane.workCenter.NameFa}</span>
-                        <span className="tx3" dir="ltr">{lane.workCenter.TimeZoneId}</span>
+                <div className="space-y-2.5 max-h-96 overflow-y-auto">
+                  {gantt.lanes.map((lane) => {
+                    const winStart = Date.parse(gantt.from || fromIso);
+                    const winEnd = Date.parse(gantt.to || toIso);
+                    const winSpan = Math.max(1, winEnd - winStart);
+                    return (
+                      <div key={lane.workCenter.Id} className="rounded-lg border b-line-soft p-2.5 space-y-2 text-xs">
+                        <div className="flex flex-wrap justify-between gap-2 tx1 font-medium">
+                          <span>
+                            {lane.workCenter.Code} — {lane.workCenter.NameFa}
+                            <span className="tx3 mx-1.5 text-[11px]">({lane.workCenter.Kind})</span>
+                          </span>
+                          <span className="tx3" dir="ltr">
+                            TZ: {lane.workCenter.TimeZoneId} · Cap: {lane.workCenter.NominalCapacityMinutesPerDay}m/d · Eff: {lane.workCenter.EfficiencyPct}%
+                          </span>
+                        </div>
+                        <div className="space-y-1.5">
+                          {lane.segments.map((seg) => {
+                            const segStart = Date.parse(seg.PlannedStartAt);
+                            const segEnd = Date.parse(seg.PlannedEndAt);
+                            const leftPct = Number.isFinite(segStart)
+                              ? Math.max(0, Math.min(95, ((segStart - winStart) / winSpan) * 100))
+                              : 0;
+                            const widthPct = Number.isFinite(segStart) && Number.isFinite(segEnd)
+                              ? Math.max(4, Math.min(100 - leftPct, ((segEnd - segStart) / winSpan) * 100))
+                              : 12;
+                            const isSelectedForResched = selectedRescheduleOpIds.includes(seg.ProductionOrderOperationId);
+                            const queueOp = queueOps.find((o) => o.Id === seg.ProductionOrderOperationId);
+                            const canRescheduleOp = !queueOp || ["pending", "queued", "ready"].includes(queueOp.Status);
+                            return (
+                              <div
+                                key={seg.Id}
+                                className={`rounded border px-2.5 py-1.5 space-y-1 tx2 ${
+                                  seg.Status === "firm"
+                                    ? "bg-emerald-500/10 border-emerald-500/40"
+                                    : "bg-sky-500/10 border-sky-500/30"
+                                }`}
+                                dir="ltr"
+                              >
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                  <label className="flex items-center gap-1.5 cursor-pointer">
+                                    {canRescheduleOp && (
+                                      <input
+                                        type="checkbox"
+                                        checked={isSelectedForResched}
+                                        onChange={() => handleToggleRescheduleOp(seg.ProductionOrderOperationId)}
+                                      />
+                                    )}
+                                    <strong>{seg.OrderNo}</strong> · #{seg.SequenceNo} {seg.OperationCode}
+                                    <span className="rounded bg-black/30 px-1.5 py-0.5 text-[10px]">
+                                      Seg #{seg.SegmentNo}
+                                    </span>
+                                    <span
+                                      className={`rounded px-1.5 py-0.5 text-[10px] ${
+                                        seg.Status === "firm"
+                                          ? "bg-emerald-500/20 text-emerald-200"
+                                          : "bg-sky-500/20 text-sky-200"
+                                      }`}
+                                    >
+                                      {seg.Status}
+                                    </span>
+                                  </label>
+                                  <span className="text-[11px]">
+                                    {seg.PlannedStartAt.slice(0, 16).replace("T", " ")} → {seg.PlannedEndAt.slice(0, 16).replace("T", " ")} ({seg.PlannedCapacityMinutes}m · {seg.DispatchRule})
+                                  </span>
+                                </div>
+                                {/* نوار موقعیت زمانی در پنجره */}
+                                <div className="h-1.5 w-full rounded bg-black/30 overflow-hidden relative">
+                                  <div
+                                    className={`h-full rounded ${seg.Status === "firm" ? "bg-emerald-400" : "bg-sky-400"}`}
+                                    style={{ marginLeft: `${leftPct}%`, width: `${widthPct}%` }}
+                                  />
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
                       </div>
-                      <div className="space-y-1">
-                        {lane.segments.map((seg) => (
-                          <div key={seg.Id} className="rounded bg-sky-500/10 border border-sky-500/30 px-2 py-1 flex flex-wrap justify-between gap-2 tx2" dir="ltr">
-                            <span>
-                              <strong>{seg.OrderNo}</strong> · {seg.OperationCode} (Seg #{seg.SegmentNo})
-                            </span>
-                            <span>
-                              {seg.PlannedStartAt.slice(0, 16).replace("T", " ")} → {seg.PlannedEndAt.slice(0, 16).replace("T", " ")} ({seg.PlannedCapacityMinutes}m · {seg.DispatchRule})
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </section>
 
             {/* بار ظرفیت و گلوگاه‌ها */}
-            <section className="glass-dark rounded-xl p-3 space-y-2">
+            <section className="glass-dark rounded-xl p-3 space-y-2.5">
               <h4 className="tx1 font-semibold">{tr("بار ظرفیت و گلوگاه‌ها (GET /capacity/load & bottlenecks)", "Capacity Load & Bottlenecks")}</h4>
-              <div className="space-y-1.5 max-h-72 overflow-y-auto">
-                {capacityBuckets.map((b, i) => (
-                  <div key={i} className="rounded border b-line-soft p-2 text-xs tx2 flex justify-between" dir="ltr">
-                    <span>{b.PeriodStart.slice(0, 10)}</span>
-                    <span>
-                      Load: {b.PlannedLoadMinutes} / Avail: {b.AvailableMinutes} min ({b.UtilizationPct ?? 0}%)
-                    </span>
-                  </div>
-                ))}
-              </div>
-              {bottlenecks.length > 0 && (
-                <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-2 text-xs text-amber-200 space-y-1">
-                  <div className="font-semibold">{tr(`گلوگاه‌های شناسایی‌شده (${bottlenecks.length}):`, `Bottlenecks (${bottlenecks.length}):`)}</div>
-                  {bottlenecks.map((bn, idx) => (
-                    <div key={idx} className="flex justify-between" dir="ltr">
-                      <span>{bn.PeriodStart.slice(0, 10)}</span>
-                      <span>Util: {bn.UtilizationPct}% · Overload: {bn.OverloadMinutes}m</span>
+              <div className="space-y-1.5 max-h-64 overflow-y-auto">
+                {capacityBuckets.map((b, i) => {
+                  const util = b.UtilizationPct ?? 0;
+                  const barColor =
+                    util > 100 ? "bg-rose-500" : util >= bottleneckThreshold ? "bg-amber-400" : "bg-emerald-400";
+                  const wcName = workCenters.find((w) => w.Id === b.WorkCenterId)?.Code ?? b.WorkCenterId;
+                  return (
+                    <div key={i} className="rounded border b-line-soft p-2 text-xs tx2 space-y-1" dir="ltr">
+                      <div className="flex justify-between">
+                        <span>
+                          <strong>{wcName}</strong> · {b.PeriodStart.slice(0, 10)}
+                        </span>
+                        <span>
+                          Load: <strong>{b.PlannedLoadMinutes}</strong> / Avail: {b.AvailableMinutes}m ({util}%)
+                        </span>
+                      </div>
+                      <div className="h-1.5 w-full rounded bg-black/30 overflow-hidden">
+                        <div className={`h-full ${barColor}`} style={{ width: `${Math.min(100, Math.max(0, util))}%` }} />
+                      </div>
                     </div>
-                  ))}
+                  );
+                })}
+              </div>
+              {bottlenecks.length > 0 ? (
+                <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-2.5 text-xs text-amber-200 space-y-1">
+                  <div className="font-semibold">
+                    {tr(`گلوگاه‌های شناسایی‌شده با بهره‌وری ≥ ${bottleneckThreshold}% (${bottlenecks.length} مورد):`, `Bottlenecks (${bottlenecks.length}):`)}
+                  </div>
+                  {bottlenecks.map((bn, idx) => {
+                    const wcName = workCenters.find((w) => w.Id === bn.WorkCenterId)?.Code ?? bn.WorkCenterId;
+                    return (
+                      <div key={idx} className="flex justify-between" dir="ltr">
+                        <span>{wcName} · {bn.PeriodStart.slice(0, 10)}</span>
+                        <span>Util: {bn.UtilizationPct}% · Overload: {bn.OverloadMinutes}m</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="rounded border b-line-soft p-2 text-xs tx3">
+                  {tr(`هیچ گلوگاهی بالای آستانهٔ ${bottleneckThreshold}% در این پنجره وجود ندارد.`, `No bottlenecks above ${bottleneckThreshold}%.`)}
                 </div>
               )}
             </section>
           </div>
-        </div>
-      )}
 
-      {/* ══════════════════════ ۵) تب اجرای کارگاهی ══════════════════════ */}
-      {!loading && tab === "execution" && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-          <section className="glass-dark rounded-xl p-3 space-y-2">
-            <h4 className="tx1 font-semibold">{tr("صف اعزام عملیات کارگاهی (GET /operation-queue)", "Shop-Floor Operation Queue")}</h4>
-            <div className="space-y-1.5 max-h-80 overflow-y-auto">
-              {queueOps.map((op) => (
-                <div
-                  key={op.Id}
-                  className={`rounded-lg border b-line-soft p-2.5 flex flex-wrap items-center justify-between gap-2 text-xs tx2 ${
-                    selectedOpId === op.Id ? "toggle-on" : ""
-                  }`}
-                >
-                  <div>
-                    <strong className="tx1" dir="ltr">{op.OrderNo ?? op.ProductionOrderId} · {op.OperationCode}</strong> — {op.OperationNameFa}
-                    <div className="tx3 mt-0.5" dir="ltr">
-                      Status: {op.Status} · PlannedQty: {op.PlannedQuantity} · Cap: {op.PlannedCapacityMinutes}m
-                    </div>
-                  </div>
-                  <button className={btnCls} onClick={() => void handleInspectOpVariance(op.Id)}>
-                    {tr("تحلیل انحراف", "Variance")}
-                  </button>
-                </div>
-              ))}
-            </div>
-          </section>
-
+          {/* پنل باززمان‌بندی انتخابی (POST /scheduling/reschedules) و گزارش Diff */}
           <section className="glass-dark rounded-xl p-3 space-y-3">
-            <h4 className="tx1 font-semibold">{tr("انحراف عملیات و ثبت توقف کارگاهی", "Operation Variance & Downtime Log")}</h4>
-            {opVariance && (
-              <div className="rounded-lg border b-line-soft p-2.5 text-xs tx2 space-y-1.5">
-                <div className="tx1 font-medium">{tr("مقادیر تولید عملیات (GET /operations/:id/variance):", "Quantities:")}</div>
-                <div className="grid grid-cols-5 gap-2 text-center" dir="ltr">
-                  <div className="rounded bg-black/20 p-1.5">Planned<br /><strong>{opVariance.Quantities?.Planned ?? 0}</strong></div>
-                  <div className="rounded bg-black/20 p-1.5">Input<br /><strong>{opVariance.Quantities?.Input ?? 0}</strong></div>
-                  <div className="rounded bg-black/20 p-1.5 text-emerald-300">Good<br /><strong>{opVariance.Quantities?.Good ?? 0}</strong></div>
-                  <div className="rounded bg-black/20 p-1.5 text-rose-300">Scrap<br /><strong>{opVariance.Quantities?.Scrap ?? 0}</strong></div>
-                  <div className="rounded bg-black/20 p-1.5 text-amber-300">Rework<br /><strong>{opVariance.Quantities?.Rework ?? 0}</strong></div>
-                </div>
-                <div className="tx3" dir="ltr">
-                  Time Variance: {opVariance.TimeMinutes?.TotalVarianceMinutes ?? 0} min · Downtime: {opVariance.TimeMinutes?.DowntimeMinutes ?? 0} min
-                </div>
-              </div>
-            )}
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h4 className="tx1 font-semibold">
+                {tr(
+                  "باززمان‌بندی انتخابی عملیات و زنجیرهٔ پس‌نیاز با حفظ بلوک‌های Firm (POST /scheduling/reschedules)",
+                  "Selective Operation Rescheduling & Schedule Diff",
+                )}
+              </h4>
+              <span className="tx3 text-xs" dir="ltr">
+                ExpectedScheduleVersion: v{gantt?.scheduleVersion ?? lastScheduleResult?.ScheduleVersion ?? 0} · Selected: {selectedRescheduleOpIds.length}
+              </span>
+            </div>
 
-            {canMfgAccess(mfgUserId, "mfg.downtime.report", plantId) && (
-              <form onSubmit={handleReportDowntime} className="border-t b-line-soft pt-3 space-y-2">
-                <div className="tx1 text-xs font-medium">{tr("ثبت توقف جدید با Idempotency-Key (POST /downtime)", "Report Downtime (Idempotent)")}</div>
-                <div className="grid grid-cols-2 gap-2">
-                  <select
-                    aria-label="Downtime WorkCenter"
-                    className={inputCls}
-                    value={downtimeForm.WorkCenterId}
-                    onChange={(e) => setDowntimeForm((f) => ({ ...f, WorkCenterId: e.target.value }))}
-                  >
-                    {workCenters.map((wc) => (
-                      <option key={wc.Id} value={wc.Id}>{wc.Code} — {wc.NameFa}</option>
-                    ))}
-                  </select>
-                  <select
-                    aria-label="DowntimeType"
-                    className={inputCls}
-                    value={downtimeForm.DowntimeType}
-                    onChange={(e) => setDowntimeForm((f) => ({ ...f, DowntimeType: e.target.value as "planned" | "unplanned" }))}
-                  >
-                    <option value="unplanned">unplanned</option>
-                    <option value="planned">planned</option>
-                  </select>
+            {/* انتخاب سریع عملیات قابل اعزام */}
+            <div className="flex flex-wrap gap-1.5">
+              {queueOps
+                .filter((op) => ["pending", "queued", "ready"].includes(op.Status))
+                .map((op) => {
+                  const checked = selectedRescheduleOpIds.includes(op.Id);
+                  return (
+                    <button
+                      key={op.Id}
+                      type="button"
+                      className={`${btnCls} ${checked ? "toggle-on" : ""}`}
+                      onClick={() => handleToggleRescheduleOp(op.Id)}
+                    >
+                      <span dir="ltr">
+                        {checked ? "☑ " : "☐ "}
+                        {op.OrderNo ?? op.ProductionOrderId} · #{op.SequenceNo} {op.OperationCode} ({op.Status})
+                      </span>
+                    </button>
+                  );
+                })}
+            </div>
+
+            {canMfgAccess(mfgUserId, "mfg.schedule.resequence", plantId) && (
+              <form onSubmit={handleRescheduleSelected} className="grid grid-cols-1 md:grid-cols-4 gap-2 items-end">
+                <div className="md:col-span-2">
+                  <label className="tx3 text-xs block mb-1">{tr("علت باززمان‌بندی (Reason)", "Reschedule Reason")}</label>
                   <input
-                    placeholder="ReasonCode"
                     className={inputCls}
-                    dir="ltr"
-                    value={downtimeForm.ReasonCode}
-                    onChange={(e) => setDowntimeForm((f) => ({ ...f, ReasonCode: e.target.value }))}
-                  />
-                  <input
-                    placeholder={tr("شرح فارسی", "NoteFa")}
-                    className={inputCls}
-                    value={downtimeForm.NoteFa}
-                    onChange={(e) => setDowntimeForm((f) => ({ ...f, NoteFa: e.target.value }))}
+                    value={rescheduleReason}
+                    onChange={(e) => setRescheduleReason(e.target.value)}
+                    placeholder={tr("علت باززمان‌بندی زنجیرهٔ عملیات...", "Reason for rescheduling...")}
                   />
                 </div>
-                <button type="submit" className={btnCls} disabled={busy}>
-                  {tr("ثبت توقف مرکز کاری", "Submit Downtime")}
+                <div>
+                  <label className="tx3 text-xs block mb-1">{tr("قاعدهٔ اعزام جدید (DispatchRule)", "New DispatchRule")}</label>
+                  <select
+                    className={inputCls}
+                    value={rescheduleDispatchRule}
+                    onChange={(e) => setRescheduleDispatchRule(e.target.value as DispatchRule)}
+                  >
+                    <option value="WSPT">WSPT</option>
+                    <option value="EDD">EDD</option>
+                    <option value="SPT">SPT</option>
+                    <option value="CR">CR</option>
+                    <option value="FIFO">FIFO</option>
+                    <option value="MANUAL">MANUAL</option>
+                  </select>
+                </div>
+                <button type="submit" className={btnCls} disabled={busy || !selectedRescheduleOpIds.length}>
+                  {tr("اجرای باززمان‌بندی انتخابی (Reschedule)", "Run Selective Reschedule")}
                 </button>
               </form>
             )}
+
+            {lastRescheduleResult?.diff && (
+              <div className="rounded-lg border border-sky-500/40 bg-sky-500/10 p-2.5 text-xs tx2 space-y-1.5" dir="ltr">
+                <div className="flex flex-wrap justify-between font-semibold text-sky-200">
+                  <span>
+                    Schedule Diff: v{lastRescheduleResult.diff.fromScheduleVersion} → v{lastRescheduleResult.diff.toScheduleVersion}
+                  </span>
+                  <span>
+                    Changed Ops: {lastRescheduleResult.diff.changedOperationCount} · Moved: {lastRescheduleResult.diff.movedCount} · Unchanged (Firm/Frozen): {lastRescheduleResult.diff.unchangedOperationCount}
+                  </span>
+                </div>
+                {(lastRescheduleResult.diff.changedOperations ?? []).map((ch: any, idx: number) => (
+                  <div key={idx} className="rounded bg-black/25 px-2 py-1 flex flex-wrap justify-between gap-2">
+                    <span>Op: <strong>{ch.operationId}</strong> ({ch.changeType ?? "rescheduled"})</span>
+                    <span>
+                      {ch.previousStartAt ? `${ch.previousStartAt.slice(0, 16).replace("T", " ")} → ` : ""}
+                      <strong>{ch.newStartAt?.slice(0, 16).replace("T", " ") ?? "—"}</strong> .. <strong>{ch.newEndAt?.slice(0, 16).replace("T", " ") ?? "—"}</strong>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
           </section>
+        </div>
+      )}
+
+      {/* ══════════════════════ ۵) تب اجرای کارگاهی و کنترل عملیات (Phase 2: Operation Control & Progress Logging) ══════════════════════ */}
+      {!loading && tab === "execution" && (
+        <div className="space-y-3">
+          {/* فیلترهای صف اعزام کارگاهی */}
+          <section className="glass-dark rounded-xl p-3 grid grid-cols-1 md:grid-cols-4 gap-2 items-end text-xs">
+            <div>
+              <label className="tx3 block mb-1">{tr("فیلتر مرکز کاری (workCenterId)", "Work Center Filter")}</label>
+              <select
+                className={inputCls}
+                value={execFilterWorkCenterId}
+                onChange={(e) => setExecFilterWorkCenterId(e.target.value)}
+              >
+                <option value="">{tr("همهٔ مراکز کاری", "All Work Centers")}</option>
+                {workCenters.map((wc) => (
+                  <option key={wc.Id} value={wc.Id}>
+                    {wc.Code} — {wc.NameFa}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="tx3 block mb-1">{tr("فیلتر وضعیت عملیات (status)", "Operation Status")}</label>
+              <select
+                className={inputCls}
+                value={execFilterStatus}
+                onChange={(e) => setExecFilterStatus(e.target.value)}
+              >
+                <option value="">{tr("همهٔ وضعیت‌ها", "All Statuses")}</option>
+                <option value="pending">pending (در انتظار)</option>
+                <option value="queued">queued (در صف)</option>
+                <option value="ready">ready (آماده اعزام)</option>
+                <option value="running">running (در حال اجرا)</option>
+                <option value="paused">paused (متوقف موقت)</option>
+                <option value="completed">completed (تکمیل‌شده)</option>
+                <option value="blocked">blocked (مسدود)</option>
+              </select>
+            </div>
+            <div>
+              <label className="tx3 block mb-1">{tr("فیلتر تاریخ شیفت (shiftDate)", "Shift Date (YYYY-MM-DD)")}</label>
+              <input
+                type="date"
+                className={inputCls}
+                dir="ltr"
+                value={execFilterShiftDate}
+                onChange={(e) => setExecFilterShiftDate(e.target.value)}
+              />
+            </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                className={btnCls}
+                onClick={() => {
+                  setExecFilterWorkCenterId("");
+                  setExecFilterStatus("");
+                  setExecFilterShiftDate("");
+                }}
+              >
+                {tr("پاک‌سازی فیلترها", "Clear Filters")}
+              </button>
+            </div>
+          </section>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+            {/* ستون راست: صف اعزام عملیات کارگاهی و کنترل نشست اجرا */}
+            <section className="glass-dark rounded-xl p-3 space-y-3">
+              <div className="flex items-center justify-between">
+                <h4 className="tx1 font-semibold">{tr("صف اعزام عملیات کارگاهی (GET /operation-queue)", "Shop-Floor Operation Queue")}</h4>
+                <span className="tx3 text-xs">{tr(`${queueOps.length} عملیات فعال`, `${queueOps.length} operations`)}</span>
+              </div>
+              <div className="space-y-2 max-h-80 overflow-y-auto">
+                {queueOps.map((op) => {
+                  const isSelected = selectedOpId === op.Id;
+                  return (
+                    <div
+                      key={op.Id}
+                      className={`rounded-lg border b-line-soft p-2.5 space-y-1.5 text-xs tx2 ${
+                        isSelected ? "toggle-on" : ""
+                      }`}
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                          <strong className="tx1" dir="ltr">
+                            {op.OrderNo ?? op.ProductionOrderId} · #{op.SequenceNo} {op.OperationCode}
+                          </strong>{" "}
+                          — {op.OperationNameFa}
+                          <span className="tx3 mx-1.5" dir="ltr">
+                            [{op.WorkCenterCode ?? op.WorkCenterId}]
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          {op.InspectionRequired && (
+                            <span className="rounded bg-amber-500/20 border border-amber-500/40 px-1.5 py-0.5 text-[10px] text-amber-200">
+                              QC Gate
+                            </span>
+                          )}
+                          {op.OverlapAllowed && (
+                            <span className="rounded bg-purple-500/20 border border-purple-500/40 px-1.5 py-0.5 text-[10px] text-purple-200" dir="ltr">
+                              Overlap ({op.TransferBatchQty ?? 0})
+                            </span>
+                          )}
+                          <button className={btnCls} onClick={() => void handleInspectOpVariance(op.Id)}>
+                            {tr("انتخاب و کنترل عملیات", "Select & Control")}
+                          </button>
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap justify-between gap-2 tx3 text-[11px]" dir="ltr">
+                        <span>
+                          Status: <strong className="tx1">{op.Status}</strong> · Good: <strong>{op.CumulativeGoodQuantity ?? 0}</strong> / {op.PlannedQuantity} · Cap: {op.PlannedCapacityMinutes}m
+                        </span>
+                        <span>
+                          {op.PlannedStartAt ? `${op.PlannedStartAt.slice(0, 16).replace("T", " ")} → ${op.PlannedEndAt?.slice(0, 16).replace("T", " ") ?? ""}` : "Unscheduled"}
+                        </span>
+                      </div>
+                      {op.ActiveExecution && (
+                        <div className="rounded bg-emerald-500/15 border border-emerald-500/40 px-2 py-1 text-[11px] text-emerald-200 flex justify-between" dir="ltr">
+                          <span>
+                            ▶ Active Execution #{op.ActiveExecution.ExecutionNo} (Id: {op.ActiveExecution.Id} · v{op.ActiveExecution.RowVersion})
+                          </span>
+                          <span>
+                            In: {op.ActiveExecution.InputQuantity} · Good: {op.ActiveExecution.GoodQuantity} · Scrap: {op.ActiveExecution.ScrapQuantity} · Rework: {op.ActiveExecution.ReworkQuantity}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* پنل کنترل اجرای عملیات انتخاب‌شده: ۱) شروع نشست ۲) ثبت پیشرفت تجمعی ۳) اتمام و گیت QC */}
+              {(() => {
+                const currentOp = queueOps.find((o) => o.Id === selectedOpId);
+                if (!currentOp) return null;
+                const activeExec =
+                  currentOp.ActiveExecution ??
+                  opVariance?.Executions?.find((ex) => ex.Status === "running") ??
+                  null;
+                const inputBalanced =
+                  Number(progressForm.InputQuantity) > 0 &&
+                  Math.abs(
+                    Number(progressForm.InputQuantity) -
+                      (Number(progressForm.GoodQuantity) +
+                        Number(progressForm.ScrapQuantity) +
+                        Number(progressForm.ReworkQuantity)),
+                  ) < 1e-6;
+
+                return (
+                  <div className="border-t b-line-soft pt-3 space-y-3 text-xs">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <strong className="tx1">
+                        {tr(
+                          `کنترل اجرای عملیات ${currentOp.OperationCode} (${currentOp.OrderNo ?? currentOp.ProductionOrderId})`,
+                          `Execution Control: ${currentOp.OperationCode}`,
+                        )}
+                      </strong>
+                      <span className="tx3" dir="ltr">
+                        Op Status: {currentOp.Status} · RowVersion: v{currentOp.RowVersion}
+                      </span>
+                    </div>
+
+                    {/* گام ۱: شروع نشست اجرای جدید */}
+                    {currentOp.Status !== "completed" &&
+                      currentOp.Status !== "blocked" &&
+                      !activeExec &&
+                      canMfgAccess(mfgUserId, "mfg.execution.start", plantId) && (
+                        <div className="rounded-lg border b-line-soft p-2.5 space-y-2">
+                          <div className="tx1 font-medium">
+                            {tr("۱. شروع نشست اجرای عملیات (POST /operations/:id/executions)", "1. Start Execution Session")}
+                          </div>
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                            <select
+                              aria-label="Execution Resource"
+                              className={inputCls}
+                              value={startExecForm.ResourceId}
+                              onChange={(e) => setStartExecForm((f) => ({ ...f, ResourceId: e.target.value }))}
+                            >
+                              <option value="">{tr("انتخاب منبع مرکز کاری...", "Select Resource...")}</option>
+                              {wcResources.map((res) => (
+                                <option key={res.Id} value={res.Id}>
+                                  {res.ResourceCode} — {res.NameFa} ({res.ResourceKind})
+                                </option>
+                              ))}
+                            </select>
+                            <input
+                              className={inputCls}
+                              dir="ltr"
+                              placeholder="OperatorId"
+                              value={startExecForm.OperatorId}
+                              onChange={(e) => setStartExecForm((f) => ({ ...f, OperatorId: e.target.value }))}
+                            />
+                            <input
+                              className={inputCls}
+                              placeholder={tr("یادداشت شروع نشست", "Start Note")}
+                              value={startExecForm.NoteFa}
+                              onChange={(e) => setStartExecForm((f) => ({ ...f, NoteFa: e.target.value }))}
+                            />
+                          </div>
+                          <button
+                            type="button"
+                            className={btnCls}
+                            disabled={busy}
+                            onClick={() => void handleStartExecution(currentOp)}
+                          >
+                            {tr("شروع نشست اجرای عملیات (Idempotent)", "Start Execution Session")}
+                          </button>
+                        </div>
+                      )}
+
+                    {/* گام ۲: ثبت پیشرفت تجمعی روی نشست فعال */}
+                    {activeExec && canMfgAccess(mfgUserId, "mfg.execution.report", plantId) && (
+                      <form
+                        onSubmit={(e) => void handleReportExecution(e, currentOp)}
+                        className="rounded-lg border border-sky-500/40 bg-sky-500/5 p-2.5 space-y-2"
+                      >
+                        <div className="flex flex-wrap justify-between gap-2 tx1 font-medium">
+                          <span>
+                            {tr(
+                              `۲. ثبت پیشرفت تجمعی روی نشست فعال #${activeExec.ExecutionNo} (POST /executions/:id/reports)`,
+                              `2. Log Cumulative Progress (Execution #${activeExec.ExecutionNo})`,
+                            )}
+                          </span>
+                          <span dir="ltr" className="text-sky-300">
+                            If-Match: v{activeExec.RowVersion}
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                          <div>
+                            <label className="tx3 block mb-0.5">{tr("ورودی افزوده (InputQty)", "InputQty")}</label>
+                            <input
+                              type="number"
+                              step="0.1"
+                              className={inputCls}
+                              dir="ltr"
+                              value={progressForm.InputQuantity}
+                              onChange={(e) => setProgressForm((f) => ({ ...f, InputQuantity: Number(e.target.value) }))}
+                            />
+                          </div>
+                          <div>
+                            <label className="tx3 block mb-0.5">{tr("سالم افزوده (GoodQty)", "GoodQty")}</label>
+                            <input
+                              type="number"
+                              step="0.1"
+                              className={inputCls}
+                              dir="ltr"
+                              value={progressForm.GoodQuantity}
+                              onChange={(e) => setProgressForm((f) => ({ ...f, GoodQuantity: Number(e.target.value) }))}
+                            />
+                          </div>
+                          <div>
+                            <label className="tx3 block mb-0.5">{tr("ضایعات افزوده (ScrapQty)", "ScrapQty")}</label>
+                            <input
+                              type="number"
+                              step="0.1"
+                              className={inputCls}
+                              dir="ltr"
+                              value={progressForm.ScrapQuantity}
+                              onChange={(e) => setProgressForm((f) => ({ ...f, ScrapQuantity: Number(e.target.value) }))}
+                            />
+                          </div>
+                          <div>
+                            <label className="tx3 block mb-0.5">{tr("دوباره‌کاری (ReworkQty)", "ReworkQty")}</label>
+                            <input
+                              type="number"
+                              step="0.1"
+                              className={inputCls}
+                              dir="ltr"
+                              value={progressForm.ReworkQuantity}
+                              onChange={(e) => setProgressForm((f) => ({ ...f, ReworkQuantity: Number(e.target.value) }))}
+                            />
+                          </div>
+                          <div>
+                            <label className="tx3 block mb-0.5">{tr("زمان واقعی Setup (دقیقه)", "SetupActualMinutes")}</label>
+                            <input
+                              type="number"
+                              className={inputCls}
+                              dir="ltr"
+                              value={progressForm.SetupActualMinutes}
+                              onChange={(e) => setProgressForm((f) => ({ ...f, SetupActualMinutes: Number(e.target.value) }))}
+                            />
+                          </div>
+                          <div>
+                            <label className="tx3 block mb-0.5">{tr("زمان واقعی Run (دقیقه)", "RunActualMinutes")}</label>
+                            <input
+                              type="number"
+                              className={inputCls}
+                              dir="ltr"
+                              value={progressForm.RunActualMinutes}
+                              onChange={(e) => setProgressForm((f) => ({ ...f, RunActualMinutes: Number(e.target.value) }))}
+                            />
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <span className={inputBalanced ? "text-emerald-300 text-[11px]" : "text-amber-300 text-[11px]"} dir="ltr">
+                            {inputBalanced
+                              ? "✓ Quantity Balanced (Input = Good + Scrap + Rework)"
+                              : "⚠ Input != Good + Scrap + Rework (Required before Finish)"}
+                          </span>
+                          <button type="submit" className={btnCls} disabled={busy}>
+                            {tr("ثبت گزارش پیشرفت تجمعی", "Submit Progress Report")}
+                          </button>
+                        </div>
+                      </form>
+                    )}
+
+                    {/* گام ۳: اتمام نشست و گیت بازرسی کیفی */}
+                    {activeExec && canMfgAccess(mfgUserId, "mfg.execution.finish", plantId) && (
+                      <div className="rounded-lg border border-emerald-500/40 bg-emerald-500/5 p-2.5 space-y-2">
+                        <div className="flex flex-wrap justify-between gap-2 tx1 font-medium">
+                          <span>
+                            {tr(
+                              `۳. اتمام نشست #${activeExec.ExecutionNo} و گیت بازرسی کیفی (POST /executions/:id/finish)`,
+                              `3. Finish Execution #${activeExec.ExecutionNo} & QC Gate`,
+                            )}
+                          </span>
+                          <span dir="ltr" className="text-emerald-300">
+                            If-Match: v{activeExec.RowVersion}
+                          </span>
+                        </div>
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <label className="flex items-center gap-2 cursor-pointer tx2">
+                            <input
+                              type="checkbox"
+                              checked={finishExecForm.InspectionApproved}
+                              onChange={(e) => setFinishExecForm((f) => ({ ...f, InspectionApproved: e.target.checked }))}
+                            />
+                            <span>
+                              {tr("تأیید بازرسی کیفی (InspectionApproved)", "Quality Inspection Approved")}
+                              {currentOp.InspectionRequired && (
+                                <strong className="text-amber-300 mx-1">
+                                  {tr("(الزامی برای این عملیات)", "(Required)")}
+                                </strong>
+                              )}
+                            </span>
+                          </label>
+                          <button
+                            type="button"
+                            className={btnCls}
+                            disabled={busy}
+                            onClick={() => void handleFinishExecution(currentOp)}
+                          >
+                            {tr("اتمام نشست و تکمیل عملیات", "Finish Execution")}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+            </section>
+
+            {/* ستون چپ: تحلیل جامع انحراف عملیات و ثبت رویدادهای توقف / ضایعات / دوباره‌کاری */}
+            <section className="glass-dark rounded-xl p-3 space-y-3">
+              <div className="flex items-center justify-between">
+                <h4 className="tx1 font-semibold">
+                  {tr("تحلیل انحراف عملیات و رویدادهای کارگاهی (GET /operations/:id/variance)", "Operation Variance & Shop-Floor Logs")}
+                </h4>
+                {opVariance?.OperationCode && (
+                  <span className="rounded border b-line-soft px-2 py-0.5 text-xs tx2" dir="ltr">
+                    {opVariance.OperationCode} ({opVariance.Status})
+                  </span>
+                )}
+              </div>
+
+              {opVariance && (
+                <div className="rounded-lg border b-line-soft p-2.5 text-xs tx2 space-y-2.5">
+                  <div className="tx1 font-medium">{tr("توازن مقادیر تولید عملیات (Quantities):", "Operation Quantities:")}</div>
+                  <div className="grid grid-cols-5 gap-2 text-center" dir="ltr">
+                    <div className="rounded bg-black/25 p-1.5">
+                      Planned<br />
+                      <strong>{opVariance.Quantities?.PlannedQuantity ?? opVariance.Quantities?.Planned ?? 0}</strong>
+                    </div>
+                    <div className="rounded bg-black/25 p-1.5">
+                      Input<br />
+                      <strong>{opVariance.Quantities?.InputQuantity ?? opVariance.Quantities?.Input ?? 0}</strong>
+                    </div>
+                    <div className="rounded bg-black/25 p-1.5 text-emerald-300">
+                      Good<br />
+                      <strong>{opVariance.Quantities?.GoodQuantity ?? opVariance.Quantities?.Good ?? 0}</strong>
+                    </div>
+                    <div className="rounded bg-black/25 p-1.5 text-rose-300">
+                      Scrap<br />
+                      <strong>{opVariance.Quantities?.ScrapQuantity ?? opVariance.Quantities?.Scrap ?? 0}</strong>
+                    </div>
+                    <div className="rounded bg-black/25 p-1.5 text-amber-300">
+                      Rework<br />
+                      <strong>{opVariance.Quantities?.ReworkQuantity ?? opVariance.Quantities?.Rework ?? 0}</strong>
+                    </div>
+                  </div>
+
+                  {/* جدول انحراف زمان Setup / Run / Total / Downtime */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-center pt-1" dir="ltr">
+                    <div className="rounded border b-line-soft p-1.5">
+                      <div className="tx3 text-[10px]">Setup (Std / Act / Var)</div>
+                      <strong>
+                        {opVariance.TimeMinutes?.StandardSetupMinutes ?? 0} / {opVariance.TimeMinutes?.ActualSetupMinutes ?? 0} ({opVariance.TimeMinutes?.SetupVarianceMinutes ?? 0}m)
+                      </strong>
+                    </div>
+                    <div className="rounded border b-line-soft p-1.5">
+                      <div className="tx3 text-[10px]">Run (Std / Act / Var)</div>
+                      <strong>
+                        {opVariance.TimeMinutes?.StandardRunMinutes ?? 0} / {opVariance.TimeMinutes?.ActualRunMinutes ?? 0} ({opVariance.TimeMinutes?.RunVarianceMinutes ?? 0}m)
+                      </strong>
+                    </div>
+                    <div className="rounded border b-line-soft p-1.5">
+                      <div className="tx3 text-[10px]">Total Variance</div>
+                      <strong>
+                        {opVariance.TimeMinutes?.TotalTimeVarianceMinutes ?? opVariance.TimeMinutes?.TotalVarianceMinutes ?? 0} min
+                      </strong>
+                    </div>
+                    <div className="rounded border b-line-soft p-1.5 text-amber-300">
+                      <div className="tx3 text-[10px]">Downtime</div>
+                      <strong>{opVariance.TimeMinutes?.DowntimeMinutes ?? 0} min</strong>
+                    </div>
+                  </div>
+
+                  {/* خلاصهٔ نشست‌ها، ضایعات و دوباره‌کاری‌های ثبت‌شده */}
+                  <div className="flex flex-wrap gap-2 text-[11px] tx3 pt-1" dir="ltr">
+                    <span>Executions: <strong>{opVariance.Executions?.length ?? 0}</strong></span>
+                    <span>· Scrap Logs: <strong>{opVariance.ScrapRecords?.length ?? 0}</strong></span>
+                    <span>· Rework Orders: <strong>{opVariance.ReworkRecords?.length ?? 0}</strong></span>
+                    <span>· Downtime Logs: <strong>{opVariance.DowntimeLogs?.length ?? 0}</strong></span>
+                  </div>
+                </div>
+              )}
+
+              {/* تب‌های فرعی ثبت توقف، ضایعات و دوباره‌کاری */}
+              <div className="border-t b-line-soft pt-3 space-y-2.5">
+                <div className="flex flex-wrap gap-1.5">
+                  <button
+                    type="button"
+                    className={`${btnCls} ${execEventSubTab === "downtime" ? "toggle-on" : ""}`}
+                    onClick={() => setExecEventSubTab("downtime")}
+                  >
+                    {tr("ثبت توقف (POST /downtime)", "Downtime Log")}
+                  </button>
+                  <button
+                    type="button"
+                    className={`${btnCls} ${execEventSubTab === "scrap" ? "toggle-on" : ""}`}
+                    onClick={() => setExecEventSubTab("scrap")}
+                  >
+                    {tr("ثبت ضایعات (POST /scrap)", "Scrap Log")}
+                  </button>
+                  <button
+                    type="button"
+                    className={`${btnCls} ${execEventSubTab === "rework" ? "toggle-on" : ""}`}
+                    onClick={() => setExecEventSubTab("rework")}
+                  >
+                    {tr("دستور دوباره‌کاری (POST /rework)", "Rework Order")}
+                  </button>
+                </div>
+
+                {execEventSubTab === "downtime" && canMfgAccess(mfgUserId, "mfg.downtime.report", plantId) && (
+                  <form onSubmit={handleReportDowntime} className="space-y-2">
+                    <div className="grid grid-cols-2 gap-2">
+                      <select
+                        aria-label="Downtime WorkCenter"
+                        className={inputCls}
+                        value={downtimeForm.WorkCenterId}
+                        onChange={(e) => setDowntimeForm((f) => ({ ...f, WorkCenterId: e.target.value }))}
+                      >
+                        {workCenters.map((wc) => (
+                          <option key={wc.Id} value={wc.Id}>{wc.Code} — {wc.NameFa}</option>
+                        ))}
+                      </select>
+                      <select
+                        aria-label="DowntimeType"
+                        className={inputCls}
+                        value={downtimeForm.DowntimeType}
+                        onChange={(e) => setDowntimeForm((f) => ({ ...f, DowntimeType: e.target.value as "planned" | "unplanned" }))}
+                      >
+                        <option value="unplanned">unplanned (توقف ناخواسته)</option>
+                        <option value="planned">planned (توقف برنامه‌ریزی‌شده)</option>
+                      </select>
+                      <input
+                        placeholder="ReasonCode"
+                        className={inputCls}
+                        dir="ltr"
+                        value={downtimeForm.ReasonCode}
+                        onChange={(e) => setDowntimeForm((f) => ({ ...f, ReasonCode: e.target.value }))}
+                      />
+                      <input
+                        placeholder={tr("شرح فارسی", "NoteFa")}
+                        className={inputCls}
+                        value={downtimeForm.NoteFa}
+                        onChange={(e) => setDowntimeForm((f) => ({ ...f, NoteFa: e.target.value }))}
+                      />
+                    </div>
+                    <button type="submit" className={btnCls} disabled={busy}>
+                      {tr("ثبت توقف با Idempotency-Key", "Submit Downtime")}
+                    </button>
+                  </form>
+                )}
+
+                {execEventSubTab === "scrap" && canMfgAccess(mfgUserId, "mfg.scrap.report", plantId) && (
+                  <form onSubmit={handleReportScrap} className="space-y-2">
+                    <div className="grid grid-cols-2 gap-2">
+                      <input
+                        type="number"
+                        step="0.1"
+                        placeholder={tr("مقدار ضایعات", "Quantity")}
+                        className={inputCls}
+                        dir="ltr"
+                        value={scrapForm.Quantity}
+                        onChange={(e) => setScrapForm((f) => ({ ...f, Quantity: Number(e.target.value) }))}
+                      />
+                      <select
+                        aria-label="Scrap Disposition"
+                        className={inputCls}
+                        value={scrapForm.Disposition}
+                        onChange={(e) =>
+                          setScrapForm((f) => ({
+                            ...f,
+                            Disposition: e.target.value as "scrapped" | "returned-to-stock" | "use-as-is",
+                          }))
+                        }
+                      >
+                        <option value="scrapped">scrapped (اسقاط قطعی)</option>
+                        <option value="returned-to-stock">returned-to-stock (برگشت به انبار)</option>
+                        <option value="use-as-is">use-as-is (مصرف با ارفاق)</option>
+                      </select>
+                      <input
+                        placeholder="ReasonCode (مثلاً DIM-TOL)"
+                        className={inputCls}
+                        dir="ltr"
+                        value={scrapForm.ReasonCode}
+                        onChange={(e) => setScrapForm((f) => ({ ...f, ReasonCode: e.target.value }))}
+                      />
+                      <input
+                        type="number"
+                        placeholder={tr("هزینهٔ برآوردی ضایعات (IRR)", "CostAmount")}
+                        className={inputCls}
+                        dir="ltr"
+                        value={scrapForm.CostAmount}
+                        onChange={(e) => setScrapForm((f) => ({ ...f, CostAmount: Number(e.target.value) }))}
+                      />
+                    </div>
+                    <button type="submit" className={btnCls} disabled={busy || !selectedOpId}>
+                      {tr("ثبت ضایعات روی عملیات انتخابی (POST /scrap)", "Submit Scrap Record")}
+                    </button>
+                  </form>
+                )}
+
+                {execEventSubTab === "rework" && canMfgAccess(mfgUserId, "mfg.rework.report", plantId) && (
+                  <form onSubmit={handleReportRework} className="space-y-2">
+                    <div className="grid grid-cols-2 gap-2">
+                      <input
+                        type="number"
+                        step="0.1"
+                        placeholder={tr("مقدار دوباره‌کاری", "Quantity")}
+                        className={inputCls}
+                        dir="ltr"
+                        value={reworkForm.Quantity}
+                        onChange={(e) => setReworkForm((f) => ({ ...f, Quantity: Number(e.target.value) }))}
+                      />
+                      <select
+                        aria-label="Rework Disposition"
+                        className={inputCls}
+                        value={reworkForm.Disposition}
+                        onChange={(e) =>
+                          setReworkForm((f) => ({
+                            ...f,
+                            Disposition: e.target.value as "rework-in-place" | "return-to-operation" | "scrap",
+                          }))
+                        }
+                      >
+                        <option value="rework-in-place">rework-in-place (اصلاح در همان ایستگاه)</option>
+                        <option value="return-to-operation">return-to-operation (بازگشت به عملیات مقصد)</option>
+                        <option value="scrap">scrap (تبدیل به ضایعات)</option>
+                      </select>
+                      <select
+                        aria-label="Target Operation"
+                        className={inputCls}
+                        value={reworkForm.TargetOperationId}
+                        onChange={(e) => setReworkForm((f) => ({ ...f, TargetOperationId: e.target.value }))}
+                      >
+                        <option value="">{tr("عملیات مقصد (اختیاری - همان سفارش)...", "Target Operation (same order)...")}</option>
+                        {queueOps
+                          .filter(
+                            (o) =>
+                              o.ProductionOrderId ===
+                              queueOps.find((cur) => cur.Id === selectedOpId)?.ProductionOrderId,
+                          )
+                          .map((o) => (
+                            <option key={o.Id} value={o.Id}>
+                              #{o.SequenceNo} {o.OperationCode} — {o.OperationNameFa}
+                            </option>
+                          ))}
+                      </select>
+                      <input
+                        placeholder="ReasonCode (مثلاً SURF-BURR)"
+                        className={inputCls}
+                        dir="ltr"
+                        value={reworkForm.ReasonCode}
+                        onChange={(e) => setReworkForm((f) => ({ ...f, ReasonCode: e.target.value }))}
+                      />
+                    </div>
+                    <button type="submit" className={btnCls} disabled={busy || !selectedOpId}>
+                      {tr("صدور دستور دوباره‌کاری (POST /rework)", "Create Rework Order")}
+                    </button>
+                  </form>
+                )}
+              </div>
+            </section>
+          </div>
         </div>
       )}
 

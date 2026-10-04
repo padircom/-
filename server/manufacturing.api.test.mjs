@@ -1257,8 +1257,28 @@ test("MFG REST: ثبت توقف، ضایعات، دوباره‌کاری و گز
   assert.equal(operatorVariance.body.data.Quantities.GoodQuantity, 0.7);
   assert.equal(operatorVariance.body.data.Quantities.ScrapQuantity, 0.2);
   assert.equal(operatorVariance.body.data.Quantities.ReworkQuantity, 0.1);
+  assert.equal(operatorVariance.body.data.Executions.length, 1);
+  assert.equal(operatorVariance.body.data.ScrapRecords.length, 1);
+  assert.equal(operatorVariance.body.data.ReworkRecords.length, 1);
+  assert.equal(operatorVariance.body.data.DowntimeLogs.length, 1);
   assert.equal(operatorVariance.body.data.Cost, null);
   assert.equal(operatorVariance.body.data.CostRedacted, true);
+
+  // ۵. بررسی غنی‌سازی صف عملیات کارگاهی (GET /operation-queue) برای کنترل عملیات فاز ۲
+  const queueCheck = await call("GET", OPERATION_QUEUE, {
+    params: { plantId: "PLANT-DEMO" },
+    query: { workCenterId: workCenter.Id },
+    headers: { "x-user-id": "u-mfg-operator" },
+  });
+  assert.equal(queueCheck.statusCode, 200);
+  const queuedOp10 = queueCheck.body.data.items.find((item) => item.Id === op10.Id);
+  assert.ok(queuedOp10);
+  assert.equal(queuedOp10.ExecutionCount, 1);
+  assert.equal(queuedOp10.CumulativeGoodQuantity, 0.7);
+  assert.equal(queuedOp10.CumulativeScrapQuantity, 0.2);
+  assert.equal(queuedOp10.CumulativeReworkQuantity, 0.1);
+  assert.equal(queuedOp10.ActiveExecution.Id, execId);
+  assert.equal(queuedOp10.WorkCenterCode, workCenter.Code);
 
   // کاربر دارای هر دو نقش سرپرست/مدیر و حسابدار صنعتی هزینه را کامل می‌بیند
   DEMO_SUBJECTS.push({

@@ -3736,7 +3736,7 @@ export function registerManufacturingRoutes(app, { repo, subjects, evaluate } = 
       if (!wc || wc.PlantId !== plantId) throw notFound();
     }
 
-    const [orders, operations, latestRuns, workCenters] = await Promise.all([
+    const [orders, operations, latestRuns, workCenters, allExecutions] = await Promise.all([
       r.list("MfgProductionOrder", { where: [{ column: "PlantId", op: "eq", value: plantId }] }),
       r.list("MfgProductionOrderOperation", { where: [{ column: "PlantId", op: "eq", value: plantId }] }),
       r.list("MfgScheduleRun", {
@@ -3745,6 +3745,7 @@ export function registerManufacturingRoutes(app, { repo, subjects, evaluate } = 
         limit: 1,
       }),
       r.list("MfgWorkCenter", { where: [{ column: "PlantId", op: "eq", value: plantId }] }),
+      r.list("MfgOperationExecution", { where: [{ column: "PlantId", op: "eq", value: plantId }] }),
     ]);
 
     const activeOrdersById = new Map(
@@ -3757,6 +3758,16 @@ export function registerManufacturingRoutes(app, { repo, subjects, evaluate } = 
         .filter((wc) => wc.PlantId === plantId)
         .map((wc) => [wc.Id, wc]),
     );
+    const executionsByOperationId = new Map();
+    for (const exec of allExecutions) {
+      if (exec.PlantId !== plantId || exec.Status === "cancelled") continue;
+      const list = executionsByOperationId.get(exec.ProductionOrderOperationId) ?? [];
+      list.push(exec);
+      executionsByOperationId.set(exec.ProductionOrderOperationId, list);
+    }
+    for (const list of executionsByOperationId.values()) {
+      list.sort((a, b) => (Number(b.ExecutionNo) || 0) - (Number(a.ExecutionNo) || 0));
+    }
 
     const scheduleVersion = latestRuns[0]?.ScheduleVersion ?? 0;
     const scheduleRows = scheduleVersion > 0
@@ -3806,6 +3817,15 @@ export function registerManufacturingRoutes(app, { repo, subjects, evaluate } = 
       const firstSeg = segments[0] ?? null;
       const lastSeg = segments[segments.length - 1] ?? null;
       const plannedStartMs = firstSeg ? storedTimestamp(firstSeg.PlannedStartAt) : Number.POSITIVE_INFINITY;
+      const wc = workCenterById.get(op.WorkCenterId) ?? null;
+      const opExecs = executionsByOperationId.get(op.Id) ?? [];
+      const activeExec = opExecs.find((ex) => ex.Status === "running") ?? null;
+      const latestExec = opExecs[0] ?? null;
+      const cumulativeInputQty = roundTo3(opExecs.reduce((sum, ex) => sum + storedNumber(ex.InputQuantity), 0));
+      const cumulativeGoodQty = roundTo3(opExecs.reduce((sum, ex) => sum + storedNumber(ex.GoodQuantity), 0));
+      const cumulativeScrapQty = roundTo3(opExecs.reduce((sum, ex) => sum + storedNumber(ex.ScrapQuantity), 0));
+      const cumulativeReworkQty = roundTo3(opExecs.reduce((sum, ex) => sum + storedNumber(ex.ReworkQuantity), 0));
+
       matched.push({
         op,
         plannedStartMs,
@@ -3815,10 +3835,21 @@ export function registerManufacturingRoutes(app, { repo, subjects, evaluate } = 
           OrderStatus: order.Status,
           PriorityRule: order.PriorityRule,
           DueDate: order.DueDate,
+          WorkCenterCode: wc?.Code ?? null,
+          WorkCenterNameFa: wc?.NameFa ?? null,
           PlannedStartAt: firstSeg ? storedIsoTimestamp(firstSeg.PlannedStartAt) : null,
           PlannedEndAt: lastSeg ? storedIsoTimestamp(lastSeg.PlannedEndAt) : null,
           ScheduledResourceId: firstSeg?.ResourceId ?? null,
           ScheduleVersion: scheduleVersion > 0 ? scheduleVersion : null,
+          SegmentCount: segments.length,
+          IsFirmScheduled: segments.some((s) => Boolean(s.IsFirm)),
+          ActiveExecution: activeExec,
+          LatestExecution: latestExec,
+          ExecutionCount: opExecs.length,
+          CumulativeInputQuantity: cumulativeInputQty,
+          CumulativeGoodQuantity: cumulativeGoodQty,
+          CumulativeScrapQuantity: cumulativeScrapQty,
+          CumulativeReworkQuantity: cumulativeReworkQty,
         },
       });
     }
@@ -4657,7 +4688,12 @@ export function registerManufacturingRoutes(app, { repo, subjects, evaluate } = 
       ProductionOrderId: operation.ProductionOrderId,
       WorkCenterId: operation.WorkCenterId,
       OperationCode: operation.OperationCode,
+      OperationNameFa: operation.OperationNameFa ?? null,
+      SequenceNo: operation.SequenceNo ?? null,
       Status: operation.Status,
+      InspectionRequired: Boolean(operation.InspectionRequired),
+      OverlapAllowed: Boolean(operation.OverlapAllowed),
+      TransferBatchQty: operation.TransferBatchQty ?? null,
       Quantities: {
         PlannedQuantity: plannedQuantity,
         InputQuantity: inputQuantity,
@@ -4677,6 +4713,10 @@ export function registerManufacturingRoutes(app, { repo, subjects, evaluate } = 
         TotalTimeVarianceMinutes: totalTimeVarianceMinutes,
         DowntimeMinutes: downtimeMinutes,
       },
+      Executions: filteredExecutions,
+      ScrapRecords: filteredScraps,
+      ReworkRecords: filteredReworks,
+      DowntimeLogs: filteredDowntimes,
       Cost: cost,
       CostRedacted: !canViewCost,
     };
