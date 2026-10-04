@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 import LeftSidebar from "./components/LeftSidebar";
-import RightSidebar, { type ModuleNavTarget } from "./components/RightSidebar";
+import RightSidebar, { type EnterpriseSystemView, type ModuleNavTarget } from "./components/RightSidebar";
 import PmbokRing from "./components/PmbokRing";
 import PortfolioPanel from "./components/PortfolioPanel";
 import CalendarView from "./components/CalendarView";
@@ -9,6 +9,8 @@ import MonitoringWorkspace from "./components/MonitoringWorkspace";
 import ProcessFlowNet from "./components/ProcessFlowNet";
 import AuthStatus from "./components/AuthStatus";
 import NotificationOpsPanel from "./components/NotificationOpsPanel";
+import CmmsWorkspaceShell from "./components/CmmsWorkspaceShell";
+import ScmWorkspaceShell from "./components/ScmWorkspaceShell";
 import { useSystem } from "./context/SystemContext";
 import {
   ui,
@@ -145,6 +147,7 @@ export default function App() {
   const [cluster, setCluster] = useState<string | null>("c1");
   const [source, setSource] = useState<string | null>("p6");
   const [moduleNav, setModuleNav] = useState<ModuleNavTarget | null>(null);
+  const [activeSystemView, setActiveSystemView] = useState<EnterpriseSystemView>({ system: "pmis" });
   const [standaloneMes, setStandaloneMes] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
     const params = new URLSearchParams(window.location.search);
@@ -291,7 +294,7 @@ export default function App() {
         {/* سایدبار منابع داده هم مثل سایدبار چارچوب فقط در صفحهٔ اصلی
           * می‌ماند. در صفحهٔ حوزه، فضای کاری به پنل تخصصی می‌رسد و
           * ۲۴۸ پیکسل دیگر آزاد می‌شود. */}
-        {!moduleNav && (
+        {!moduleNav && activeSystemView.system === "pmis" && (
           <LeftSidebar
             lang={lang}
             activeSource={source}
@@ -300,7 +303,29 @@ export default function App() {
         )}
 
         <section className="flex min-w-0 flex-1 flex-col gap-3 overflow-hidden">
-          {moduleNav ? (
+          {activeSystemView.system === "mes" ? (
+            <Suspense fallback={<div className="glass flex flex-1 items-center justify-center rounded-2xl text-[11px] tx3">…</div>}>
+              <ManufacturingWorkspace
+                lang={lang}
+                initialTab={activeSystemView.tab}
+                onTabChange={(nextTab) => setActiveSystemView({ system: "mes", tab: nextTab })}
+              />
+            </Suspense>
+          ) : activeSystemView.system === "cmms" ? (
+            <CmmsWorkspaceShell
+              lang={lang}
+              activeSub={activeSystemView.sub}
+              onSelectSub={(nextSub) => setActiveSystemView({ system: "cmms", sub: nextSub })}
+              onBackHome={() => setActiveSystemView({ system: "pmis" })}
+            />
+          ) : activeSystemView.system === "scm" ? (
+            <ScmWorkspaceShell
+              lang={lang}
+              activeSub={activeSystemView.sub}
+              onSelectSub={(nextSub) => setActiveSystemView({ system: "scm", sub: nextSub })}
+              onBackHome={() => setActiveSystemView({ system: "pmis" })}
+            />
+          ) : moduleNav ? (
             <Suspense fallback={<div className="glass flex flex-1 items-center justify-center rounded-2xl text-[11px] tx3">…</div>}>
               <ModuleDetail
                 lang={lang}
@@ -354,6 +379,7 @@ export default function App() {
             lang={lang}
             quickAction={quickAction}
             onQuickAction={(id) => {
+              setActiveSystemView({ system: "pmis" });
               setQuickAction(id);
               setModuleNav(null);
             }}
@@ -361,8 +387,21 @@ export default function App() {
               if (target.moduleId !== "d7" && target.clusterId && target.projectId) {
                 changeScope(target.clusterId, target.projectId);
               }
+              if (target.moduleId === "d17") {
+                setActiveSystemView({ system: "mes", tab: "overview" });
+                setModuleNav(null);
+                return;
+              }
+              setActiveSystemView({ system: "pmis" });
               setModuleNav(target);
               setQuickAction("home");
+            }}
+            activeSystemView={activeSystemView}
+            onSelectSystemView={(nextView) => {
+              setActiveSystemView(nextView);
+              if (nextView.system !== "pmis") {
+                setModuleNav(null);
+              }
             }}
           />
         )}

@@ -43,6 +43,7 @@ export interface ManufacturingWorkspaceProps {
   lang: Lang;
   plantId?: string;
   initialTab?: MfgTab;
+  onTabChange?: (tab: MfgTab) => void;
   standalone?: boolean;
   onExitStandalone?: () => void;
 }
@@ -67,6 +68,7 @@ export default function ManufacturingWorkspace({
   lang,
   plantId: initialPlantId = DEFAULT_PLANT_ID,
   initialTab = "overview",
+  onTabChange,
   standalone = false,
   onExitStandalone,
 }: ManufacturingWorkspaceProps) {
@@ -1223,7 +1225,10 @@ export default function ManufacturingWorkspace({
             <button
               key={tItem.id}
               type="button"
-              onClick={() => setTab(tItem.id)}
+              onClick={() => {
+                setTab(tItem.id);
+                onTabChange?.(tItem.id);
+              }}
               className={`${btnCls} flex items-center gap-1.5 ${tab === tItem.id ? "toggle-on tx1" : "tx2"}`}
             >
               <span>{fa ? tItem.fa : tItem.en}</span>

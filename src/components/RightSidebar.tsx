@@ -13,6 +13,9 @@ import {
 import { useSystem } from "../context/SystemContext";
 import { useAuth } from "../context/AuthContext";
 import { EDITABLE_TAXONOMY_DOMAINS, loadProcessTree } from "../services/taxonomyApi";
+import type { MfgTab } from "./ManufacturingWorkspace";
+import type { CmmsSubModuleId } from "./CmmsWorkspaceShell";
+import type { ScmSubModuleId } from "./ScmWorkspaceShell";
 
 export type ModuleNavTarget = {
   moduleId: string;
@@ -22,12 +25,49 @@ export type ModuleNavTarget = {
   subId?: string;
 };
 
+export type EnterpriseSystemView =
+  | { system: "pmis" }
+  | { system: "mes"; tab: MfgTab }
+  | { system: "cmms"; sub: CmmsSubModuleId }
+  | { system: "scm"; sub: ScmSubModuleId };
+
 type Props = {
   lang: Lang;
   quickAction: string;
   onQuickAction: (id: string) => void;
   onNavigate: (target: ModuleNavTarget) => void;
+  activeSystemView?: EnterpriseSystemView;
+  onSelectSystemView?: (view: EnterpriseSystemView) => void;
 };
+
+/* زیرماژول‌های سرگروه دوم: برنامه‌ریزی و کنترل تولید (MES) */
+const MES_SIDEBAR_ITEMS: Array<{ id: MfgTab; icon: string; label: Bi }> = [
+  { id: "engineering", icon: "🔩", label: { fa: "مهندسی تولید", en: "Manufacturing Engineering" } },
+  { id: "orders", icon: "📋", label: { fa: "سفارشات تولید", en: "Production Orders" } },
+  { id: "scheduling", icon: "📅", label: { fa: "زمان‌بندی و ظرفیت", en: "Scheduling & Capacity" } },
+  { id: "execution", icon: "⚙️", label: { fa: "اجرای کارگاهی و پایش", en: "Shop-Floor Execution" } },
+  { id: "mrp", icon: "📦", label: { fa: "مواد و MRP", en: "Materials & MRP" } },
+  { id: "cost", icon: "💰", label: { fa: "هزینه‌یابی تولید", en: "Production Costing" } },
+  { id: "overview", icon: "📊", label: { fa: "داشبورد و OEE", en: "Dashboard & OEE" } },
+];
+
+/* زیرماژول‌های سرگروه سوم: نگهداری و تعمیرات (CMMS) */
+const CMMS_SIDEBAR_ITEMS: Array<{ id: CmmsSubModuleId; icon: string; label: Bi }> = [
+  { id: "assets", icon: "🏷️", label: { fa: "شناسنامه تجهیزات و دارایی‌ها", en: "Equipment & Asset Registry" } },
+  { id: "pm", icon: "🗓️", label: { fa: "برنامه‌ریزی نت پیشگیرانه (PM)", en: "Preventive Maintenance (PM)" } },
+  { id: "work-orders", icon: "🛠️", label: { fa: "دستور کار تعمیرات (Work Order)", en: "Maintenance Work Orders" } },
+  { id: "spares", icon: "⚙️", label: { fa: "قطعات یدکی و ابزارها", en: "Spare Parts & Tooling" } },
+  { id: "analytics", icon: "📉", label: { fa: "شاخص‌ها و تحلیل نت (MTBF / MTTR)", en: "MTBF / MTTR Analytics" } },
+];
+
+/* زیرماژول‌های سرگروه چهارم: زنجیره تأمین و انبارداری (SCM) */
+const SCM_SIDEBAR_ITEMS: Array<{ id: ScmSubModuleId; icon: string; label: Bi }> = [
+  { id: "inventory", icon: "🏬", label: { fa: "مدیریت انبارها و موجودی", en: "Warehouses & Inventory" } },
+  { id: "purchasing", icon: "🧾", label: { fa: "درخواست و سفارشات خرید", en: "Purchase Requisitions & POs" } },
+  { id: "vendors", icon: "🤝", label: { fa: "مدیریت تأمین‌کنندگان", en: "Vendor Management" } },
+  { id: "movements", icon: "🚚", label: { fa: "ورود و خروج کالا (رسید / حواله)", en: "Goods Receipt & Issue" } },
+  { id: "dashboard", icon: "📈", label: { fa: "داشبورد زنجیره تأمین", en: "Supply Chain Dashboard" } },
+];
 
 type QuickAction = { id: string; label: Bi; alert?: string; icon: ReactNode };
 
@@ -75,7 +115,14 @@ function loadGroupState(): { open: string | null; supportOpen: boolean } {
   return { open: "pg2", supportOpen: true };
 }
 
-export default function RightSidebar({ lang, quickAction, onQuickAction, onNavigate }: Props) {
+export default function RightSidebar({
+  lang,
+  quickAction,
+  onQuickAction,
+  onNavigate,
+  activeSystemView = { system: "pmis" },
+  onSelectSystemView,
+}: Props) {
   const rtl = lang === "fa";
   const { clusters, projectsByCluster, projectScope } = useSystem();
   const { can, user } = useAuth();
@@ -85,6 +132,21 @@ export default function RightSidebar({ lang, quickAction, onQuickAction, onNavig
   const [groupState, setGroupState] = useState(loadGroupState);
   const [query, setQuery] = useState("");
   const [taxonomyOverrides, setTaxonomyOverrides] = useState<Record<string, Process[]>>({});
+  const [sectionsOpen, setSectionsOpen] = useState<{
+    pmis: boolean;
+    mes: boolean;
+    cmms: boolean;
+    scm: boolean;
+  }>({
+    pmis: true,
+    mes: true,
+    cmms: true,
+    scm: true,
+  });
+
+  const toggleSection = (key: "pmis" | "mes" | "cmms" | "scm") => {
+    setSectionsOpen((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
 
   const openGroup = groupState.open;
   const supportOpen = groupState.supportOpen;
@@ -135,6 +197,7 @@ export default function RightSidebar({ lang, quickAction, onQuickAction, onNavig
   }, [groupState]);
 
   const toggleDomain = (id: string) => {
+    onSelectSystemView?.({ system: "pmis" });
     // System administration is global; it never requires an industry/project context.
     if (id === "d7") {
       onNavigate({ moduleId: "d7", clusterId: "", projectId: "" });
@@ -149,6 +212,8 @@ export default function RightSidebar({ lang, quickAction, onQuickAction, onNavig
   const jumpToDomain = (id: string) => {
     const d = domains.find((x) => x.id === id);
     if (!d) return;
+    onSelectSystemView?.({ system: "pmis" });
+    setSectionsOpen((prev) => ({ ...prev, pmis: true }));
     if (d.group === "support") {
       setGroupState((s) => ({ ...s, supportOpen: true }));
     } else {
@@ -160,6 +225,7 @@ export default function RightSidebar({ lang, quickAction, onQuickAction, onNavig
   };
 
   const toggleGroup = (id: string, pinned?: boolean) => {
+    onSelectSystemView?.({ system: "pmis" });
     if (pinned) {
       setGroupState((s) => ({ ...s, supportOpen: !s.supportOpen }));
     } else {
@@ -373,7 +439,7 @@ export default function RightSidebar({ lang, quickAction, onQuickAction, onNavig
         </div>
       </header>
 
-      <div className="thin-scroll flex-1 space-y-2 overflow-y-auto px-3 py-3">
+      <div className="thin-scroll flex-1 space-y-2.5 overflow-y-auto px-3 py-3">
         {searching ? (
           searchHits.length ? (
             searchHits.map(renderDomain)
@@ -384,41 +450,274 @@ export default function RightSidebar({ lang, quickAction, onQuickAction, onNavig
           )
         ) : (
           <>
-            {sidebarGroups.map((g) => {
-              const members = visibleDomains.filter((d) => d.group === g.id);
-              if (!members.length) return null;
-              const isOpen = g.pinned ? supportOpen : openGroup === g.id;
-              const { dc, pc } = groupCounts(members);
-              return (
-                <div key={g.id} className="border-b b-line-soft pb-1.5 last:border-b-0 last:pb-0">
-                  <button
-                    type="button"
-                    onClick={() => toggleGroup(g.id, g.pinned)}
-                    aria-expanded={isOpen}
-                    className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-start transition hover:bg-[var(--row-hover)]"
-                    style={isOpen ? { background: `${g.color}14` } : undefined}
-                  >
-                    <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: g.color }} />
-                    <span className="min-w-0 flex-1 truncate text-[11px] font-medium" style={{ color: g.color }}>
-                      {t(g.title, lang)}
-                    </span>
-                    <span className="shrink-0 text-[8.5px] font-extralight tabular-nums tx4">
-                      {rtl ? `${faDigits(dc)} حوزه · ${faDigits(pc)} فرآیند` : `${dc} · ${pc}`}
-                    </span>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"
-                         className={`h-3 w-3 shrink-0 tx4 transition-transform ${isOpen ? "rotate-180" : ""}`}>
-                      <path d="m6 9 6 6 6-6" />
-                    </svg>
-                  </button>
+            {/* ── ۱. سرگروه اصلی اول: مدیریت و کنترل پروژه (PMIS) ── */}
+            <section className="space-y-1">
+              <button
+                type="button"
+                onClick={() => toggleSection("pmis")}
+                aria-expanded={sectionsOpen.pmis}
+                className={`flex w-full items-center gap-2 rounded-xl border px-2.5 py-2 text-start transition ${
+                  activeSystemView.system === "pmis"
+                    ? "border-sky-500/40 bg-sky-500/10 tx1"
+                    : "b-line-soft bg-black/15 tx2 hover:tx1"
+                }`}
+              >
+                <span className="text-[12px]">📐</span>
+                <span className="min-w-0 flex-1 truncate text-[11px] font-semibold">
+                  {rtl ? "مدیریت و کنترل پروژه (PMIS)" : "Project Management & Control (PMIS)"}
+                </span>
+                <span className="rounded border border-sky-500/30 bg-sky-500/10 px-1.5 py-0.5 text-[8.5px] text-sky-300" dir="ltr">
+                  PMIS
+                </span>
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className={`h-3 w-3 shrink-0 tx4 transition-transform ${sectionsOpen.pmis ? "rotate-180" : ""}`}
+                >
+                  <path d="m6 9 6 6 6-6" />
+                </svg>
+              </button>
 
-                  {isOpen && (
-                    <div className="fade-rise mt-1 border-s-2 ps-2" style={{ borderColor: `${g.color}33` }}>
-                      {members.map(renderDomain)}
-                    </div>
-                  )}
+              {sectionsOpen.pmis && (
+                <div className="fade-rise space-y-1 border-s-2 border-sky-500/30 ps-2 pt-0.5">
+                  {sidebarGroups.map((g) => {
+                    const members = visibleDomains.filter((d) => d.group === g.id);
+                    if (!members.length) return null;
+                    const isOpen = g.pinned ? supportOpen : openGroup === g.id;
+                    const { dc, pc } = groupCounts(members);
+                    return (
+                      <div key={g.id} className="border-b b-line-soft pb-1 last:border-b-0 last:pb-0">
+                        <button
+                          type="button"
+                          onClick={() => toggleGroup(g.id, g.pinned)}
+                          aria-expanded={isOpen}
+                          className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-start transition hover:bg-[var(--row-hover)]"
+                          style={isOpen ? { background: `${g.color}14` } : undefined}
+                        >
+                          <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: g.color }} />
+                          <span className="min-w-0 flex-1 truncate text-[10.5px] font-medium" style={{ color: g.color }}>
+                            {t(g.title, lang)}
+                          </span>
+                          <span className="shrink-0 text-[8.5px] font-extralight tabular-nums tx4">
+                            {rtl ? `${faDigits(dc)} حوزه · ${faDigits(pc)} فرآیند` : `${dc} · ${pc}`}
+                          </span>
+                          <svg
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.8"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            className={`h-3 w-3 shrink-0 tx4 transition-transform ${isOpen ? "rotate-180" : ""}`}
+                          >
+                            <path d="m6 9 6 6 6-6" />
+                          </svg>
+                        </button>
+
+                        {isOpen && (
+                          <div className="fade-rise mt-1 border-s-2 ps-2" style={{ borderColor: `${g.color}33` }}>
+                            {members.map(renderDomain)}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
-              );
-            })}
+              )}
+            </section>
+
+            {/* ── خط جداکنندهٔ بصری (Divider) بین بخش ۱ و ۲ ── */}
+            <div role="separator" aria-orientation="horizontal" className="my-2 flex items-center gap-2 px-1">
+              <span className="hair h-px flex-1" />
+              <span className="text-[8px] tracking-widest tx4" dir="ltr">MES</span>
+              <span className="hair h-px flex-1" />
+            </div>
+
+            {/* ── ۲. سرگروه اصلی دوم: برنامه‌ریزی و کنترل تولید (MES) ── */}
+            <section className="space-y-1">
+              <button
+                type="button"
+                onClick={() => toggleSection("mes")}
+                aria-expanded={sectionsOpen.mes}
+                className={`flex w-full items-center gap-2 rounded-xl border px-2.5 py-2 text-start transition ${
+                  activeSystemView.system === "mes"
+                    ? "border-emerald-500/40 bg-emerald-500/10 tx1"
+                    : "b-line-soft bg-black/15 tx2 hover:tx1"
+                }`}
+              >
+                <span className="text-[12px]">🏭</span>
+                <span className="min-w-0 flex-1 truncate text-[11px] font-semibold">
+                  {rtl ? "برنامه‌ریزی و کنترل تولید (MES)" : "Manufacturing Execution (MES)"}
+                </span>
+                <span className="rounded border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 text-[8.5px] text-emerald-300" dir="ltr">
+                  MES
+                </span>
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className={`h-3 w-3 shrink-0 tx4 transition-transform ${sectionsOpen.mes ? "rotate-180" : ""}`}
+                >
+                  <path d="m6 9 6 6 6-6" />
+                </svg>
+              </button>
+
+              {sectionsOpen.mes && (
+                <div className="fade-rise space-y-0.5 border-s-2 border-emerald-500/30 ps-2 pt-0.5">
+                  {MES_SIDEBAR_ITEMS.map((item) => {
+                    const active = activeSystemView.system === "mes" && activeSystemView.tab === item.id;
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => onSelectSystemView?.({ system: "mes", tab: item.id })}
+                        className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-start text-[10.5px] transition ${
+                          active
+                            ? "row-on font-medium text-emerald-300"
+                            : "tx2 hover:bg-[var(--row-hover)] hover:tx1"
+                        }`}
+                      >
+                        <span className="text-[11px]">{item.icon}</span>
+                        <span className="min-w-0 flex-1 truncate">{t(item.label, lang)}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+
+            {/* ── خط جداکنندهٔ بصری (Divider) بین بخش ۲ و ۳ ── */}
+            <div role="separator" aria-orientation="horizontal" className="my-2 flex items-center gap-2 px-1">
+              <span className="hair h-px flex-1" />
+              <span className="text-[8px] tracking-widest tx4" dir="ltr">CMMS</span>
+              <span className="hair h-px flex-1" />
+            </div>
+
+            {/* ── ۳. سرگروه اصلی سوم: نگهداری و تعمیرات (CMMS) ── */}
+            <section className="space-y-1">
+              <button
+                type="button"
+                onClick={() => toggleSection("cmms")}
+                aria-expanded={sectionsOpen.cmms}
+                className={`flex w-full items-center gap-2 rounded-xl border px-2.5 py-2 text-start transition ${
+                  activeSystemView.system === "cmms"
+                    ? "border-amber-500/40 bg-amber-500/10 tx1"
+                    : "b-line-soft bg-black/15 tx2 hover:tx1"
+                }`}
+              >
+                <span className="text-[12px]">🔧</span>
+                <span className="min-w-0 flex-1 truncate text-[11px] font-semibold">
+                  {rtl ? "نگهداری و تعمیرات (CMMS)" : "Maintenance Management (CMMS)"}
+                </span>
+                <span className="rounded border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[8.5px] text-amber-300" dir="ltr">
+                  CMMS
+                </span>
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className={`h-3 w-3 shrink-0 tx4 transition-transform ${sectionsOpen.cmms ? "rotate-180" : ""}`}
+                >
+                  <path d="m6 9 6 6 6-6" />
+                </svg>
+              </button>
+
+              {sectionsOpen.cmms && (
+                <div className="fade-rise space-y-0.5 border-s-2 border-amber-500/30 ps-2 pt-0.5">
+                  {CMMS_SIDEBAR_ITEMS.map((item) => {
+                    const active = activeSystemView.system === "cmms" && activeSystemView.sub === item.id;
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => onSelectSystemView?.({ system: "cmms", sub: item.id })}
+                        className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-start text-[10.5px] transition ${
+                          active
+                            ? "row-on font-medium text-amber-300"
+                            : "tx2 hover:bg-[var(--row-hover)] hover:tx1"
+                        }`}
+                      >
+                        <span className="text-[11px]">{item.icon}</span>
+                        <span className="min-w-0 flex-1 truncate">{t(item.label, lang)}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+
+            {/* ── خط جداکنندهٔ بصری (Divider) بین بخش ۳ و ۴ ── */}
+            <div role="separator" aria-orientation="horizontal" className="my-2 flex items-center gap-2 px-1">
+              <span className="hair h-px flex-1" />
+              <span className="text-[8px] tracking-widest tx4" dir="ltr">SCM</span>
+              <span className="hair h-px flex-1" />
+            </div>
+
+            {/* ── ۴. سرگروه اصلی چهارم: زنجیره تأمین و انبارداری (SCM) ── */}
+            <section className="space-y-1">
+              <button
+                type="button"
+                onClick={() => toggleSection("scm")}
+                aria-expanded={sectionsOpen.scm}
+                className={`flex w-full items-center gap-2 rounded-xl border px-2.5 py-2 text-start transition ${
+                  activeSystemView.system === "scm"
+                    ? "border-teal-500/40 bg-teal-500/10 tx1"
+                    : "b-line-soft bg-black/15 tx2 hover:tx1"
+                }`}
+              >
+                <span className="text-[12px]">📦</span>
+                <span className="min-w-0 flex-1 truncate text-[11px] font-semibold">
+                  {rtl ? "زنجیره تأمین و انبارداری (SCM)" : "Supply Chain & Warehouse (SCM)"}
+                </span>
+                <span className="rounded border border-teal-500/30 bg-teal-500/10 px-1.5 py-0.5 text-[8.5px] text-teal-300" dir="ltr">
+                  SCM
+                </span>
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className={`h-3 w-3 shrink-0 tx4 transition-transform ${sectionsOpen.scm ? "rotate-180" : ""}`}
+                >
+                  <path d="m6 9 6 6 6-6" />
+                </svg>
+              </button>
+
+              {sectionsOpen.scm && (
+                <div className="fade-rise space-y-0.5 border-s-2 border-teal-500/30 ps-2 pt-0.5">
+                  {SCM_SIDEBAR_ITEMS.map((item) => {
+                    const active = activeSystemView.system === "scm" && activeSystemView.sub === item.id;
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => onSelectSystemView?.({ system: "scm", sub: item.id })}
+                        className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-start text-[10.5px] transition ${
+                          active
+                            ? "row-on font-medium text-teal-300"
+                            : "tx2 hover:bg-[var(--row-hover)] hover:tx1"
+                        }`}
+                      >
+                        <span className="text-[11px]">{item.icon}</span>
+                        <span className="min-w-0 flex-1 truncate">{t(item.label, lang)}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
           </>
         )}
       </div>
