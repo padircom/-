@@ -4740,11 +4740,28 @@ export function registerManufacturingRoutes(app, { repo, subjects, evaluate } = 
     }
     const needle = text(q.q, "q", { max: 80 });
 
-    const [materials, parts] = await Promise.all([
+    const [materials, parts, inventories, consumptions] = await Promise.all([
       r.list("MfgMaterial", { where: [{ column: "PlantId", op: "eq", value: plantId }] }),
       r.list("MfgPart", { where: [{ column: "PlantId", op: "eq", value: plantId }] }),
+      r.list("MfgInventoryLevel", { where: [{ column: "PlantId", op: "eq", value: plantId }] }),
+      r.list("MfgMaterialConsumption", { where: [{ column: "PlantId", op: "eq", value: plantId }] }),
     ]);
     const partById = new Map(parts.filter((p) => p.PlantId === plantId).map((p) => [p.Id, p]));
+    const invByMaterialId = new Map();
+    for (const inv of inventories) {
+      if (inv.PlantId !== plantId) continue;
+      const list = invByMaterialId.get(inv.MaterialId) ?? [];
+      list.push(inv);
+      invByMaterialId.set(inv.MaterialId, list);
+    }
+    const consumedByMaterialId = new Map();
+    for (const cRow of consumptions) {
+      if (cRow.PlantId !== plantId) continue;
+      consumedByMaterialId.set(
+        cRow.MaterialId,
+        roundTo3((consumedByMaterialId.get(cRow.MaterialId) ?? 0) + storedNumber(cRow.Quantity)),
+      );
+    }
 
     const matched = [];
     for (const mat of materials) {
@@ -4758,12 +4775,42 @@ export function registerManufacturingRoutes(app, { repo, subjects, evaluate } = 
         const hay = `${part.PartNo ?? ""} ${part.NameFa ?? ""} ${part.NameEn ?? ""} ${mat.DefaultWarehouseCode ?? ""} ${mat.Id ?? ""}`.toLowerCase();
         if (!hay.includes(lower)) continue;
       }
+      const invRows = invByMaterialId.get(mat.Id) ?? [];
+      const totalOnHand = roundTo3(invRows.reduce((s, rRow) => s + storedNumber(rRow.OnHandQty), 0));
+      const totalReserved = roundTo3(invRows.reduce((s, rRow) => s + storedNumber(rRow.ReservedQty), 0));
+      const totalBlocked = roundTo3(invRows.reduce((s, rRow) => s + storedNumber(rRow.BlockedQty), 0));
+      const totalInTransit = roundTo3(invRows.reduce((s, rRow) => s + storedNumber(rRow.InTransitQty), 0));
+      const safetyStock = Math.max(
+        storedNumber(mat.SafetyStockQty),
+        invRows.reduce((s, rRow) => s + storedNumber(rRow.SafetyStockQty), 0),
+      );
+      const freeAvailable = Math.max(
+        0,
+        roundTo3(totalOnHand + totalInTransit - totalReserved - totalBlocked - safetyStock),
+      );
       matched.push({
         ...mat,
         PartNo: part.PartNo,
         PartNameFa: part.NameFa,
         BaseUom: part.BaseUom,
         PartType: part.PartType,
+        IsLotTracked: Boolean(part.IsLotTracked),
+        OnHandQty: totalOnHand,
+        ReservedQty: totalReserved,
+        BlockedQty: totalBlocked,
+        InTransitQty: totalInTransit,
+        FreeAvailableQty: freeAvailable,
+        TotalConsumedQty: consumedByMaterialId.get(mat.Id) ?? 0,
+        InventoryLocations: invRows.map((rRow) => ({
+          Id: rRow.Id,
+          WarehouseCode: rRow.WarehouseCode,
+          LocationCode: rRow.LocationCode ?? null,
+          LotNo: rRow.LotNo ?? null,
+          OnHandQty: storedNumber(rRow.OnHandQty),
+          ReservedQty: storedNumber(rRow.ReservedQty),
+          BlockedQty: storedNumber(rRow.BlockedQty),
+          InTransitQty: storedNumber(rRow.InTransitQty),
+        })),
       });
     }
 
@@ -5072,6 +5119,66 @@ export function registerManufacturingRoutes(app, { repo, subjects, evaluate } = 
           }
         }
 
+        // همگام‌سازی خودکار هشدارهای کمبود مواد (MfgProductionAlert) در همان تراکنش MRP
+        const existingAlerts = await db.list("MfgProductionAlert", {
+          where: [{ column: "PlantId", op: "eq", value: plantId }],
+        });
+        const alertByKey = new Map(
+          existingAlerts
+            .filter((al) => al.PlantId === plantId)
+            .map((al) => [al.AlertKey, al]),
+        );
+        const nowAlertIso = new Date().toISOString();
+        for (const pReq of persistedRequirements) {
+          const alertKey = `SH-${pReq.Id}`.slice(0, 60);
+          const existingAlert = alertByKey.get(alertKey);
+          const shortageVal = roundTo3(storedNumber(pReq.ShortageQuantity));
+          const matObj = materialById.get(pReq.MaterialId);
+          const partObj = matObj ? partById.get(matObj.PartId) : null;
+          const ordObj = orderById.get(pReq.ProductionOrderId);
+          if (shortageVal > 0) {
+            const titleFa = `کمبود مادهٔ ${partObj?.PartNo ?? pReq.MaterialId} برای سفارش ${ordObj?.OrderNo ?? pReq.ProductionOrderId}`;
+            const detailFa = `کمبود ${shortageVal} ${pReq.Uom} (نیاز خالص: ${pReq.NetQuantity} ${pReq.Uom}، تخصیص‌یافته: ${pReq.AvailableQuantity} ${pReq.Uom})`;
+            if (!existingAlert) {
+              await db.create("MfgProductionAlert", {
+                PlantId: plantId,
+                AlertKey: alertKey,
+                AlertCode: "MATERIAL_SHORTAGE",
+                Severity: "high",
+                Status: "open",
+                ProductionOrderId: pReq.ProductionOrderId,
+                ProductionOrderOperationId: pReq.ProductionOrderOperationId ?? null,
+                WorkCenterId: null,
+                TitleFa: titleFa.slice(0, 240),
+                DetailFa: detailFa.slice(0, 1200),
+                FirstRaisedAt: nowAlertIso,
+                LastRaisedAt: nowAlertIso,
+                OccurrenceCount: 1,
+                ThresholdValue: pReq.NetQuantity,
+                ActualValue: shortageVal,
+                SourceEventKey: pReq.RequirementKey.slice(0, 160),
+              }, subject.id);
+            } else if (existingAlert.Status !== "suppressed") {
+              await db.patch("MfgProductionAlert", existingAlert.Id, {
+                Status: existingAlert.Status === "resolved" ? "open" : existingAlert.Status,
+                ResolvedAt: existingAlert.Status === "resolved" ? null : existingAlert.ResolvedAt,
+                ResolvedBy: existingAlert.Status === "resolved" ? null : existingAlert.ResolvedBy,
+                LastRaisedAt: nowAlertIso,
+                OccurrenceCount: (Number(existingAlert.OccurrenceCount) || 1) + 1,
+                ThresholdValue: pReq.NetQuantity,
+                ActualValue: shortageVal,
+                DetailFa: detailFa.slice(0, 1200),
+              }, subject.id, existingAlert.RowVersion);
+            }
+          } else if (existingAlert && ["open", "acknowledged"].includes(existingAlert.Status)) {
+            await db.patch("MfgProductionAlert", existingAlert.Id, {
+              Status: "resolved",
+              ResolvedAt: nowAlertIso,
+              ResolvedBy: subject.id,
+            }, subject.id, existingAlert.RowVersion);
+          }
+        }
+
         await createAuditRecord(db, req, "MFG_MRP_CALCULATED", "MfgMaterialRequirement", `mrp-v${scheduleVersion}`, "mfg.mrp.run", {
           scheduleVersion,
           throughDate,
@@ -5157,21 +5264,51 @@ export function registerManufacturingRoutes(app, { repo, subjects, evaluate } = 
       if (!ord || ord.PlantId !== plantId) throw notFound();
     }
 
-    const allReqs = await r.list("MfgMaterialRequirement", {
-      where: [{ column: "PlantId", op: "eq", value: plantId }],
-    });
-    const matched = allReqs.filter((row) => {
-      if (row.PlantId !== plantId) return false;
-      if (row.Status !== "shortage" || storedNumber(row.ShortageQuantity) <= 0) return false;
-      if (materialId && row.MaterialId !== materialId) return false;
-      if (orderId && row.ProductionOrderId !== orderId) return false;
-      if (scheduleVersion !== null && row.ScheduleVersion !== scheduleVersion) return false;
-      if (requiredBeforeMs !== null) {
-        const reqMs = storedTimestamp(row.RequiredAt);
-        if (!Number.isFinite(reqMs) || reqMs > requiredBeforeMs) return false;
-      }
-      return true;
-    });
+    const [allReqs, allMaterials, allParts, allOrders, allOperations] = await Promise.all([
+      r.list("MfgMaterialRequirement", { where: [{ column: "PlantId", op: "eq", value: plantId }] }),
+      r.list("MfgMaterial", { where: [{ column: "PlantId", op: "eq", value: plantId }] }),
+      r.list("MfgPart", { where: [{ column: "PlantId", op: "eq", value: plantId }] }),
+      r.list("MfgProductionOrder", { where: [{ column: "PlantId", op: "eq", value: plantId }] }),
+      r.list("MfgProductionOrderOperation", { where: [{ column: "PlantId", op: "eq", value: plantId }] }),
+    ]);
+    const matById = new Map(allMaterials.filter((m) => m.PlantId === plantId).map((m) => [m.Id, m]));
+    const partById = new Map(allParts.filter((p) => p.PlantId === plantId).map((p) => [p.Id, p]));
+    const orderById = new Map(allOrders.filter((o) => o.PlantId === plantId).map((o) => [o.Id, o]));
+    const opById = new Map(allOperations.filter((op) => op.PlantId === plantId).map((op) => [op.Id, op]));
+
+    const matched = allReqs
+      .filter((row) => {
+        if (row.PlantId !== plantId) return false;
+        if (row.Status !== "shortage" || storedNumber(row.ShortageQuantity) <= 0) return false;
+        if (materialId && row.MaterialId !== materialId) return false;
+        if (orderId && row.ProductionOrderId !== orderId) return false;
+        if (scheduleVersion !== null && row.ScheduleVersion !== scheduleVersion) return false;
+        if (requiredBeforeMs !== null) {
+          const reqMs = storedTimestamp(row.RequiredAt);
+          if (!Number.isFinite(reqMs) || reqMs > requiredBeforeMs) return false;
+        }
+        return true;
+      })
+      .map((row) => {
+        const mat = matById.get(row.MaterialId);
+        const part = mat ? partById.get(mat.PartId) : null;
+        const ord = orderById.get(row.ProductionOrderId);
+        const op = row.ProductionOrderOperationId ? opById.get(row.ProductionOrderOperationId) : null;
+        return {
+          ...row,
+          PartId: mat?.PartId ?? null,
+          PartNo: part?.PartNo ?? null,
+          PartNameFa: part?.NameFa ?? null,
+          OrderNo: ord?.OrderNo ?? null,
+          OperationCode: op?.OperationCode ?? null,
+          ProcurementType: mat?.ProcurementType ?? null,
+          LeadTimeDays: mat?.LeadTimeDays ?? null,
+          LotSize: mat?.LotSize ?? null,
+          OrderMultiple: mat?.OrderMultiple ?? null,
+          StandardUnitCost: mat?.StandardUnitCost ?? part?.StandardUnitCost ?? null,
+          Currency: mat?.Currency ?? part?.Currency ?? "IRR",
+        };
+      });
 
     matched.sort((a, b) => storedTimestamp(a.RequiredAt) - storedTimestamp(b.RequiredAt)
       || String(a.Id).localeCompare(String(b.Id)));
@@ -6321,17 +6458,37 @@ export function registerManufacturingRoutes(app, { repo, subjects, evaluate } = 
     const orderId = text(q.orderId, "orderId", { max: 60, pattern: ID_RE });
     const workCenterId = text(q.workCenterId, "workCenterId", { max: 60, pattern: ID_RE });
 
-    const allAlerts = await r.list("MfgProductionAlert", {
-      where: [{ column: "PlantId", op: "eq", value: plantId }],
-    });
-    const matched = allAlerts.filter((al) => {
-      if (al.PlantId !== plantId) return false;
-      if (statusFilter && al.Status !== statusFilter) return false;
-      if (severityFilter && al.Severity !== severityFilter) return false;
-      if (orderId && al.ProductionOrderId !== orderId) return false;
-      if (workCenterId && al.WorkCenterId !== workCenterId) return false;
-      return true;
-    });
+    const [allAlerts, allOrders, allOperations, allWorkCenters] = await Promise.all([
+      r.list("MfgProductionAlert", { where: [{ column: "PlantId", op: "eq", value: plantId }] }),
+      r.list("MfgProductionOrder", { where: [{ column: "PlantId", op: "eq", value: plantId }] }),
+      r.list("MfgProductionOrderOperation", { where: [{ column: "PlantId", op: "eq", value: plantId }] }),
+      r.list("MfgWorkCenter", { where: [{ column: "PlantId", op: "eq", value: plantId }] }),
+    ]);
+    const orderById = new Map(allOrders.filter((o) => o.PlantId === plantId).map((o) => [o.Id, o]));
+    const opById = new Map(allOperations.filter((op) => op.PlantId === plantId).map((op) => [op.Id, op]));
+    const wcById = new Map(allWorkCenters.filter((wc) => wc.PlantId === plantId).map((wc) => [wc.Id, wc]));
+
+    const matched = allAlerts
+      .filter((al) => {
+        if (al.PlantId !== plantId) return false;
+        if (statusFilter && al.Status !== statusFilter) return false;
+        if (severityFilter && al.Severity !== severityFilter) return false;
+        if (orderId && al.ProductionOrderId !== orderId) return false;
+        if (workCenterId && al.WorkCenterId !== workCenterId) return false;
+        return true;
+      })
+      .map((al) => {
+        const ord = al.ProductionOrderId ? orderById.get(al.ProductionOrderId) : null;
+        const op = al.ProductionOrderOperationId ? opById.get(al.ProductionOrderOperationId) : null;
+        const wc = al.WorkCenterId ? wcById.get(al.WorkCenterId) : null;
+        return {
+          ...al,
+          OrderNo: ord?.OrderNo ?? null,
+          OperationCode: op?.OperationCode ?? null,
+          WorkCenterCode: wc?.Code ?? null,
+          WorkCenterNameFa: wc?.NameFa ?? null,
+        };
+      });
 
     matched.sort((a, b) => storedTimestamp(b.LastRaisedAt) - storedTimestamp(a.LastRaisedAt)
       || String(a.Id).localeCompare(String(b.Id)));

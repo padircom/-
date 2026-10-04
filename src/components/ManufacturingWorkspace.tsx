@@ -207,11 +207,33 @@ export default function ManufacturingWorkspace({
     NoteFa: "پلیسه‌گیری مجدد سطح ماشین‌کاری‌شده",
   });
 
-  // MRP state
+  // MRP, Materials & Alerts state (Phase 3)
   const [materials, setMaterials] = useState<MfgMaterial[]>([]);
   const [shortages, setShortages] = useState<MfgMaterialRequirement[]>([]);
   const [mrpResult, setMrpResult] = useState<any>(null);
   const [proposalResult, setProposalResult] = useState<any>(null);
+  const [matFilterQuery, setMatFilterQuery] = useState<string>("");
+  const [matFilterProcurement, setMatFilterProcurement] = useState<"" | "buy" | "make">("");
+  const [shortageFilterOrderId, setShortageFilterOrderId] = useState<string>("");
+  const [shortageFilterMaterialId, setShortageFilterMaterialId] = useState<string>("");
+  const [mrpHorizonIso, setMrpHorizonIso] = useState<string>("2026-12-31T23:59:59.000Z");
+  const [mrpTargetOrderId, setMrpTargetOrderId] = useState<string>("");
+  const [selectedShortageIds, setSelectedShortageIds] = useState<string[]>([]);
+  const [proposalNoteFa, setProposalNoteFa] = useState<string>("پیشنهاد تأمین ناشی از کمبود MRP کارخانه");
+  const [consumeForm, setConsumeForm] = useState({
+    OperationId: "",
+    RequirementId: "",
+    MaterialId: "",
+    Quantity: 1,
+    Uom: "ea",
+    LotNo: "",
+    WarehouseCode: "WH-MAIN",
+    UnitCost: 500000,
+    ConsumptionMethod: "manual" as "manual" | "backflush" | "issue",
+  });
+  const [alertFilterStatus, setAlertFilterStatus] = useState<string>("");
+  const [alertFilterSeverity, setAlertFilterSeverity] = useState<string>("");
+  const [ackNotesByAlertId, setAckNotesByAlertId] = useState<Record<string, string>>({});
 
   // Cost state
   const [costOrderId, setCostOrderId] = useState<string>("");
@@ -253,11 +275,14 @@ export default function ManufacturingWorkspace({
     setError("");
     try {
       if (tab === "overview") {
+        const alertQuery: { status?: string; severity?: string; limit?: number } = { limit: 50 };
+        if (alertFilterStatus) alertQuery.status = alertFilterStatus;
+        if (alertFilterSeverity) alertQuery.severity = alertFilterSeverity;
         const [ov, oee, al] = await Promise.all([
           MfgClient.getDashboardOverview(plantId, mfgUserId, { from: fromIso, to: toIso }),
           MfgClient.getDashboardOee(plantId, mfgUserId, { from: fromIso, to: toIso }),
           canMfgAccess(mfgUserId, "mfg.alert.view", plantId)
-            ? MfgClient.listAlerts(plantId, mfgUserId, { limit: 50 })
+            ? MfgClient.listAlerts(plantId, mfgUserId, alertQuery)
             : Promise.resolve({ items: [], page: { limit: 50, offset: 0, total: 0 } }),
         ]);
         if (!aliveRef.current) return;
@@ -389,13 +414,54 @@ export default function ManufacturingWorkspace({
           setOpVariance(null);
         }
       } else if (tab === "mrp") {
-        const [mRes, sRes] = await Promise.all([
-          MfgClient.listMaterials(plantId, mfgUserId, { limit: 100 }),
-          MfgClient.listShortages(plantId, mfgUserId, { limit: 100 }),
+        const matQuery: { q?: string; procurementType?: "make" | "buy"; limit?: number } = { limit: 100 };
+        if (matFilterQuery.trim()) matQuery.q = matFilterQuery.trim();
+        if (matFilterProcurement) matQuery.procurementType = matFilterProcurement;
+
+        const shQuery: { orderId?: string; materialId?: string; limit?: number } = { limit: 100 };
+        if (shortageFilterOrderId) shQuery.orderId = shortageFilterOrderId;
+        if (shortageFilterMaterialId) shQuery.materialId = shortageFilterMaterialId;
+
+        const [mRes, sRes, oRes, qRes, alRes] = await Promise.all([
+          MfgClient.listMaterials(plantId, mfgUserId, matQuery),
+          canMfgAccess(mfgUserId, "mfg.mrp.view", plantId)
+            ? MfgClient.listShortages(plantId, mfgUserId, shQuery)
+            : Promise.resolve({ items: [], page: { limit: 100, offset: 0, total: 0 } }),
+          canMfgAccess(mfgUserId, "mfg.order.view", plantId)
+            ? MfgClient.listOrders(plantId, mfgUserId, { limit: 100 })
+            : Promise.resolve({ items: [], page: { limit: 100, offset: 0, total: 0 } }),
+          canMfgAccess(mfgUserId, "mfg.execution.view", plantId)
+            ? MfgClient.getOperationQueue(plantId, mfgUserId, { limit: 100 })
+            : Promise.resolve({ items: [], page: { limit: 100, offset: 0, total: 0 } }),
+          canMfgAccess(mfgUserId, "mfg.alert.view", plantId)
+            ? MfgClient.listAlerts(plantId, mfgUserId, { limit: 50 })
+            : Promise.resolve({ items: [], page: { limit: 50, offset: 0, total: 0 } }),
         ]);
         if (!aliveRef.current) return;
-        setMaterials(mRes.items ?? []);
-        setShortages(sRes.items ?? []);
+        const matItems = mRes.items ?? [];
+        const shItems = sRes.items ?? [];
+        setMaterials(matItems);
+        setShortages(shItems);
+        if (oRes.items?.length) setOrders(oRes.items);
+        if (qRes.items?.length) {
+          setQueueOps(qRes.items);
+          if (!consumeForm.OperationId) {
+            setConsumeForm((f) => ({ ...f, OperationId: qRes.items[0].Id }));
+          }
+        }
+        if (alRes.items) setAlerts(alRes.items);
+        if (matItems.length && !consumeForm.MaterialId) {
+          const firstMat = matItems[0];
+          const firstLoc = firstMat.InventoryLocations?.[0];
+          setConsumeForm((f) => ({
+            ...f,
+            MaterialId: firstMat.Id,
+            Uom: firstMat.BaseUom || "ea",
+            UnitCost: firstMat.StandardUnitCost ?? 500000,
+            WarehouseCode: firstLoc?.WarehouseCode || firstMat.DefaultWarehouseCode || "WH-MAIN",
+            LotNo: firstLoc?.LotNo || "",
+          }));
+        }
       } else if (tab === "cost") {
         const oRes = await MfgClient.listOrders(plantId, mfgUserId, { limit: 100 });
         if (!aliveRef.current) return;
@@ -442,6 +508,12 @@ export default function ManufacturingWorkspace({
     execFilterWorkCenterId,
     execFilterStatus,
     execFilterShiftDate,
+    matFilterQuery,
+    matFilterProcurement,
+    shortageFilterOrderId,
+    shortageFilterMaterialId,
+    alertFilterStatus,
+    alertFilterSeverity,
   ]);
 
   useEffect(() => {
@@ -458,10 +530,11 @@ export default function ManufacturingWorkspace({
     setError("");
     setNotice("");
     try {
+      const customNote = ackNotesByAlertId[alert.Id]?.trim();
       await MfgClient.acknowledgeAlert(plantId, mfgUserId, alert.Id, alert.RowVersion, {
-        NoteFa: "بررسی و ثبت دریافت توسط مسئول تولید در میز کار MES",
+        NoteFa: customNote || "بررسی و ثبت دریافت توسط مسئول تولید در میز کار MES",
       });
-      setNotice(tr(`هشدار ${alert.AlertCode} تأیید دریافت شد.`, `Alert ${alert.AlertCode} acknowledged.`));
+      setNotice(tr(`هشدار ${alert.AlertCode} تأیید دریافت شد (v${alert.RowVersion + 1}).`, `Alert ${alert.AlertCode} acknowledged.`));
       await loadActiveTab();
     } catch (err) {
       setError(formatError(err));
@@ -878,13 +951,14 @@ export default function ManufacturingWorkspace({
     setNotice("");
     try {
       const res = await MfgClient.calculateMrp(plantId, mfgUserId, {
-        ThroughDate: "2026-12-31T23:59:59.000Z",
+        ThroughDate: mrpHorizonIso || "2026-12-31T23:59:59.000Z",
+        ...(mrpTargetOrderId ? { OrderIds: [mrpTargetOrderId] } : {}),
         PreviewOnly: previewOnly,
       });
       setMrpResult(res);
       setNotice(
         tr(
-          `محاسبهٔ MRP (${previewOnly ? "پیش‌نمایش" : "ثبت اتمیک"}): ${res.requirements?.length ?? 0} نیازمندی، ${res.shortages?.length ?? 0} کمبود.`,
+          `محاسبهٔ MRP (${previewOnly ? "پیش‌نمایش" : "ثبت اتمیک + صدور خودکار هشدار کمبود"}): ${res.requirements?.length ?? 0} نیازمندی، ${res.shortages?.length ?? 0} کمبود.`,
           `MRP (${previewOnly ? "preview" : "committed"}): ${res.requirements?.length ?? 0} requirements, ${res.shortages?.length ?? 0} shortages.`,
         ),
       );
@@ -896,19 +970,95 @@ export default function ManufacturingWorkspace({
     }
   }
 
+  function handleToggleShortage(reqId: string) {
+    setSelectedShortageIds((prev) =>
+      prev.includes(reqId) ? prev.filter((id) => id !== reqId) : [...prev, reqId],
+    );
+  }
+
   async function handleCreateProposal() {
-    if (!shortages.length) return;
+    const targetIds = selectedShortageIds.length ? selectedShortageIds : shortages.map((s) => s.Id);
+    if (!targetIds.length) return;
     setBusy(true);
     setError("");
     setNotice("");
     try {
       const res = await MfgClient.createProcurementProposal(plantId, mfgUserId, {
-        ThroughDate: "2026-12-31T23:59:59.000Z",
-        RequirementIds: shortages.map((s) => s.Id),
-        NoteFa: "پیشنهاد تأمین صادرشده از فضای کاری مستقل MES",
+        ThroughDate: mrpHorizonIso || "2026-12-31T23:59:59.000Z",
+        RequirementIds: targetIds,
+        NoteFa: proposalNoteFa.trim() || "پیشنهاد تأمین صادرشده از فضای کاری مستقل MES",
       });
       setProposalResult(res);
-      setNotice(tr(`پیشنهاد تأمین برای ${shortages.length} ردیف کمبود صادر شد.`, `Procurement proposal created for ${shortages.length} shortages.`));
+      setNotice(
+        tr(
+          `پیشنهاد تأمین برای ${targetIds.length} ردیف کمبود (${res.proposalsCount ?? res.proposals?.length ?? 0} محمولهٔ تجمیعی) صادر شد.`,
+          `Procurement proposal created for ${targetIds.length} shortages.`,
+        ),
+      );
+    } catch (err) {
+      setError(formatError(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function handleSelectMaterialForConsume(mat: MfgMaterial) {
+    const firstLoc = mat.InventoryLocations?.[0];
+    setConsumeForm((f) => ({
+      ...f,
+      MaterialId: mat.Id,
+      Uom: mat.BaseUom || "ea",
+      UnitCost: mat.StandardUnitCost ?? f.UnitCost,
+      WarehouseCode: firstLoc?.WarehouseCode || mat.DefaultWarehouseCode || "WH-MAIN",
+      LotNo: firstLoc?.LotNo || "",
+    }));
+  }
+
+  function handleSelectShortageForConsume(sh: MfgMaterialRequirement) {
+    const mat = materials.find((m) => m.Id === sh.MaterialId);
+    const firstLoc = mat?.InventoryLocations?.[0];
+    setConsumeForm((f) => ({
+      ...f,
+      RequirementId: sh.Id,
+      OperationId: sh.ProductionOrderOperationId || f.OperationId,
+      MaterialId: sh.MaterialId,
+      Quantity: Math.max(0.1, sh.AvailableQuantity > 0 ? sh.AvailableQuantity : 1),
+      Uom: sh.Uom || mat?.BaseUom || "ea",
+      UnitCost: sh.StandardUnitCost ?? mat?.StandardUnitCost ?? f.UnitCost,
+      WarehouseCode: firstLoc?.WarehouseCode || mat?.DefaultWarehouseCode || "WH-MAIN",
+      LotNo: firstLoc?.LotNo || "",
+    }));
+  }
+
+  async function handleConsumeMaterial(e: React.FormEvent) {
+    e.preventDefault();
+    if (!consumeForm.OperationId || !consumeForm.MaterialId) {
+      setError(tr("انتخاب عملیات و ماده برای ثبت مصرف الزامی است.", "Operation and Material are required."));
+      return;
+    }
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const res = await MfgClient.consumeMaterial(plantId, mfgUserId, {
+        OperationId: consumeForm.OperationId,
+        ...(consumeForm.RequirementId ? { RequirementId: consumeForm.RequirementId } : {}),
+        MaterialId: consumeForm.MaterialId,
+        Quantity: Number(consumeForm.Quantity) || 1,
+        Uom: consumeForm.Uom || "ea",
+        ...(consumeForm.LotNo.trim() ? { LotNo: consumeForm.LotNo.trim() } : {}),
+        ...(consumeForm.WarehouseCode.trim() ? { WarehouseCode: consumeForm.WarehouseCode.trim() } : {}),
+        UnitCost: Number(consumeForm.UnitCost) || 0,
+        Currency: "IRR",
+        ConsumptionMethod: consumeForm.ConsumptionMethod,
+      });
+      setNotice(
+        tr(
+          `مصرف واقعی ماده (${res.Quantity} ${res.Uom}) با موفقیت ثبت و از موجودی انبار کسر شد.`,
+          `Material consumption (${res.Quantity} ${res.Uom}) recorded and deducted from inventory.`,
+        ),
+      );
+      await loadActiveTab();
     } catch (err) {
       setError(formatError(err));
     } finally {
@@ -1171,23 +1321,76 @@ export default function ManufacturingWorkspace({
             </div>
           </div>
 
-          <section className="glass-dark rounded-xl p-3 space-y-2">
-            <h4 className="tx1 font-semibold">{tr("فهرست هشدارهای کارگاه (GET /alerts)", "Plant Alerts")}</h4>
+          <section className="glass-dark rounded-xl p-3 space-y-2.5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h4 className="tx1 font-semibold">{tr("فهرست هشدارهای کارگاه و کمبودهای مواد (GET /alerts)", "Plant & Shortage Alerts")}</h4>
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                <select
+                  aria-label="Alert Status Filter"
+                  className="rounded border b-line-soft bg-[var(--row)] px-2 py-1 text-xs tx1"
+                  value={alertFilterStatus}
+                  onChange={(e) => setAlertFilterStatus(e.target.value)}
+                >
+                  <option value="">{tr("همهٔ وضعیت‌ها", "All Statuses")}</option>
+                  <option value="open">open (باز)</option>
+                  <option value="acknowledged">acknowledged (رسیدگی‌شده)</option>
+                  <option value="resolved">resolved (برطرف‌شده)</option>
+                  <option value="suppressed">suppressed (مسکوت)</option>
+                </select>
+                <select
+                  aria-label="Alert Severity Filter"
+                  className="rounded border b-line-soft bg-[var(--row)] px-2 py-1 text-xs tx1"
+                  value={alertFilterSeverity}
+                  onChange={(e) => setAlertFilterSeverity(e.target.value)}
+                >
+                  <option value="">{tr("همهٔ شدت‌ها", "All Severities")}</option>
+                  <option value="critical">critical (بحرانی)</option>
+                  <option value="high">high (بالا)</option>
+                  <option value="medium">medium (متوسط)</option>
+                  <option value="low">low (پایین)</option>
+                </select>
+              </div>
+            </div>
             {!alerts.length ? (
-              <p className="tx3 text-xs">{tr("هشداری در این کارخانه ثبت نشده است.", "No alerts recorded.")}</p>
+              <p className="tx3 text-xs">{tr("هشداری مطابق فیلترهای انتخابی در این کارخانه یافت نشد.", "No alerts recorded.")}</p>
             ) : (
               <div className="space-y-2">
                 {alerts.map((al) => (
-                  <article key={al.Id} className="rounded-lg border b-line-soft p-2.5 flex flex-wrap items-center justify-between gap-2 text-xs tx2">
-                    <div>
-                      <strong className="tx1">{al.TitleFa}</strong>
-                      <span className="mx-2 tx3" dir="ltr">[{al.AlertCode} · {al.Severity} · {al.Status} · v{al.RowVersion}]</span>
-                      {al.DetailFa && <p className="tx3 text-xs mt-0.5">{al.DetailFa}</p>}
+                  <article key={al.Id} className="rounded-lg border b-line-soft p-2.5 space-y-1.5 text-xs tx2">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <strong className="tx1">{al.TitleFa}</strong>
+                        <span className="mx-2 tx3" dir="ltr">
+                          [{al.AlertCode} · {al.Severity} · {al.Status} · Occurrences: {al.OccurrenceCount} · v{al.RowVersion}]
+                        </span>
+                      </div>
+                      <span className="tx3 text-[11px]" dir="ltr">
+                        {al.OrderNo ? `Order: ${al.OrderNo} ` : ""}
+                        {al.OperationCode ? `· Op: ${al.OperationCode} ` : ""}
+                        {al.WorkCenterCode ? `· WC: ${al.WorkCenterCode}` : ""}
+                      </span>
                     </div>
+                    {al.DetailFa && <p className="tx3 text-xs">{al.DetailFa}</p>}
+                    {(al.ActualValue != null || al.ThresholdValue != null || al.AcknowledgedBy || al.ResolvedAt) && (
+                      <div className="flex flex-wrap gap-3 text-[11px] tx3" dir="ltr">
+                        {al.ActualValue != null && <span>Actual: <strong>{al.ActualValue}</strong></span>}
+                        {al.ThresholdValue != null && <span>Threshold/Net: <strong>{al.ThresholdValue}</strong></span>}
+                        {al.AcknowledgedBy && <span>Ack By: <strong>{al.AcknowledgedBy}</strong> ({al.AcknowledgedAt?.slice(0, 16).replace("T", " ")})</span>}
+                        {al.ResolvedAt && <span className="text-emerald-300">Resolved: {al.ResolvedAt.slice(0, 16).replace("T", " ")}</span>}
+                      </div>
+                    )}
                     {al.Status === "open" && canMfgAccess(mfgUserId, "mfg.alert.ack", plantId) && (
-                      <button className={btnCls} disabled={busy} onClick={() => void handleAckAlert(al)}>
-                        {tr("تأیید دریافت (Ack)", "Acknowledge")}
-                      </button>
+                      <div className="flex flex-wrap items-center gap-2 pt-1">
+                        <input
+                          className="flex-1 rounded border b-line-soft bg-[var(--row)] px-2 py-1 text-xs tx1"
+                          placeholder={tr("یادداشت رسیدگی به هشدار (NoteFa)...", "Acknowledgement note...")}
+                          value={ackNotesByAlertId[al.Id] ?? ""}
+                          onChange={(e) => setAckNotesByAlertId((prev) => ({ ...prev, [al.Id]: e.target.value }))}
+                        />
+                        <button className={btnCls} disabled={busy} onClick={() => void handleAckAlert(al)}>
+                          {tr("تأیید دریافت با If-Match (POST /alerts/:id/acknowledgements)", "Acknowledge")}
+                        </button>
+                      </div>
                     )}
                   </article>
                 ))}
@@ -2461,71 +2664,449 @@ export default function ManufacturingWorkspace({
         </div>
       )}
 
-      {/* ══════════════════════ ۶) تب مواد، MRP و کمبودها ══════════════════════ */}
+      {/* ══════════════════════ ۶) تب مواد، MRP، کمبود، مصرف و هشدارها (Phase 3) ══════════════════════ */}
       {!loading && tab === "mrp" && (
         <div className="space-y-3">
-          <section className="glass-dark rounded-xl p-3 flex flex-wrap items-center justify-between gap-2">
-            <div className="text-xs tx1 font-semibold">
-              {tr("برنامه‌ریزی نیازمندی‌های مواد (MRP) و مدیریت کمبودها", "Material Requirements Planning (MRP) & Shortages")}
+          {/* نوار فرمان اجرای MRP و صدور پیشنهاد تأمین */}
+          <section className="glass-dark rounded-xl p-3 space-y-2.5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="text-xs tx1 font-semibold">
+                {tr(
+                  "برنامه‌ریزی نیازمندی‌های مواد (MRP)، مدیریت موجودی/بچ، پیشنهاد تأمین و هشدارهای کمبود",
+                  "Material Requirements Planning (MRP), Inventory/Lot, Proposals & Alerts",
+                )}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {canMfgAccess(mfgUserId, "mfg.mrp.run", plantId) && (
+                  <>
+                    <button className={btnCls} disabled={busy} onClick={() => void handleRunMrp(true)}>
+                      {tr("اجرای پیش‌نمایش MRP (PreviewOnly)", "Run MRP Preview")}
+                    </button>
+                    <button className={btnCls} disabled={busy} onClick={() => void handleRunMrp(false)}>
+                      {tr("محاسبه و ثبت اتمیک MRP + صدور هشدار کمبود", "Commit MRP + Auto Alerts")}
+                    </button>
+                  </>
+                )}
+                {canMfgAccess(mfgUserId, "mfg.requisition.create", plantId) && shortages.length > 0 && (
+                  <button className={btnCls} disabled={busy} onClick={() => void handleCreateProposal()}>
+                    {tr(
+                      `صدور پیشنهاد تأمین (${selectedShortageIds.length || shortages.length} کمبود)`,
+                      `Create Procurement Proposal (${selectedShortageIds.length || shortages.length})`,
+                    )}
+                  </button>
+                )}
+              </div>
             </div>
-            <div className="flex flex-wrap gap-2">
-              {canMfgAccess(mfgUserId, "mfg.mrp.run", plantId) && (
-                <>
-                  <button className={btnCls} disabled={busy} onClick={() => void handleRunMrp(true)}>
-                    {tr("اجرای پیش‌نمایش MRP (PreviewOnly)", "Run MRP Preview")}
-                  </button>
-                  <button className={btnCls} disabled={busy} onClick={() => void handleRunMrp(false)}>
-                    {tr("محاسبه و ثبت اتمیک MRP", "Commit MRP Calculation")}
-                  </button>
-                </>
-              )}
-              {canMfgAccess(mfgUserId, "mfg.requisition.create", plantId) && shortages.length > 0 && (
-                <button className={btnCls} disabled={busy} onClick={() => void handleCreateProposal()}>
-                  {tr(`صدور پیشنهاد تأمین (${shortages.length} کمبود)`, `Create Procurement Proposal (${shortages.length})`)}
-                </button>
-              )}
+
+            {/* پارامترهای افق زمانی MRP، سفارش هدف و یادداشت پیشنهاد تأمین */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-2 pt-2 border-t b-line-soft text-xs">
+              <div>
+                <label className="tx3 block mb-1">{tr("افق زمانی محاسبهٔ MRP (ThroughDate)", "MRP Horizon (ThroughDate)")}</label>
+                <input
+                  className={inputCls}
+                  dir="ltr"
+                  value={mrpHorizonIso}
+                  onChange={(e) => setMrpHorizonIso(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="tx3 block mb-1">{tr("محدودسازی MRP به سفارش خاص (اختیاری)", "Target Order (Optional)")}</label>
+                <select
+                  className={inputCls}
+                  value={mrpTargetOrderId}
+                  onChange={(e) => setMrpTargetOrderId(e.target.value)}
+                >
+                  <option value="">{tr("همهٔ سفارش‌های آزادشده و در حال اجرا", "All Released / In-Progress Orders")}</option>
+                  {orders
+                    .filter((o) => ["released", "in-progress"].includes(o.Status))
+                    .map((o) => (
+                      <option key={o.Id} value={o.Id}>
+                        {o.OrderNo} ({o.Status} · Qty: {o.OrderQuantity})
+                      </option>
+                    ))}
+                </select>
+              </div>
+              <div>
+                <label className="tx3 block mb-1">{tr("یادداشت پیشنهاد تأمین (NoteFa)", "Proposal Note")}</label>
+                <input
+                  className={inputCls}
+                  value={proposalNoteFa}
+                  onChange={(e) => setProposalNoteFa(e.target.value)}
+                />
+              </div>
             </div>
           </section>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-            <section className="glass-dark rounded-xl p-3 space-y-2">
-              <h4 className="tx1 font-semibold">{tr("مواد برنامه‌ریزی‌شده (GET /materials)", "Planned Materials")}</h4>
-              <div className="space-y-1.5 max-h-72 overflow-y-auto">
+            {/* ستون راست: مواد برنامه‌ریزی‌شده، موجودی آزاد انبار و جزئیات بچ/لات */}
+            <section className="glass-dark rounded-xl p-3 space-y-2.5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h4 className="tx1 font-semibold">{tr("مواد برنامه‌ریزی‌شده و موجودی انبار (GET /materials)", "Planned Materials & Live Inventory")}</h4>
+                <span className="tx3 text-xs">{tr(`${materials.length} ماده`, `${materials.length} materials`)}</span>
+              </div>
+
+              {/* فیلتر جستجو و نوع تأمین */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
+                <input
+                  className={inputCls}
+                  placeholder={tr("جستجوی کد/نام قطعه یا انبار (q)...", "Search PartNo / Name / Warehouse...")}
+                  value={matFilterQuery}
+                  onChange={(e) => setMatFilterQuery(e.target.value)}
+                />
+                <select
+                  aria-label="Material Procurement Filter"
+                  className={inputCls}
+                  value={matFilterProcurement}
+                  onChange={(e) => setMatFilterProcurement(e.target.value as "" | "buy" | "make")}
+                >
+                  <option value="">{tr("همهٔ انواع تأمین (buy & make)", "All Procurement Types")}</option>
+                  <option value="buy">buy (خریدنی)</option>
+                  <option value="make">make (ساختنی)</option>
+                </select>
+              </div>
+
+              <div className="space-y-2 max-h-80 overflow-y-auto">
                 {materials.map((m) => (
-                  <div key={m.Id} className="rounded border b-line-soft p-2 text-xs tx2 flex justify-between" dir="ltr">
-                    <span>{m.Id} · {m.ProcurementType.toUpperCase()}</span>
-                    <span>
-                      Lead: {m.LeadTimeDays}d · Safety: {m.SafetyStockQty} · Lot: {m.LotSize} · Cost: {m.StandardUnitCost?.toLocaleString() ?? 0} {m.Currency}
-                    </span>
+                  <div key={m.Id} className="rounded-lg border b-line-soft p-2.5 text-xs tx2 space-y-1.5">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <strong className="tx1" dir="ltr">{m.PartNo ?? m.Id}</strong>
+                        {m.PartNameFa && <span> — {m.PartNameFa}</span>}
+                        <span className="mx-1.5 rounded bg-black/30 px-1.5 py-0.5 text-[10px] uppercase" dir="ltr">
+                          {m.ProcurementType}
+                        </span>
+                        {m.IsLotTracked && (
+                          <span className="rounded bg-amber-500/20 border border-amber-500/40 px-1.5 py-0.5 text-[10px] text-amber-200" dir="ltr">
+                            Lot-Tracked
+                          </span>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        className={btnCls}
+                        onClick={() => handleSelectMaterialForConsume(m)}
+                      >
+                        {tr("انتخاب برای مصرف", "Select to Consume")}
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-1.5 text-center" dir="ltr">
+                      <div className="rounded bg-black/25 p-1">
+                        <span className="tx3 text-[10px] block">OnHand</span>
+                        <strong>{m.OnHandQty ?? 0} {m.BaseUom ?? ""}</strong>
+                      </div>
+                      <div className="rounded bg-black/25 p-1">
+                        <span className="tx3 text-[10px] block">Reserved</span>
+                        <strong>{m.ReservedQty ?? 0}</strong>
+                      </div>
+                      <div className="rounded bg-black/25 p-1">
+                        <span className="tx3 text-[10px] block">Safety</span>
+                        <strong>{m.SafetyStockQty}</strong>
+                      </div>
+                      <div className="rounded bg-black/25 p-1 text-emerald-300">
+                        <span className="tx3 text-[10px] block">Free Avail</span>
+                        <strong>{m.FreeAvailableQty ?? 0}</strong>
+                      </div>
+                      <div className="rounded bg-black/25 p-1 text-sky-300">
+                        <span className="tx3 text-[10px] block">Consumed</span>
+                        <strong>{m.TotalConsumedQty ?? 0}</strong>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap justify-between gap-2 tx3 text-[11px]" dir="ltr">
+                      <span>
+                        Lead: {m.LeadTimeDays}d · LotSize: {m.LotSize} · Mult: {m.OrderMultiple}
+                      </span>
+                      <span>
+                        Std Cost: {m.StandardUnitCost?.toLocaleString() ?? 0} {m.Currency}
+                      </span>
+                    </div>
+
+                    {m.InventoryLocations && m.InventoryLocations.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 pt-0.5" dir="ltr">
+                        {m.InventoryLocations.map((loc) => (
+                          <span key={loc.Id} className="rounded border b-line-soft bg-black/20 px-2 py-0.5 text-[10px] tx3">
+                            {loc.WarehouseCode}
+                            {loc.LocationCode ? `/${loc.LocationCode}` : ""}
+                            {loc.LotNo ? ` · Lot: ${loc.LotNo}` : ""} — OnHand: <strong className="tx2">{loc.OnHandQty}</strong>
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
             </section>
 
-            <section className="glass-dark rounded-xl p-3 space-y-2">
-              <h4 className="tx1 font-semibold">{tr("کمبودهای مواد (GET /mrp/shortages)", "Material Shortages")}</h4>
+            {/* ستون چپ: کمبودهای مواد (GET /mrp/shortages)، خروجی اجرای MRP و پیشنهادهای تأمین */}
+            <section className="glass-dark rounded-xl p-3 space-y-2.5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h4 className="tx1 font-semibold">{tr("کمبودهای باز مواد (GET /mrp/shortages)", "Open Material Shortages")}</h4>
+                <span className="tx3 text-xs">
+                  {tr(`${shortages.length} کمبود فعال`, `${shortages.length} shortages`)}
+                </span>
+              </div>
+
+              {/* فیلتر کمبود بر اساس سفارش و ماده */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
+                <select
+                  aria-label="Shortage Order Filter"
+                  className={inputCls}
+                  value={shortageFilterOrderId}
+                  onChange={(e) => setShortageFilterOrderId(e.target.value)}
+                >
+                  <option value="">{tr("همهٔ سفارش‌ها", "All Orders")}</option>
+                  {orders.map((o) => (
+                    <option key={o.Id} value={o.Id}>
+                      {o.OrderNo} ({o.Status})
+                    </option>
+                  ))}
+                </select>
+                <select
+                  aria-label="Shortage Material Filter"
+                  className={inputCls}
+                  value={shortageFilterMaterialId}
+                  onChange={(e) => setShortageFilterMaterialId(e.target.value)}
+                >
+                  <option value="">{tr("همهٔ مواد", "All Materials")}</option>
+                  {materials.map((m) => (
+                    <option key={m.Id} value={m.Id}>
+                      {m.PartNo ?? m.Id} — {m.PartNameFa ?? ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               {!shortages.length ? (
-                <p className="tx3 text-xs">{tr("کمبودی ثبت نشده است.", "No shortages found.")}</p>
+                <p className="tx3 text-xs">{tr("کمبودی مطابق فیلترها ثبت نشده است.", "No shortages found.")}</p>
               ) : (
-                <div className="space-y-1.5 max-h-72 overflow-y-auto">
-                  {shortages.map((s) => (
-                    <div key={s.Id} className="rounded border border-rose-500/30 bg-rose-500/5 p-2 text-xs tx2 flex flex-wrap justify-between gap-2" dir="ltr">
-                      <span>{s.RequirementKey}</span>
-                      <span className="text-rose-300">
-                        Net: {s.NetQuantity} · Avail: {s.AvailableQuantity} · Shortage: <strong>{s.ShortageQuantity} {s.Uom}</strong> ({s.Status})
+                <div className="space-y-1.5 max-h-64 overflow-y-auto">
+                  {shortages.map((s) => {
+                    const checked = selectedShortageIds.includes(s.Id);
+                    return (
+                      <div
+                        key={s.Id}
+                        className="rounded-lg border border-rose-500/30 bg-rose-500/5 p-2 text-xs tx2 space-y-1"
+                        dir="ltr"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <label className="flex items-center gap-1.5 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => handleToggleShortage(s.Id)}
+                            />
+                            <strong className="tx1">{s.PartNo ?? s.MaterialId}</strong>
+                            {s.OrderNo && <span className="tx3">· Order: {s.OrderNo}</span>}
+                            {s.OperationCode && <span className="tx3">· Op: {s.OperationCode}</span>}
+                          </label>
+                          <button
+                            type="button"
+                            className={btnCls}
+                            onClick={() => handleSelectShortageForConsume(s)}
+                          >
+                            {tr("تخصیص به فرم مصرف", "Prefill Consume")}
+                          </button>
+                        </div>
+                        <div className="flex flex-wrap justify-between gap-2 text-[11px]">
+                          <span className="tx3">
+                            Gross: {s.GrossQuantity} + Scrap: {s.ScrapAllowanceQty} = Net: <strong>{s.NetQuantity}</strong> · Avail: {s.AvailableQuantity}
+                          </span>
+                          <span className="text-rose-300">
+                            Shortage: <strong>{s.ShortageQuantity} {s.Uom}</strong> (Need: {s.RequiredAt.slice(0, 10)})
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {mrpResult && (
+                <div className="rounded-lg border border-sky-500/30 bg-sky-500/10 p-2.5 text-xs text-sky-200 space-y-1" dir="ltr">
+                  <div className="font-semibold">
+                    MRP Calculation @ {mrpResult.calculationAt?.slice(0, 19).replace("T", " ")} · PreviewOnly: {String(mrpResult.previewOnly)} · Schedule: v{mrpResult.scheduleVersion ?? 1}
+                  </div>
+                  <div>
+                    Total Requirements: <strong>{mrpResult.requirements?.length ?? 0}</strong> · Shortages: <strong>{mrpResult.shortages?.length ?? 0}</strong> · Auto-Suggested Proposals: <strong>{mrpResult.proposals?.length ?? 0}</strong>
+                  </div>
+                </div>
+              )}
+
+              {proposalResult?.proposals && (
+                <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-2.5 text-xs text-emerald-200 space-y-1.5" dir="ltr">
+                  <div className="font-semibold">
+                    Procurement Proposals Created ({proposalResult.proposalsCount ?? proposalResult.proposals.length}):
+                  </div>
+                  {proposalResult.proposals.map((prp: any, idx: number) => (
+                    <div key={idx} className="rounded bg-black/25 px-2 py-1 flex flex-wrap justify-between gap-2">
+                      <span>
+                        <strong>{prp.ProposalNo}</strong> · {prp.PartNo ?? prp.MaterialId} ({prp.ProcurementType})
+                      </span>
+                      <span>
+                        Shortage: {prp.ShortageQuantity} → Suggested: <strong>{prp.SuggestedQuantity} {prp.Uom}</strong> · OrderBy: {prp.OrderBy?.slice(0, 10)} · Est: {prp.EstimatedTotalCost?.toLocaleString() ?? "—"} {prp.Currency}
                       </span>
                     </div>
                   ))}
                 </div>
               )}
-              {mrpResult && (
-                <div className="rounded-lg border border-sky-500/30 bg-sky-500/10 p-2 text-xs text-sky-200" dir="ltr">
-                  MRP Run @ {mrpResult.calculationAt} · PreviewOnly: {String(mrpResult.previewOnly)} · Requirements: {mrpResult.requirements?.length ?? 0} · Shortages: {mrpResult.shortages?.length ?? 0}
-                </div>
+            </section>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+            {/* فرم ثبت مصرف واقعی مواد با کسر اتمیک موجودی انبار و کنترل LotNo */}
+            <section className="glass-dark rounded-xl p-3 space-y-2.5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h4 className="tx1 font-semibold">
+                  {tr(
+                    "ثبت مصرف واقعی مواد و کسر اتمیک موجودی انبار (POST /material-consumptions)",
+                    "Record Actual Material Consumption (Atomic Inventory Deduction)",
+                  )}
+                </h4>
+                <span className="tx3 text-[11px]" dir="ltr">Idempotency-Key + LotNo Check</span>
+              </div>
+
+              {canMfgAccess(mfgUserId, "mfg.material.consume", plantId) ? (
+                <form onSubmit={handleConsumeMaterial} className="space-y-2 text-xs">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    <div>
+                      <label className="tx3 block mb-1">{tr("عملیات سفارش (OperationId)", "Operation")}</label>
+                      <select
+                        aria-label="Consumption Operation"
+                        className={inputCls}
+                        value={consumeForm.OperationId}
+                        onChange={(e) => setConsumeForm((f) => ({ ...f, OperationId: e.target.value }))}
+                      >
+                        <option value="">{tr("انتخاب عملیات...", "Select Operation...")}</option>
+                        {queueOps.map((op) => (
+                          <option key={op.Id} value={op.Id}>
+                            {op.OrderNo ?? op.ProductionOrderId} · #{op.SequenceNo} {op.OperationCode} ({op.Status})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="tx3 block mb-1">{tr("مادهٔ مصرفی (MaterialId)", "Material")}</label>
+                      <select
+                        aria-label="Consumption Material"
+                        className={inputCls}
+                        value={consumeForm.MaterialId}
+                        onChange={(e) => {
+                          const mat = materials.find((m) => m.Id === e.target.value);
+                          if (mat) handleSelectMaterialForConsume(mat);
+                          else setConsumeForm((f) => ({ ...f, MaterialId: e.target.value }));
+                        }}
+                      >
+                        <option value="">{tr("انتخاب ماده...", "Select Material...")}</option>
+                        {materials.map((m) => (
+                          <option key={m.Id} value={m.Id}>
+                            {m.PartNo ?? m.Id} — {m.PartNameFa ?? ""} (OnHand: {m.OnHandQty ?? 0} {m.BaseUom ?? ""})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="tx3 block mb-1">{tr("مقدار مصرف (Quantity)", "Quantity")}</label>
+                      <input
+                        type="number"
+                        step="0.1"
+                        className={inputCls}
+                        dir="ltr"
+                        value={consumeForm.Quantity}
+                        onChange={(e) => setConsumeForm((f) => ({ ...f, Quantity: Number(e.target.value) }))}
+                      />
+                    </div>
+                    <div>
+                      <label className="tx3 block mb-1">{tr("روش ثبت مصرف (ConsumptionMethod)", "Consumption Method")}</label>
+                      <select
+                        aria-label="Consumption Method"
+                        className={inputCls}
+                        value={consumeForm.ConsumptionMethod}
+                        onChange={(e) =>
+                          setConsumeForm((f) => ({
+                            ...f,
+                            ConsumptionMethod: e.target.value as "manual" | "backflush" | "issue",
+                          }))
+                        }
+                      >
+                        <option value="manual">manual (ثبت دستی کارگاهی)</option>
+                        <option value="issue">issue (حوالهٔ انبار)</option>
+                        <option value="backflush">backflush (کسر خودکار پسینی)</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="tx3 block mb-1">
+                        {tr("شماره بچ / لات (LotNo)", "LotNo")}
+                        {materials.find((m) => m.Id === consumeForm.MaterialId)?.IsLotTracked && (
+                          <strong className="text-amber-300 mx-1">{tr("(الزامی)", "(Required)")}</strong>
+                        )}
+                      </label>
+                      <input
+                        className={inputCls}
+                        dir="ltr"
+                        placeholder="LOT-..."
+                        value={consumeForm.LotNo}
+                        onChange={(e) => setConsumeForm((f) => ({ ...f, LotNo: e.target.value }))}
+                      />
+                    </div>
+                    <div>
+                      <label className="tx3 block mb-1">{tr("بهای واحد مصرف (UnitCost - IRR)", "Unit Cost (IRR)")}</label>
+                      <input
+                        type="number"
+                        className={inputCls}
+                        dir="ltr"
+                        value={consumeForm.UnitCost}
+                        onChange={(e) => setConsumeForm((f) => ({ ...f, UnitCost: Number(e.target.value) }))}
+                      />
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                    <span className="tx3 text-[11px]" dir="ltr">
+                      Warehouse: {consumeForm.WarehouseCode} · UoM: {consumeForm.Uom}
+                      {consumeForm.RequirementId ? ` · Linked Req: ${consumeForm.RequirementId}` : ""}
+                    </span>
+                    <button type="submit" className={btnCls} disabled={busy}>
+                      {tr("ثبت مصرف واقعی و کسر موجودی انبار", "Post Material Consumption")}
+                    </button>
+                  </div>
+                </form>
+              ) : (
+                <p className="tx3 text-xs">{tr("نقش فعلی مجوز mfg.material.consume ندارد.", "Requires mfg.material.consume permission.")}</p>
               )}
-              {proposalResult && (
-                <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-2 text-xs text-emerald-200" dir="ltr">
-                  Proposal Created: {JSON.stringify(proposalResult.proposals ?? proposalResult)}
+            </section>
+
+            {/* پنل هشدارهای کمبود مواد و تولید در تب MRP */}
+            <section className="glass-dark rounded-xl p-3 space-y-2.5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h4 className="tx1 font-semibold">
+                  {tr("هشدارهای کمبود مواد و کارگاه (GET /alerts)", "Material Shortage & Plant Alerts")}
+                </h4>
+                <span className="tx3 text-xs" dir="ltr">
+                  Open: {alerts.filter((a) => a.Status === "open").length} / Total: {alerts.length}
+                </span>
+              </div>
+              {!alerts.length ? (
+                <p className="tx3 text-xs">{tr("هشداری ثبت نشده است.", "No alerts found.")}</p>
+              ) : (
+                <div className="space-y-1.5 max-h-64 overflow-y-auto">
+                  {alerts.map((al) => (
+                    <div key={al.Id} className="rounded-lg border b-line-soft p-2 text-xs tx2 space-y-1">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                          <strong className="tx1">{al.TitleFa}</strong>
+                          <span className="mx-1.5 tx3" dir="ltr">
+                            [{al.AlertCode} · {al.Severity} · {al.Status} · v{al.RowVersion}]
+                          </span>
+                        </div>
+                        {al.Status === "open" && canMfgAccess(mfgUserId, "mfg.alert.ack", plantId) && (
+                          <button className={btnCls} disabled={busy} onClick={() => void handleAckAlert(al)}>
+                            {tr("تأیید دریافت (Ack)", "Acknowledge")}
+                          </button>
+                        )}
+                      </div>
+                      {al.DetailFa && <p className="tx3 text-[11px]">{al.DetailFa}</p>}
+                    </div>
+                  ))}
                 </div>
               )}
             </section>

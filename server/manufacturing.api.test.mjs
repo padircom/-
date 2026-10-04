@@ -1350,6 +1350,12 @@ test("MFG REST: مواد، محاسبهٔ MRP (پیش‌نمایش و ثبت ا�
   assert.equal(matList.statusCode, 200);
   assert.equal(matList.body.data.page.total, 1);
   assert.equal(matList.body.data.items[0].PartNo, "RM-STEEL-01");
+  assert.equal(matList.body.data.items[0].IsLotTracked, true);
+  assert.equal(matList.body.data.items[0].OnHandQty, 150);
+  assert.equal(matList.body.data.items[0].ReservedQty, 10);
+  assert.equal(matList.body.data.items[0].FreeAvailableQty, 120);
+  assert.equal(matList.body.data.items[0].InventoryLocations.length, 1);
+  assert.equal(matList.body.data.items[0].InventoryLocations[0].LotNo, "LOT-01");
 
   // ۲. اجرای MRP در حالت PreviewOnly (نیاز ناخالص = ۲۰۰، ضایعات ۱۰٪ = ۲۰، نیاز خالص = ۲۲۰؛ موجودی آزاد = ۱۵۰ - ۱۰ - ۲۰ = ۱۲۰ -> کمبود = ۱۰۰)
   const previewRes = await call("POST", MRP_CALCULATE, {
@@ -1371,7 +1377,7 @@ test("MFG REST: مواد، محاسبهٔ MRP (پیش‌نمایش و ثبت ا�
   assert.equal(previewRes.body.data.requirements[0].ShortageQuantity, 100);
   assert.equal(repo.tables.get("MfgMaterialRequirement")?.length ?? 0, 0);
 
-  // ۳. اجرای MRP با ثبت اتمیک نیازمندی‌ها
+  // ۳. اجرای MRP با ثبت اتمیک نیازمندی‌ها و صدور خودکار هشدار کمبود (MATERIAL_SHORTAGE)
   const commitMrp = await call("POST", MRP_CALCULATE, {
     params: { plantId: "PLANT-DEMO" },
     headers: { "x-user-id": "u-mfg-material" },
@@ -1386,7 +1392,18 @@ test("MFG REST: مواد، محاسبهٔ MRP (پیش‌نمایش و ثبت ا�
   assert.equal(repo.tables.get("MfgMaterialRequirement").length, 1);
   const reqId = commitMrp.body.data.requirements[0].Id;
 
-  // ۴. مشاهدهٔ فهرست کمبودهای باز
+  const mrpAlerts = await call("GET", ALERTS, {
+    params: { plantId: "PLANT-DEMO" },
+    query: { status: "open" },
+    headers: { "x-user-id": "u-mfg-manager" },
+  });
+  assert.equal(mrpAlerts.statusCode, 200);
+  assert.equal(mrpAlerts.body.data.items.length, 1);
+  assert.equal(mrpAlerts.body.data.items[0].AlertCode, "MATERIAL_SHORTAGE");
+  assert.equal(mrpAlerts.body.data.items[0].ActualValue, 100);
+  assert.equal(mrpAlerts.body.data.items[0].OrderNo, order.OrderNo);
+
+  // ۴. مشاهدهٔ فهرست کمبودهای باز همراه با فیلدهای غنی‌شدهٔ قطعه و سفارش
   const shortagesRes = await call("GET", MRP_SHORTAGES, {
     params: { plantId: "PLANT-DEMO" },
     query: { materialId: material.Id },
@@ -1395,6 +1412,9 @@ test("MFG REST: مواد، محاسبهٔ MRP (پیش‌نمایش و ثبت ا�
   assert.equal(shortagesRes.statusCode, 200);
   assert.equal(shortagesRes.body.data.page.total, 1);
   assert.equal(shortagesRes.body.data.items[0].Id, reqId);
+  assert.equal(shortagesRes.body.data.items[0].PartNo, "RM-STEEL-01");
+  assert.equal(shortagesRes.body.data.items[0].OrderNo, order.OrderNo);
+  assert.equal(shortagesRes.body.data.items[0].ProcurementType, "buy");
 
   // ۵. ایجاد پیشنهاد خرید از روی کمبودها با حذف اقلام تکراری و بدون صدور PO
   const proposalRes = await call("POST", PROCUREMENT_PROPOSALS, {
