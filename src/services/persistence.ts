@@ -5482,6 +5482,26 @@ function manufacturingTablesFor0046(): TableDef[] {
           checks: table.checks?.filter((check) => check.name !== "CK_MfgWcCalendar_BreakStart"),
         };
       }
+      if (table.name === "MfgOperationCost") {
+        return {
+          ...table,
+          columns: table.columns.filter((column) => !["PlannedQuantity", "PlannedRate", "PlannedAmount"].includes(column.name)),
+          checks: table.checks?.filter((check) => check.name !== "CK_MfgOperationCost_PlannedAmounts")
+            .map((check) => check.name === "CK_MfgOperationCost_Element"
+              ? { ...check, expression: "CostElement IN ('material','machine','labor','overhead')" }
+              : check),
+        };
+      }
+      if (table.name === "MfgOrderCost") {
+        return {
+          ...table,
+          columns: table.columns.filter((column) => ![
+            "PlannedMaterialCost", "PlannedMachineCost", "PlannedLaborCost", "PlannedOverheadCost",
+            "StandardScrapCost", "PlannedScrapCost", "ActualScrapCost", "PlannedTotalCost", "ReconcileThrough",
+          ].includes(column.name)),
+          checks: table.checks?.filter((check) => check.name !== "CK_MfgOrderCost_Phase4Amounts"),
+        };
+      }
       return table;
     });
 }
@@ -6125,6 +6145,23 @@ export const MIGRATIONS: Migration[] = [
       `IF EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_MfgWorkCenterResource_EquipmentId' AND parent_object_id = OBJECT_ID(N'dbo.MfgWorkCenterResource')) ALTER TABLE dbo.MfgWorkCenterResource DROP CONSTRAINT FK_MfgWorkCenterResource_EquipmentId;`,
       `IF EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_MfgProductionOrder_ContractId' AND parent_object_id = OBJECT_ID(N'dbo.MfgProductionOrder')) ALTER TABLE dbo.MfgProductionOrder DROP CONSTRAINT FK_MfgProductionOrder_ContractId;`,
       `IF EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_MfgProductionOrder_ProjectId' AND parent_object_id = OBJECT_ID(N'dbo.MfgProductionOrder')) ALTER TABLE dbo.MfgProductionOrder DROP CONSTRAINT FK_MfgProductionOrder_ProjectId;`,
+    ],
+  },
+  {
+    /* MFG-5: ذخیرهٔ برآورد برنامه‌ریزی‌شده، هزینهٔ ضایعات و تطبیق تا تاریخ مشخص.
+     * 0046 تا 0049 یخ‌زده می‌مانند؛ ستون‌های افزایشی nullable هستند تا روی دادهٔ موجود امن باشند. */
+    version: "0050", name: "manufacturing_cost_rollup_planned_scrap",
+    statements: [
+      ...["PlannedQuantity", "PlannedRate", "PlannedAmount"].map((column) =>
+        addColumnDdl("MfgOperationCost", column, "mssql")),
+      ...[
+        "PlannedMaterialCost", "PlannedMachineCost", "PlannedLaborCost", "PlannedOverheadCost",
+        "StandardScrapCost", "PlannedScrapCost", "ActualScrapCost", "PlannedTotalCost", "ReconcileThrough",
+      ].map((column) => addColumnDdl("MfgOrderCost", column, "mssql")),
+      `IF EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_MfgOperationCost_Element' AND parent_object_id = OBJECT_ID(N'dbo.MfgOperationCost')) ALTER TABLE dbo.MfgOperationCost DROP CONSTRAINT CK_MfgOperationCost_Element;`,
+      `IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_MfgOperationCost_Element' AND parent_object_id = OBJECT_ID(N'dbo.MfgOperationCost')) ALTER TABLE dbo.MfgOperationCost WITH CHECK ADD CONSTRAINT CK_MfgOperationCost_Element CHECK (CostElement IN ('material','machine','labor','overhead','scrap'));`,
+      `IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_MfgOperationCost_PlannedAmounts' AND parent_object_id = OBJECT_ID(N'dbo.MfgOperationCost')) ALTER TABLE dbo.MfgOperationCost WITH CHECK ADD CONSTRAINT CK_MfgOperationCost_PlannedAmounts CHECK ((PlannedQuantity IS NULL OR PlannedQuantity >= 0) AND (PlannedRate IS NULL OR PlannedRate >= 0) AND (PlannedAmount IS NULL OR PlannedAmount >= 0));`,
+      `IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_MfgOrderCost_Phase4Amounts' AND parent_object_id = OBJECT_ID(N'dbo.MfgOrderCost')) ALTER TABLE dbo.MfgOrderCost WITH CHECK ADD CONSTRAINT CK_MfgOrderCost_Phase4Amounts CHECK ((PlannedMaterialCost IS NULL OR PlannedMaterialCost >= 0) AND (PlannedMachineCost IS NULL OR PlannedMachineCost >= 0) AND (PlannedLaborCost IS NULL OR PlannedLaborCost >= 0) AND (PlannedOverheadCost IS NULL OR PlannedOverheadCost >= 0) AND (StandardScrapCost IS NULL OR StandardScrapCost >= 0) AND (PlannedScrapCost IS NULL OR PlannedScrapCost >= 0) AND (ActualScrapCost IS NULL OR ActualScrapCost >= 0) AND (PlannedTotalCost IS NULL OR PlannedTotalCost >= 0));`,
     ],
   },
 ];

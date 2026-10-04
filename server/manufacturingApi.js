@@ -24,7 +24,7 @@ const PROCUREMENT_TYPES = new Set(["make", "buy"]);
 const CONSUMPTION_METHODS = new Set(["manual", "backflush", "issue"]);
 const ALERT_STATUSES = new Set(["open", "acknowledged", "resolved", "suppressed"]);
 const ALERT_SEVERITIES = new Set(["critical", "high", "medium", "low"]);
-const COST_ELEMENTS = ["material", "machine", "labor", "overhead"];
+const COST_ELEMENTS = ["material", "machine", "labor", "overhead", "scrap"];
 const BOM_STATUSES = new Set(["draft", "released", "obsolete"]);
 const BOM_ISSUE_METHODS = new Set(["manual", "backflush", "kit"]);
 const WORK_CENTER_KINDS = new Set(["machine", "labor", "assembly", "inspection"]);
@@ -535,167 +535,493 @@ async function persistPartPlanning(tx, { plantId, partId, partType, planning, su
   return { material, inventory, defaultProcurementType: defaultProcurementType(partType) };
 }
 
-/* ─────────── رول‌آپ هزینهٔ عملیات از دادهٔ واقعی کارگاه ───────────
- *
- * هیچ مسیری در قرارداد، `MfgOperationCost` را پیش از تطبیق نمی‌سازد. اگر
- * محاسبهٔ هزینه فقط به ردیف‌های از پیش موجود تکیه کند، `reconcile` هرگز
- * اجرا نمی‌شود و در نتیجه `close` هم هرگز ممکن نیست. این تابع همان ردیف‌ها
- * را از شواهد واقعی می‌سازد:
- *   - ماده: نیازمندی‌ها (استاندارد) و مصرف‌های واقعی (واقعی)
- *   - ماشین/نیروی کار/سربار: دقایق برنامه‌ای و واقعی × نرخ مرکز هزینه،
- *     و در نبود مرکز هزینه، نرخ خود مرکز کاری بر پایهٔ نوع آن.
+/* ─────────── رول‌آپ هزینهٔ عملیات از دادهٔ واقعی کارگاه ─────────── */
+function costVariance(actual, basis) {
+  return roundTo3(storedNumber(actual) - storedNumber(basis));
+}
+
+function costVariancePct(actual, basis) {
+  const denominator = storedNumber(basis);
+  return denominator > 0 ? roundTo3((costVariance(actual, denominator) / denominator) * 100) : null;
+}
+
+function enrichOperationCostRow(row) {
+  const standardAmount = roundTo3(storedNumber(row.StandardAmount));
+  const plannedAmount = roundTo3(storedNumber(row.PlannedAmount, standardAmount));
+  const actualAmount = roundTo3(storedNumber(row.ActualAmount));
+  const standardQty = roundTo3(storedNumber(row.StandardQuantity));
+  const plannedQty = roundTo3(storedNumber(row.PlannedQuantity, standardQty));
+  const actualQty = roundTo3(storedNumber(row.ActualQuantity));
+  return {
+    ...row,
+    StandardQuantity: standardQty,
+    PlannedQuantity: plannedQty,
+    ActualQuantity: actualQty,
+    StandardAmount: standardAmount,
+    PlannedAmount: plannedAmount,
+    ActualAmount: actualAmount,
+    CostVariance: costVariance(actualAmount, standardAmount),
+    CostVariancePct: costVariancePct(actualAmount, standardAmount),
+    PlannedCostVariance: costVariance(actualAmount, plannedAmount),
+    PlannedCostVariancePct: costVariancePct(actualAmount, plannedAmount),
+  };
+}
+
+function assertSingleCostCurrency(rows, fallback = "IRR") {
+  const currencies = new Set(rows
+    .filter((row) => Math.abs(storedNumber(row.StandardAmount)) > 0.000001
+      || Math.abs(storedNumber(row.PlannedAmount, storedNumber(row.StandardAmount))) > 0.000001
+      || Math.abs(storedNumber(row.ActualAmount)) > 0.000001)
+    .map((row) => String(row.Currency ?? fallback).toUpperCase()));
+  if (currencies.size > 1) {
+    throw businessRule("MFG_COST_CURRENCY_MISMATCH", "هزینه‌های سفارش چند ارز دارند و بدون نرخ تبدیل نمی‌توان آن‌ها را با هم جمع زد");
+  }
+  return currencies.values().next().value ?? String(rows[0]?.Currency ?? fallback).toUpperCase();
+}
+
+function rollupCostElements(rows) {
+  const elements = ["material", "machine", "labor", "overhead", "scrap"];
+  const totals = Object.fromEntries(elements.map((element) => [element, { standard: 0, planned: 0, actual: 0 }]));
+  for (const raw of rows) {
+    const row = enrichOperationCostRow(raw);
+    const bucket = totals[row.CostElement];
+    if (!bucket) continue;
+    bucket.standard = roundTo3(bucket.standard + row.StandardAmount);
+    bucket.planned = roundTo3(bucket.planned + row.PlannedAmount);
+    bucket.actual = roundTo3(bucket.actual + row.ActualAmount);
+  }
+  for (const bucket of Object.values(totals)) {
+    bucket.costVariance = costVariance(bucket.actual, bucket.standard);
+    bucket.costVariancePct = costVariancePct(bucket.actual, bucket.standard);
+    bucket.plannedCostVariance = costVariance(bucket.actual, bucket.planned);
+    bucket.plannedCostVariancePct = costVariancePct(bucket.actual, bucket.planned);
+  }
+  return totals;
+}
+
+function summarizeCostRows(rows) {
+  const enrichedRows = rows.map(enrichOperationCostRow);
+  const byElement = rollupCostElements(enrichedRows);
+  const sum = (key) => roundTo3(Object.values(byElement).reduce((total, element) => total + storedNumber(element[key]), 0));
+  const standardTotalCost = sum("standard");
+  const plannedTotalCost = sum("planned");
+  const actualTotalCost = sum("actual");
+  return {
+    byElement,
+    standardTotalCost,
+    plannedTotalCost,
+    actualTotalCost,
+    costVariance: costVariance(actualTotalCost, standardTotalCost),
+    costVariancePct: costVariancePct(actualTotalCost, standardTotalCost),
+    plannedCostVariance: costVariance(actualTotalCost, plannedTotalCost),
+    plannedCostVariancePct: costVariancePct(actualTotalCost, plannedTotalCost),
+    currency: assertSingleCostCurrency(enrichedRows),
+    rows: enrichedRows,
+  };
+}
+
+function operationCostBreakdown(operations, rows) {
+  const rowsByOperation = new Map();
+  for (const row of rows) {
+    const list = rowsByOperation.get(row.ProductionOrderOperationId) ?? [];
+    list.push(enrichOperationCostRow(row));
+    rowsByOperation.set(row.ProductionOrderOperationId, list);
+  }
+  return operations.map((operation) => {
+    const opRows = rowsByOperation.get(operation.Id) ?? [];
+    const summary = summarizeCostRows(opRows);
+    return {
+      OperationId: operation.Id,
+      SequenceNo: operation.SequenceNo,
+      OperationCode: operation.OperationCode,
+      OperationNameFa: operation.OperationNameFa,
+      WorkCenterId: operation.WorkCenterId,
+      Status: operation.Status,
+      Currency: summary.currency,
+      StandardTotalCost: summary.standardTotalCost,
+      PlannedTotalCost: summary.plannedTotalCost,
+      ActualTotalCost: summary.actualTotalCost,
+      CostVariance: summary.costVariance,
+      CostVariancePct: summary.costVariancePct,
+      PlannedCostVariance: summary.plannedCostVariance,
+      PlannedCostVariancePct: summary.plannedCostVariancePct,
+      ByElement: summary.byElement,
+    };
+  });
+}
+
+function completeOperationCostRows(operations, storedRows, derivedRows) {
+  const storedByKey = new Map();
+  for (const row of storedRows) storedByKey.set(`${row.ProductionOrderOperationId}\u0000${row.CostElement}`, row);
+  const derivedByKey = new Map();
+  for (const row of derivedRows) derivedByKey.set(`${row.ProductionOrderOperationId}\u0000${row.CostElement}`, row);
+  const result = [];
+  let usedDerived = false;
+  for (const operation of operations) {
+    for (const element of COST_ELEMENTS) {
+      const key = `${operation.Id}\u0000${element}`;
+      const stored = storedByKey.get(key);
+      const derived = derivedByKey.get(key);
+      if (stored) result.push(enrichOperationCostRow(stored));
+      else if (derived) {
+        result.push(enrichOperationCostRow(derived));
+        usedDerived = true;
+      }
+    }
+  }
+  return { rows: result, derived: usedDerived || result.length === 0 };
+}
+
+function isAtOrBefore(value, throughMs) {
+  if (throughMs === null || throughMs === undefined) return true;
+  const timestamp = storedTimestamp(value);
+  return Number.isFinite(timestamp) && timestamp <= throughMs;
+}
+
+function chooseRateCostCenter(costCenters, { plantId, preferredId, workCenter, element, effectiveAt }) {
+  const effectiveDate = dateOnly(effectiveAt) ?? new Date().toISOString().slice(0, 10);
+  const active = costCenters.filter((row) => row.PlantId === plantId
+    && row.CostElement === element
+    && row.IsActive !== false
+    && effectiveOn(row, effectiveDate));
+  const preferred = preferredId ? active.find((row) => row.Id === preferredId) : null;
+  if (preferred) return preferred;
+  if (workCenter?.Code) {
+    const exactCode = `${workCenter.Code}-${element.toUpperCase()}`;
+    const sameCenterRates = active.filter((row) => String(row.Code ?? "").toUpperCase() === exactCode.toUpperCase()
+      || String(row.Code ?? "").toUpperCase().startsWith(`${String(workCenter.Code).toUpperCase()}-`));
+    if (sameCenterRates.length) {
+      sameCenterRates.sort((left, right) => String(dateOnly(right.EffectiveFrom) ?? "").localeCompare(String(dateOnly(left.EffectiveFrom) ?? "")));
+      return sameCenterRates[0];
+    }
+  }
+  active.sort((left, right) => String(dateOnly(right.EffectiveFrom) ?? "").localeCompare(String(dateOnly(left.EffectiveFrom) ?? ""))
+    || String(left.Id).localeCompare(String(right.Id)));
+  return active[0] ?? null;
+}
+
+function assertSingleCurrencyAmounts(items, fallback = "IRR") {
+  const currencies = new Set(items
+    .filter((item) => Math.abs(storedNumber(item.amount)) > 0.000001)
+    .map((item) => String(item.currency ?? fallback).toUpperCase()));
+  if (currencies.size > 1) {
+    throw businessRule("MFG_COST_CURRENCY_MISMATCH", "هزینهٔ یک عنصر در چند ارز ثبت شده است؛ ابتدا ارزها را یکسان‌سازی کنید");
+  }
+  return currencies.values().next().value
+    ?? String(items.find((item) => item.currency)?.currency ?? fallback).toUpperCase();
+}
+
+/**
+ * رول‌آپ هزینهٔ یک مجموعه Operation با تفکیک استاندارد، برنامه‌ریزی‌شده و واقعی.
+ * استاندارد مواد از GrossQuantity و برنامه از NetQuantity (شامل allowance ضایعات)
+ * می‌آید؛ هزینهٔ واقعی از تراکنش مصرف و زمان/نرخ واقعی اجرا محاسبه می‌شود.
  */
-async function deriveOperationCostRows(db, { plantId, operations, costVersion }) {
+async function deriveOperationCostRows(db, { plantId, operations, costVersion = 1, asOf = null }) {
   if (!Array.isArray(operations) || operations.length === 0) return [];
-  const [consumptions, requirements, parts, materials, workCenters, costCenters, executions] = await Promise.all([
+  const [consumptions, requirements, parts, materials, workCenters, costCenters, executions, scrapRecords, orders, schedules] = await Promise.all([
     db.list("MfgMaterialConsumption", { where: [{ column: "PlantId", op: "eq", value: plantId }] }),
     db.list("MfgMaterialRequirement", { where: [{ column: "PlantId", op: "eq", value: plantId }] }),
     db.list("MfgPart", { where: [{ column: "PlantId", op: "eq", value: plantId }] }),
     db.list("MfgMaterial", { where: [{ column: "PlantId", op: "eq", value: plantId }] }),
     db.list("MfgWorkCenter", { where: [{ column: "PlantId", op: "eq", value: plantId }] }),
     db.list("MfgCostCenter", { where: [{ column: "PlantId", op: "eq", value: plantId }] }),
-    /* دقیقهٔ واقعی روی «اجرا» ثبت می‌شود نه روی خود عملیات؛ بدون این جدول
-     * عناصر ماشین/دستمزد/سربار همیشه هزینهٔ واقعی صفر می‌گرفتند. */
     db.list("MfgOperationExecution", { where: [{ column: "PlantId", op: "eq", value: plantId }] }),
+    db.list("MfgScrapRecord", { where: [{ column: "PlantId", op: "eq", value: plantId }] }),
+    db.list("MfgProductionOrder", { where: [{ column: "PlantId", op: "eq", value: plantId }] }),
+    db.list("MfgOperationSchedule", { where: [{ column: "PlantId", op: "eq", value: plantId }] }),
   ]);
-
+  const throughMs = asOf ? Date.parse(asOf) : null;
+  const operationIds = new Set(operations.filter((row) => row.PlantId === plantId).map((row) => row.Id));
+  const orderById = new Map(orders.filter((row) => row.PlantId === plantId).map((row) => [row.Id, row]));
   const materialById = new Map(materials.filter((row) => row.PlantId === plantId).map((row) => [row.Id, row]));
   const partById = new Map(parts.filter((row) => row.PlantId === plantId).map((row) => [row.Id, row]));
   const centerById = new Map(workCenters.filter((row) => row.PlantId === plantId).map((row) => [row.Id, row]));
-  const costCenterById = new Map(costCenters.filter((row) => row.PlantId === plantId).map((row) => [row.Id, row]));
 
-  /* نرخ‌ها از مرکز هزینه می‌آیند: هر عنصر نرخ ساعتی خودش را دارد و
-   * CostCenterId عملیات/مرکز کاری فقط مرکز ترجیحی همان عنصر را انتخاب می‌کند.
-   * نبود نرخ یعنی صفر — نه نرخ حدسی. */
-  const costCenterFor = (costCenterId, element) => {
-    const candidates = costCenters.filter(
-      (row) => row.PlantId === plantId && row.IsActive !== false && row.CostElement === element,
-    );
-    return (costCenterId ? candidates.find((row) => row.Id === costCenterId) : null) ?? candidates[0] ?? null;
-  };
-  const rateFor = (costCenterId, element) => {
-    const chosen = costCenterFor(costCenterId, element);
-    return chosen && chosen.HourlyRate !== null && chosen.HourlyRate !== undefined ? storedNumber(chosen.HourlyRate) : 0;
-  };
+  const requirementByOperation = new Map();
+  const latestRequirementByKey = new Map();
+  for (const row of requirements) {
+    if (row.PlantId !== plantId || !operationIds.has(row.ProductionOrderOperationId) || row.Status === "cancelled") continue;
+    if (!isAtOrBefore(row.RequiredAt, throughMs)) continue;
+    const stableKey = String(row.RequirementKey ?? row.Id).replace(/:v\d+$/, "");
+    const previous = latestRequirementByKey.get(stableKey);
+    if (!previous || Number(row.ScheduleVersion ?? 0) > Number(previous.ScheduleVersion ?? 0)
+      || (Number(row.ScheduleVersion ?? 0) === Number(previous.ScheduleVersion ?? 0)
+        && storedTimestamp(row.CreatedAt) > storedTimestamp(previous.CreatedAt))) {
+      latestRequirementByKey.set(stableKey, row);
+    }
+  }
+  for (const row of latestRequirementByKey.values()) {
+    const list = requirementByOperation.get(row.ProductionOrderOperationId) ?? [];
+    list.push(row);
+    requirementByOperation.set(row.ProductionOrderOperationId, list);
+  }
 
+  const consumptionsByOperation = new Map();
+  for (const row of consumptions) {
+    if (row.PlantId !== plantId || !operationIds.has(row.ProductionOrderOperationId) || !isAtOrBefore(row.ConsumedAt, throughMs)) continue;
+    const list = consumptionsByOperation.get(row.ProductionOrderOperationId) ?? [];
+    list.push(row);
+    consumptionsByOperation.set(row.ProductionOrderOperationId, list);
+  }
   const executionsByOperation = new Map();
   for (const row of executions) {
-    if (row.PlantId !== plantId) continue;
+    if (row.PlantId !== plantId || !operationIds.has(row.ProductionOrderOperationId) || row.Status === "cancelled") continue;
+    if (!isAtOrBefore(row.StartedAt, throughMs) || (row.FinishedAt && !isAtOrBefore(row.FinishedAt, throughMs))) continue;
     const list = executionsByOperation.get(row.ProductionOrderOperationId) ?? [];
     list.push(row);
     executionsByOperation.set(row.ProductionOrderOperationId, list);
   }
+  const scrapByOperation = new Map();
+  for (const row of scrapRecords) {
+    if (row.PlantId !== plantId || !operationIds.has(row.ProductionOrderOperationId) || row.Disposition !== "scrapped") continue;
+    if (!isAtOrBefore(row.RecordedAt, throughMs)) continue;
+    const list = scrapByOperation.get(row.ProductionOrderOperationId) ?? [];
+    list.push(row);
+    scrapByOperation.set(row.ProductionOrderOperationId, list);
+  }
+  const scheduleByOperation = new Map();
+  for (const row of schedules) {
+    if (row.PlantId !== plantId || !operationIds.has(row.ProductionOrderOperationId) || row.Status === "cancelled") continue;
+    const list = scheduleByOperation.get(row.ProductionOrderOperationId) ?? [];
+    list.push(row);
+    scheduleByOperation.set(row.ProductionOrderOperationId, list);
+  }
 
   const hours = (minutes) => roundTo3(storedNumber(minutes) / 60);
   const rows = [];
-
   for (const operation of operations) {
+    if (operation.PlantId !== plantId) continue;
     const workCenter = centerById.get(operation.WorkCenterId) ?? null;
-    const operationConsumptions = consumptions.filter(
-      (row) => row.PlantId === plantId && row.ProductionOrderOperationId === operation.Id,
-    );
-    const operationRequirements = requirements.filter(
-      (row) => row.PlantId === plantId && row.ProductionOrderOperationId === operation.Id,
-    );
+    const order = orderById.get(operation.ProductionOrderId) ?? null;
+    const orderPart = order ? partById.get(order.PartId) : null;
+    const operationRequirements = requirementByOperation.get(operation.Id) ?? [];
+    const operationConsumptions = consumptionsByOperation.get(operation.Id) ?? [];
+    const operationExecutions = executionsByOperation.get(operation.Id) ?? [];
+    const operationScraps = scrapByOperation.get(operation.Id) ?? [];
+    const operationSchedules = scheduleByOperation.get(operation.Id) ?? [];
 
-    /* نرخ استاندارد ماده = بهای واحد هر جزء در فهرست مواد/قطعه؛ مقدار
-     * استاندارد = مجموع مقدار خالص نیازمندی‌ها. تقسیم نرخ بر تعداد ردیف
-     * اشتباه است، چون هر ردیف بهای واحد خودش را دارد. */
-    const standardMaterialQty = roundTo3(operationRequirements.reduce((sum, row) => sum + storedNumber(row.NetQuantity), 0));
-    const standardMaterialAmount = roundTo3(operationRequirements.reduce((sum, row) => {
-      const material = materialById.get(row.MaterialId);
+    // یک نسخهٔ برنامهٔ آخر برای جلوگیری از جمع دوبارهٔ چند بار زمان‌بندی.
+    const latestScheduleVersion = operationSchedules.reduce((max, row) => Math.max(max, Number(row.ScheduleVersion) || 0), 0);
+    const latestSchedule = operationSchedules.filter((row) => Number(row.ScheduleVersion) === latestScheduleVersion);
+    const scheduledMinutes = roundTo3(latestSchedule.reduce((sum, row) => sum + storedNumber(row.PlannedCapacityMinutes), 0));
+    const firstPlannedStart = latestSchedule
+      .map((row) => storedTimestamp(row.PlannedStartAt))
+      .filter(Number.isFinite)
+      .sort((left, right) => left - right)[0];
+    const plannedAt = Number.isFinite(firstPlannedStart)
+      ? new Date(firstPlannedStart).toISOString()
+      : order?.RequestedStartAt ?? order?.ReleasedAt ?? order?.DueAt ?? new Date().toISOString();
+    const plannedDate = dateOnly(plannedAt) ?? new Date().toISOString().slice(0, 10);
+
+    const standardMaterialDetails = operationRequirements.map((requirement) => {
+      const material = materialById.get(requirement.MaterialId);
       const part = material ? partById.get(material.PartId) : null;
-      const unitCost = storedNumber(material?.StandardUnitCost ?? part?.StandardUnitCost);
-      return sum + storedNumber(row.NetQuantity) * unitCost;
-    }, 0));
-    const standardMaterialRate = standardMaterialQty > 0
-      ? roundTo3(standardMaterialAmount / standardMaterialQty)
-      : 0;
-    const actualMaterialQty = roundTo3(operationConsumptions.reduce((sum, row) => sum + storedNumber(row.Quantity), 0));
-    const actualMaterialAmount = roundTo3(operationConsumptions.reduce(
-      (sum, row) => sum + storedNumber(row.Quantity) * storedNumber(row.UnitCost),
-      0,
-    ));
-    const actualMaterialRate = actualMaterialQty > 0
-      ? roundTo3(actualMaterialAmount / actualMaterialQty)
-      : standardMaterialRate;
-
+      const rate = storedNumber(material?.StandardUnitCost ?? part?.StandardUnitCost);
+      const currency = material?.Currency ?? part?.Currency ?? "IRR";
+      const standardQty = storedNumber(requirement.GrossQuantity, storedNumber(requirement.NetQuantity));
+      const plannedQty = storedNumber(requirement.NetQuantity, standardQty);
+      return {
+        standardQty,
+        plannedQty,
+        standardAmount: standardQty * rate,
+        plannedAmount: plannedQty * rate,
+        currency,
+      };
+    });
+    const actualMaterialDetails = operationConsumptions.map((row) => ({
+      qty: storedNumber(row.Quantity),
+      amount: storedNumber(row.Quantity) * storedNumber(row.UnitCost),
+      currency: row.Currency ?? "IRR",
+    }));
+    const standardMaterialQty = roundTo3(standardMaterialDetails.reduce((sum, row) => sum + row.standardQty, 0));
+    const plannedMaterialQty = roundTo3(standardMaterialDetails.reduce((sum, row) => sum + row.plannedQty, 0));
+    const actualMaterialQty = roundTo3(actualMaterialDetails.reduce((sum, row) => sum + row.qty, 0));
+    const standardMaterialAmount = roundTo3(standardMaterialDetails.reduce((sum, row) => sum + row.standardAmount, 0));
+    const plannedMaterialAmount = roundTo3(standardMaterialDetails.reduce((sum, row) => sum + row.plannedAmount, 0));
+    const actualMaterialAmount = roundTo3(actualMaterialDetails.reduce((sum, row) => sum + row.amount, 0));
+    const materialCurrency = assertSingleCurrencyAmounts([
+      ...standardMaterialDetails.map((row) => ({ amount: row.standardAmount, currency: row.currency })),
+      ...actualMaterialDetails.map((row) => ({ amount: row.amount, currency: row.currency })),
+    ], orderPart?.Currency ?? "IRR");
+    const standardMaterialRate = standardMaterialQty > 0 ? roundTo3(standardMaterialAmount / standardMaterialQty) : 0;
+    const plannedMaterialRate = plannedMaterialQty > 0 ? roundTo3(plannedMaterialAmount / plannedMaterialQty) : standardMaterialRate;
+    const actualMaterialRate = actualMaterialQty > 0 ? roundTo3(actualMaterialAmount / actualMaterialQty) : standardMaterialRate;
     rows.push({
       PlantId: plantId,
       ProductionOrderOperationId: operation.Id,
-      CostCenterId: operation.CostCenterId ?? workCenter?.CostCenterId ?? null,
+      CostCenterId: null,
       CostElement: "material",
       CostVersion: costVersion,
       StandardQuantity: standardMaterialQty,
+      PlannedQuantity: plannedMaterialQty,
       ActualQuantity: actualMaterialQty,
       StandardRate: standardMaterialRate,
+      PlannedRate: plannedMaterialRate,
       ActualRate: actualMaterialRate,
       StandardAmount: standardMaterialAmount,
+      PlannedAmount: plannedMaterialAmount,
       ActualAmount: actualMaterialAmount,
-      Currency: operationConsumptions[0]?.Currency ?? "IRR",
+      Currency: materialCurrency,
       CalculatedAt: new Date().toISOString(),
-      SourceRef: "derived-from-actuals",
+      SourceRef: "material-requirements-and-consumptions",
     });
 
-    const plannedMinutes = roundTo3(
+    const standardMinutes = roundTo3(
       storedNumber(operation.PlannedSetupMinutes)
       + storedNumber(operation.PlannedRunMinutesPerUnit) * storedNumber(operation.PlannedQuantity),
     );
-    /* منبع اصلی دقیقهٔ واقعی، ردیف‌های اجراست؛ اگر اجراها هنوز دقیقه‌ای
-     * ثبت نکرده باشند، مقدار خود عملیات (اگر پر شده باشد) جایگزین می‌شود. */
-    const operationExecutions = executionsByOperation.get(operation.Id) ?? [];
-    const executionMinutes = roundTo3(operationExecutions.reduce(
+    const plannedMinutes = scheduledMinutes > 0
+      ? scheduledMinutes
+      : storedNumber(operation.PlannedCapacityMinutes) > 0
+        ? storedNumber(operation.PlannedCapacityMinutes)
+        : standardMinutes;
+    const actualMinutes = roundTo3(operationExecutions.reduce(
       (sum, row) => sum + storedNumber(row.SetupActualMinutes) + storedNumber(row.RunActualMinutes),
       0,
-    ));
-    const actualMinutes = executionMinutes > 0
-      ? executionMinutes
-      : roundTo3(storedNumber(operation.ActualSetupMinutes) + storedNumber(operation.ActualRunMinutes));
-    const costCenterId = operation.CostCenterId ?? workCenter?.CostCenterId ?? null;
-
+    ) || storedNumber(operation.ActualSetupMinutes) + storedNumber(operation.ActualRunMinutes));
+    const preferredCostCenterId = operation.CostCenterId ?? workCenter?.CostCenterId ?? null;
+    const selectedRates = new Map();
     for (const element of ["machine", "labor", "overhead"]) {
-      const center = costCenterFor(costCenterId, element);
-      const rate = rateFor(costCenterId, element);
-      const standardQty = hours(plannedMinutes);
+      const standardCenter = chooseRateCostCenter(costCenters, {
+        plantId, preferredId: preferredCostCenterId, workCenter, element, effectiveAt: plannedDate,
+      });
+      const standardRate = storedNumber(standardCenter?.HourlyRate);
+      const standardCurrency = standardCenter?.Currency ?? "IRR";
+      const actualRateAmounts = [];
+      for (const execution of operationExecutions) {
+        const minutes = storedNumber(execution.SetupActualMinutes) + storedNumber(execution.RunActualMinutes);
+        if (minutes <= 0) continue;
+        const executionDate = dateOnly(execution.StartedAt) ?? plannedDate;
+        const actualCenter = chooseRateCostCenter(costCenters, {
+          plantId, preferredId: preferredCostCenterId, workCenter, element, effectiveAt: executionDate,
+        });
+        actualRateAmounts.push({
+          amount: hours(minutes) * storedNumber(actualCenter?.HourlyRate),
+          currency: actualCenter?.Currency ?? standardCurrency,
+        });
+      }
+      const actualMinutesFromExecutions = roundTo3(operationExecutions.reduce(
+        (sum, row) => sum + storedNumber(row.SetupActualMinutes) + storedNumber(row.RunActualMinutes),
+        0,
+      ));
+      if (actualMinutesFromExecutions <= 0 && actualMinutes > 0) {
+        actualRateAmounts.push({ amount: hours(actualMinutes) * standardRate, currency: standardCurrency });
+      }
+      const actualAmount = roundTo3(actualRateAmounts.reduce((sum, item) => sum + item.amount, 0));
+      const actualCurrency = assertSingleCurrencyAmounts(actualRateAmounts, standardCurrency);
       const actualQty = hours(actualMinutes);
+      const effectiveActualRate = actualQty > 0 ? roundTo3(actualAmount / actualQty) : standardRate;
+      selectedRates.set(element, { standardCenter, standardRate, standardCurrency, actualCurrency, actualAmount, actualQty });
       rows.push({
         PlantId: plantId,
         ProductionOrderOperationId: operation.Id,
-        CostCenterId: costCenterId,
+        CostCenterId: standardCenter?.Id ?? preferredCostCenterId,
         CostElement: element,
         CostVersion: costVersion,
-        StandardQuantity: standardQty,
+        StandardQuantity: hours(standardMinutes),
+        PlannedQuantity: hours(plannedMinutes),
         ActualQuantity: actualQty,
-        StandardRate: rate,
-        ActualRate: rate,
-        StandardAmount: roundTo3(standardQty * rate),
-        ActualAmount: roundTo3(actualQty * rate),
-        Currency: center?.Currency ?? "IRR",
+        StandardRate: standardRate,
+        PlannedRate: standardRate,
+        ActualRate: effectiveActualRate,
+        StandardAmount: roundTo3(hours(standardMinutes) * standardRate),
+        PlannedAmount: roundTo3(hours(plannedMinutes) * standardRate),
+        ActualAmount: actualAmount,
+        Currency: actualAmount > 0 ? actualCurrency : standardCurrency,
         CalculatedAt: new Date().toISOString(),
         SourceRef: "derived-from-actuals",
       });
     }
+
+    const standardScrapQty = roundTo3(operationRequirements.reduce((sum, row) => sum + storedNumber(row.ScrapAllowanceQty), 0));
+    const standardScrapAmount = roundTo3(operationRequirements.reduce((sum, row) => {
+      const material = materialById.get(row.MaterialId);
+      const part = material ? partById.get(material.PartId) : null;
+      return sum + storedNumber(row.ScrapAllowanceQty) * storedNumber(material?.StandardUnitCost ?? part?.StandardUnitCost);
+    }, 0));
+    const plannedScrapQty = standardScrapQty;
+    const plannedScrapAmount = standardScrapAmount;
+    const executionScrapById = new Map(operationExecutions.map((row) => [row.Id, row]));
+    const recordsByExecution = new Map();
+    const unlinkedScrapRecords = [];
+    for (const record of operationScraps) {
+      if (record.ExecutionId && executionScrapById.has(record.ExecutionId)) {
+        const list = recordsByExecution.get(record.ExecutionId) ?? [];
+        list.push(record);
+        recordsByExecution.set(record.ExecutionId, list);
+      } else {
+        unlinkedScrapRecords.push(record);
+      }
+    }
+    const scrapValuationItems = [];
+    let actualScrapQty = 0;
+    const addRecordValuation = (record, qty) => {
+      const costAmount = record.CostAmount === null || record.CostAmount === undefined
+        ? null
+        : storedNumber(record.CostAmount);
+      scrapValuationItems.push({
+        amount: costAmount === null ? null : costAmount,
+        qty,
+        currency: record.Currency ?? materialCurrency,
+      });
+    };
+    for (const execution of operationExecutions) {
+      const records = recordsByExecution.get(execution.Id) ?? [];
+      const recordQty = roundTo3(records.reduce((sum, row) => sum + storedNumber(row.Quantity), 0));
+      const executionQty = storedNumber(execution.ScrapQuantity);
+      const effectiveQty = Math.max(recordQty, executionQty);
+      actualScrapQty = roundTo3(actualScrapQty + effectiveQty);
+      for (const record of records) addRecordValuation(record, storedNumber(record.Quantity));
+      const unvaluedExecutionQty = Math.max(0, executionQty - recordQty);
+      if (unvaluedExecutionQty > 0) scrapValuationItems.push({ amount: null, qty: unvaluedExecutionQty, currency: materialCurrency });
+    }
+    for (const record of unlinkedScrapRecords) {
+      const qty = storedNumber(record.Quantity);
+      actualScrapQty = roundTo3(actualScrapQty + qty);
+      addRecordValuation(record, qty);
+    }
+    const executionInputQty = roundTo3(operationExecutions.reduce((sum, row) => sum + storedNumber(row.InputQuantity), 0));
+    const executionOutputQty = roundTo3(operationExecutions.reduce((sum, row) =>
+      sum + storedNumber(row.GoodQuantity) + storedNumber(row.ReworkQuantity) + storedNumber(row.ScrapQuantity), 0));
+    const unitScrapValuation = executionInputQty > 0
+      ? roundTo3((actualMaterialAmount
+        + [...selectedRates.values()].reduce((sum, item) => sum + item.actualAmount, 0)) / executionInputQty)
+      : orderPart?.StandardUnitCost !== null && orderPart?.StandardUnitCost !== undefined
+        ? storedNumber(orderPart.StandardUnitCost)
+        : storedNumber(orderPart?.StandardUnitCost);
+    const actualScrapAmount = roundTo3(scrapValuationItems.reduce((sum, item) =>
+      sum + (item.amount === null ? item.qty * unitScrapValuation : item.amount), 0));
+    const scrapCurrency = assertSingleCurrencyAmounts(
+      scrapValuationItems.map((item) => ({ amount: item.amount === null ? item.qty * unitScrapValuation : item.amount, currency: item.currency })),
+      materialCurrency,
+    );
+    const standardScrapRate = standardScrapQty > 0 ? roundTo3(standardScrapAmount / standardScrapQty) : 0;
+    const actualScrapRate = actualScrapQty > 0 ? roundTo3(actualScrapAmount / actualScrapQty) : standardScrapRate;
+    const allScrapCostsEntered = operationScraps.length > 0 && operationScraps.every((row) => row.CostAmount !== null && row.CostAmount !== undefined);
+    rows.push({
+      PlantId: plantId,
+      ProductionOrderOperationId: operation.Id,
+      CostCenterId: null,
+      CostElement: "scrap",
+      CostVersion: costVersion,
+      StandardQuantity: standardScrapQty,
+      PlannedQuantity: plannedScrapQty,
+      ActualQuantity: actualScrapQty,
+      StandardRate: standardScrapRate,
+      PlannedRate: standardScrapRate,
+      ActualRate: actualScrapRate,
+      StandardAmount: standardScrapAmount,
+      PlannedAmount: plannedScrapAmount,
+      ActualAmount: actualScrapAmount,
+      Currency: actualScrapAmount > 0 ? scrapCurrency : materialCurrency,
+      CalculatedAt: new Date().toISOString(),
+      SourceRef: operationScraps.length === 0
+        ? (actualScrapQty > 0 ? "execution-scrap-valued-at-operation-cost" : "bom-scrap-allowance")
+        : allScrapCostsEntered ? "scrap-record-cost-amount" : "scrap-records-with-derived-valuation",
+    });
   }
-
-  return rows;
+  return rows.map(enrichOperationCostRow);
 }
-
-function rollupCostElements(rows) {
-  const totals = {
-    material: { standard: 0, actual: 0 },
-    machine: { standard: 0, actual: 0 },
-    labor: { standard: 0, actual: 0 },
-    overhead: { standard: 0, actual: 0 },
-  };
-  for (const row of rows) {
-    const bucket = totals[row.CostElement];
-    if (!bucket) continue;
-    bucket.standard = roundTo3(bucket.standard + storedNumber(row.StandardAmount));
-    bucket.actual = roundTo3(bucket.actual + storedNumber(row.ActualAmount));
-  }
-  return totals;
-}
-
 function dateOnly(value) {
   if (value instanceof Date && Number.isFinite(value.getTime())) return value.toISOString().slice(0, 10);
   if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}/.test(value)) return value.slice(0, 10);
@@ -863,6 +1189,332 @@ async function validateRoutingForRelease(repo, routing, plantId, effectiveAt) {
     seenSequences.add(operation.SequenceNo);
   }
   return operations;
+}
+
+const calendarDateTimeFormatterCache = new Map();
+
+function addLocalCalendarDays(date, amount) {
+  const value = new Date(`${date}T00:00:00.000Z`);
+  if (!Number.isFinite(value.getTime())) return null;
+  value.setUTCDate(value.getUTCDate() + amount);
+  return value.toISOString().slice(0, 10);
+}
+
+function isoWeekday(date) {
+  const value = new Date(`${date}T00:00:00.000Z`);
+  const day = value.getUTCDay();
+  return day === 0 ? 7 : day;
+}
+
+function localDateTimePartsAt(timestamp, timeZone) {
+  let formatter = calendarDateTimeFormatterCache.get(timeZone);
+  if (!formatter) {
+    try {
+      formatter = new Intl.DateTimeFormat("en-US-u-ca-iso8601-nu-latn", {
+        timeZone,
+        year: "numeric", month: "2-digit", day: "2-digit",
+        hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23",
+      });
+    } catch {
+      throw businessRule("MFG_WORK_CENTER_TIMEZONE_INVALID", `منطقهٔ زمانی مرکز کاری «${timeZone}» معتبر نیست`);
+    }
+    calendarDateTimeFormatterCache.set(timeZone, formatter);
+  }
+  const values = Object.fromEntries(formatter.formatToParts(new Date(timestamp))
+    .filter((part) => part.type !== "literal")
+    .map((part) => [part.type, Number(part.value)]));
+  return {
+    year: values.year, month: values.month, day: values.day,
+    hour: values.hour, minute: values.minute, second: values.second,
+  };
+}
+
+function localCalendarMinuteToTimestamp(date, minuteOfDay, timeZone) {
+  const parts = /^([0-9]{4})-([0-9]{2})-([0-9]{2})$/.exec(date ?? "");
+  if (!parts || !Number.isFinite(minuteOfDay)) throw businessRule("MFG_CALENDAR_INVALID", "تاریخ یا دقیقهٔ محلی تقویم معتبر نیست");
+  const dayOffset = Math.floor(minuteOfDay / 1440);
+  const withinDay = ((minuteOfDay % 1440) + 1440) % 1440;
+  const shiftedDate = addLocalCalendarDays(date, dayOffset);
+  const shifted = /^([0-9]{4})-([0-9]{2})-([0-9]{2})$/.exec(shiftedDate ?? "");
+  const target = Date.UTC(Number(shifted[1]), Number(shifted[2]) - 1, Number(shifted[3]), Math.floor(withinDay / 60), withinDay % 60);
+  let guess = target;
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const local = localDateTimePartsAt(guess, timeZone);
+    const represented = Date.UTC(local.year, local.month - 1, local.day, local.hour, local.minute, local.second);
+    const adjustment = target - represented;
+    if (adjustment === 0) break;
+    guess += adjustment;
+  }
+  return guess;
+}
+
+function mergeTimeIntervals(intervals) {
+  const sorted = intervals
+    .filter((row) => Number.isFinite(row.start) && Number.isFinite(row.end) && row.end > row.start)
+    .map((row) => ({ start: row.start, end: row.end }))
+    .sort((left, right) => left.start - right.start || left.end - right.end);
+  const result = [];
+  for (const interval of sorted) {
+    const last = result[result.length - 1];
+    if (last && interval.start <= last.end) last.end = Math.max(last.end, interval.end);
+    else result.push(interval);
+  }
+  return result;
+}
+
+function subtractTimeIntervals(intervals, exclusions) {
+  const cuts = mergeTimeIntervals(exclusions);
+  const result = [];
+  for (const interval of mergeTimeIntervals(intervals)) {
+    let fragments = [interval];
+    for (const cut of cuts) {
+      fragments = fragments.flatMap((fragment) => {
+        if (cut.end <= fragment.start || cut.start >= fragment.end) return [fragment];
+        const remaining = [];
+        if (cut.start > fragment.start) remaining.push({ start: fragment.start, end: Math.min(cut.start, fragment.end) });
+        if (cut.end < fragment.end) remaining.push({ start: Math.max(cut.end, fragment.start), end: fragment.end });
+        return remaining.filter((piece) => piece.end > piece.start);
+      });
+      if (!fragments.length) break;
+    }
+    result.push(...fragments);
+  }
+  return result;
+}
+
+function workCenterCalendarIntervals(workCenter, calendarRows, fromMs, toMs) {
+  const timeZone = workCenter.TimeZoneId || "UTC";
+  const firstDate = addLocalCalendarDays(localDateAt(fromMs, timeZone), -1);
+  const lastDate = addLocalCalendarDays(localDateAt(toMs - 1, timeZone), 1);
+  const rows = calendarRows.filter((row) => row.PlantId === workCenter.PlantId && row.WorkCenterId === workCenter.Id);
+  const shifts = [];
+  for (let date = firstDate; date && lastDate && date <= lastDate; date = addLocalCalendarDays(date, 1)) {
+    const effectiveRows = rows.filter((row) => effectiveOn(row, date));
+    const overrides = effectiveRows.filter((row) => row.RuleType === "date-override" && dateOnly(row.CalendarDate) === date);
+    const candidates = overrides.length
+      ? overrides
+      : effectiveRows.filter((row) => row.RuleType === "weekly" && Number(row.WeekdayIso) === isoWeekday(date));
+    for (const calendar of candidates) {
+      if (calendar.IsWorking === false || calendar.IsWorking === 0) continue;
+      const startMinute = Number(calendar.StartMinuteOfDay);
+      const endMinute = Number(calendar.EndMinuteOfDay);
+      const breakMinutes = storedNumber(calendar.BreakMinutes);
+      const availabilityPct = storedNumber(calendar.AvailabilityPct, 100);
+      if (!Number.isInteger(startMinute) || !Number.isInteger(endMinute)
+        || startMinute < 0 || startMinute > 1439 || endMinute <= startMinute || endMinute > 2879
+        || !Number.isFinite(breakMinutes) || breakMinutes < 0 || breakMinutes > endMinute - startMinute
+        || availabilityPct < 0 || availabilityPct > 100) {
+        throw businessRule("MFG_CALENDAR_INVALID", `شیفت تقویم ${calendar.RuleKey ?? calendar.Id} معتبر نیست`);
+      }
+      let segments = [{ start: startMinute, end: endMinute }];
+      if (breakMinutes > 0) {
+        const breakStart = Number(calendar.BreakStartMinuteOfDay);
+        if (!Number.isInteger(breakStart) || breakStart < startMinute || breakStart + breakMinutes > endMinute) {
+          throw businessRule("MFG_CALENDAR_BREAK_START_REQUIRED", `زمان شروع استراحت تقویم ${calendar.RuleKey ?? calendar.Id} معتبر نیست`);
+        }
+        segments = [];
+        if (breakStart > startMinute) segments.push({ start: startMinute, end: breakStart });
+        if (breakStart + breakMinutes < endMinute) segments.push({ start: breakStart + breakMinutes, end: endMinute });
+      }
+      for (const segment of segments) {
+        const start = Math.max(fromMs, localCalendarMinuteToTimestamp(date, segment.start, timeZone));
+        const end = Math.min(toMs, localCalendarMinuteToTimestamp(date, segment.end, timeZone));
+        if (end > start && availabilityPct > 0) shifts.push({ start, end, availabilityPct });
+      }
+    }
+  }
+
+  const boundaries = [...new Set(shifts.flatMap((row) => [row.start, row.end]))].sort((left, right) => left - right);
+  const result = [];
+  for (let index = 0; index < boundaries.length - 1; index++) {
+    const start = boundaries[index];
+    const end = boundaries[index + 1];
+    const pct = shifts.reduce((max, row) => row.start < end && row.end > start ? Math.max(max, row.availabilityPct) : max, 0);
+    if (pct <= 0 || end <= start) continue;
+    const previous = result[result.length - 1];
+    if (previous && previous.end === start && previous.availabilityPct === pct) previous.end = end;
+    else result.push({ start, end, availabilityPct: pct });
+  }
+  return result;
+}
+
+function weightedCalendarMinutes(intervals) {
+  return roundTo3(intervals.reduce((sum, row) => sum + ((row.end - row.start) / 60_000) * row.availabilityPct / 100, 0));
+}
+
+function weightedOverlapMinutes(events, calendarIntervals) {
+  let minutes = 0;
+  for (const event of events) {
+    for (const shift of calendarIntervals) {
+      const start = Math.max(event.start, shift.start);
+      const end = Math.min(event.end, shift.end);
+      if (end > start) minutes += ((end - start) / 60_000) * shift.availabilityPct / 100;
+    }
+  }
+  return roundTo3(minutes);
+}
+
+function downtimeIntervalsForWindow(downtimes, workCenterId, fromMs, toMs, type) {
+  const intervals = [];
+  for (const row of downtimes) {
+    if (row.WorkCenterId !== workCenterId || (type && row.DowntimeType !== type)) continue;
+    const start = storedTimestamp(row.StartedAt);
+    if (!Number.isFinite(start) || start >= toMs) continue;
+    const finished = storedTimestamp(row.FinishedAt);
+    const duration = storedNumber(row.DurationMinutes);
+    const end = Number.isFinite(finished) ? finished : duration > 0 ? start + duration * 60_000 : toMs;
+    const clippedStart = Math.max(fromMs, start);
+    const clippedEnd = Math.min(toMs, end);
+    if (clippedEnd > clippedStart) intervals.push({ start: clippedStart, end: clippedEnd });
+  }
+  return mergeTimeIntervals(intervals);
+}
+
+function executionWindowFraction(execution, fromMs, toMs) {
+  const start = storedTimestamp(execution.StartedAt);
+  if (!Number.isFinite(start) || start >= toMs) return 0;
+  const end = storedTimestamp(execution.FinishedAt);
+  if (!Number.isFinite(end)) return start >= fromMs && start < toMs ? 1 : 0;
+  if (end <= fromMs) return 0;
+  if (end <= start) return start >= fromMs && start < toMs ? 1 : 0;
+  const overlap = Math.max(0, Math.min(end, toMs) - Math.max(start, fromMs));
+  return overlap > 0 ? Math.min(1, overlap / (end - start)) : 0;
+}
+
+function productionFactsForOperations(operations, executions, scrapRecords, fromMs, toMs) {
+  const operationById = new Map(operations.map((row) => [row.Id, row]));
+  const executionRows = executions.filter((row) => row.PlantId === operations[0]?.PlantId
+    && row.Status !== "cancelled"
+    && operationById.has(row.ProductionOrderOperationId)
+    && executionWindowFraction(row, fromMs, toMs) > 0);
+  const executionIds = new Set(executionRows.map((row) => row.Id));
+  const linkedScrapByExecution = new Map();
+  const standaloneScrapByOperation = new Map();
+  for (const row of scrapRecords) {
+    if (row.PlantId !== operations[0]?.PlantId || row.Disposition !== "scrapped") continue;
+    const recordedAt = storedTimestamp(row.RecordedAt);
+    if (!Number.isFinite(recordedAt) || recordedAt < fromMs || recordedAt >= toMs || !operationById.has(row.ProductionOrderOperationId)) continue;
+    if (row.ExecutionId && executionIds.has(row.ExecutionId)) {
+      const list = linkedScrapByExecution.get(row.ExecutionId) ?? [];
+      list.push(row);
+      linkedScrapByExecution.set(row.ExecutionId, list);
+    } else {
+      const list = standaloneScrapByOperation.get(row.ProductionOrderOperationId) ?? [];
+      list.push(row);
+      standaloneScrapByOperation.set(row.ProductionOrderOperationId, list);
+    }
+  }
+  const facts = new Map();
+  const empty = () => ({
+    actualRunMinutes: 0,
+    idealProductionMinutes: 0,
+    goodQuantity: 0,
+    scrapQuantity: 0,
+    reworkQuantity: 0,
+    totalProducedQuantity: 0,
+  });
+  for (const operation of operations) facts.set(operation.Id, empty());
+  for (const execution of executionRows) {
+    const operation = operationById.get(execution.ProductionOrderOperationId);
+    const target = facts.get(operation.Id);
+    const fraction = executionWindowFraction(execution, fromMs, toMs);
+    const good = storedNumber(execution.GoodQuantity) * fraction;
+    const rework = storedNumber(execution.ReworkQuantity) * fraction;
+    const executionScrap = storedNumber(execution.ScrapQuantity) * fraction;
+    const linkedRecords = linkedScrapByExecution.get(execution.Id) ?? [];
+    const recordScrap = linkedRecords.reduce((sum, row) => sum + storedNumber(row.Quantity), 0);
+    const scrap = Math.max(executionScrap, recordScrap);
+    const produced = good + rework + scrap;
+    const actualMinutes = (storedNumber(execution.SetupActualMinutes) + storedNumber(execution.RunActualMinutes)) * fraction;
+    target.actualRunMinutes += actualMinutes;
+    target.goodQuantity += good;
+    target.scrapQuantity += scrap;
+    target.reworkQuantity += rework;
+    target.totalProducedQuantity += produced;
+    if (actualMinutes > 0 || produced > 0) {
+      target.idealProductionMinutes += storedNumber(operation.PlannedSetupMinutes);
+      target.idealProductionMinutes += produced * storedNumber(operation.PlannedRunMinutesPerUnit);
+    }
+  }
+  for (const [operationId, records] of standaloneScrapByOperation) {
+    const target = facts.get(operationId);
+    const qty = records.reduce((sum, row) => sum + storedNumber(row.Quantity), 0);
+    target.scrapQuantity += qty;
+    target.totalProducedQuantity += qty;
+  }
+  for (const target of facts.values()) {
+    target.actualRunMinutes = roundTo3(target.actualRunMinutes);
+    target.idealProductionMinutes = roundTo3(target.idealProductionMinutes);
+    target.goodQuantity = roundTo3(target.goodQuantity);
+    target.scrapQuantity = roundTo3(target.scrapQuantity);
+    target.reworkQuantity = roundTo3(target.reworkQuantity);
+    target.totalProducedQuantity = roundTo3(target.totalProducedQuantity);
+  }
+  return [...facts.values()].reduce((sum, row) => ({
+    actualRunMinutes: roundTo3(sum.actualRunMinutes + row.actualRunMinutes),
+    idealProductionMinutes: roundTo3(sum.idealProductionMinutes + row.idealProductionMinutes),
+    goodQuantity: roundTo3(sum.goodQuantity + row.goodQuantity),
+    scrapQuantity: roundTo3(sum.scrapQuantity + row.scrapQuantity),
+    reworkQuantity: roundTo3(sum.reworkQuantity + row.reworkQuantity),
+    totalProducedQuantity: roundTo3(sum.totalProducedQuantity + row.totalProducedQuantity),
+  }), empty());
+}
+
+function buildOeeMetrics({ from, to, workCenter = null, calendarMinutes, plannedDowntimeMinutes, unplannedDowntimeMinutes, facts }) {
+  const plannedProductionMinutes = roundTo3(Math.max(0, calendarMinutes - plannedDowntimeMinutes));
+  const operatingMinutes = roundTo3(Math.max(0, plannedProductionMinutes - unplannedDowntimeMinutes));
+  const availabilityValue = plannedProductionMinutes > 0 ? roundTo3(operatingMinutes / plannedProductionMinutes) : null;
+    const performanceValue = facts.actualRunMinutes > 0 ? roundTo3(Math.min(1, facts.idealProductionMinutes / facts.actualRunMinutes)) : null;
+  const qualityValue = facts.totalProducedQuantity > 0 ? roundTo3(facts.goodQuantity / facts.totalProducedQuantity) : null;
+  const oeeValue = availabilityValue === null || performanceValue === null || qualityValue === null
+    ? null
+    : roundTo3(availabilityValue * performanceValue * qualityValue);
+  return {
+    from,
+    to,
+    ...(workCenter ? {
+      workCenterId: workCenter.Id,
+      workCenterCode: workCenter.Code,
+      workCenterNameFa: workCenter.NameFa,
+    } : {}),
+    calendar: {
+      availableMinutes: roundTo3(calendarMinutes),
+      plannedProductionMinutes,
+    },
+    downtime: {
+      plannedMinutes: roundTo3(plannedDowntimeMinutes),
+      unplannedMinutes: roundTo3(unplannedDowntimeMinutes),
+      plannedDowntimeMinutes: roundTo3(plannedDowntimeMinutes),
+      unplannedDowntimeMinutes: roundTo3(unplannedDowntimeMinutes),
+      totalMinutes: roundTo3(plannedDowntimeMinutes + unplannedDowntimeMinutes),
+    },
+    availability: {
+      numerator: operatingMinutes,
+      denominator: plannedProductionMinutes,
+      value: availabilityValue,
+      pct: availabilityValue === null ? null : roundTo3(availabilityValue * 100),
+    },
+    performance: {
+      numerator: facts.idealProductionMinutes,
+      denominator: facts.actualRunMinutes,
+      value: performanceValue,
+      pct: performanceValue === null ? null : roundTo3(performanceValue * 100),
+      idealProductionMinutes: facts.idealProductionMinutes,
+      actualRunMinutes: facts.actualRunMinutes,
+    },
+    quality: {
+      numerator: facts.goodQuantity,
+      denominator: facts.totalProducedQuantity,
+      value: qualityValue,
+      pct: qualityValue === null ? null : roundTo3(qualityValue * 100),
+      goodQuantity: facts.goodQuantity,
+      scrapQuantity: facts.scrapQuantity,
+      reworkQuantity: facts.reworkQuantity,
+      totalProducedQuantity: facts.totalProducedQuantity,
+    },
+    oee: oeeValue,
+    oeePct: oeeValue === null ? null : roundTo3(oeeValue * 100),
+  };
 }
 
 async function parseOrderFilters(req, subject, evaluate, repo) {
@@ -5650,8 +6302,7 @@ export function registerManufacturingRoutes(app, { repo, subjects, evaluate } = 
 
     const order = await r.get("MfgProductionOrder", orderId);
     if (!order || order.PlantId !== plantId) throw notFound();
-
-    const [orderCostRows, operations, opCostRows] = await Promise.all([
+    const [orderCostRows, operations, allOperationCostRows] = await Promise.all([
       r.list("MfgOrderCost", {
         where: [
           { column: "PlantId", op: "eq", value: plantId },
@@ -5665,116 +6316,145 @@ export function registerManufacturingRoutes(app, { repo, subjects, evaluate } = 
           { column: "ProductionOrderId", op: "eq", value: orderId },
         ],
       }),
-      r.list("MfgOperationCost", {
-        where: [{ column: "PlantId", op: "eq", value: plantId }],
-      }),
+      r.list("MfgOperationCost", { where: [{ column: "PlantId", op: "eq", value: plantId }] }),
     ]);
 
     const validOrderCosts = orderCostRows.filter((row) => row.PlantId === plantId && row.ProductionOrderId === orderId);
-    const opIds = new Set(operations.filter((op) => op.PlantId === plantId).map((op) => op.Id));
-    const orderOpCosts = opCostRows.filter((row) => row.PlantId === plantId && opIds.has(row.ProductionOrderOperationId));
+    const orderOps = operations.filter((row) => row.PlantId === plantId && row.ProductionOrderId === orderId);
+    const operationIds = new Set(orderOps.map((row) => row.Id));
+    const orderOperationCosts = allOperationCostRows.filter((row) =>
+      row.PlantId === plantId && operationIds.has(row.ProductionOrderOperationId));
+    const maxStoredVersion = Math.max(
+      0,
+      ...validOrderCosts.map((row) => Number(row.CostVersion) || 0),
+      ...orderOperationCosts.map((row) => Number(row.CostVersion) || 0),
+    );
+    const targetVersion = requestedVersion ?? (maxStoredVersion > 0 ? maxStoredVersion : 1);
+    const matchedSummary = validOrderCosts.find((row) => Number(row.CostVersion) === targetVersion) ?? null;
+    const storedRowsForVersion = orderOperationCosts.filter((row) => Number(row.CostVersion) === targetVersion);
+    if (requestedVersion !== null && !matchedSummary && storedRowsForVersion.length === 0) throw notFound();
 
-    const targetVersion = requestedVersion
-      ?? validOrderCosts[0]?.CostVersion
-      ?? orderOpCosts.reduce((max, row) => Math.max(max, Number(row.CostVersion) || 0), 0)
-      ?? 1;
-
-    const matchedSummary = validOrderCosts.find((row) => row.CostVersion === targetVersion) ?? null;
-    const versionOpCosts = orderOpCosts.filter((row) => row.CostVersion === targetVersion);
-
-    if (requestedVersion !== null && !matchedSummary && versionOpCosts.length === 0) {
-      throw notFound();
-    }
+    const derivedRows = await deriveOperationCostRows(r, {
+      plantId,
+      operations: orderOps,
+      costVersion: targetVersion,
+    });
+    const completeCosts = completeOperationCostRows(orderOps, storedRowsForVersion, derivedRows);
+    const totals = summarizeCostRows(completeCosts.rows);
+    const operationBreakdown = operationCostBreakdown(orderOps, completeCosts.rows);
 
     if (matchedSummary) {
-      const stdMat = roundTo3(storedNumber(matchedSummary.StandardMaterialCost));
-      const actMat = roundTo3(storedNumber(matchedSummary.ActualMaterialCost));
-      const stdMach = roundTo3(storedNumber(matchedSummary.StandardMachineCost));
-      const actMach = roundTo3(storedNumber(matchedSummary.ActualMachineCost));
-      const stdLab = roundTo3(storedNumber(matchedSummary.StandardLaborCost));
-      const actLab = roundTo3(storedNumber(matchedSummary.ActualLaborCost));
-      const stdOvh = roundTo3(storedNumber(matchedSummary.StandardOverheadCost));
-      const actOvh = roundTo3(storedNumber(matchedSummary.ActualOverheadCost));
-      const stdTot = roundTo3(storedNumber(matchedSummary.StandardTotalCost));
-      const actTot = roundTo3(storedNumber(matchedSummary.ActualTotalCost));
+      const standardMaterialCost = roundTo3(storedNumber(matchedSummary.StandardMaterialCost));
+      const plannedMaterialCost = roundTo3(storedNumber(matchedSummary.PlannedMaterialCost, standardMaterialCost));
+      const actualMaterialCost = roundTo3(storedNumber(matchedSummary.ActualMaterialCost));
+      const standardMachineCost = roundTo3(storedNumber(matchedSummary.StandardMachineCost));
+      const plannedMachineCost = roundTo3(storedNumber(matchedSummary.PlannedMachineCost, standardMachineCost));
+      const actualMachineCost = roundTo3(storedNumber(matchedSummary.ActualMachineCost));
+      const standardLaborCost = roundTo3(storedNumber(matchedSummary.StandardLaborCost));
+      const plannedLaborCost = roundTo3(storedNumber(matchedSummary.PlannedLaborCost, standardLaborCost));
+      const actualLaborCost = roundTo3(storedNumber(matchedSummary.ActualLaborCost));
+      const standardOverheadCost = roundTo3(storedNumber(matchedSummary.StandardOverheadCost));
+      const plannedOverheadCost = roundTo3(storedNumber(matchedSummary.PlannedOverheadCost, standardOverheadCost));
+      const actualOverheadCost = roundTo3(storedNumber(matchedSummary.ActualOverheadCost));
+      const standardScrapCost = roundTo3(storedNumber(matchedSummary.StandardScrapCost));
+      const plannedScrapCost = roundTo3(storedNumber(matchedSummary.PlannedScrapCost, standardScrapCost));
+      const actualScrapCost = roundTo3(storedNumber(matchedSummary.ActualScrapCost));
+      const standardTotalCost = roundTo3(storedNumber(matchedSummary.StandardTotalCost));
+      const plannedTotalCost = roundTo3(storedNumber(matchedSummary.PlannedTotalCost, standardTotalCost));
+      const actualTotalCost = roundTo3(storedNumber(matchedSummary.ActualTotalCost));
       const contractRevenue = matchedSummary.ContractRevenue === null || matchedSummary.ContractRevenue === undefined
         ? null
         : roundTo3(storedNumber(matchedSummary.ContractRevenue));
       const grossMargin = matchedSummary.GrossMargin === null || matchedSummary.GrossMargin === undefined
-        ? (contractRevenue === null ? null : roundTo3(contractRevenue - actTot))
+        ? (contractRevenue === null ? null : roundTo3(contractRevenue - actualTotalCost))
         : roundTo3(storedNumber(matchedSummary.GrossMargin));
-
+      const byElement = {
+        material: { standard: standardMaterialCost, planned: plannedMaterialCost, actual: actualMaterialCost },
+        machine: { standard: standardMachineCost, planned: plannedMachineCost, actual: actualMachineCost },
+        labor: { standard: standardLaborCost, planned: plannedLaborCost, actual: actualLaborCost },
+        overhead: { standard: standardOverheadCost, planned: plannedOverheadCost, actual: actualOverheadCost },
+        scrap: { standard: standardScrapCost, planned: plannedScrapCost, actual: actualScrapCost },
+      };
+      for (const element of Object.values(byElement)) {
+        element.costVariance = costVariance(element.actual, element.standard);
+        element.costVariancePct = costVariancePct(element.actual, element.standard);
+        element.plannedCostVariance = costVariance(element.actual, element.planned);
+        element.plannedCostVariancePct = costVariancePct(element.actual, element.planned);
+      }
       return {
         ...matchedSummary,
         ProductionOrderId: orderId,
         CostVersion: targetVersion,
-        Currency: matchedSummary.Currency ?? "IRR",
-        StandardMaterialCost: stdMat,
-        ActualMaterialCost: actMat,
-        StandardMachineCost: stdMach,
-        ActualMachineCost: actMach,
-        StandardLaborCost: stdLab,
-        ActualLaborCost: actLab,
-        StandardOverheadCost: stdOvh,
-        ActualOverheadCost: actOvh,
-        StandardTotalCost: stdTot,
-        ActualTotalCost: actTot,
-        Variance: roundTo3(actTot - stdTot),
+        Currency: matchedSummary.Currency ?? totals.currency,
+        StandardMaterialCost: standardMaterialCost,
+        PlannedMaterialCost: plannedMaterialCost,
+        ActualMaterialCost: actualMaterialCost,
+        StandardMachineCost: standardMachineCost,
+        PlannedMachineCost: plannedMachineCost,
+        ActualMachineCost: actualMachineCost,
+        StandardLaborCost: standardLaborCost,
+        PlannedLaborCost: plannedLaborCost,
+        ActualLaborCost: actualLaborCost,
+        StandardOverheadCost: standardOverheadCost,
+        PlannedOverheadCost: plannedOverheadCost,
+        ActualOverheadCost: actualOverheadCost,
+        StandardScrapCost: standardScrapCost,
+        PlannedScrapCost: plannedScrapCost,
+        ActualScrapCost: actualScrapCost,
+        StandardTotalCost: standardTotalCost,
+        PlannedTotalCost: plannedTotalCost,
+        ActualTotalCost: actualTotalCost,
+        Variance: costVariance(actualTotalCost, standardTotalCost),
+        CostVariance: costVariance(actualTotalCost, standardTotalCost),
+        CostVariancePct: costVariancePct(actualTotalCost, standardTotalCost),
+        PlannedCostVariance: costVariance(actualTotalCost, plannedTotalCost),
+        PlannedCostVariancePct: costVariancePct(actualTotalCost, plannedTotalCost),
         ContractRevenue: contractRevenue,
         GrossMargin: grossMargin,
-        ByElement: {
-          material: { standard: stdMat, actual: actMat },
-          machine: { standard: stdMach, actual: actMach },
-          labor: { standard: stdLab, actual: actLab },
-          overhead: { standard: stdOvh, actual: actOvh },
-        },
+        ByElement: byElement,
+        OperationBreakdown: operationBreakdown,
         Reconciled: Boolean(matchedSummary.Reconciled),
         ReconciledAt: matchedSummary.ReconciledAt ?? null,
+        ReconcileThrough: matchedSummary.ReconcileThrough ?? null,
       };
     }
 
-    const orderOps = operations.filter((op) => op.PlantId === plantId);
-    const effectiveOpCosts = versionOpCosts.length > 0
-      ? versionOpCosts
-      : await deriveOperationCostRows(r, { plantId, operations: orderOps, costVersion: targetVersion });
-    const byElement = {
-      material: { standard: 0, actual: 0 },
-      machine: { standard: 0, actual: 0 },
-      labor: { standard: 0, actual: 0 },
-      overhead: { standard: 0, actual: 0 },
-    };
-    for (const row of effectiveOpCosts) {
-      if (!byElement[row.CostElement]) continue;
-      byElement[row.CostElement].standard = roundTo3(byElement[row.CostElement].standard + storedNumber(row.StandardAmount));
-      byElement[row.CostElement].actual = roundTo3(byElement[row.CostElement].actual + storedNumber(row.ActualAmount));
-    }
-    const standardTotalCost = roundTo3(
-      byElement.material.standard + byElement.machine.standard + byElement.labor.standard + byElement.overhead.standard,
-    );
-    const actualTotalCost = roundTo3(
-      byElement.material.actual + byElement.machine.actual + byElement.labor.actual + byElement.overhead.actual,
-    );
-
     return {
+      PlantId: plantId,
       ProductionOrderId: orderId,
       CostVersion: targetVersion,
-      Currency: versionOpCosts[0]?.Currency ?? "IRR",
-      StandardMaterialCost: byElement.material.standard,
-      ActualMaterialCost: byElement.material.actual,
-      StandardMachineCost: byElement.machine.standard,
-      ActualMachineCost: byElement.machine.actual,
-      StandardLaborCost: byElement.labor.standard,
-      ActualLaborCost: byElement.labor.actual,
-      StandardOverheadCost: byElement.overhead.standard,
-      ActualOverheadCost: byElement.overhead.actual,
-      StandardTotalCost: standardTotalCost,
-      ActualTotalCost: actualTotalCost,
-      Variance: roundTo3(actualTotalCost - standardTotalCost),
+      Currency: totals.currency,
+      StandardMaterialCost: totals.byElement.material.standard,
+      PlannedMaterialCost: totals.byElement.material.planned,
+      ActualMaterialCost: totals.byElement.material.actual,
+      StandardMachineCost: totals.byElement.machine.standard,
+      PlannedMachineCost: totals.byElement.machine.planned,
+      ActualMachineCost: totals.byElement.machine.actual,
+      StandardLaborCost: totals.byElement.labor.standard,
+      PlannedLaborCost: totals.byElement.labor.planned,
+      ActualLaborCost: totals.byElement.labor.actual,
+      StandardOverheadCost: totals.byElement.overhead.standard,
+      PlannedOverheadCost: totals.byElement.overhead.planned,
+      ActualOverheadCost: totals.byElement.overhead.actual,
+      StandardScrapCost: totals.byElement.scrap.standard,
+      PlannedScrapCost: totals.byElement.scrap.planned,
+      ActualScrapCost: totals.byElement.scrap.actual,
+      StandardTotalCost: totals.standardTotalCost,
+      PlannedTotalCost: totals.plannedTotalCost,
+      ActualTotalCost: totals.actualTotalCost,
+      Variance: totals.costVariance,
+      CostVariance: totals.costVariance,
+      CostVariancePct: totals.costVariancePct,
+      PlannedCostVariance: totals.plannedCostVariance,
+      PlannedCostVariancePct: totals.plannedCostVariancePct,
       ContractRevenue: null,
       GrossMargin: null,
-      ByElement: byElement,
+      ByElement: totals.byElement,
+      OperationBreakdown: operationBreakdown,
       Reconciled: false,
       ReconciledAt: null,
+      ReconcileThrough: null,
+      Derived: completeCosts.derived,
     };
   }));
 
@@ -5787,34 +6467,25 @@ export function registerManufacturingRoutes(app, { repo, subjects, evaluate } = 
       requestedVersion = pageNumber(q.costVersion, "costVersion", 1, 1_000_000);
       if (requestedVersion < 1) throw bad("costVersion", "costVersion باید عدد صحیح مثبت باشد");
     }
-
     const operation = await r.get("MfgProductionOrderOperation", operationId);
     if (!operation || operation.PlantId !== plantId) throw notFound();
-
-    const rows = await r.list("MfgOperationCost", {
+    const allRows = await r.list("MfgOperationCost", {
       where: [
         { column: "PlantId", op: "eq", value: plantId },
         { column: "ProductionOrderOperationId", op: "eq", value: operationId },
       ],
     });
-    let items = rows
-      .filter((row) => row.PlantId === plantId
-        && row.ProductionOrderOperationId === operationId
-        && (requestedVersion === null || row.CostVersion === requestedVersion))
-      .sort((a, b) => (b.CostVersion ?? 0) - (a.CostVersion ?? 0)
-        || String(a.CostElement).localeCompare(String(b.CostElement)));
-
-    /* خواندن نباید رد شود: نبود ردیف ذخیره‌شده یعنی رول‌آپ لحظه‌ای از
-     * مصرف‌ها، نیازمندی‌ها و دقایق واقعی عملیات. */
-    if (items.length === 0) {
-      items = await deriveOperationCostRows(r, {
-        plantId,
-        operations: [operation],
-        costVersion: requestedVersion ?? 1,
-      });
+    const storedRows = allRows.filter((row) => row.PlantId === plantId
+      && row.ProductionOrderOperationId === operationId
+      && (requestedVersion === null || Number(row.CostVersion) === requestedVersion));
+    let targetVersion = requestedVersion;
+    if (targetVersion === null) {
+      targetVersion = storedRows.reduce((max, row) => Math.max(max, Number(row.CostVersion) || 0), 0) || 1;
     }
-
-    return { items, derived: rows.length === 0 };
+    const versionRows = storedRows.filter((row) => Number(row.CostVersion) === targetVersion);
+    const derivedRows = await deriveOperationCostRows(r, { plantId, operations: [operation], costVersion: targetVersion });
+    const completeCosts = completeOperationCostRows([operation], versionRows, derivedRows);
+    return { items: completeCosts.rows, derived: completeCosts.derived };
   }));
 
   app.post(`${ROOT}/cost/orders/:orderId/reconcile`, route("mfg.cost.reconcile", async ({ repo: r, req, plantId, subject }) => {
@@ -5826,13 +6497,13 @@ export function registerManufacturingRoutes(app, { repo, subjects, evaluate } = 
     const costVersion = number(body.CostVersion, "CostVersion", { required: true, min: 1, max: 1_000_000, integer: true });
     const reconcileThrough = isoDateTime(body.ReconcileThrough, "ReconcileThrough", { required: true });
     const contractRevenueInput = number(body.ContractRevenue, "ContractRevenue", { min: 0, max: 999_999_999_999 });
-    const modelVersion = text(body.ModelVersion, "ModelVersion", { max: 40 }) ?? "mfg-cost-v1";
-
+    const modelVersion = text(body.ModelVersion, "ModelVersion", { max: 40 }) ?? "mfg-cost-v2";
     const fingerprint = JSON.stringify({
       orderId,
       costVersion,
       reconcileThrough,
       contractRevenue: contractRevenueInput,
+      modelVersion,
     });
 
     return r.transaction(async (tx) => {
@@ -5847,17 +6518,18 @@ export function registerManufacturingRoutes(app, { repo, subjects, evaluate } = 
 
       const order = await tx.get("MfgProductionOrder", orderId);
       if (!order || order.PlantId !== plantId) throw notFound();
+      if (order.RowVersion !== expectedVersion) {
+        throw conflict("MFG_ROW_VERSION_CONFLICT", "RowVersion سفارش از زمان خواندن تغییر کرده است؛ تازه‌خوانی کنید");
+      }
 
-      const [operations, executions, requirements, existingCostRows, allOpCosts] = await Promise.all([
+      const [operations, executions, requirements, existingCostRows, allOperationCosts] = await Promise.all([
         tx.list("MfgProductionOrderOperation", {
           where: [
             { column: "PlantId", op: "eq", value: plantId },
             { column: "ProductionOrderId", op: "eq", value: orderId },
           ],
         }),
-        tx.list("MfgOperationExecution", {
-          where: [{ column: "PlantId", op: "eq", value: plantId }],
-        }),
+        tx.list("MfgOperationExecution", { where: [{ column: "PlantId", op: "eq", value: plantId }] }),
         tx.list("MfgMaterialRequirement", {
           where: [
             { column: "PlantId", op: "eq", value: plantId },
@@ -5870,99 +6542,61 @@ export function registerManufacturingRoutes(app, { repo, subjects, evaluate } = 
             { column: "ProductionOrderId", op: "eq", value: orderId },
           ],
         }),
-        tx.list("MfgOperationCost", {
-          where: [{ column: "PlantId", op: "eq", value: plantId }],
-        }),
+        tx.list("MfgOperationCost", { where: [{ column: "PlantId", op: "eq", value: plantId }] }),
       ]);
-
-      const orderOps = operations.filter((op) => op.PlantId === plantId && op.ProductionOrderId === orderId);
-      if (orderOps.length === 0 || orderOps.some((op) => op.Status !== "completed")) {
+      const orderOps = operations.filter((row) => row.PlantId === plantId && row.ProductionOrderId === orderId);
+      if (orderOps.length === 0 || orderOps.some((row) => row.Status !== "completed")) {
         throw businessRule("MFG_OPERATIONS_NOT_COMPLETED", "پیش از تطبیق هزینهٔ سفارش، تمام عملیات‌های سفارش باید تکمیل شده باشند");
       }
-      const opIds = new Set(orderOps.map((op) => op.Id));
-      const runningExecs = executions.filter((ex) => ex.PlantId === plantId && opIds.has(ex.ProductionOrderOperationId) && ex.Status === "running");
-      if (runningExecs.length > 0) {
+      const operationIds = new Set(orderOps.map((row) => row.Id));
+      if (executions.some((row) => row.PlantId === plantId && operationIds.has(row.ProductionOrderOperationId) && row.Status === "running")) {
         throw businessRule("MFG_OPERATIONS_NOT_COMPLETED", "نشست اجرای باز روی عملیات سفارش وجود دارد");
       }
-
-      const openShortages = requirements.filter(
-        (reqRow) => reqRow.PlantId === plantId
-          && reqRow.ProductionOrderId === orderId
-          && (reqRow.Status === "shortage" || storedNumber(reqRow.ShortageQuantity) > 0),
-      );
+      const openShortages = requirements.filter((row) => row.PlantId === plantId
+        && row.ProductionOrderId === orderId
+        && (row.Status === "shortage" || storedNumber(row.ShortageQuantity) > 0));
       if (openShortages.length > 0) {
         throw businessRule("MFG_MATERIALS_NOT_RECONCILED", "پیش از تطبیق نهایی هزینه، کمبودهای مواد سفارش باید تعیین‌تکلیف شوند");
       }
 
-      const existingOrderCost = existingCostRows.find(
-        (row) => row.PlantId === plantId && row.ProductionOrderId === orderId && row.CostVersion === costVersion,
-      ) ?? null;
-
-      if (existingOrderCost) {
-        if (existingOrderCost.RowVersion !== expectedVersion && order.RowVersion !== expectedVersion) {
-          throw conflict("MFG_ROW_VERSION_CONFLICT", "رکورد هزینهٔ سفارش از زمان خواندن تغییر کرده است؛ تازه‌خوانی کنید");
+      const existingOrderCost = existingCostRows.find((row) => row.PlantId === plantId
+        && row.ProductionOrderId === orderId
+        && Number(row.CostVersion) === costVersion) ?? null;
+      const storedRows = allOperationCosts.filter((row) => row.PlantId === plantId
+        && operationIds.has(row.ProductionOrderOperationId)
+        && Number(row.CostVersion) === costVersion);
+      const derivedRows = await deriveOperationCostRows(tx, {
+        plantId,
+        operations: orderOps,
+        costVersion,
+        asOf: reconcileThrough,
+      });
+      const completeCosts = completeOperationCostRows(orderOps, storedRows, derivedRows);
+      const rowsByKey = new Map(storedRows.map((row) => [`${row.ProductionOrderOperationId}\\u0000${row.CostElement}`, row]));
+      const derivedByKey = new Map(derivedRows.map((row) => [`${row.ProductionOrderOperationId}\\u0000${row.CostElement}`, row]));
+      const operationCostsForVersion = [];
+      for (const operation of orderOps) {
+        for (const element of COST_ELEMENTS) {
+          const key = `${operation.Id}\\u0000${element}`;
+          const stored = rowsByKey.get(key);
+          if (stored) operationCostsForVersion.push(stored);
+          else {
+            const derived = derivedByKey.get(key);
+            if (!derived) continue;
+            operationCostsForVersion.push(await tx.create("MfgOperationCost", derived, subject.id));
+          }
         }
-      } else if (order.RowVersion !== expectedVersion) {
-        throw conflict("MFG_ROW_VERSION_CONFLICT", "رکورد سفارش از زمان خواندن تغییر کرده است؛ تازه‌خوانی کنید");
       }
-
-      let opCostsForVersion = allOpCosts.filter(
-        (row) => row.PlantId === plantId
-          && opIds.has(row.ProductionOrderOperationId)
-          && row.CostVersion === costVersion,
-      );
-
-      /* اگر هیچ ردیف هزینه‌ای برای این نسخه ثبت نشده باشد، رول‌آپ از شواهد
-       * واقعی ساخته و در همان تراکنش ذخیره می‌شود؛ وگرنه reconcile هیچ‌وقت
-       * اجرا نمی‌شد و گیت `close` هم هرگز باز نمی‌شد. */
-      let derivedCostRows = [];
-      if (opCostsForVersion.length === 0) {
-        derivedCostRows = await deriveOperationCostRows(tx, { plantId, operations: orderOps, costVersion });
-        opCostsForVersion = [];
-        for (const row of derivedCostRows) {
-          opCostsForVersion.push(await tx.create("MfgOperationCost", row, subject.id));
-        }
-      }
-
-      let stdMat = 0;
-      let actMat = 0;
-      let stdMach = 0;
-      let actMach = 0;
-      let stdLab = 0;
-      let actLab = 0;
-      let stdOvh = 0;
-      let actOvh = 0;
-
-      if (opCostsForVersion.length > 0) {
-        for (const row of opCostsForVersion) {
-          const s = storedNumber(row.StandardAmount);
-          const a = storedNumber(row.ActualAmount);
-          if (row.CostElement === "material") { stdMat = roundTo3(stdMat + s); actMat = roundTo3(actMat + a); }
-          if (row.CostElement === "machine") { stdMach = roundTo3(stdMach + s); actMach = roundTo3(actMach + a); }
-          if (row.CostElement === "labor") { stdLab = roundTo3(stdLab + s); actLab = roundTo3(actLab + a); }
-          if (row.CostElement === "overhead") { stdOvh = roundTo3(stdOvh + s); actOvh = roundTo3(actOvh + a); }
-        }
-      } else if (existingOrderCost) {
-        stdMat = roundTo3(storedNumber(existingOrderCost.StandardMaterialCost));
-        actMat = roundTo3(storedNumber(existingOrderCost.ActualMaterialCost));
-        stdMach = roundTo3(storedNumber(existingOrderCost.StandardMachineCost));
-        actMach = roundTo3(storedNumber(existingOrderCost.ActualMachineCost));
-        stdLab = roundTo3(storedNumber(existingOrderCost.StandardLaborCost));
-        actLab = roundTo3(storedNumber(existingOrderCost.ActualLaborCost));
-        stdOvh = roundTo3(storedNumber(existingOrderCost.StandardOverheadCost));
-        actOvh = roundTo3(storedNumber(existingOrderCost.ActualOverheadCost));
-      } else {
+      const totals = summarizeCostRows(completeCosts.rows);
+      if (operationCostsForVersion.length === 0) {
         throw businessRule("MFG_COST_VERSION_NOT_FOUND", `هیچ ردیف هزینه‌ای برای نسخهٔ ${costVersion} یافت نشد`);
       }
 
-      const computedStdTotal = roundTo3(stdMat + stdMach + stdLab + stdOvh);
-      const computedActTotal = roundTo3(actMat + actMach + actLab + actOvh);
-
       if (existingOrderCost) {
-        const storedStdTotal = roundTo3(storedNumber(existingOrderCost.StandardTotalCost));
-        const storedActTotal = roundTo3(storedNumber(existingOrderCost.ActualTotalCost));
-        if (Math.abs(storedStdTotal - computedStdTotal) > 0.01 || Math.abs(storedActTotal - computedActTotal) > 0.01) {
-          throw businessRule("MFG_COST_TOTAL_MISMATCH", "جمع اجزای هزینه با مبلغ کل هزینهٔ سفارش برابر نیست");
+        const storedStandard = roundTo3(storedNumber(existingOrderCost.StandardTotalCost));
+        const storedActual = roundTo3(storedNumber(existingOrderCost.ActualTotalCost));
+        if (Math.abs(storedStandard - totals.standardTotalCost) > 0.01 || Math.abs(storedActual - totals.actualTotalCost) > 0.01) {
+          throw businessRule("MFG_COST_TOTAL_MISMATCH", "جمع اجزای هزینه با مبلغ کل نسخهٔ تطبیق‌شده برابر نیست؛ برای محاسبهٔ تازه نسخهٔ هزینهٔ جدید بسازید");
         }
       }
 
@@ -5971,29 +6605,37 @@ export function registerManufacturingRoutes(app, { repo, subjects, evaluate } = 
         : existingOrderCost?.ContractRevenue !== null && existingOrderCost?.ContractRevenue !== undefined
           ? roundTo3(storedNumber(existingOrderCost.ContractRevenue))
           : null;
-      const grossMargin = effectiveRevenue === null ? null : roundTo3(effectiveRevenue - computedActTotal);
+      const grossMargin = effectiveRevenue === null ? null : roundTo3(effectiveRevenue - totals.actualTotalCost);
       const reconciledAt = new Date().toISOString();
-      const currency = existingOrderCost?.Currency ?? opCostsForVersion[0]?.Currency ?? "IRR";
-
+      const summary = {
+        StandardMaterialCost: totals.byElement.material.standard,
+        PlannedMaterialCost: totals.byElement.material.planned,
+        ActualMaterialCost: totals.byElement.material.actual,
+        StandardMachineCost: totals.byElement.machine.standard,
+        PlannedMachineCost: totals.byElement.machine.planned,
+        ActualMachineCost: totals.byElement.machine.actual,
+        StandardLaborCost: totals.byElement.labor.standard,
+        PlannedLaborCost: totals.byElement.labor.planned,
+        ActualLaborCost: totals.byElement.labor.actual,
+        StandardOverheadCost: totals.byElement.overhead.standard,
+        PlannedOverheadCost: totals.byElement.overhead.planned,
+        ActualOverheadCost: totals.byElement.overhead.actual,
+        StandardScrapCost: totals.byElement.scrap.standard,
+        PlannedScrapCost: totals.byElement.scrap.planned,
+        ActualScrapCost: totals.byElement.scrap.actual,
+        StandardTotalCost: totals.standardTotalCost,
+        PlannedTotalCost: totals.plannedTotalCost,
+        ActualTotalCost: totals.actualTotalCost,
+        ContractRevenue: effectiveRevenue,
+        GrossMargin: grossMargin,
+        Reconciled: true,
+        ReconciledAt: reconciledAt,
+        ReconcileThrough: reconcileThrough,
+        ModelVersion: modelVersion,
+      };
       let saved;
       if (existingOrderCost) {
-        const patchRes = await tx.patch("MfgOrderCost", existingOrderCost.Id, {
-          StandardMaterialCost: stdMat,
-          ActualMaterialCost: actMat,
-          StandardMachineCost: stdMach,
-          ActualMachineCost: actMach,
-          StandardLaborCost: stdLab,
-          ActualLaborCost: actLab,
-          StandardOverheadCost: stdOvh,
-          ActualOverheadCost: actOvh,
-          StandardTotalCost: computedStdTotal,
-          ActualTotalCost: computedActTotal,
-          ContractRevenue: effectiveRevenue,
-          GrossMargin: grossMargin,
-          Reconciled: true,
-          ReconciledAt: reconciledAt,
-          ModelVersion: modelVersion,
-        }, subject.id, existingOrderCost.RowVersion);
+        const patchRes = await tx.patch("MfgOrderCost", existingOrderCost.Id, summary, subject.id, existingOrderCost.RowVersion);
         if (!patchRes.ok) throw conflict("MFG_ROW_VERSION_CONFLICT", "رکورد هزینهٔ سفارش هم‌زمان تغییر کرده است");
         saved = await tx.get("MfgOrderCost", existingOrderCost.Id);
       } else {
@@ -6001,25 +6643,10 @@ export function registerManufacturingRoutes(app, { repo, subjects, evaluate } = 
           PlantId: plantId,
           ProductionOrderId: orderId,
           CostVersion: costVersion,
-          Currency: currency,
-          StandardMaterialCost: stdMat,
-          ActualMaterialCost: actMat,
-          StandardMachineCost: stdMach,
-          ActualMachineCost: actMach,
-          StandardLaborCost: stdLab,
-          ActualLaborCost: actLab,
-          StandardOverheadCost: stdOvh,
-          ActualOverheadCost: actOvh,
-          StandardTotalCost: computedStdTotal,
-          ActualTotalCost: computedActTotal,
-          ContractRevenue: effectiveRevenue,
-          GrossMargin: grossMargin,
-          Reconciled: true,
-          ReconciledAt: reconciledAt,
-          ModelVersion: modelVersion,
+          Currency: totals.currency,
+          ...summary,
         }, subject.id);
       }
-
       await createAuditRecord(tx, req, "MFG_ORDER_COST_RECONCILED", "MfgOrderCost", saved.Id, "mfg.cost.reconcile", {
         idempotencyKey,
         idempotencyFingerprint: fingerprint,
@@ -6027,8 +6654,17 @@ export function registerManufacturingRoutes(app, { repo, subjects, evaluate } = 
         costVersion,
         reconcileThrough,
       });
-
-      return saved;
+      const byElement = totals.byElement;
+      return {
+        ...saved,
+        Variance: totals.costVariance,
+        CostVariance: totals.costVariance,
+        CostVariancePct: totals.costVariancePct,
+        PlannedCostVariance: totals.plannedCostVariance,
+        PlannedCostVariancePct: totals.plannedCostVariancePct,
+        ByElement: byElement,
+        OperationBreakdown: operationCostBreakdown(orderOps, completeCosts.rows),
+      };
     });
   }));
 
@@ -6138,7 +6774,7 @@ export function registerManufacturingRoutes(app, { repo, subjects, evaluate } = 
     return protectProjectLink(subject, closed, evaluate);
   }));
 
-  app.get(`${ROOT}/dashboard/overview`, route("mfg.dashboard.view", async ({ repo: r, req, plantId }) => {
+  app.get(`${ROOT}/dashboard/overview`, route("mfg.dashboard.view", async ({ repo: r, req, plantId, subject }) => {
     const q = req.query ?? {};
     assertOnlyQueryKeys(q, new Set(["from", "to", "workCenterId"]));
     const from = isoDateTime(q.from, "from", { required: true });
@@ -6148,83 +6784,217 @@ export function registerManufacturingRoutes(app, { repo, subjects, evaluate } = 
     if (toMs <= fromMs) throw bad("to", "to باید پس از from باشد");
     if (toMs - fromMs > MAX_GANTT_WINDOW_MS) throw bad("to", "پنجرهٔ داشبورد حداکثر ۹۰ روز است");
     const workCenterId = text(q.workCenterId, "workCenterId", { max: 60, pattern: ID_RE });
-
     if (workCenterId) {
-      const wc = await r.get("MfgWorkCenter", workCenterId);
-      if (!wc || wc.PlantId !== plantId) throw notFound();
+      const workCenter = await r.get("MfgWorkCenter", workCenterId);
+      if (!workCenter || workCenter.PlantId !== plantId) throw notFound();
     }
 
-    const [orders, operations, executions, requirements, alerts] = await Promise.all([
+    const [allOrders, allOperations, executions, requirements, alerts, scrapRecords] = await Promise.all([
       r.list("MfgProductionOrder", { where: [{ column: "PlantId", op: "eq", value: plantId }] }),
       r.list("MfgProductionOrderOperation", { where: [{ column: "PlantId", op: "eq", value: plantId }] }),
       r.list("MfgOperationExecution", { where: [{ column: "PlantId", op: "eq", value: plantId }] }),
       r.list("MfgMaterialRequirement", { where: [{ column: "PlantId", op: "eq", value: plantId }] }),
       r.list("MfgProductionAlert", { where: [{ column: "PlantId", op: "eq", value: plantId }] }),
+      r.list("MfgScrapRecord", { where: [{ column: "PlantId", op: "eq", value: plantId }] }),
     ]);
+    const plantOperations = allOperations.filter((row) => row.PlantId === plantId
+      && (!workCenterId || row.WorkCenterId === workCenterId));
+    const allowedOperationIds = new Set(plantOperations.map((row) => row.Id));
+    const scopedOrderIds = new Set(plantOperations.map((row) => row.ProductionOrderId));
+    const plantOrders = allOrders.filter((row) => row.PlantId === plantId
+      && (!workCenterId || scopedOrderIds.has(row.Id)));
+    const scopedOrderIdSet = new Set(plantOrders.map((row) => row.Id));
 
-    const plantOrders = orders.filter((o) => o.PlantId === plantId);
-    const openOrdersCount = plantOrders.filter((o) => ["created", "released", "in-progress"].includes(o.Status)).length;
-
-    const completedInWindow = plantOrders.filter((o) => {
-      if (!["completed", "closed"].includes(o.Status)) return false;
-      const finMs = storedTimestamp(o.ClosedAt ?? o.UpdatedAt ?? o.DueAt);
-      return Number.isFinite(finMs) && finMs >= fromMs && finMs < toMs;
+    const statusCounts = { created: 0, released: 0, "in-progress": 0, completed: 0, closed: 0, cancelled: 0 };
+    for (const order of plantOrders) {
+      if (Object.hasOwn(statusCounts, order.Status)) statusCounts[order.Status]++;
+    }
+    const openOrdersCount = statusCounts.created + statusCounts.released + statusCounts["in-progress"];
+    const deliveryAt = (order) => storedTimestamp(order.CompletedAt ?? order.ClosedAt);
+    const completedInWindow = plantOrders.filter((order) => {
+      if (!["completed", "closed"].includes(order.Status)) return false;
+      const completedAt = deliveryAt(order);
+      return Number.isFinite(completedAt) && completedAt >= fromMs && completedAt < toMs;
     });
-    const completedOnTimeCount = completedInWindow.filter((o) => {
-      const finMs = storedTimestamp(o.ClosedAt ?? o.UpdatedAt ?? o.DueAt);
-      const dueMs = storedTimestamp(o.DueAt);
-      return Number.isFinite(finMs) && Number.isFinite(dueMs) && finMs <= dueMs;
+    const completedOnTimeCount = completedInWindow.filter((order) => {
+      const finishedAt = deliveryAt(order);
+      const dueAt = storedTimestamp(order.DueAt);
+      return Number.isFinite(finishedAt) && Number.isFinite(dueAt) && finishedAt <= dueAt;
     }).length;
-    const onTimeDeliveryPct = completedInWindow.length === 0
+    const dueOrders = plantOrders.filter((order) => {
+      const dueAt = storedTimestamp(order.DueAt);
+      return Number.isFinite(dueAt) && dueAt >= fromMs && dueAt < toMs;
+    });
+    const deliveredDueOrders = dueOrders.filter((order) => ["completed", "closed"].includes(order.Status)
+      && Number.isFinite(deliveryAt(order)));
+    const onTimeDueOrders = deliveredDueOrders.filter((order) => deliveryAt(order) <= storedTimestamp(order.DueAt));
+    const openLateOrdersCount = plantOrders.filter((order) => {
+      const dueAt = storedTimestamp(order.DueAt);
+      return Number.isFinite(dueAt) && dueAt < toMs && !["completed", "closed", "cancelled"].includes(order.Status);
+    }).length;
+    const onTimeDeliveryPct = dueOrders.length === 0
       ? null
-      : roundTo3((completedOnTimeCount / completedInWindow.length) * 100);
+      : roundTo3((onTimeDueOrders.length / dueOrders.length) * 100);
+    const deliveredOnTimePct = deliveredDueOrders.length === 0
+      ? null
+      : roundTo3((onTimeDueOrders.length / deliveredDueOrders.length) * 100);
 
-    const allowedOpIds = new Set(
-      operations
-        .filter((op) => op.PlantId === plantId && (!workCenterId || op.WorkCenterId === workCenterId))
-        .map((op) => op.Id),
-    );
-
-    const execsInWindow = executions.filter((ex) => {
-      if (ex.PlantId !== plantId || ex.Status === "cancelled" || !allowedOpIds.has(ex.ProductionOrderOperationId)) return false;
-      const startMs = storedTimestamp(ex.StartedAt);
-      return Number.isFinite(startMs) && startMs >= fromMs && startMs < toMs;
+    const production = productionFactsForOperations(plantOperations, executions, scrapRecords, fromMs, toMs);
+    const openShortages = requirements.filter((row) => {
+      if (row.PlantId !== plantId || !scopedOrderIdSet.has(row.ProductionOrderId)
+        || !["shortage"].includes(row.Status) || storedNumber(row.ShortageQuantity) <= 0) return false;
+      if (workCenterId && row.ProductionOrderOperationId && !allowedOperationIds.has(row.ProductionOrderOperationId)) return false;
+      return true;
     });
-
-    const goodQuantity = roundTo3(execsInWindow.reduce((s, ex) => s + storedNumber(ex.GoodQuantity), 0));
-    const scrapQuantity = roundTo3(execsInWindow.reduce((s, ex) => s + storedNumber(ex.ScrapQuantity), 0));
-    const reworkQuantity = roundTo3(execsInWindow.reduce((s, ex) => s + storedNumber(ex.ReworkQuantity), 0));
-
-    const shortagesInWindow = requirements.filter((reqRow) => {
-      if (reqRow.PlantId !== plantId || reqRow.Status !== "shortage" || storedNumber(reqRow.ShortageQuantity) <= 0) return false;
-      if (workCenterId && reqRow.ProductionOrderOperationId && !allowedOpIds.has(reqRow.ProductionOrderOperationId)) return false;
-      const reqMs = storedTimestamp(reqRow.RequiredAt);
-      return Number.isFinite(reqMs) && reqMs >= fromMs && reqMs < toMs;
+    const shortagesDueInWindow = openShortages.filter((row) => {
+      const requiredAt = storedTimestamp(row.RequiredAt);
+      return Number.isFinite(requiredAt) && requiredAt >= fromMs && requiredAt < toMs;
     });
-    const totalShortageQuantity = roundTo3(
-      shortagesInWindow.reduce((s, reqRow) => s + storedNumber(reqRow.ShortageQuantity), 0),
-    );
+    const totalShortageQuantity = roundTo3(openShortages.reduce((sum, row) => sum + storedNumber(row.ShortageQuantity), 0));
+    const openAlerts = alerts.filter((row) => row.PlantId === plantId && row.Status === "open"
+      && (!workCenterId || row.WorkCenterId === workCenterId
+        || (!row.WorkCenterId && row.ProductionOrderId && scopedOrderIdSet.has(row.ProductionOrderId))));
+    const alertsBySeverity = Object.fromEntries([...ALERT_SEVERITIES].map((severity) => [
+      severity, openAlerts.filter((row) => row.Severity === severity).length,
+    ]));
 
-    const openAlertsCount = alerts.filter(
-      (al) => al.PlantId === plantId
-        && al.Status === "open"
-        && (!workCenterId || al.WorkCenterId === workCenterId),
-    ).length;
+    const costVisible = evaluate(subject, "mfg.cost.view", { plantId }).allow;
+    const costSummary = {
+      available: costVisible,
+      currency: null,
+      orderCount: 0,
+      reconciledOrderCount: 0,
+      standardTotalCost: 0,
+      plannedTotalCost: 0,
+      actualTotalCost: 0,
+      costVariance: 0,
+      costVariancePct: null,
+      plannedCostVariance: 0,
+      plannedCostVariancePct: null,
+      currencies: [],
+    };
+    if (costVisible && plantOrders.length > 0) {
+      const [orderCostRows, allOperationCostRows] = await Promise.all([
+        r.list("MfgOrderCost", { where: [{ column: "PlantId", op: "eq", value: plantId }] }),
+        r.list("MfgOperationCost", { where: [{ column: "PlantId", op: "eq", value: plantId }] }),
+      ]);
+      const byCurrency = new Map();
+      const operationByOrder = new Map();
+      for (const operation of plantOperations) {
+        const list = operationByOrder.get(operation.ProductionOrderId) ?? [];
+        list.push(operation);
+        operationByOrder.set(operation.ProductionOrderId, list);
+      }
+      for (const order of plantOrders) {
+        const operationsForOrder = operationByOrder.get(order.Id) ?? [];
+        if (operationsForOrder.length === 0) continue;
+        const summaries = orderCostRows.filter((row) => row.PlantId === plantId && row.ProductionOrderId === order.Id);
+        const latestSummary = summaries.sort((left, right) => Number(right.CostVersion) - Number(left.CostVersion))[0] ?? null;
+        let currency = null;
+        let standardTotalCost = 0;
+        let plannedTotalCost = 0;
+        let actualTotalCost = 0;
+        let reconciled = false;
+        if (!workCenterId && latestSummary?.Reconciled === true) {
+          currency = latestSummary.Currency ?? "IRR";
+          standardTotalCost = roundTo3(storedNumber(latestSummary.StandardTotalCost));
+          plannedTotalCost = roundTo3(storedNumber(latestSummary.PlannedTotalCost, standardTotalCost));
+          actualTotalCost = roundTo3(storedNumber(latestSummary.ActualTotalCost));
+          reconciled = true;
+        } else {
+          const operationIdsForOrder = new Set(operationsForOrder.map((row) => row.Id));
+          const storedVersions = allOperationCostRows.filter((row) => row.PlantId === plantId
+            && operationIdsForOrder.has(row.ProductionOrderOperationId));
+          const targetVersion = Math.max(Number(latestSummary?.CostVersion) || 0,
+            ...storedVersions.map((row) => Number(row.CostVersion) || 0), 1);
+          const storedForVersion = storedVersions.filter((row) => Number(row.CostVersion) === targetVersion);
+          const derived = await deriveOperationCostRows(r, {
+            plantId,
+            operations: operationsForOrder,
+            costVersion: targetVersion,
+          });
+          const complete = completeOperationCostRows(operationsForOrder, storedForVersion, derived);
+          const totals = summarizeCostRows(complete.rows);
+          currency = totals.currency;
+          standardTotalCost = totals.standardTotalCost;
+          plannedTotalCost = totals.plannedTotalCost;
+          actualTotalCost = totals.actualTotalCost;
+        }
+        const key = String(currency ?? "IRR").toUpperCase();
+        let aggregate = byCurrency.get(key);
+        if (!aggregate) {
+          aggregate = { currency: key, orderCount: 0, reconciledOrderCount: 0, standardTotalCost: 0, plannedTotalCost: 0, actualTotalCost: 0 };
+          byCurrency.set(key, aggregate);
+        }
+        aggregate.orderCount++;
+        if (reconciled) aggregate.reconciledOrderCount++;
+        aggregate.standardTotalCost = roundTo3(aggregate.standardTotalCost + standardTotalCost);
+        aggregate.plannedTotalCost = roundTo3(aggregate.plannedTotalCost + plannedTotalCost);
+        aggregate.actualTotalCost = roundTo3(aggregate.actualTotalCost + actualTotalCost);
+      }
+      costSummary.currencies = [...byCurrency.values()].map((row) => ({
+        ...row,
+        costVariance: costVariance(row.actualTotalCost, row.standardTotalCost),
+        costVariancePct: costVariancePct(row.actualTotalCost, row.standardTotalCost),
+        plannedCostVariance: costVariance(row.actualTotalCost, row.plannedTotalCost),
+        plannedCostVariancePct: costVariancePct(row.actualTotalCost, row.plannedTotalCost),
+      }));
+      costSummary.orderCount = costSummary.currencies.reduce((sum, row) => sum + row.orderCount, 0);
+      costSummary.reconciledOrderCount = costSummary.currencies.reduce((sum, row) => sum + row.reconciledOrderCount, 0);
+      if (costSummary.currencies.length === 1) {
+        const aggregate = costSummary.currencies[0];
+        costSummary.currency = aggregate.currency;
+        costSummary.standardTotalCost = aggregate.standardTotalCost;
+        costSummary.plannedTotalCost = aggregate.plannedTotalCost;
+        costSummary.actualTotalCost = aggregate.actualTotalCost;
+        costSummary.costVariance = aggregate.costVariance;
+        costSummary.costVariancePct = aggregate.costVariancePct;
+        costSummary.plannedCostVariance = aggregate.plannedCostVariance;
+        costSummary.plannedCostVariancePct = aggregate.plannedCostVariancePct;
+      }
+    }
 
+    const ordersSummary = {
+      totalCount: plantOrders.length,
+      openCount: openOrdersCount,
+      closedCount: statusCounts.closed,
+      statusCounts,
+      completedInWindowCount: completedInWindow.length,
+      completedOnTimeCount,
+      dueInWindowCount: dueOrders.length,
+      deliveredDueInWindowCount: deliveredDueOrders.length,
+      onTimeDueInWindowCount: onTimeDueOrders.length,
+      lateDeliveryCount: Math.max(0, deliveredDueOrders.length - onTimeDueOrders.length),
+      openLateCount: openLateOrdersCount,
+      onTimeDeliveryPct,
+      deliveredOnTimePct,
+    };
     return {
       from,
       to,
       workCenterId: workCenterId ?? null,
       openOrdersCount,
+      orders: ordersSummary,
+      statusCounts,
       completedOrdersCount: completedInWindow.length,
       completedOnTimeCount,
       onTimeDeliveryPct,
-      goodQuantity,
-      scrapQuantity,
-      reworkQuantity,
-      openShortagesCount: shortagesInWindow.length,
+      deliveredOnTimePct,
+      goodQuantity: production.goodQuantity,
+      scrapQuantity: production.scrapQuantity,
+      reworkQuantity: production.reworkQuantity,
+      totalProducedQuantity: production.totalProducedQuantity,
+      production,
+      openShortagesCount: openShortages.length,
       totalShortageQuantity,
-      openAlertsCount,
+      shortages: {
+        openCount: openShortages.length,
+        dueInWindowCount: shortagesDueInWindow.length,
+        totalQuantity: totalShortageQuantity,
+      },
+      openAlertsCount: openAlerts.length,
+      alerts: { openCount: openAlerts.length, bySeverity: alertsBySeverity },
+      costSummary,
     };
   }));
 
@@ -6327,116 +7097,83 @@ export function registerManufacturingRoutes(app, { repo, subjects, evaluate } = 
     if (toMs <= fromMs) throw bad("to", "to باید پس از from باشد");
     if (toMs - fromMs > MAX_GANTT_WINDOW_MS) throw bad("to", "پنجرهٔ OEE حداکثر ۹۰ روز است");
     const workCenterId = text(q.workCenterId, "workCenterId", { max: 60, pattern: ID_RE });
-
-    if (workCenterId) {
-      const wc = await r.get("MfgWorkCenter", workCenterId);
-      if (!wc || wc.PlantId !== plantId) throw notFound();
-    }
-
-    const [operations, executions, downtimes] = await Promise.all([
+    const [allWorkCenters, allOperations, executions, downtimes, scrapRecords, calendars] = await Promise.all([
+      r.list("MfgWorkCenter", { where: [{ column: "PlantId", op: "eq", value: plantId }] }),
       r.list("MfgProductionOrderOperation", { where: [{ column: "PlantId", op: "eq", value: plantId }] }),
       r.list("MfgOperationExecution", { where: [{ column: "PlantId", op: "eq", value: plantId }] }),
       r.list("MfgDowntimeLog", { where: [{ column: "PlantId", op: "eq", value: plantId }] }),
+      r.list("MfgScrapRecord", { where: [{ column: "PlantId", op: "eq", value: plantId }] }),
+      r.list("MfgWorkCenterCalendar", { where: [{ column: "PlantId", op: "eq", value: plantId }] }),
     ]);
-
-    const opById = new Map(
-      operations
-        .filter((op) => op.PlantId === plantId && (!workCenterId || op.WorkCenterId === workCenterId))
-        .map((op) => [op.Id, op]),
-    );
-
-    const execsInWindow = executions.filter((ex) => {
-      if (ex.PlantId !== plantId || ex.Status === "cancelled" || !opById.has(ex.ProductionOrderOperationId)) return false;
-      const startMs = storedTimestamp(ex.StartedAt);
-      return Number.isFinite(startMs) && startMs >= fromMs && startMs < toMs;
-    });
-
-    const dtsInWindow = downtimes.filter((dt) => {
-      if (dt.PlantId !== plantId) return false;
-      if (workCenterId && dt.WorkCenterId !== workCenterId) return false;
-      const startMs = storedTimestamp(dt.StartedAt);
-      return Number.isFinite(startMs) && startMs >= fromMs && startMs < toMs;
-    });
-
-    const plannedDowntimeMinutes = roundTo3(
-      dtsInWindow
-        .filter((dt) => dt.DowntimeType === "planned")
-        .reduce((s, dt) => s + storedNumber(dt.DurationMinutes), 0),
-    );
-    const unplannedDowntimeMinutes = roundTo3(
-      dtsInWindow
-        .filter((dt) => dt.DowntimeType === "unplanned")
-        .reduce((s, dt) => s + storedNumber(dt.DurationMinutes), 0),
-    );
-
-    const actualRunAndSetupMinutes = roundTo3(
-      execsInWindow.reduce((s, ex) => s + storedNumber(ex.SetupActualMinutes) + storedNumber(ex.RunActualMinutes), 0),
-    );
-    const plannedProductionMinutes = roundTo3(actualRunAndSetupMinutes + unplannedDowntimeMinutes);
-    const operatingMinutes = roundTo3(Math.max(0, plannedProductionMinutes - unplannedDowntimeMinutes));
-
-    let idealOutputMinutes = 0;
-    let goodQuantity = 0;
-    let totalProducedQuantity = 0;
-    const seenOpsForSetup = new Set();
-
-    for (const ex of execsInWindow) {
-      const op = opById.get(ex.ProductionOrderOperationId);
-      const exGood = storedNumber(ex.GoodQuantity);
-      const exScrap = storedNumber(ex.ScrapQuantity);
-      const exRework = storedNumber(ex.ReworkQuantity);
-      const exProduced = exGood + exScrap + exRework;
-
-      goodQuantity = roundTo3(goodQuantity + exGood);
-      totalProducedQuantity = roundTo3(totalProducedQuantity + exProduced);
-
-      if (op) {
-        const stdSetup = seenOpsForSetup.has(op.Id) ? 0 : storedNumber(op.PlannedSetupMinutes);
-        seenOpsForSetup.add(op.Id);
-        const stdRunPerUnit = storedNumber(op.PlannedRunMinutesPerUnit);
-        idealOutputMinutes = roundTo3(idealOutputMinutes + stdSetup + exProduced * stdRunPerUnit);
-      }
+    const workCenters = allWorkCenters.filter((row) => row.PlantId === plantId
+      && (!workCenterId || row.Id === workCenterId));
+    if (workCenterId && workCenters.length === 0) throw notFound();
+    const perWorkCenter = [];
+    let calendarMinutes = 0;
+    let plannedDowntimeMinutes = 0;
+    let unplannedDowntimeMinutes = 0;
+    const plantFacts = {
+      actualRunMinutes: 0,
+      idealProductionMinutes: 0,
+      goodQuantity: 0,
+      scrapQuantity: 0,
+      reworkQuantity: 0,
+      totalProducedQuantity: 0,
+    };
+    for (const workCenter of workCenters) {
+      const centerOperations = allOperations.filter((row) => row.PlantId === plantId && row.WorkCenterId === workCenter.Id);
+      const centerCalendar = workCenterCalendarIntervals(workCenter, calendars, fromMs, toMs);
+      const available = weightedCalendarMinutes(centerCalendar);
+      const plannedIntervals = downtimeIntervalsForWindow(downtimes, workCenter.Id, fromMs, toMs, "planned");
+      const allUnplannedIntervals = downtimeIntervalsForWindow(downtimes, workCenter.Id, fromMs, toMs, "unplanned");
+      const unplannedIntervals = subtractTimeIntervals(allUnplannedIntervals, plannedIntervals);
+      const plannedMinutes = weightedOverlapMinutes(plannedIntervals, centerCalendar);
+      const unplannedMinutes = weightedOverlapMinutes(unplannedIntervals, centerCalendar);
+      const facts = productionFactsForOperations(centerOperations, executions, scrapRecords, fromMs, toMs);
+      const metrics = buildOeeMetrics({
+        from,
+        to,
+        workCenter,
+        calendarMinutes: available,
+        plannedDowntimeMinutes: plannedMinutes,
+        unplannedDowntimeMinutes: unplannedMinutes,
+        facts,
+      });
+      perWorkCenter.push(metrics);
+      calendarMinutes += available;
+      plannedDowntimeMinutes += plannedMinutes;
+      unplannedDowntimeMinutes += unplannedMinutes;
+      for (const key of Object.keys(plantFacts)) plantFacts[key] += facts[key];
     }
-
-    const availabilityRatio = plannedProductionMinutes <= 0
-      ? null
-      : roundTo3(Math.min(1, operatingMinutes / plannedProductionMinutes));
-    const performanceRatio = operatingMinutes <= 0
-      ? null
-      : roundTo3(idealOutputMinutes / operatingMinutes);
-    const qualityRatio = totalProducedQuantity <= 0
-      ? null
-      : roundTo3(goodQuantity / totalProducedQuantity);
-
-    const oeeRatio = availabilityRatio === null || performanceRatio === null || qualityRatio === null
-      ? null
-      : roundTo3(availabilityRatio * performanceRatio * qualityRatio);
-
-    return {
+    for (const key of Object.keys(plantFacts)) plantFacts[key] = roundTo3(plantFacts[key]);
+    const overall = buildOeeMetrics({
       from,
       to,
+      calendarMinutes: roundTo3(calendarMinutes),
+      plannedDowntimeMinutes: roundTo3(plannedDowntimeMinutes),
+      unplannedDowntimeMinutes: roundTo3(unplannedDowntimeMinutes),
+      facts: plantFacts,
+    });
+    const bottlenecks = perWorkCenter
+      .filter((row) => row.oeePct !== null)
+      .sort((left, right) => left.oeePct - right.oeePct || String(left.workCenterCode).localeCompare(String(right.workCenterCode)))
+      .slice(0, 5)
+      .map((row, index) => ({
+        rank: index + 1,
+        workCenterId: row.workCenterId,
+        workCenterCode: row.workCenterCode,
+        workCenterNameFa: row.workCenterNameFa,
+        oeePct: row.oeePct,
+        availabilityPct: row.availability.pct,
+        performancePct: row.performance.pct,
+        qualityPct: row.quality.pct,
+        unplannedDowntimeMinutes: row.downtime.unplannedMinutes,
+      }));
+    return {
+      ...overall,
       workCenterId: workCenterId ?? null,
-      downtime: {
-        plannedDowntimeMinutes,
-        unplannedDowntimeMinutes,
-      },
-      availability: {
-        numerator: operatingMinutes,
-        denominator: plannedProductionMinutes,
-        value: availabilityRatio,
-      },
-      performance: {
-        numerator: idealOutputMinutes,
-        denominator: operatingMinutes,
-        value: performanceRatio,
-      },
-      quality: {
-        numerator: goodQuantity,
-        denominator: totalProducedQuantity,
-        value: qualityRatio,
-      },
-      oee: oeeRatio,
-      oeePct: oeeRatio === null ? null : roundTo3(oeeRatio * 100),
+      workCenters: perWorkCenter,
+      bottlenecks,
     };
   }));
 

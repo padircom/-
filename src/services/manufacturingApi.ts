@@ -684,19 +684,38 @@ export interface MfgCapacityBottlenecksResponse {
   items: Array<MfgCapacityBucket & { OverloadMinutes: number }>;
 }
 
+export type MfgCostElement = "material" | "machine" | "labor" | "overhead" | "scrap";
+
+export interface MfgCostElementSummary {
+  standard: number;
+  planned: number;
+  actual: number;
+  costVariance?: number;
+  costVariancePct?: number | null;
+  plannedCostVariance?: number;
+  plannedCostVariancePct?: number | null;
+}
+
 export interface MfgOperationCost {
   Id?: string;
   PlantId: string;
   ProductionOrderOperationId: string;
   CostCenterId?: string | null;
-  CostElement: "material" | "machine" | "labor" | "overhead";
+  CostElement: MfgCostElement;
   CostVersion: number;
   StandardQuantity: number;
+  PlannedQuantity?: number;
   ActualQuantity: number;
   StandardRate: number;
+  PlannedRate?: number;
   ActualRate: number;
   StandardAmount: number;
+  PlannedAmount?: number;
   ActualAmount: number;
+  CostVariance?: number;
+  CostVariancePct?: number | null;
+  PlannedCostVariance?: number;
+  PlannedCostVariancePct?: number | null;
   Currency: string;
   CalculatedAt: string;
   SourceRef?: string | null;
@@ -710,26 +729,169 @@ export interface MfgOrderCost {
   CostVersion: number;
   Currency: string;
   StandardMaterialCost?: number;
+  PlannedMaterialCost?: number;
   ActualMaterialCost?: number;
   StandardMachineCost?: number;
+  PlannedMachineCost?: number;
   ActualMachineCost?: number;
   StandardLaborCost?: number;
+  PlannedLaborCost?: number;
   ActualLaborCost?: number;
   StandardOverheadCost?: number;
+  PlannedOverheadCost?: number;
   ActualOverheadCost?: number;
+  StandardScrapCost?: number;
+  PlannedScrapCost?: number;
+  ActualScrapCost?: number;
   StandardTotalCost: number;
+  PlannedTotalCost?: number;
   ActualTotalCost: number;
   Variance?: number;
-  ByElement?: Record<
-    "material" | "machine" | "labor" | "overhead",
-    { standard: number; actual: number; variance?: number }
-  >;
+  CostVariance?: number;
+  CostVariancePct?: number | null;
+  PlannedCostVariance?: number;
+  PlannedCostVariancePct?: number | null;
+  ByElement?: Partial<Record<MfgCostElement, MfgCostElementSummary>>;
+  OperationBreakdown?: Array<{
+    OperationId: string;
+    SequenceNo?: number;
+    OperationCode?: string;
+    OperationNameFa?: string;
+    WorkCenterId?: string;
+    Status?: string;
+    Currency?: string;
+    StandardTotalCost: number;
+    PlannedTotalCost: number;
+    ActualTotalCost: number;
+    CostVariance: number;
+    CostVariancePct: number | null;
+    PlannedCostVariance: number;
+    PlannedCostVariancePct: number | null;
+    ByElement: Partial<Record<MfgCostElement, MfgCostElementSummary>>;
+  }>;
   ContractRevenue?: number | null;
   GrossMargin?: number | null;
   Reconciled: boolean;
   ReconciledAt?: string | null;
+  ReconcileThrough?: string | null;
+  Derived?: boolean;
   ModelVersion?: string | null;
   RowVersion?: number;
+}
+
+export interface MfgDashboardOeeComponent {
+  numerator: number;
+  denominator: number;
+  value: number | null;
+  pct?: number | null;
+  idealProductionMinutes?: number;
+  actualRunMinutes?: number;
+  goodQuantity?: number;
+  scrapQuantity?: number;
+  reworkQuantity?: number;
+  totalProducedQuantity?: number;
+}
+
+export interface MfgDashboardOeeSummary {
+  from: string;
+  to: string;
+  workCenterId: string | null;
+  workCenterCode?: string;
+  workCenterNameFa?: string;
+  calendar: { availableMinutes: number; plannedProductionMinutes: number };
+  downtime: {
+    plannedMinutes: number;
+    unplannedMinutes: number;
+    plannedDowntimeMinutes: number;
+    unplannedDowntimeMinutes: number;
+    totalMinutes: number;
+  };
+  availability: MfgDashboardOeeComponent;
+  performance: MfgDashboardOeeComponent;
+  quality: MfgDashboardOeeComponent;
+  oee: number | null;
+  oeePct: number | null;
+  workCenters?: MfgDashboardOeeSummary[];
+  bottlenecks?: Array<{
+    rank: number;
+    workCenterId: string;
+    workCenterCode: string;
+    workCenterNameFa: string;
+    oeePct: number;
+    availabilityPct: number | null;
+    performancePct: number | null;
+    qualityPct: number | null;
+    unplannedDowntimeMinutes: number;
+  }>;
+}
+
+export interface MfgDashboardOverview {
+  from: string;
+  to: string;
+  workCenterId: string | null;
+  openOrdersCount: number;
+  orders: {
+    totalCount: number;
+    openCount: number;
+    closedCount: number;
+    statusCounts: Record<string, number>;
+    completedInWindowCount: number;
+    completedOnTimeCount: number;
+    dueInWindowCount: number;
+    deliveredDueInWindowCount: number;
+    onTimeDueInWindowCount: number;
+    lateDeliveryCount: number;
+    openLateCount: number;
+    onTimeDeliveryPct: number | null;
+    deliveredOnTimePct: number | null;
+  };
+  statusCounts: Record<string, number>;
+  completedOrdersCount: number;
+  completedOnTimeCount: number;
+  onTimeDeliveryPct: number | null;
+  deliveredOnTimePct: number | null;
+  goodQuantity: number;
+  scrapQuantity: number;
+  reworkQuantity: number;
+  totalProducedQuantity: number;
+  production: {
+    actualRunMinutes: number;
+    idealProductionMinutes: number;
+    goodQuantity: number;
+    scrapQuantity: number;
+    reworkQuantity: number;
+    totalProducedQuantity: number;
+  };
+  openShortagesCount: number;
+  totalShortageQuantity: number;
+  shortages: { openCount: number; dueInWindowCount: number; totalQuantity: number };
+  openAlertsCount: number;
+  alerts: { openCount: number; bySeverity: Record<string, number> };
+  costSummary: {
+    available: boolean;
+    currency: string | null;
+    orderCount: number;
+    reconciledOrderCount: number;
+    standardTotalCost: number;
+    plannedTotalCost: number;
+    actualTotalCost: number;
+    costVariance: number;
+    costVariancePct: number | null;
+    plannedCostVariance: number;
+    plannedCostVariancePct: number | null;
+    currencies: Array<{
+      currency: string;
+      orderCount: number;
+      reconciledOrderCount: number;
+      standardTotalCost: number;
+      plannedTotalCost: number;
+      actualTotalCost: number;
+      costVariance: number;
+      costVariancePct: number | null;
+      plannedCostVariance: number;
+      plannedCostVariancePct: number | null;
+    }>;
+  };
 }
 
 export interface MfgOperationVariance {
@@ -1380,7 +1542,7 @@ export const MfgClient = {
     userId: string | null | undefined,
     orderId: string,
     rowVersion: number,
-    body: { CostVersion: number; ReconcileThrough: string; ContractRevenue?: number | null },
+    body: { CostVersion: number; ReconcileThrough: string; ContractRevenue?: number | null; ModelVersion?: string },
     idempotencyKey: string = makeIdempotencyKey("reconcile"),
   ) =>
     mfgFetch<MfgOrderCost>(plantId, `/cost/orders/${encodeURIComponent(orderId)}/reconcile`, {
@@ -1395,7 +1557,7 @@ export const MfgClient = {
     plantId: string,
     userId: string | null | undefined,
     query: { from: string; to: string; workCenterId?: string },
-  ) => mfgFetch<any>(plantId, "/dashboard/overview", { userId, query }),
+  ) => mfgFetch<MfgDashboardOverview>(plantId, "/dashboard/overview", { userId, query }),
 
   getDashboardWorkCenterLoad: (
     plantId: string,
@@ -1407,18 +1569,7 @@ export const MfgClient = {
     plantId: string,
     userId: string | null | undefined,
     query: { from: string; to: string; workCenterId?: string },
-  ) =>
-    mfgFetch<{
-      from: string;
-      to: string;
-      workCenterId?: string | null;
-      downtime: any;
-      availability: any;
-      performance: any;
-      quality: any;
-      oee: number | null;
-      oeePct: number | null;
-    }>(plantId, "/dashboard/oee", { userId, query }),
+  ) => mfgFetch<MfgDashboardOeeSummary>(plantId, "/dashboard/oee", { userId, query }),
 
   listAlerts: (
     plantId: string,

@@ -1562,7 +1562,9 @@ test("MFG REST: مشاهدهٔ هزینه، تطبیق نهایی هزینه و 
     headers: { "x-user-id": "u-mfg-cost" },
   });
   assert.equal(opCostRes.statusCode, 200);
-  assert.equal(opCostRes.body.data.items.length, 2);
+  assert.equal(opCostRes.body.data.items.length, 5);
+  assert.equal(opCostRes.body.data.derived, true);
+  assert.ok(opCostRes.body.data.items.some((row) => row.CostElement === "scrap"));
 
   const ordCostBefore = await call("GET", COST_ORDER, {
     params: { plantId: "PLANT-DEMO", orderId: order.Id },
@@ -1575,6 +1577,10 @@ test("MFG REST: مشاهدهٔ هزینه، تطبیق نهایی هزینه و 
   assert.equal(ordCostBefore.body.data.ContractRevenue, null);
   assert.equal(ordCostBefore.body.data.GrossMargin, null);
   assert.equal(ordCostBefore.body.data.Reconciled, false);
+  assert.equal(ordCostBefore.body.data.PlannedTotalCost, 100000);
+  assert.equal(ordCostBefore.body.data.CostVariancePct, 7.5);
+  assert.equal(ordCostBefore.body.data.OperationBreakdown.length, 1);
+  assert.equal(ordCostBefore.body.data.ByElement.scrap.actual, 0);
 
   // تلاش برای تطبیق هزینه پیش از تکمیل عملیات رد می‌شود
   const prematureReconcile = await call("POST", COST_ORDER_RECONCILE, {
@@ -1608,6 +1614,42 @@ test("MFG REST: مشاهدهٔ هزینه، تطبیق نهایی هزینه و 
   assert.equal(reconcileRes.statusCode, 200);
   assert.equal(reconcileRes.body.data.Reconciled, true);
   assert.equal(reconcileRes.body.data.GrossMargin, 42500);
+  assert.equal(reconcileRes.body.data.PlannedTotalCost, 100000);
+  assert.equal(reconcileRes.body.data.CostVariance, 7500);
+  assert.equal(reconcileRes.body.data.CostVariancePct, 7.5);
+  assert.equal(reconcileRes.body.data.OperationBreakdown.length, 1);
+
+  const reconcileReplay = await call("POST", COST_ORDER_RECONCILE, {
+    params: { plantId: "PLANT-DEMO", orderId: order.Id },
+    headers: { "x-user-id": "u-mfg-cost", "if-match": "1", "idempotency-key": "rec-ok-1" },
+    body: {
+      CostVersion: 1,
+      ReconcileThrough: "2026-10-05T18:00:00.000Z",
+      ContractRevenue: 150000,
+    },
+  });
+  assert.equal(reconcileReplay.statusCode, 200);
+  assert.equal(reconcileReplay.body.data.Id, reconcileRes.body.data.Id);
+
+  const staleReconcile = await call("POST", COST_ORDER_RECONCILE, {
+    params: { plantId: "PLANT-DEMO", orderId: order.Id },
+    headers: { "x-user-id": "u-mfg-cost", "if-match": "2", "idempotency-key": "rec-stale-row" },
+    body: { CostVersion: 1, ReconcileThrough: "2026-10-05T18:00:00.000Z" },
+  });
+  assert.equal(staleReconcile.statusCode, 409);
+  assert.equal(staleReconcile.body.error.code, "MFG_ROW_VERSION_CONFLICT");
+
+  const idempotencyConflict = await call("POST", COST_ORDER_RECONCILE, {
+    params: { plantId: "PLANT-DEMO", orderId: order.Id },
+    headers: { "x-user-id": "u-mfg-cost", "if-match": "1", "idempotency-key": "rec-ok-1" },
+    body: {
+      CostVersion: 1,
+      ReconcileThrough: "2026-10-05T18:00:00.000Z",
+      ContractRevenue: 150001,
+    },
+  });
+  assert.equal(idempotencyConflict.statusCode, 409);
+  assert.equal(idempotencyConflict.body.error.code, "MFG_IDEMPOTENCY_CONFLICT");
 
   // بستن نهایی سفارش تولید پس از عبور از تمام گیت‌ها
   const closeRes = await call("POST", ORDER_CLOSE, {
@@ -1656,6 +1698,18 @@ test("MFG REST: داشبورد خلاصه، بار مراکز کاری، شاخ�
       RunActualMinutes: 90,
     },
   });
+  await repo.create("MfgScrapRecord", {
+    PlantId: "PLANT-DEMO", ProductionOrderOperationId: op10.Id,
+    ExecutionId: startRes.body.data.Id, Quantity: 0.2, Uom: "ea",
+    Disposition: "scrapped", Currency: "IRR", RecordedAt: "2026-10-05T09:30:00.000Z",
+  }, "u-mfg-operator");
+  await repo.create("MfgMaterialRequirement", {
+    PlantId: "PLANT-DEMO", ProductionOrderId: order.Id, ProductionOrderOperationId: op10.Id,
+    BomItemId: "bomitem-short-dashboard", MaterialId: "material-short-dashboard",
+    RequirementKey: "dashboard-shortage-v1", RequiredAt: "2026-10-05T12:00:00.000Z",
+    GrossQuantity: 5, ScrapAllowanceQty: 0, NetQuantity: 5, AvailableQuantity: 3,
+    ReservedQuantity: 0, ShortageQuantity: 2, Uom: "ea", ScheduleVersion: 1, Status: "shortage",
+  }, "u-mfg-material");
 
   // ثبت ۳۰ دقیقه توقف ناخواسته و ۱۵ دقیقه توقف برنامه‌ریزی‌شده
   await call("POST", DOWNTIME, {
@@ -1675,8 +1729,8 @@ test("MFG REST: داشبورد خلاصه، بار مراکز کاری، شاخ�
     headers: { "x-user-id": "u-mfg-operator", "idempotency-key": "oee-dt-planned" },
     body: {
       WorkCenterId: workCenter.Id,
-      StartedAt: "2026-10-05T10:00:00.000Z",
-      FinishedAt: "2026-10-05T10:15:00.000Z",
+      StartedAt: "2026-10-05T09:00:00.000Z",
+      FinishedAt: "2026-10-05T09:15:00.000Z",
       DowntimeType: "planned",
       ReasonCode: "PM-CHECK",
     },
@@ -1703,6 +1757,13 @@ test("MFG REST: داشبورد خلاصه، بار مراکز کاری، شاخ�
   assert.equal(overviewRes.body.data.goodQuantity, 0.8);
   assert.equal(overviewRes.body.data.scrapQuantity, 0.2);
   assert.equal(overviewRes.body.data.openAlertsCount, 1);
+  assert.equal(overviewRes.body.data.alerts.bySeverity.high, 1);
+  assert.equal(overviewRes.body.data.openShortagesCount, 1);
+  assert.equal(overviewRes.body.data.totalShortageQuantity, 2);
+  assert.equal(overviewRes.body.data.shortages.dueInWindowCount, 1);
+  assert.equal(overviewRes.body.data.orders.dueInWindowCount, 1);
+  assert.equal(overviewRes.body.data.orders.onTimeDeliveryPct, 0);
+  assert.equal(overviewRes.body.data.orders.openLateCount, 1);
 
   // ۲. بار مرکز کاری در داشبورد
   const loadRes = await call("GET", DASHBOARD_WC_LOAD, {
@@ -1713,20 +1774,58 @@ test("MFG REST: داشبورد خلاصه، بار مراکز کاری، شاخ�
   assert.equal(loadRes.statusCode, 200);
   assert.equal(loadRes.body.data.buckets.length, 1);
 
-  // ۳. شاخص OEE (Availability = 120/150 = 0.8، Performance = 120/120 = 1، Quality = 0.8/1 = 0.8 -> OEE = 0.64)
+  // ۳. OEE بر پایهٔ تقویم ۴۸۰ دقیقه‌ای؛ ۱۵ دقیقه توقف برنامه‌ریزی‌شده
+  // از مخرج کم و هم‌پوشانی توقف برنامه‌ریزی‌شده/ناخواسته دوباره‌شماری نمی‌شود.
   const oeeRes = await call("GET", DASHBOARD_OEE, {
     params: { plantId: "PLANT-DEMO" },
     query: { from: "2026-10-05T00:00:00.000Z", to: "2026-10-06T00:00:00.000Z", workCenterId: workCenter.Id },
     headers: { "x-user-id": "u-mfg-manager" },
   });
   assert.equal(oeeRes.statusCode, 200);
+  assert.equal(oeeRes.body.data.calendar.availableMinutes, 480);
   assert.equal(oeeRes.body.data.downtime.plannedDowntimeMinutes, 15);
-  assert.equal(oeeRes.body.data.downtime.unplannedDowntimeMinutes, 30);
-  assert.equal(oeeRes.body.data.availability.value, 0.8);
+  assert.equal(oeeRes.body.data.downtime.unplannedDowntimeMinutes, 15);
+  assert.equal(oeeRes.body.data.availability.numerator, 450);
+  assert.equal(oeeRes.body.data.availability.denominator, 465);
+  assert.equal(oeeRes.body.data.availability.value, 0.968);
   assert.equal(oeeRes.body.data.performance.value, 1);
   assert.equal(oeeRes.body.data.quality.value, 0.8);
-  assert.equal(oeeRes.body.data.oee, 0.64);
-  assert.equal(oeeRes.body.data.oeePct, 64);
+  assert.equal(oeeRes.body.data.oee, 0.774);
+  assert.equal(oeeRes.body.data.oeePct, 77.4);
+  assert.equal(oeeRes.body.data.workCenters.length, 1);
+  assert.equal(oeeRes.body.data.workCenters[0].workCenterId, workCenter.Id);
+  assert.equal(oeeRes.body.data.quality.scrapQuantity, 0.2);
+
+  // OEE کارخانه بدون فیلتر باید از تجمیع Work Centerها حاصل شود.
+  const plantOee = await call("GET", DASHBOARD_OEE, {
+    params: { plantId: "PLANT-DEMO" },
+    query: { from: "2026-10-05T00:00:00.000Z", to: "2026-10-06T00:00:00.000Z" },
+    headers: { "x-user-id": "u-mfg-manager" },
+  });
+  assert.equal(plantOee.statusCode, 200);
+  assert.equal(plantOee.body.data.oeePct, 77.4);
+  assert.equal(plantOee.body.data.workCenters.length, 1);
+
+  // روز override بر تقویم هفتگی مقدم است؛ break و AvailabilityPct در ظرفیت اعمال می‌شوند.
+  const overrideCalendar = await call("POST", WORK_CENTER_CALENDARS, {
+    params: { plantId: "PLANT-DEMO", workCenterId: workCenter.Id },
+    headers: { "x-user-id": "u-mfg-eng" },
+    body: {
+      RuleType: "date-override", RuleKey: "oee-override-2026-10-06", CalendarDate: "2026-10-06",
+      ShiftCode: "SHORT", StartMinuteOfDay: 480, EndMinuteOfDay: 720,
+      BreakMinutes: 30, BreakStartMinuteOfDay: 600, IsWorking: true, AvailabilityPct: 80,
+      EffectiveFrom: "2026-01-01",
+    },
+  });
+  assert.equal(overrideCalendar.statusCode, 201);
+  const overrideOee = await call("GET", DASHBOARD_OEE, {
+    params: { plantId: "PLANT-DEMO" },
+    query: { from: "2026-10-06T00:00:00.000Z", to: "2026-10-07T00:00:00.000Z", workCenterId: workCenter.Id },
+    headers: { "x-user-id": "u-mfg-manager" },
+  });
+  assert.equal(overrideOee.statusCode, 200);
+  assert.equal(overrideOee.body.data.calendar.availableMinutes, 168);
+  assert.equal(overrideOee.body.data.oee, null);
 
   // ۴. فهرست هشدارها و رسیدگی (acknowledge) با If-Match
   const alertsRes = await call("GET", ALERTS, {
@@ -2691,9 +2790,9 @@ test("MFG REST: رول‌آپ هزینه از دادهٔ واقعی، تطبیق
     ProductionOrderOperationId: operation.Id,
     Status: "completed",
     InputQuantity: 40,
-    GoodQuantity: 40,
+    GoodQuantity: 38,
     ReworkQuantity: 0,
-    ScrapQuantity: 0,
+    ScrapQuantity: 2,
     StartedAt: "2026-10-05T04:30:00.000Z",
     FinishedAt: "2026-10-05T10:00:00.000Z",
   });
@@ -2724,6 +2823,18 @@ test("MFG REST: رول‌آپ هزینه از دادهٔ واقعی، تطبیق
     UnitCost: 500,
     Currency: "IRR",
     ConsumptionMethod: "manual",
+    ConsumedAt: "2026-10-05T04:30:00.000Z",
+  });
+  await repo.create("MfgScrapRecord", {
+    PlantId: plantId,
+    ProductionOrderOperationId: operation.Id,
+    ExecutionId: execution.Id,
+    Quantity: 2,
+    Uom: "ea",
+    Disposition: "scrapped",
+    CostAmount: 320,
+    Currency: "IRR",
+    RecordedAt: "2026-10-05T09:15:00.000Z",
   });
 
   // ۱. خواندن هزینهٔ عملیات بدون ردیف ذخیره‌شده، رول‌آپ لحظه‌ای می‌دهد
@@ -2732,7 +2843,8 @@ test("MFG REST: رول‌آپ هزینه از دادهٔ واقعی، تطبیق
     headers: costView,
   });
   assert.equal(operationCost.statusCode, 200);
-  assert.equal(operationCost.body.data.items.length, 4);
+  assert.equal(operationCost.body.data.items.length, 5);
+  assert.equal(operationCost.body.data.derived, true);
   const materialElement = operationCost.body.data.items.find((row) => row.CostElement === "material");
   assert.equal(materialElement.ActualAmount, 5_000);
   assert.equal(materialElement.StandardAmount, 6_000);
@@ -2761,6 +2873,10 @@ test("MFG REST: رول‌آپ هزینه از دادهٔ واقعی، تطبیق
     fromExecutions.body.data.items.find((row) => row.CostElement === "machine").ActualAmount,
     actualMachineAmount,
   );
+  const scrapCost = fromExecutions.body.data.items.find((row) => row.CostElement === "scrap");
+  assert.equal(scrapCost.ActualQuantity, 2);
+  assert.equal(scrapCost.ActualAmount, 320);
+  assert.equal(scrapCost.StandardAmount, 0);
 
   // ۲. تطبیق: ردیف‌های هزینه ساخته و روی سفارش Reconciled می‌شود
   const refreshed = await call("GET", ORDER, { params: { plantId, orderId: order.Id }, headers: manager });
@@ -2773,12 +2889,17 @@ test("MFG REST: رول‌آپ هزینه از دادهٔ واقعی، تطبیق
   assert.equal(reconciled.statusCode, 200, JSON.stringify(reconciled.body));
   assert.equal(reconciled.body.data.Reconciled, true);
   assert.equal(reconciled.body.data.ActualMaterialCost, 5_000);
+  assert.equal(reconciled.body.data.StandardMaterialCost, 6_000);
+  assert.equal(reconciled.body.data.PlannedMaterialCost, 6_000);
+  assert.equal(reconciled.body.data.StandardScrapCost, 0);
+  assert.equal(reconciled.body.data.ActualScrapCost, 320);
+  assert.ok(reconciled.body.data.ByElement.scrap);
   assert.equal(
     reconciled.body.data.ActualTotalCost,
-    round3(5_000 + actualMachineAmount + fromExecutions.body.data.items.find((row) => row.CostElement === "overhead").ActualAmount),
+    round3(5_000 + actualMachineAmount + 320 + fromExecutions.body.data.items.find((row) => row.CostElement === "overhead").ActualAmount),
   );
   assert.equal(reconciled.body.data.GrossMargin, 100_000 - reconciled.body.data.ActualTotalCost);
-  assert.equal(repo.tables.get("MfgOperationCost").length, 4);
+  assert.equal(repo.tables.get("MfgOperationCost").length, 5);
   const persistedMachine = repo.tables.get("MfgOperationCost").find((row) => row.CostElement === "machine");
   assert.equal(persistedMachine.ActualAmount, actualMachineAmount);
   assert.equal(persistedMachine.SourceRef, "derived-from-actuals");
