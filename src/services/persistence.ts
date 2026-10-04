@@ -5445,14 +5445,34 @@ function manufacturingTablesFor0046(): TableDef[] {
   return MANUFACTURING_TABLES
     .filter((table) => table.name !== "MfgScheduleRun")
     .map((table) => {
+      if (table.name === "MfgWorkCenterResource") {
+        return {
+          ...table,
+          /* در 0046 کلید خارجی Equipment وجود داشت و در 0049 برای استقلال کامل MES حذف شد؛
+           * 0046 یخ‌زده می‌ماند تا چک‌سام مهاجرت‌های پیشین تغییر نکند. */
+          foreignKeys: [
+            { column: "WorkCenterId", refTable: "MfgWorkCenter", refColumn: "Id" },
+            { column: "EquipmentId", refTable: "Equipment", refColumn: "Id" },
+            { column: "CostCenterId", refTable: "MfgCostCenter", refColumn: "Id" },
+          ],
+        };
+      }
       if (table.name === "MfgProductionOrder") {
         return {
           ...table,
           /* ClosedBy در 0046 نبود (بعداً افزایشی اضافه شد) و DispatchWeight در 0047.
-           * 0046 یخ‌زده است؛ اگر ستون تازه‌ای اضافه شود باید همین‌جا فیلتر و در
+           * همچنین کلیدهای خارجی Project/ContractMaster در 0049 حذف شدند.
+           * 0046 یخ‌زده است؛ اگر ستون یا قید تازه‌ای تغییر کند باید همین‌جا فیلتر و در
            * migration تازه آورده شود، وگرنه چک‌سام مهاجرت قبلی می‌شکند. */
           columns: table.columns.filter((column) => !["DispatchWeight", "ClosedBy"].includes(column.name)),
           checks: table.checks?.filter((check) => check.name !== "CK_MfgProdOrder_DispatchWeight"),
+          foreignKeys: [
+            { column: "PartId", refTable: "MfgPart", refColumn: "Id" },
+            { column: "ContractId", refTable: "ContractMaster", refColumn: "Id" },
+            { column: "ProjectId", refTable: "Project", refColumn: "Id" },
+            { column: "BomHeaderId", refTable: "MfgBomHeader", refColumn: "Id" },
+            { column: "RoutingId", refTable: "MfgRouting", refColumn: "Id" },
+          ],
         };
       }
       if (table.name === "MfgWorkCenterCalendar") {
@@ -6093,6 +6113,18 @@ export const MIGRATIONS: Migration[] = [
     version: "0048", name: "manufacturing_order_closed_by",
     statements: [
       `IF COL_LENGTH('dbo.MfgProductionOrder','ClosedBy') IS NULL ALTER TABLE dbo.MfgProductionOrder ADD ${columnDdl(columnDefFor("MfgProductionOrder", "ClosedBy"), "mssql")};`,
+    ],
+  },
+  {
+    /* MFG-4: استقلال کامل دیتابیس MES (Standalone MES). حذف کلیدهای خارجی فیزیکی
+     * به جداول سامانهٔ کنترل پروژه (Project، ContractMaster، Equipment) تا دیتابیس
+     * تولید هیچ وابستگی به جداول بیرونی نداشته باشد و فیلدهای مرجع صرفاً کلید نرم
+     * برای یکپارچگی REST API باشند. */
+    version: "0049", name: "manufacturing_standalone_decouple_external_fks",
+    statements: [
+      `IF EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_MfgWorkCenterResource_EquipmentId' AND parent_object_id = OBJECT_ID(N'dbo.MfgWorkCenterResource')) ALTER TABLE dbo.MfgWorkCenterResource DROP CONSTRAINT FK_MfgWorkCenterResource_EquipmentId;`,
+      `IF EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_MfgProductionOrder_ContractId' AND parent_object_id = OBJECT_ID(N'dbo.MfgProductionOrder')) ALTER TABLE dbo.MfgProductionOrder DROP CONSTRAINT FK_MfgProductionOrder_ContractId;`,
+      `IF EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_MfgProductionOrder_ProjectId' AND parent_object_id = OBJECT_ID(N'dbo.MfgProductionOrder')) ALTER TABLE dbo.MfgProductionOrder DROP CONSTRAINT FK_MfgProductionOrder_ProjectId;`,
     ],
   },
 ];

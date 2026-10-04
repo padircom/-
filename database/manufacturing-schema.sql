@@ -1,7 +1,7 @@
--- MFG · Operation-Based Production Planning & Control
+-- MFG · Standalone Operation-Based Production Planning & Control (MES)
 -- تولیدشده از src/services/manufacturingSchema.ts و persistence.ts؛ ویرایش دستی نکنید.
--- پیش‌نیاز: جداول پایهٔ Project، ContractMaster و Equipment باید نصب شده باشند.
--- ProjectId اختیاری است؛ PlantId دامنهٔ اجباری داده‌های تولید است.
+-- دیتابیس کاملاً مستقل MES: بدون هیچ وابستگی یا کلید خارجی به جداول سامانهٔ کنترل پروژه.
+-- PlantId دامنهٔ اجباری داده‌های تولید است؛ ارجاع به سامانه‌های دیگر فقط از طریق کلید نرم و REST API است.
 
 -- MfgPart · قطعه و محصول
 IF OBJECT_ID('dbo.MfgPart', 'U') IS NULL
@@ -188,7 +188,6 @@ CREATE TABLE [dbo].[MfgWorkCenterResource] (
   [RowVersion] INT NOT NULL DEFAULT 1,
   CONSTRAINT [PK_MfgWorkCenterResource] PRIMARY KEY ([Id]),
   CONSTRAINT [FK_MfgWorkCenterResource_WorkCenterId] FOREIGN KEY ([WorkCenterId]) REFERENCES [dbo].[MfgWorkCenter] ([Id]) ON DELETE NO ACTION,
-  CONSTRAINT [FK_MfgWorkCenterResource_EquipmentId] FOREIGN KEY ([EquipmentId]) REFERENCES [dbo].[Equipment] ([Id]) ON DELETE NO ACTION,
   CONSTRAINT [FK_MfgWorkCenterResource_CostCenterId] FOREIGN KEY ([CostCenterId]) REFERENCES [dbo].[MfgCostCenter] ([Id]) ON DELETE NO ACTION,
   CONSTRAINT [CK_MfgWcResource_Kind] CHECK (ResourceKind IN ('machine','labor')),
   CONSTRAINT [CK_MfgWcResource_Capacity] CHECK (CapacityUnits > 0),
@@ -357,8 +356,6 @@ CREATE TABLE [dbo].[MfgProductionOrder] (
   [RowVersion] INT NOT NULL DEFAULT 1,
   CONSTRAINT [PK_MfgProductionOrder] PRIMARY KEY ([Id]),
   CONSTRAINT [FK_MfgProductionOrder_PartId] FOREIGN KEY ([PartId]) REFERENCES [dbo].[MfgPart] ([Id]) ON DELETE NO ACTION,
-  CONSTRAINT [FK_MfgProductionOrder_ContractId] FOREIGN KEY ([ContractId]) REFERENCES [dbo].[ContractMaster] ([Id]) ON DELETE NO ACTION,
-  CONSTRAINT [FK_MfgProductionOrder_ProjectId] FOREIGN KEY ([ProjectId]) REFERENCES [dbo].[Project] ([Id]) ON DELETE NO ACTION,
   CONSTRAINT [FK_MfgProductionOrder_BomHeaderId] FOREIGN KEY ([BomHeaderId]) REFERENCES [dbo].[MfgBomHeader] ([Id]) ON DELETE NO ACTION,
   CONSTRAINT [FK_MfgProductionOrder_RoutingId] FOREIGN KEY ([RoutingId]) REFERENCES [dbo].[MfgRouting] ([Id]) ON DELETE NO ACTION,
   CONSTRAINT [CK_MfgProdOrder_Qty] CHECK (OrderQuantity > 0),

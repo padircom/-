@@ -1,10 +1,10 @@
-# بخش ۵ — قرارداد REST API ماژول تولید عملیات‌محور
+# بخش ۵ — قرارداد REST API سامانهٔ مستقل برنامه‌ریزی و کنترل تولید (Standalone MES)
 
 **نسخهٔ قرارداد:** `mfg-api-v1`
 
-**دامنهٔ اصلی:** کارخانه (`PlantId`)؛ نه پروژه.
+**دامنهٔ اصلی:** کارخانه (`PlantId`)؛ سامانهٔ کاملاً مستقل تولید کارگاهی (Standalone MES) با دیتابیس، بک‌اند و فرانت‌اند مستقل و بدون وابستگی به جداول یا ماژول‌های سامانهٔ کنترل پروژه.
 
-**وضعیت این تحویل:** قرارداد کامل طراحی شده و هر شصت‌وپنج مسیر (۱۰۰٪ بخش‌های ۵.۳ تا ۵.۸) در `server/manufacturingApi.js` پیاده و در `server/index.js` ثبت شده‌اند؛ شامل داده‌های پایه (قطعه، BOM، مسیر ساخت و عملیات آن، مراکز کاری، منابع و تقویم)، سفارش تولید، زمان‌بندی ظرفیت محدود، باززمان‌بندی، Gantt و ظرفیت، اجرای کارگاهی، توقف، ضایعات، دوباره‌کاری و انحراف، مواد، MRP، مصرف و پیشنهاد تأمین، و بهای تمام‌شده، داشبورد، OEE و هشدارها. تغییرات واقعی RBAC و Plant-scope نیز در `src/services/accessControl.ts` انجام شده‌اند. فرمان‌های چندجدولی از Unit of Work اتمیک استفاده می‌کنند.
+**وضعیت این تحویل:** قرارداد کامل طراحی شده و هر **۶۵/۶۵ مسیر** (۱۰۰٪ بخش‌های ۵.۳ تا ۵.۸) در `server/manufacturingApi.js` پیاده و در `server/index.js` ثبت شده‌اند؛ شامل داده‌های پایه (قطعه همراه با بلوک اختیاری `Planning`، BOM، مسیر ساخت و عملیات آن، مراکز کاری همراه با بلوک اختیاری `Rates`، منابع و تقویم)، سفارش تولید، زمان‌بندی ظرفیت محدود، باززمان‌بندی، Gantt و ظرفیت، اجرای کارگاهی، توقف، ضایعات، دوباره‌کاری و انحراف، مواد، MRP، مصرف و پیشنهاد تأمین، و رول‌آپ بهای تمام‌شده، تطبیق نهایی هزینه، بستن دوگیتی سفارش، داشبورد، OEE و هشدارها. تغییرات واقعی RBAC و Plant-scope نیز در `src/services/accessControl.ts` انجام شده‌اند و فرمان‌های چندجدولی از Unit of Work اتمیک استفاده می‌کنند.
 
 ## ۵.۱ قواعد مشترک
 
@@ -14,7 +14,7 @@
 /api/mfg/plants/{plantId}
 ```
 
-`plantId` در هر درخواست اجباری است و با `Subject.plantIds` در موتور RBAC سنجیده می‌شود. نبود یا خالی‌بودن `plantIds` برای درخواست Plant-scoped به معنی **عدم دسترسی** است؛ فقط `plantIds: ["*"]` دسترسی همهٔ کارخانه‌ها را می‌دهد. `ProjectId` در سفارش، در صورت نیاز، تنها مرجع تجاری/گزارشی اختیاری است و هرگز دامنهٔ برنامه‌ریزی تولید را تعیین نمی‌کند. ارائهٔ `ProjectId` دسترسی Plant را ایجاد یا گسترش نمی‌دهد؛ نمایش/اعتبارسنجی جزئیات پروژه علاوه بر مجوز MFG به کنترل پروژهٔ متناظر نیاز دارد.
+`plantId` در هر درخواست اجباری است و با `Subject.plantIds` در موتور RBAC سنجیده می‌شود. نبود یا خالی‌بودن `plantIds` برای درخواست Plant-scoped به معنی **عدم دسترسی** است؛ فقط `plantIds: ["*"]` دسترسی همهٔ کارخانه‌ها را می‌دهد. دیتابیس تولید (`Mfg*`) هیچ کلید خارجی (FK) به جداول سامانهٔ کنترل پروژه (`Project`، `ContractMaster`، `Equipment`) ندارد؛ فیلدهای `ProjectId`، `ContractId` و `EquipmentId` صرفاً کلیدهای نرم بیرونی (Soft External References) برای تبادل داده از طریق REST API با سامانه‌های دیگر هستند و بک‌اند MES هیچ کوئری یا وابستگی به جداول بیرونی ندارد.
 
 در توسعه، هویت با آداپتور فعلی `x-user-id` شناخته می‌شود. در استقرار واقعی، دروازهٔ مورداعتماد باید کاربر را احراز هویت و سربرگ ارسالی از کلاینت را حذف/بازنویسی کند. این سربرگ به‌تنهایی سازوکار احراز هویت تولیدی نیست.
 
@@ -83,9 +83,9 @@
 | متد و مسیر | درخواست → پاسخ داده | اعتبارسنجی اصلی | مجوز |
 |---|---|---|---|
 | `GET /parts` | فیلتر `q, partType, isActive, limit, offset` → `{items: MfgPart[], page}` | فقط فیلترهای allow-list؛ محدود به Plant | `mfg.part.view` |
-| `POST /parts` | `PartNo, NameFa, PartType, BaseUom, ...` → قطعهٔ ساخته‌شده با `Id/RowVersion` | `PartNo` و نام الزامی؛ نوع `manufactured/purchased/phantom/subcontract`; ارز/هزینه معتبر؛ یکتایی شماره در Plant | `mfg.part.edit` |
+| `POST /parts` | `PartNo, NameFa, PartType, BaseUom, ..., Planning?` → قطعهٔ ساخته‌شده با `Id/RowVersion` (و در صورت ارسال `Planning`: `+ Material, Inventory`) | `PartNo` و نام الزامی؛ نوع `manufactured/purchased/phantom/subcontract`; ارز/هزینه معتبر؛ یکتایی شماره در Plant (`409 MFG_DUPLICATE`)؛ ساخت اتمیک `MfgMaterial` و `MfgInventoryLevel` در صورت ارسال `Planning` | `mfg.part.edit` |
 | `GET /parts/{partId}` | بدون body → یک `MfgPart` | رکورد باید به همان Plant تعلق داشته باشد | `mfg.part.view` |
-| `PATCH /parts/{partId}` | فیلدهای قابل‌ویرایش + `If-Match` → `MfgPart` به‌روز | `Id/PlantId/PartNo` هویت‌اند و در PATCH تغییر نمی‌کنند؛ RowVersion الزامی | `mfg.part.edit` |
+| `PATCH /parts/{partId}` | فیلدهای قابل‌ویرایش + `Planning?` + `If-Match` → `MfgPart` به‌روز (و در صورت ارسال `Planning`: `+ Material, Inventory`) | `Id/PlantId/PartNo` هویت‌اند و در PATCH تغییر نمی‌کنند؛ RowVersion الزامی؛ درج/به‌روزرسانی اتمیک `MfgMaterial` و موجودی افتتاحیهٔ `MfgInventoryLevel` در همان تراکنش | `mfg.part.edit` |
 | `GET /bom-headers` | فیلتر `partId, status, effectiveAt` → `{items: MfgBomHeader[]}` | قطعه باید در همان Plant باشد؛ تاریخ ISO | `mfg.bom.view` |
 | `POST /bom-headers` | `PartId, Revision, BaseQuantity, BaseUom, EffectiveFrom, ...` → سربرگ پیش‌نویس | Part هم‌کارخانه؛ `BaseQuantity > 0`; بازهٔ تاریخ معتبر؛ وضعیت/فیلد انتشار از بدنه حذف می‌شود | `mfg.bom.edit` |
 | `GET /bom-headers/{bomId}` | بدون body → سربرگ | محدود به Plant | `mfg.bom.view` |
@@ -106,26 +106,88 @@
 | `DELETE /routing-operations/{routingOperationId}` | بدون body → `204` | فقط در Routing draft و وقتی Routing در سفارش released مصرف نشده باشد | `mfg.routing.edit` |
 | `POST /routings/{routingId}/release` | `If-Match`, اختیاری `EffectiveAt` → Routing released | حداقل یک Operation؛ Work Center فعال و هم‌کارخانه؛ توالی معتبر؛ تاریخ/نسخهٔ پیش‌فرض بدون تعارض | `mfg.routing.release` |
 | `GET /work-centers` | فیلتر `kind, status, q, limit, offset` → `{items: MfgWorkCenter[]}` | فقط فیلترهای مجاز؛ Plant | `mfg.workcenter.view` |
-| `POST /work-centers` | `Code, NameFa, Kind, NominalCapacityMinutesPerDay, EfficiencyPct, TimeZoneId, ...` → Work Center | کد یکتا؛ ظرفیت مثبت؛ راندمان ۰..۱۰۰؛ timezone معتبر؛ Cost Center اختیاری ولی هم‌کارخانه | `mfg.workcenter.edit` |
+| `POST /work-centers` | `Code, NameFa, Kind, NominalCapacityMinutesPerDay, EfficiencyPct, TimeZoneId, ..., Rates?` → Work Center (و در صورت ارسال `Rates`: `+ CostCenters[]`) | کد یکتا؛ ظرفیت مثبت؛ راندمان ۰..۱۰۰؛ timezone معتبر؛ Cost Center اختیاری ولی هم‌کارخانه؛ در صورت ارسال `Rates` حداکثر ۳ ردیف نرخ (`machine/labor/overhead`) در همان تراکنش ساخته می‌شود | `mfg.workcenter.edit` |
 | `GET /work-centers/{workCenterId}` | بدون body → Work Center | محدود به Plant | `mfg.workcenter.view` |
 | `PATCH /work-centers/{workCenterId}` | فیلدهای قابل‌ویرایش + `If-Match` → Work Center | ظرفیت مثبت؛ وضعیت فقط `active/inactive/maintenance`; غیرفعال‌کردن مرکز دارای عملیات جاری رد می‌شود | `mfg.workcenter.edit` |
 | `GET /work-centers/{workCenterId}/resources` | `activeOnly` → `{items: MfgWorkCenterResource[]}` | Work Center هم‌کارخانه | `mfg.workcenter.view` |
-| `POST /work-centers/{workCenterId}/resources` | `ResourceCode, NameFa, ResourceKind, CapacityUnits, AvailabilityPct, ...` → منبع | ظرفیت > ۰؛ دسترس‌پذیری ۰..۱۰۰؛ Equipment/Cost Center در صورت وجود هم‌کارخانه | `mfg.workcenter.edit` |
+| `POST /work-centers/{workCenterId}/resources` | `ResourceCode, NameFa, ResourceKind, CapacityUnits, AvailabilityPct, ...` → منبع | ظرفیت > ۰؛ دسترس‌پذیری ۰..۱۰۰؛ `EquipmentId` کلید نرم اختیاری؛ Cost Center در صورت وجود هم‌کارخانه | `mfg.workcenter.edit` |
 | `PATCH /work-center-resources/{resourceId}` | فیلدهای منبع + `If-Match` → منبع | هویت و Plant ثابت؛ بازهٔ مؤثر معتبر | `mfg.workcenter.edit` |
 | `GET /work-centers/{workCenterId}/calendars` | `from, to` → `{items: MfgWorkCenterCalendar[]}` | پنجرهٔ زمانی معتبر؛ Work Center هم‌کارخانه | `mfg.workcenter.view` |
 | `POST /work-centers/{workCenterId}/calendars` | `RuleType, RuleKey, WeekdayIso/CalendarDate, ShiftCode, StartMinuteOfDay, EndMinuteOfDay, ...` → تقویم | الگوی هفتگی یا استثنای تاریخ دقیقاً یکی؛ دقیقهٔ شروع ۰..۱۴۳۹؛ پایان > شروع و ≤۲۸۷۹؛ استراحت داخل طول شیفت؛ کلید یکتا | `mfg.calendar.edit` |
 | `PATCH /work-center-calendars/{calendarId}` | فیلدهای تقویم + `If-Match` → تقویم | قیدهای بازه/شیفت دوباره بررسی می‌شوند؛ رکورد مصرف‌شده در برنامهٔ firm بی‌اثرانه تغییر نمی‌کند | `mfg.calendar.edit` |
 
+### ۵.۳.۱ بلوک اختیاری `Planning` روی `POST /parts` و `PATCH /parts/{partId}`
+
+هر دو مسیر ایجاد و ویرایش قطعه یک شیء اختیاری `Planning` می‌پذیرند تا در همان تراکنش (Unit of Work) رکورد برنامه‌ریزی ماده (`MfgMaterial`) و در صورت ارسال، موجودی افتتاحیه (`MfgInventoryLevel`) نیز ثبت یا به‌روز شود:
+
+```json
+{
+  "Planning": {
+    "ProcurementType": "make | buy",
+    "LeadTimeDays": 0,
+    "SafetyStockQty": 0,
+    "LotSize": 1,
+    "OrderMultiple": 1,
+    "ShelfLifeDays": null,
+    "StandardUnitCost": 450000,
+    "Currency": "IRR",
+    "DefaultWarehouseCode": "WH-MAIN",
+    "IsActive": true,
+    "OpeningInventory": {
+      "WarehouseCode": "WH-MAIN",
+      "LocationCode": "RACK-A1",
+      "LotNo": "LOT-2026-01",
+      "OnHandQty": 500,
+      "ReservedQty": 0,
+      "BlockedQty": 0,
+      "InTransitQty": 0,
+      "SafetyStockQty": 0
+    }
+  }
+}
+```
+
+- اگر `ProcurementType` ارسال نشود، به‌صورت پیش‌فرض برای `PartType = "purchased"` مقدار `"buy"` و برای سایر انواع `"make"` استخراج می‌شود.
+- **سازگاری عقب‌رو در پاسخ:** در صورت ارسال `Planning`، پاسخ شامل فیلدهای ردیف `MfgPart` به‌همراه دو کلید `Material` و `Inventory` است؛ بدون ارسال `Planning`، پاسخ دقیقاً همان ردیف قطعه باقی می‌ماند.
+- **ایدمپوتنسی موجودی افتتاحیه:** درج `OpeningInventory` بر پایهٔ کلید یکتا (`InventoryKey = MaterialId|WarehouseCode|LocationCode|LotNo`) انجام می‌شود؛ تکرار همان درج موجودی عمداً no-op است و ردیف موجود را بدون دوبرابر کردن موجودی برمی‌گرداند.
+- خطاها: `PartNo` تکراری در کارخانه → `409 MFG_DUPLICATE`؛ کلید ناشناخته → `400 MFG_UNKNOWN_FIELDS`؛ مقدار نامعتبر (مثلاً `ReservedQty + BlockedQty > OnHandQty` یا `LotSize <= 0`) → `400 MFG_VALIDATION_FAILED`.
+
+### ۵.۳.۲ بلوک اختیاری `Rates` روی `POST /work-centers`
+
+تنها مسیر REST برای ساخت ردیف‌های نرخ مرکز هزینه (`MfgCostCenter`)، ارسال آرایهٔ اختیاری `Rates` در بدنهٔ `POST /work-centers` است:
+
+```json
+{
+  "Rates": [
+    {
+      "CostElement": "machine",
+      "HourlyRate": 1800000,
+      "Currency": "IRR",
+      "AllocationBasis": "machine_hours",
+      "Code": "WC-CNC-MACHINE",
+      "NameFa": "نرخ ماشین CNC",
+      "EffectiveFrom": "2026-01-01",
+      "EffectiveTo": null
+    }
+  ]
+}
+```
+
+- حداکثر ۳ ردیف، بدون تکرار `CostElement` (`"machine" | "labor" | "overhead"`). فیلد `HourlyRate` الزامی و نامنفی (`>= 0`) است؛ `Currency` پیش‌فرض `"IRR"` و `AllocationBasis` از مجموعهٔ `machine_hours | labor_hours | units | percent` است.
+- در صورت ارسال `Rates`، پاسخ شامل فیلدهای ردیف `MfgWorkCenter` به‌علاوهٔ آرایهٔ `CostCenters` است (بدون `Rates` همان ردیف مرکز کاری برگردانده می‌شود).
+- اگر `CostCenterId` صریح در بدنهٔ مرکز کاری داده نشود، سرور آن را روی شناسهٔ مرکز هزینهٔ عنصر `"machine"` (و در نبود آن اولین عنصر ساخته‌شده) تنظیم می‌کند.
+- تکرار کد مرکز هزینه (`Code`) در همان کارخانه و تاریخ `EffectiveFrom` با `409 MFG_DUPLICATE` رد می‌شود.
+
 ## ۵.۴ سفارش تولید
 
 | متد و مسیر | درخواست → پاسخ داده | اعتبارسنجی اصلی | مجوز |
 |---|---|---|---|
-| `GET /orders` | فیلتر `status, partId, dueFrom, dueTo, projectId, contractId, priorityRule, q, limit, offset` → `{items: MfgProductionOrder[]}` | `projectId` فقط فیلتر/پیوند اختیاری است و Plant scope را عوض نمی‌کند؛ در صورت نمایش اطلاعات پروژه، کنترل scope پروژه هم لازم است | `mfg.order.view` |
-| `POST /orders` | نمونهٔ زیر → سفارش با `Status=created` | شماره یکتا در Plant؛ Part فعال و هم‌کارخانه؛ مقدار و `DispatchWeight` > ۰ (وزن پیش‌فرض ۱)؛ DemandSource مجاز؛ منبع غیر manual به DemandRef نیاز دارد؛ contract به ContractId و ProjectId قابل‌دسترسی نیاز دارد؛ DueAt با timezone؛ شروع درخواستی ≤ موعد؛ BOM/Routing نمی‌تواند از کلاینت به‌عنوان Released اعلام شود | `mfg.order.create` |
-| `GET /orders/{orderId}` | بدون body → سفارش و عملیات وابسته (در صورت وجود) | رکورد هم‌کارخانه؛ ProjectId فقط در صورت مجوز پروژه باز می‌شود | `mfg.order.view` |
+| `GET /orders` | فیلتر `status, partId, dueFrom, dueTo, projectId, contractId, priorityRule, q, limit, offset` → `{items: MfgProductionOrder[], page}` | `projectId` و `contractId` صرفاً فیلتر روی کلید نرم بیرونی‌اند و Plant scope را عوض نمی‌کنند | `mfg.order.view` |
+| `POST /orders` | نمونهٔ زیر → سفارش با `Status=created` | شماره یکتا در Plant؛ Part فعال و هم‌کارخانه؛ مقدار و `DispatchWeight` > ۰ (وزن پیش‌فرض ۱)؛ DemandSource مجاز؛ منبع غیر manual به DemandRef نیاز دارد؛ `ContractId` و `ProjectId` کلیدهای نرم بیرونی بدون وابستگی به دیتابیس PMIS هستند؛ DueAt با timezone؛ شروع درخواستی ≤ موعد؛ BOM/Routing نمی‌تواند از کلاینت به‌عنوان Released اعلام شود | `mfg.order.create` |
+| `GET /orders/{orderId}` | بدون body → ردیف سفارش + `Operations[]` | رکورد هم‌کارخانه؛ عملیات به ترتیب صعودی `SequenceNo` | `mfg.order.view` |
 | `POST /orders/{orderId}/release` | `If-Match`, body: `{BomHeaderId, RoutingId, EffectiveAt?}` → `{order, operations[]}` | سفارش `created` و نسخه مطابق؛ BOM و Routing آزادشده/مؤثر و متعلق به همان Part/Plant؛ انفجار BOM بدون چرخه (حداکثر ۳۲ سطح و ۵۰۰۰ ردیف)، Operationهای Routing معتبر و Work Center/منبع فعال؛ `CreatedBy` سفارش نباید همان آزادکننده باشد (SOD). snapshot عملیات، تغییر سفارش و AuditLog در یک UoW ثبت می‌شوند | `mfg.order.release` |
-| `PATCH /orders/{orderId}/priority` | `{PriorityRule:"EDD"|"CR"|"MANUAL", ManualRank?, DispatchWeight?}` و `If-Match` → سفارش | `ManualRank >= 0` و فقط برای MANUAL؛ `DispatchWeight > 0`؛ سفارش بسته‌شده قابل تغییر نیست؛ این عمل Project schedule را تغییر نمی‌دهد | `mfg.order.reprioritize` |
-| `POST /orders/{orderId}/close` | `{If-Match, closeReason?}` → سفارش بسته | همهٔ عملیات تمام؛ مقدار/ضایعات تطبیق؛ مصرف و هزینهٔ لازم تعیین تکلیف؛ `ClosedAt/By` فقط سمت سرور؛ بستن چندگیتی نیازمند تراکنش است | `mfg.order.close` |
+| `PATCH /orders/{orderId}/priority` | `{PriorityRule:"EDD"|"CR"|"MANUAL", ManualRank?, DispatchWeight?}` و `If-Match` → سفارش | `ManualRank >= 0` و فقط برای MANUAL؛ `DispatchWeight > 0`؛ سفارش بسته‌شده قابل تغییر نیست | `mfg.order.reprioritize` |
+| `POST /orders/{orderId}/close` | `If-Match`, body: `{CloseReasonFa?}` → سفارش بسته (`Status="closed"`, `ClosedAt`, `ClosedBy`) | همهٔ عملیات `completed`؛ مجموع خروجی سالم + ضایعات با مقدار سفارش منطبق؛ دو گیت بستن: ۱) گیت مواد (`MFG_MATERIALS_NOT_RECONCILED` در صورت نیازمندی مصرف‌نشده) و ۲) گیت هزینه (`MFG_COST_NOT_RECONCILED` در صورت نبود `MfgOrderCost` با `Reconciled=true`)؛ `ClosedAt/ClosedBy` فقط سمت سرور و در یک UoW اتمیک ثبت می‌شوند | `mfg.order.close` |
 
 ## ۵.۵ برنامه‌ریزی ظرفیت و صف اعزام
 
@@ -167,13 +229,28 @@
 | متد و مسیر | درخواست → پاسخ داده | اعتبارسنجی اصلی | مجوز |
 |---|---|---|---|
 | `GET /cost/orders/{orderId}` | `costVersion?` → مقادیر استاندارد/واقعی به تفکیک ماده، ماشین، نیروی کار، سربار؛ جمع و Gross Margin | سفارش همان Plant؛ نرخ/ارز همان نسخه؛ مقدار خالی به صفر ضمنی تبدیل نمی‌شود | `mfg.cost.view` |
-| `GET /cost/operations/{operationId}` | `costVersion?` → `{items: MfgOperationCost[]}` | Operation همان Plant؛ نمایش `ActualRate` بر پایهٔ طبقه‌بندی هزینه | `mfg.cost.view` |
-| `POST /cost/orders/{orderId}/reconcile` | `Idempotency-Key`, `If-Match`; `{CostVersion, ReconcileThrough}` → `MfgOrderCost` نهایی | اجرای عملیات/مصرف‌های لازم کامل؛ جمع اجزا با Total برابر؛ نسخهٔ هزینه فعال؛ ثبت Reconciled فقط سمت سرور و اتمیک | `mfg.cost.reconcile` |
+| `GET /cost/operations/{operationId}` | `costVersion?` → `{items: MfgOperationCost[], derived: boolean}` | Operation همان Plant؛ در نبود ردیف ذخیره‌شده، رول‌آپ لحظه‌ای از داده‌های واقعی با `derived: true` برمی‌گردد | `mfg.cost.view` |
+| `POST /cost/orders/{orderId}/reconcile` | `Idempotency-Key`, `If-Match`; `{CostVersion, ReconcileThrough, ContractRevenue?}` → `MfgOrderCost` نهایی | همهٔ عملیات تکمیل‌شده و مصرف مواد تطبیق‌یافته؛ در همان تراکنش ردیف‌های `MfgOperationCost` با `SourceRef: "derived-from-actuals"` ساخته و در `MfgOrderCost` جمع زده می‌شوند؛ ثبت `Reconciled=true` و `ReconciledAt` فقط سمت سرور و اتمیک | `mfg.cost.reconcile` |
 | `GET /dashboard/overview` | `from, to, workCenterId?` → خلاصهٔ سفارش باز، تحویل به‌موقع، خروجی سالم، ضایعات و کمبود | پنجرهٔ حداکثر ۹۰ روز؛ فقط Plant جاری | `mfg.dashboard.view` |
 | `GET /dashboard/work-center-load` | `from, to, bucket=day/week` → بار/ظرفیت هر مرکز و utilization | همان قواعد capacity/load | `mfg.dashboard.view` |
 | `GET /dashboard/oee` | `from, to, workCenterId?` → Availability/Performance/Quality و OEE با شمارنده/مخرج | فقط با دادهٔ قابل‌ردیابی؛ مخرج صفر `null` می‌شود؛ downtime planned و unplanned مطابق تعریف مدل جدا می‌مانند | `mfg.dashboard.view` |
-| `GET /alerts` | `status?, severity?, orderId?, workCenterId?, limit, offset` → `{items: MfgProductionAlert[]}` | Plant scope؛ فقط فیلترهای مجاز | `mfg.alert.view` |
+| `GET /alerts` | `status?, severity?, orderId?, workCenterId?, limit, offset` → `{items: MfgProductionAlert[], page}` | Plant scope؛ فقط فیلترهای مجاز | `mfg.alert.view` |
 | `POST /alerts/{alertId}/acknowledgements` | `If-Match`; `{NoteFa?}` → هشدار acknowledged | فقط هشدار open؛ `AcknowledgedBy/At` سمت سرور؛ وضعیت resolved با acknowledge عوض نمی‌شود | `mfg.alert.ack` |
+
+### ۵.۸.۱ قرارداد رول‌آپ هزینه و دو گیت بستن سفارش
+
+- **مشاهدهٔ هزینهٔ عملیات (`GET /cost/operations/{operationId}`):** خروجی به شکل `{items, derived}` است. اگر ردیف‌های `MfgOperationCost` برای نسخهٔ درخواستی قبلاً ذخیره شده باشند با `derived: false` برمی‌گردند؛ در غیر این صورت، سرور رول‌آپ لحظه‌ای را از داده‌های واقعی کارگاه محاسبه کرده و با `derived: true` برمی‌گرداند.
+- **تطبیق نهایی هزینه (`POST /cost/orders/{orderId}/reconcile`):** در یک تراکنش اتمیک (Unit of Work)، اگر ردیف‌های `MfgOperationCost` برای نسخهٔ هزینه وجود نداشته باشند، آن‌ها را از داده‌های واقعی کارگاه با `SourceRef: "derived-from-actuals"` می‌سازد و ذخیره می‌کند، سپس مقادیر استاندارد و واقعی هر چهار عنصر را در `MfgOrderCost` جمع می‌زند و `Reconciled = true` و `ReconciledAt` را ثبت می‌کند.
+- **فرمول عنصر ماده (`material`):**
+  - مقدار استاندارد = `Σ NetQuantity` از نیازمندی‌های مواد (`MfgMaterialRequirement`) عملیات؛ مبلغ استاندارد = `Σ (NetQuantity × StandardUnitCost)` بر پایهٔ بهای واحد استاندارد ماده/قطعهٔ جزء.
+  - مقدار واقعی = `Σ Quantity` از مصرف‌های واقعی (`MfgMaterialConsumption`) عملیات؛ مبلغ واقعی = `Σ (Quantity × UnitCost)` مصرف‌ها.
+- **فرمول عناصر ماشین، دستمزد و سربار (`machine` | `labor` | `overhead`):**
+  - ساعت استاندارد = `(PlannedSetupMinutes + PlannedQuantity × PlannedRunMinutesPerUnit) / 60`.
+  - ساعت واقعی = مجموع `(SetupActualMinutes + RunActualMinutes)` ردیف‌های اجرای عملیات (`MfgOperationExecution`) تقسیم بر ۶۰ (و اگر صفر بود، فیلدهای واقعی خود عملیات).
+  - مبلغ استاندارد/واقعی = `ساعت × MfgCostCenter.HourlyRate` عنصر مربوط؛ در نبود مرکز هزینه/نرخ ثبت‌شده، نرخ و مبلغ برابر **صفر** است (نرخ حدسی ساخته نمی‌شود).
+- **دو گیت بستن سفارش (`POST /orders/{orderId}/close`):** علاوه بر تکمیل تمام عملیات (`completed`) و برابری خروجی تجمعی با مقدار سفارش، دو دروازهٔ الزامی بررسی می‌شوند:
+  1. گیت تطبیق مواد: هیچ نیازمندی باز یا بدون مصرف معتبر باقی نمانده باشد (وگرنه `422 MFG_MATERIALS_NOT_RECONCILED`).
+  2. گیت تطبیق هزینه: رکورد `MfgOrderCost` با `Reconciled = true` ثبت شده باشد (وگرنه `422 MFG_COST_NOT_RECONCILED`).
 
 ## ۵.۹ نمونهٔ Request/Response
 
@@ -539,13 +616,13 @@ Content-Type: application/json
 - route guard از `subjects` و `evaluate(subject, permission, { plantId })` استفاده می‌کند؛ هیچ `projectId` ساختگی برای سفارش/رویداد MFG تولید نمی‌شود.
 - پاسخ/خطا با الگوی `{ok,data,meta:{traceId}}` و `{ok:false,error:{code,message,traceId}}` است؛ شناسهٔ actor فقط از Subject احراز‌شده می‌آید.
 - مسیرهای فعال: `GET/POST /parts`, `GET/PATCH /parts/{partId}`, `GET/POST /bom-headers`, `GET/PATCH /bom-headers/{bomId}`, `GET/POST /bom-headers/{bomId}/items`, `PATCH/DELETE /bom-items/{itemId}`, `POST /bom-headers/{bomId}/release`, `POST /bom-headers/{bomId}/explosions`, `GET/POST /routings`, `GET/PATCH /routings/{routingId}`, `GET/POST /routings/{routingId}/operations`, `PATCH/DELETE /routing-operations/{routingOperationId}`, `POST /routings/{routingId}/release`, `GET/POST /work-centers`, `GET/PATCH /work-centers/{workCenterId}`, `GET/POST /work-centers/{workCenterId}/resources`, `PATCH /work-center-resources/{resourceId}`, `GET/POST /work-centers/{workCenterId}/calendars`, `PATCH /work-center-calendars/{calendarId}`, `GET/POST /orders`, `GET /orders/{orderId}`, `PATCH /orders/{orderId}/priority`, `POST /orders/{orderId}/release`, `POST /orders/{orderId}/close`, `POST /scheduling/runs`, `POST /scheduling/reschedules`, `GET /scheduling/gantt`, `GET /capacity/load`, `GET /capacity/bottlenecks`, `GET /operation-queue`, `POST /operations/{operationId}/executions`, `POST /executions/{executionId}/reports`, `POST /executions/{executionId}/finish`, `POST /downtime`, `POST /scrap`, `POST /rework`, `GET /operations/{operationId}/variance`, `GET /materials`, `POST /mrp/calculate`, `GET /mrp/shortages`, `POST /material-consumptions`, `POST /material-procurement-proposals`, `GET /cost/orders/{orderId}`, `GET /cost/operations/{operationId}`, `POST /cost/orders/{orderId}/reconcile`, `GET /dashboard/overview`, `GET /dashboard/work-center-load`, `GET /dashboard/oee`, `GET /alerts` و `POST /alerts/{alertId}/acknowledgements`.
-- migration افزایشی `0047`، جدول سربرگ `MfgScheduleRun` و ستون‌های `DispatchWeight`/`BreakStartMinuteOfDay` را می‌سازد؛ DDL تثبیت‌شدهٔ `0046` عمداً با schema جدید بازتولید نمی‌شود. DDL کامل MFG از `npm run db:mfg` ساخته می‌شود.
-- repository اکنون `transaction(work)` دارد و callback را با repository محدود به همان تراکنش اجرا می‌کند. آزادسازی BOM و Routing، آزادسازی و بستن سفارش، اجرای زمان‌بندی و باززمان‌بندی، رخدادهای اجرایی کارگاه (شروع/گزارش/اتمام نشست، توقف، ضایعات و دوباره‌کاری)، ثبت MRP، مصرف هم‌زمان مواد و کاهش موجودی، تطبیق نهایی هزینه و رسیدگی به هشدارها تغییرات جدول‌ها و AuditLog را در یک UoW ثبت می‌کنند. استفادهٔ تصادفی از repository بیرونی در callback رد می‌شود و nested transaction پشتیبانی نمی‌شود. این قابلیت به معنی Outbox اتمیک نیست؛ Observer فعلی همچنان درون‌فرایندی است. در JSON، mutex فقط درون همان process تضمین می‌دهد و journal redo برای recovery استفاده می‌شود؛ در SQL Server از `sql.Transaction` استفاده می‌شود.
+- migration افزایشی `0047`، جدول سربرگ `MfgScheduleRun` و ستون‌های `DispatchWeight`/`BreakStartMinuteOfDay` را می‌سازد؛ migration افزایشی `0048` ستون `ClosedBy` را به `MfgProductionOrder` اضافه می‌کند (بدون آن `POST /orders/{id}/close` با `ROW_VALIDATION_FAILED` رد می‌شد)؛ و migration افزایشی `0049` کلیدهای خارجی به جداول بیرونی را حذف می‌کند تا دیتابیس تولید ۱۰۰٪ مستقل (Standalone MES) باشد. قاعدهٔ مهاجرت: هر ستون یا قید تازهٔ MFG باید در `manufacturingTablesFor0046()` در `src/services/persistence.ts` فیلتر شود و در مهاجرت جدید بیاید تا `0046/0047/0048` دست‌نخورده بمانند. پس از هر تغییر اسکیما باید `npm run db:mfg` اجرا شود تا `database/manufacturing-schema.sql` بازتولید گردد.
+- repository اکنون `transaction(work)` دارد و callback را با repository محدود به همان تراکنش اجرا می‌کند. ایجاد/ویرایش قطعه همراه با `Planning`، ایجاد مرکز کاری همراه با `Rates`، آزادسازی BOM و Routing، آزادسازی و بستن سفارش، اجرای زمان‌بندی و باززمان‌بندی، رخدادهای اجرایی کارگاه (شروع/گزارش/اتمام نشست، توقف، ضایعات و دوباره‌کاری)، ثبت MRP، مصرف هم‌زمان مواد و کاهش موجودی، تطبیق نهایی هزینه و رسیدگی به هشدارها تغییرات جدول‌ها و AuditLog را در یک UoW ثبت می‌کنند. استفادهٔ تصادفی از repository بیرونی در callback رد می‌شود و nested transaction پشتیبانی نمی‌شود. این قابلیت به معنی Outbox اتمیک نیست؛ Observer فعلی همچنان درون‌فرایندی است. در JSON، mutex فقط درون همان process تضمین می‌دهد و journal redo برای recovery استفاده می‌شود؛ در SQL Server از `sql.Transaction` استفاده می‌شود.
 - SQL Server این محیط در دسترس نیست؛ آزمون مسیر release روی `JsonFileDriver` واقعی با Unit of Work اجرا شده و آزمون تراکنش SQL صرفاً از harness ساختگی استفاده می‌کند. این نتایج را نباید اجرای integration روی SQL Server تلقی کرد. محدودیت multi-process در JSON نیز پابرجاست.
 
 ### آنچه در کد این بخش تغییر کرده است
 
-1. `Subject.plantIds` و `AccessContext.plantId` به موتور RBAC اضافه شده‌اند؛ Plant-scope با `DENY_PLANT_SCOPE` و سیاست fail-closed اعمال می‌شود، بدون آنکه ارزیابی‌های Project موجود تغییر کنند.
+1. `Subject.plantIds` و `AccessContext.plantId` به موتور RBAC اضافه شده‌اند؛ Plant-scope با `DENY_PLANT_SCOPE` و سیاست fail-closed اعمال می‌شود، بدون آنکه وابستگی به جداول یا مجوزهای سامانهٔ کنترل پروژه وجود داشته باشد.
 2. ۳۷ مجوز `mfg.*` و ۷ نقش تخصصی MFG به `ROLE_CATALOG` اضافه شده‌اند؛ `admin` به‌صورت ضمنی مجوز business تولید نمی‌گیرد.
 3. آزمون‌های RBAC برای عدم عبور بین دو Plant، نبود Plant assignment و جداسازی نقش‌های تولید افزوده شده‌اند.
-4. آزمون‌ها: Unit of Work تراکنش `13/13`، API تولید `27/27`، release `4/4`، scheduler خالص `9/9`، schema تولید `6/6` و persistence/SQL موجود `79/79` موفق‌اند. آزمون API، مدیریت قطعه و نسخه‌های BOM پیش‌نویس/آزادشده و انفجار چندسطحی BOM؛ مدیریت Routing پیش‌نویس، عملیات آن و آزادسازی Routing؛ مدیریت مراکز کاری، منابع و تقویم شیفت (با کنترل `BreakStartMinuteOfDay` و قفل تقویم در برنامهٔ `firm`)؛ باززمان‌بندی هدفمند با زنجیرهٔ وابستگی، حفظ بلوک `firm`، تولید `diff`، رد نسخهٔ کهنه/خارج از Plant/عملیات غیرقابل‌اعزام و rollback تراکنش؛ Gantt و گزارش ظرفیت؛ اجرای کارگاهی با صف عملیات، شروع/گزارش تجمعی/اتمام نشست اجرا، کنترل پیش‌نیاز و گیت بازرسی، Idempotency، توقف، ضایعات، دوباره‌کاری و انحراف عملیات (با تفکیک دسترسی هزینه)؛ مواد، محاسبهٔ MRP (پیش‌نمایش و ثبت اتمیک)، کمبودها، پیشنهاد خرید و مصرف واقعی مواد (با کنترل LotNo و کسر اتمیک موجودی)؛ و هزینهٔ سفارش/عملیات، تطبیق هزینه، بستن چندگیتی سفارش، داشبورد خلاصه/OEE و رسیدگی به هشدارها را می‌پوشاند. API زمان‌بندی در mock تراکنشی و یک اجرای دستی با `JsonFileDriver` واقعی آزموده شد؛ SQL Server واقعی در دسترس نبود.
+4. آزمون‌ها: API تولید `29/29`، scheduler خالص `9/9`، release تراکنشی `4/4`، و schema مستقل تولید `7/7` (جمعاً **۴۹/۴۹** در مجموعهٔ تولید) به‌همراه Unit of Work تراکنش `13/13` و persistence/SQL موجود موفق‌اند. آزمون API، مدیریت قطعه (همراه با بلوک اتمیک `Planning` برای ماده و موجودی افتتاحیه) و نسخه‌های BOM پیش‌نویس/آزادشده و انفجار چندسطحی BOM؛ مدیریت Routing پیش‌نویس، عملیات آن و آزادسازی Routing؛ مدیریت مراکز کاری (همراه با بلوک `Rates` برای ساخت نرخ هزینه)، منابع و تقویم شیفت (با کنترل `BreakStartMinuteOfDay` و قفل تقویم در برنامهٔ `firm`)؛ باززمان‌بندی هدفمند با زنجیرهٔ وابستگی، حفظ بلوک `firm`، تولید `diff`، رد نسخهٔ کهنه/خارج از Plant/عملیات غیرقابل‌اعزام و rollback تراکنش؛ Gantt و گزارش ظرفیت؛ اجرای کارگاهی با صف عملیات، شروع/گزارش تجمعی/اتمام نشست اجرا، کنترل پیش‌نیاز و گیت بازرسی، Idempotency، توقف، ضایعات، دوباره‌کاری و انحراف عملیات (با تفکیک دسترسی هزینه)؛ مواد، محاسبهٔ MRP (پیش‌نمایش و ثبت اتمیک)، کمبودها، پیشنهاد خرید و مصرف واقعی مواد (با کنترل LotNo و کسر اتمیک موجودی)؛ و رول‌آپ هزینهٔ سفارش/عملیات از داده‌های واقعی کارگاه، تطبیق نهایی هزینه، بستن دوگیتی سفارش (`MFG_MATERIALS_NOT_RECONCILED` و `MFG_COST_NOT_RECONCILED`)، داشبورد خلاصه/OEE و رسیدگی به هشدارها را می‌پوشاند. API زمان‌بندی در mock تراکنشی و یک اجرای واقعی با `JsonFileDriver` آزموده شد؛ SQL Server واقعی در دسترس نبود.
