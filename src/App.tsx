@@ -11,6 +11,7 @@ import AuthStatus from "./components/AuthStatus";
 import NotificationOpsPanel from "./components/NotificationOpsPanel";
 import CmmsWorkspaceShell from "./components/CmmsWorkspaceShell";
 import ScmWorkspaceShell from "./components/ScmWorkspaceShell";
+import IiotWorkspaceShell from "./components/IiotWorkspaceShell";
 import { useSystem } from "./context/SystemContext";
 import {
   ui,
@@ -323,6 +324,13 @@ export default function App() {
               lang={lang}
               activeSub={activeSystemView.sub}
               onSelectSub={(nextSub) => setActiveSystemView({ system: "scm", sub: nextSub })}
+              onBackHome={() => setActiveSystemView({ system: "pmis" })}
+            />
+          ) : activeSystemView.system === "iiot" ? (
+            <IiotWorkspaceShell
+              lang={lang}
+              activeSub={activeSystemView.sub}
+              onSelectSub={(nextSub) => setActiveSystemView({ system: "iiot", sub: nextSub })}
               onBackHome={() => setActiveSystemView({ system: "pmis" })}
             />
           ) : moduleNav ? (

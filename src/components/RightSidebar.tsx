@@ -16,6 +16,7 @@ import { EDITABLE_TAXONOMY_DOMAINS, loadProcessTree } from "../services/taxonomy
 import type { MfgTab } from "./ManufacturingWorkspace";
 import type { CmmsSubModuleId } from "./CmmsWorkspaceShell";
 import type { ScmSubModuleId } from "./ScmWorkspaceShell";
+import type { IiotSubModuleId } from "./IiotWorkspaceShell";
 
 export type ModuleNavTarget = {
   moduleId: string;
@@ -29,7 +30,8 @@ export type EnterpriseSystemView =
   | { system: "pmis" }
   | { system: "mes"; tab: MfgTab }
   | { system: "cmms"; sub: CmmsSubModuleId }
-  | { system: "scm"; sub: ScmSubModuleId };
+  | { system: "scm"; sub: ScmSubModuleId }
+  | { system: "iiot"; sub: IiotSubModuleId };
 
 type Props = {
   lang: Lang;
@@ -60,13 +62,21 @@ const CMMS_SIDEBAR_ITEMS: Array<{ id: CmmsSubModuleId; icon: string; label: Bi }
   { id: "analytics", icon: "📉", label: { fa: "شاخص‌ها و تحلیل نت (MTBF / MTTR)", en: "MTBF / MTTR Analytics" } },
 ];
 
-/* زیرماژول‌های سرگروه چهارم: زنجیره تأمین و انبارداری (SCM) */
+/* زیرماژول‌های سرگروه چهارم: زنجیره تأمین، بازرگانی و مالی (SCM & Finance) */
 const SCM_SIDEBAR_ITEMS: Array<{ id: ScmSubModuleId; icon: string; label: Bi }> = [
   { id: "inventory", icon: "🏬", label: { fa: "مدیریت انبارها و موجودی", en: "Warehouses & Inventory" } },
   { id: "purchasing", icon: "🧾", label: { fa: "درخواست و سفارشات خرید", en: "Purchase Requisitions & POs" } },
-  { id: "vendors", icon: "🤝", label: { fa: "مدیریت تأمین‌کنندگان", en: "Vendor Management" } },
+  { id: "crm", icon: "🤝", label: { fa: "فروش و مدیریت مشتریان (CRM)", en: "Sales & CRM" } },
   { id: "movements", icon: "🚚", label: { fa: "ورود و خروج کالا (رسید / حواله)", en: "Goods Receipt & Issue" } },
-  { id: "dashboard", icon: "📈", label: { fa: "داشبورد زنجیره تأمین", en: "Supply Chain Dashboard" } },
+  { id: "finance", icon: "💳", label: { fa: "حسابداری و هزینه‌یابی مالی", en: "Financial Accounting & Costing" } },
+];
+
+/* زیرماژول‌های سرگروه پنجم: پایش میدانی و اینترنت اشیاء (IIoT & DAS) */
+const IIOT_SIDEBAR_ITEMS: Array<{ id: IiotSubModuleId; icon: string; label: Bi }> = [
+  { id: "drilling-das", icon: "📡", label: { fa: "پایش زنده حفاری و عملیات (Drilling DAS)", en: "Live Drilling & Operations (Drilling DAS)" } },
+  { id: "iot-devices", icon: "🛰️", label: { fa: "مدیریت سنسورها و تجهیزات IoT", en: "IoT Sensors & Devices Management" } },
+  { id: "condition-monitoring", icon: "🌡️", label: { fa: "پایش آنلاین شرایط محیطی و تجهیزات", en: "Online Environmental & Condition Monitoring" } },
+  { id: "sensor-alerts", icon: "🚨", label: { fa: "سیستم هشدار بلادرنگ سنسورها", en: "Real-Time Sensor Alert System" } },
 ];
 
 type QuickAction = { id: string; label: Bi; alert?: string; icon: ReactNode };
@@ -137,14 +147,16 @@ export default function RightSidebar({
     mes: boolean;
     cmms: boolean;
     scm: boolean;
+    iiot: boolean;
   }>({
     pmis: true,
     mes: true,
     cmms: true,
     scm: true,
+    iiot: true,
   });
 
-  const toggleSection = (key: "pmis" | "mes" | "cmms" | "scm") => {
+  const toggleSection = (key: "pmis" | "mes" | "cmms" | "scm" | "iiot") => {
     setSectionsOpen((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
@@ -659,11 +671,11 @@ export default function RightSidebar({
             {/* ── خط جداکنندهٔ بصری (Divider) بین بخش ۳ و ۴ ── */}
             <div role="separator" aria-orientation="horizontal" className="my-2 flex items-center gap-2 px-1">
               <span className="hair h-px flex-1" />
-              <span className="text-[8px] tracking-widest tx4" dir="ltr">SCM</span>
+              <span className="text-[8px] tracking-widest tx4" dir="ltr">SCM &amp; Finance</span>
               <span className="hair h-px flex-1" />
             </div>
 
-            {/* ── ۴. سرگروه اصلی چهارم: زنجیره تأمین و انبارداری (SCM) ── */}
+            {/* ── ۴. سرگروه اصلی چهارم: زنجیره تأمین، بازرگانی و مالی (SCM & Finance) ── */}
             <section className="space-y-1">
               <button
                 type="button"
@@ -677,7 +689,7 @@ export default function RightSidebar({
               >
                 <span className="text-[12px]">📦</span>
                 <span className="min-w-0 flex-1 truncate text-[11px] font-semibold">
-                  {rtl ? "زنجیره تأمین و انبارداری (SCM)" : "Supply Chain & Warehouse (SCM)"}
+                  {rtl ? "زنجیره تأمین، بازرگانی و مالی (SCM & Finance)" : "Supply Chain, Commercial & Finance (SCM & Finance)"}
                 </span>
                 <span className="rounded border border-teal-500/30 bg-teal-500/10 px-1.5 py-0.5 text-[8.5px] text-teal-300" dir="ltr">
                   SCM
@@ -707,6 +719,69 @@ export default function RightSidebar({
                         className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-start text-[10.5px] transition ${
                           active
                             ? "row-on font-medium text-teal-300"
+                            : "tx2 hover:bg-[var(--row-hover)] hover:tx1"
+                        }`}
+                      >
+                        <span className="text-[11px]">{item.icon}</span>
+                        <span className="min-w-0 flex-1 truncate">{t(item.label, lang)}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+
+            {/* ── خط جداکنندهٔ بصری (Divider) بین بخش ۴ و ۵ ── */}
+            <div role="separator" aria-orientation="horizontal" className="my-2 flex items-center gap-2 px-1">
+              <span className="hair h-px flex-1" />
+              <span className="text-[8px] tracking-widest tx4" dir="ltr">IIoT &amp; DAS</span>
+              <span className="hair h-px flex-1" />
+            </div>
+
+            {/* ── ۵. سرگروه اصلی پنجم: پایش میدانی و اینترنت اشیاء (IIoT & DAS) ── */}
+            <section className="space-y-1">
+              <button
+                type="button"
+                onClick={() => toggleSection("iiot")}
+                aria-expanded={sectionsOpen.iiot}
+                className={`flex w-full items-center gap-2 rounded-xl border px-2.5 py-2 text-start transition ${
+                  activeSystemView.system === "iiot"
+                    ? "border-purple-500/40 bg-purple-500/10 tx1"
+                    : "b-line-soft bg-black/15 tx2 hover:tx1"
+                }`}
+              >
+                <span className="text-[12px]">📡</span>
+                <span className="min-w-0 flex-1 truncate text-[11px] font-semibold">
+                  {rtl ? "پایش میدانی و اینترنت اشیاء (IIoT & DAS)" : "Field Monitoring & Industrial IoT (IIoT & DAS)"}
+                </span>
+                <span className="rounded border border-purple-500/30 bg-purple-500/10 px-1.5 py-0.5 text-[8.5px] text-purple-300" dir="ltr">
+                  IIoT
+                </span>
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className={`h-3 w-3 shrink-0 tx4 transition-transform ${sectionsOpen.iiot ? "rotate-180" : ""}`}
+                >
+                  <path d="m6 9 6 6 6-6" />
+                </svg>
+              </button>
+
+              {sectionsOpen.iiot && (
+                <div className="fade-rise space-y-0.5 border-s-2 border-purple-500/30 ps-2 pt-0.5">
+                  {IIOT_SIDEBAR_ITEMS.map((item) => {
+                    const active = activeSystemView.system === "iiot" && activeSystemView.sub === item.id;
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => onSelectSystemView?.({ system: "iiot", sub: item.id })}
+                        className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-start text-[10.5px] transition ${
+                          active
+                            ? "row-on font-medium text-purple-300"
                             : "tx2 hover:bg-[var(--row-hover)] hover:tx1"
                         }`}
                       >

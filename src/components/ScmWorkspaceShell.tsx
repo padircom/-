@@ -3,9 +3,9 @@ import type { Lang } from "../data/framework";
 export type ScmSubModuleId =
   | "inventory"
   | "purchasing"
-  | "vendors"
+  | "crm"
   | "movements"
-  | "dashboard";
+  | "finance";
 
 export const SCM_SUBMODULES: Array<{
   id: ScmSubModuleId;
@@ -30,36 +30,36 @@ export const SCM_SUBMODULES: Array<{
     icon: "🧾",
     fa: "درخواست و سفارشات خرید",
     en: "Purchase Requisitions & Orders",
-    descFa: "تبدیل پیشنهادهای تأمین MRP به درخواست خرید (PR)، استعلام بها (RFQ) و صدور سفارش خرید (PO).",
-    descEn: "Convert MRP procurement proposals into Purchase Requisitions (PR), RFQs, and Purchase Orders (PO).",
-    plannedEntities: ["ScmPurchaseRequisition", "ScmPurchaseOrder", "ScmPurchaseOrderLine"],
+    descFa: "تبدیل پیشنهادهای تأمین MRP به درخواست خرید (PR)، استعلام بها (RFQ)، ارزیابی تأمین‌کنندگان و صدور سفارش خرید (PO).",
+    descEn: "Convert MRP procurement proposals into Purchase Requisitions (PR), RFQs, vendor evaluation, and Purchase Orders (PO).",
+    plannedEntities: ["ScmPurchaseRequisition", "ScmPurchaseOrder", "ScmVendor"],
   },
   {
-    id: "vendors",
+    id: "crm",
     icon: "🤝",
-    fa: "مدیریت تأمین‌کنندگان",
-    en: "Supplier & Vendor Management",
-    descFa: "پروندهٔ تأمین‌کنندگان مجاز (AVL)، ارزیابی عملکرد تحویل به‌موقع (OTD)، کیفیت محموله و زمان تدارک.",
-    descEn: "Approved Vendor List (AVL), on-time delivery (OTD) scoring, quality rating, and lead-time tracking.",
-    plannedEntities: ["ScmVendor", "ScmVendorScorecard", "ScmPriceAgreement"],
+    fa: "فروش و مدیریت مشتریان (CRM)",
+    en: "Sales & Customer Relationship Management (CRM)",
+    descFa: "مدیریت پروندهٔ مشتریان، پیش‌فاکتورها، قراردادهای فروش، سفارش‌های مشتری (Sales Orders) و پیگیری تعهدات تحویل.",
+    descEn: "Customer accounts, quotations, sales contracts, customer sales orders, and delivery commitment tracking.",
+    plannedEntities: ["CrmCustomer", "CrmQuotation", "ScmSalesOrder"],
   },
   {
     id: "movements",
     icon: "🚚",
     fa: "ورود و خروج کالا (رسید / حواله)",
     en: "Goods Receipt & Issue (GRN / GIN)",
-    descFa: "ثبت رسید موقت و قطعی انبار، قرنطینهٔ کنترل کیفیت ورودی (IQC)، حوالهٔ مصرف به خطوط تولید و انتقال بین‌انباری.",
-    descEn: "Goods Receipt Notes (GRN), incoming QC quarantine, shop-floor Goods Issue Notes (GIN), and transfers.",
+    descFa: "ثبت رسید موقت و قطعی انبار، قرنطینهٔ کنترل کیفیت ورودی (IQC)، حوالهٔ مصرف به خطوط تولید و ارسال به مشتری.",
+    descEn: "Goods Receipt Notes (GRN), incoming QC quarantine, shop-floor Goods Issue Notes (GIN), and customer shipments.",
     plannedEntities: ["ScmGoodsReceipt", "ScmGoodsIssue", "ScmStockTransfer"],
   },
   {
-    id: "dashboard",
-    icon: "📈",
-    fa: "داشبورد زنجیره تأمین",
-    en: "Supply Chain Analytics Dashboard",
-    descFa: "پایش نرخ گردش موجودی، ارزش ریالی انبار، سفارش‌های خرید معوق، ریسک کسری مواد و عملکرد تأمین‌کنندگان.",
-    descEn: "Inventory turnover, stock valuation, open PO aging, shortage risk, and supplier KPIs.",
-    plannedEntities: ["ScmKpiSnapshot", "ScmLeadTimeVariance"],
+    id: "finance",
+    icon: "💳",
+    fa: "حسابداری و هزینه‌یابی مالی",
+    en: "Financial Accounting & Costing",
+    descFa: "دفتر کل و اسناد حسابداری، تطبیق بهای تمام‌شدهٔ تولید و موجودی انبار، حساب‌های دریافتنی/پرداختنی (AR/AP) و صورت‌های مالی.",
+    descEn: "General ledger, manufacturing & inventory cost reconciliation, accounts receivable/payable (AR/AP), and financial statements.",
+    plannedEntities: ["FinLedgerEntry", "FinInvoice", "FinCostCenterSnapshot"],
   },
 ];
 
@@ -79,22 +79,25 @@ export default function ScmWorkspaceShell({ lang, activeSub, onSelectSub, onBack
     <div dir={fa ? "rtl" : "ltr"} className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-1">
       <header className="glass-dark rounded-xl p-3.5 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <span className="grid h-10 w-10 place-items-center rounded-xl border border-emerald-500/40 bg-emerald-500/10 text-lg">
+          <span className="grid h-10 w-10 place-items-center rounded-xl border border-teal-500/40 bg-teal-500/10 text-lg">
             📦
           </span>
           <div>
             <div className="flex items-center gap-2">
               <h2 className="tx1 font-semibold text-sm">
-                {tr("سامانهٔ زنجیره تأمین و انبارداری (SCM)", "Supply Chain & Warehouse Management System (SCM)")}
+                {tr(
+                  "سامانهٔ زنجیره تأمین، بازرگانی و مالی (SCM & Finance)",
+                  "Supply Chain, Commercial & Financial System (SCM & Finance)",
+                )}
               </h2>
-              <span className="rounded-md border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[10px] text-emerald-300">
+              <span className="rounded-md border border-teal-500/40 bg-teal-500/10 px-2 py-0.5 text-[10px] text-teal-300">
                 {tr("پوستهٔ اولیه (Workspace Shell)", "Workspace Shell")}
               </span>
             </div>
             <p className="tx3 text-xs mt-0.5">
               {tr(
-                "بخش چهارم سازمان · آمادهٔ پیاده‌سازی منطق دامنه و API پس از تکمیل فاز ۴ ماژول تولید (MES)",
-                "Organizational Pillar #4 · Ready for domain & API implementation after MES Phase 4",
+                "سرگروه چهارم سازمان · مدیریت یکپارچهٔ انبار، تدارکات، فروش (CRM) و حسابداری مالی",
+                "Organizational Pillar #4 · Integrated warehousing, procurement, CRM sales, and financial accounting",
               )}
             </p>
           </div>
@@ -110,7 +113,7 @@ export default function ScmWorkspaceShell({ lang, activeSub, onSelectSub, onBack
         )}
       </header>
 
-      {/* نوار تب‌های ۵گانهٔ SCM */}
+      {/* نوار تب‌های ۵گانهٔ SCM & Finance */}
       <nav className="flex flex-wrap gap-1.5">
         {SCM_SUBMODULES.map((item) => {
           const active = item.id === current.id;
@@ -141,20 +144,20 @@ export default function ScmWorkspaceShell({ lang, activeSub, onSelectSub, onBack
             </div>
           </div>
           <span className="rounded-lg border b-line-soft bg-black/20 px-2.5 py-1 text-[11px] tx3" dir="ltr">
-            module: scm / {current.id}
+            module: scm-finance / {current.id}
           </span>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div className="rounded-xl border b-line-soft bg-black/15 p-3.5 space-y-1">
             <div className="tx3 text-xs">{tr("وضعیت زیرماژول", "Submodule Status")}</div>
-            <div className="tx1 font-semibold text-sm text-emerald-300">
+            <div className="tx1 font-semibold text-sm text-teal-300">
               {tr("پوستهٔ آماده (Placeholder Shell)", "Placeholder Shell Ready")}
             </div>
             <p className="tx3 text-[11px]">
               {tr(
-                "ساختار ناوبری و رابط کاربری اولیه ایجاد شده است و منطق بک‌اند پس از پایان ماژول تولید افزوده می‌شود.",
-                "UI shell and navigation are wired; backend logic will be added after MES completion.",
+                "ساختار ناوبری و رابط کاربری اولیه ایجاد شده است و منطق دامنه و API در فازهای آتی متصل می‌شود.",
+                "UI shell and navigation are wired; domain logic and APIs will be connected in upcoming phases.",
               )}
             </p>
           </div>
@@ -174,8 +177,8 @@ export default function ScmWorkspaceShell({ lang, activeSub, onSelectSub, onBack
             <div className="tx3 text-xs">{tr("یکپارچگی با سایر بخش‌های سازمان", "Cross-System Integration")}</div>
             <div className="tx2 text-xs leading-5">
               {tr(
-                "دریافت پیشنهادهای خرید ناشی از کمبود MRP تولید (MES)، تأمین قطعات یدکی نت (CMMS) و تدارکات پروژه‌ها (PMIS).",
-                "Consumes MRP procurement proposals from MES, spare part requests from CMMS, and project procurement from PMIS.",
+                "تبدیل سفارش‌های فروش CRM به سفارش تولید (MES)، دریافت پیشنهادهای خرید MRP و تطبیق سند مالی بهای تمام‌شده.",
+                "Feeds CRM sales orders into MES production orders, processes MRP purchase proposals, and reconciles financial cost ledgers.",
               )}
             </div>
           </div>
