@@ -568,9 +568,11 @@ export const MANUFACTURING_TABLES: TableDef[] = [
     name: "MfgOperationCost", module: "mfg", title: { fa: "هزینهٔ عملیات", en: "Operation cost" }, pk: "Id",
     columns: [
       id(), plant(), req("ProductionOrderOperationId", "text", { len: 60 }), c("CostCenterId", "text", { len: 60 }),
-      req("CostElement", "text", { len: 16, comment: "material|machine|labor|overhead" }), req("CostVersion", "int"),
-      qty("StandardQuantity"), qty("ActualQuantity"), req("StandardRate", "decimal", { precision: 18, scale: 4, default: "0" }),
-      req("ActualRate", "decimal", { precision: 18, scale: 4, default: "0" }), money("StandardAmount", false), money("ActualAmount", false),
+      req("CostElement", "text", { len: 16, comment: "material|machine|labor|overhead|scrap" }), req("CostVersion", "int"),
+      qty("StandardQuantity"), c("PlannedQuantity", "decimal", { precision: 18, scale: 4 }), qty("ActualQuantity"),
+      req("StandardRate", "decimal", { precision: 18, scale: 4, default: "0" }),
+      c("PlannedRate", "decimal", { precision: 18, scale: 4 }), req("ActualRate", "decimal", { precision: 18, scale: 4, default: "0" }),
+      money("StandardAmount", false), c("PlannedAmount", "decimal", { precision: 18, scale: 2 }), money("ActualAmount", false),
       req("Currency", "text", { len: 8, default: "'IRR'" }), req("CalculatedAt", "datetime"), c("SourceRef", "text", { len: 100 }),
     ],
     indexes: [
@@ -582,9 +584,10 @@ export const MANUFACTURING_TABLES: TableDef[] = [
       { column: "CostCenterId", refTable: "MfgCostCenter", refColumn: "Id" },
     ],
     checks: [
-      ck("CK_MfgOperationCost_Element", "CostElement IN ('material','machine','labor','overhead')", ["CostElement"]),
+      ck("CK_MfgOperationCost_Element", "CostElement IN ('material','machine','labor','overhead','scrap')", ["CostElement"]),
       ck("CK_MfgOperationCost_Version", "CostVersion > 0", ["CostVersion"]),
       ck("CK_MfgOperationCost_Amounts", "StandardQuantity >= 0 AND ActualQuantity >= 0 AND StandardRate >= 0 AND ActualRate >= 0 AND StandardAmount >= 0 AND ActualAmount >= 0", ["StandardQuantity", "ActualQuantity", "StandardRate", "ActualRate", "StandardAmount", "ActualAmount"]),
+      ck("CK_MfgOperationCost_PlannedAmounts", "(PlannedQuantity IS NULL OR PlannedQuantity >= 0) AND (PlannedRate IS NULL OR PlannedRate >= 0) AND (PlannedAmount IS NULL OR PlannedAmount >= 0)", ["PlannedQuantity", "PlannedRate", "PlannedAmount"]),
     ],
   },
 
@@ -593,10 +596,14 @@ export const MANUFACTURING_TABLES: TableDef[] = [
     name: "MfgOrderCost", module: "mfg", title: { fa: "هزینهٔ تجمیعی سفارش", en: "Production order cost summary" }, pk: "Id",
     columns: [
       id(), plant(), req("ProductionOrderId", "text", { len: 60 }), req("CostVersion", "int"), req("Currency", "text", { len: 8, default: "'IRR'" }),
-      money("StandardMaterialCost", false), money("ActualMaterialCost", false), money("StandardMachineCost", false), money("ActualMachineCost", false),
-      money("StandardLaborCost", false), money("ActualLaborCost", false), money("StandardOverheadCost", false), money("ActualOverheadCost", false),
-      money("StandardTotalCost", false), money("ActualTotalCost", false), money("ContractRevenue"), money("GrossMargin"),
-      req("Reconciled", "bool", { default: "0" }), c("ReconciledAt", "datetime"), c("ModelVersion", "text", { len: 40 }),
+      money("StandardMaterialCost", false), c("PlannedMaterialCost", "decimal", { precision: 18, scale: 2 }), money("ActualMaterialCost", false),
+      money("StandardMachineCost", false), c("PlannedMachineCost", "decimal", { precision: 18, scale: 2 }), money("ActualMachineCost", false),
+      money("StandardLaborCost", false), c("PlannedLaborCost", "decimal", { precision: 18, scale: 2 }), money("ActualLaborCost", false),
+      money("StandardOverheadCost", false), c("PlannedOverheadCost", "decimal", { precision: 18, scale: 2 }), money("ActualOverheadCost", false),
+      c("StandardScrapCost", "decimal", { precision: 18, scale: 2 }), c("PlannedScrapCost", "decimal", { precision: 18, scale: 2 }), c("ActualScrapCost", "decimal", { precision: 18, scale: 2 }),
+      money("StandardTotalCost", false), c("PlannedTotalCost", "decimal", { precision: 18, scale: 2 }), money("ActualTotalCost", false),
+      money("ContractRevenue"), money("GrossMargin"),
+      req("Reconciled", "bool", { default: "0" }), c("ReconciledAt", "datetime"), c("ReconcileThrough", "datetime"), c("ModelVersion", "text", { len: 40 }),
     ],
     indexes: [
       { name: "UX_MfgOrderCost_Version", columns: ["ProductionOrderId", "CostVersion"], unique: true },
@@ -606,6 +613,7 @@ export const MANUFACTURING_TABLES: TableDef[] = [
     checks: [
       ck("CK_MfgOrderCost_Version", "CostVersion > 0", ["CostVersion"]),
       ck("CK_MfgOrderCost_Amounts", "StandardMaterialCost >= 0 AND ActualMaterialCost >= 0 AND StandardMachineCost >= 0 AND ActualMachineCost >= 0 AND StandardLaborCost >= 0 AND ActualLaborCost >= 0 AND StandardOverheadCost >= 0 AND ActualOverheadCost >= 0 AND StandardTotalCost >= 0 AND ActualTotalCost >= 0", ["StandardMaterialCost", "ActualMaterialCost", "StandardMachineCost", "ActualMachineCost", "StandardLaborCost", "ActualLaborCost", "StandardOverheadCost", "ActualOverheadCost", "StandardTotalCost", "ActualTotalCost"]),
+      ck("CK_MfgOrderCost_Phase4Amounts", "(PlannedMaterialCost IS NULL OR PlannedMaterialCost >= 0) AND (PlannedMachineCost IS NULL OR PlannedMachineCost >= 0) AND (PlannedLaborCost IS NULL OR PlannedLaborCost >= 0) AND (PlannedOverheadCost IS NULL OR PlannedOverheadCost >= 0) AND (StandardScrapCost IS NULL OR StandardScrapCost >= 0) AND (PlannedScrapCost IS NULL OR PlannedScrapCost >= 0) AND (ActualScrapCost IS NULL OR ActualScrapCost >= 0) AND (PlannedTotalCost IS NULL OR PlannedTotalCost >= 0)", ["PlannedMaterialCost", "PlannedMachineCost", "PlannedLaborCost", "PlannedOverheadCost", "StandardScrapCost", "PlannedScrapCost", "ActualScrapCost", "PlannedTotalCost"]),
       ck("CK_MfgOrderCost_Reconciled", "Reconciled = 0 OR ReconciledAt IS NOT NULL", ["Reconciled", "ReconciledAt"]),
     ],
   },

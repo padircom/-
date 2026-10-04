@@ -88,3 +88,33 @@ test("مهاجرت 0048 ستون ClosedBy را افزایشی اضافه می‌
   const order = tableDef("MfgProductionOrder");
   assert.ok(order.columns.some((column) => column.name === "ClosedBy"));
 });
+
+test("مهاجرت 0050 هزینهٔ planned/scrap را افزایشی اضافه می‌کند و 0046 یخ‌زده می‌ماند", () => {
+  const migration = MIGRATIONS.find((item) => item.version === "0050");
+  assert.ok(migration);
+  assert.equal(migration.name, "manufacturing_cost_rollup_planned_scrap");
+  const operationColumns = ["PlannedQuantity", "PlannedRate", "PlannedAmount"];
+  const orderColumns = [
+    "PlannedMaterialCost", "PlannedMachineCost", "PlannedLaborCost", "PlannedOverheadCost",
+    "StandardScrapCost", "PlannedScrapCost", "ActualScrapCost", "PlannedTotalCost", "ReconcileThrough",
+  ];
+  for (const column of operationColumns) {
+    assert.ok(migration.statements.some((sql) => sql.includes("dbo.MfgOperationCost") && sql.includes(column) && sql.includes("IS NULL")));
+    assert.equal(tableDef("MfgOperationCost").columns.find((item) => item.name === column)?.nullable, true);
+  }
+  for (const column of orderColumns) {
+    assert.ok(migration.statements.some((sql) => sql.includes("dbo.MfgOrderCost") && sql.includes(column) && sql.includes("IS NULL")));
+    assert.equal(tableDef("MfgOrderCost").columns.find((item) => item.name === column)?.nullable, true);
+  }
+  assert.ok(migration.statements.some((sql) => sql.includes("CostElement IN ('material','machine','labor','overhead','scrap')")));
+  assert.ok(migration.statements.some((sql) => sql.includes("CK_MfgOperationCost_PlannedAmounts")));
+  assert.ok(migration.statements.some((sql) => sql.includes("CK_MfgOrderCost_Phase4Amounts")));
+
+  const frozen = MIGRATIONS.find((item) => item.version === "0046");
+  assert.ok(frozen);
+  const frozenOperationDdl = frozen.statements.find((sql) => sql.includes("CREATE TABLE [dbo].[MfgOperationCost]")) ?? "";
+  const frozenOrderDdl = frozen.statements.find((sql) => sql.includes("CREATE TABLE [dbo].[MfgOrderCost]")) ?? "";
+  for (const column of operationColumns) assert.ok(!frozenOperationDdl.includes(column), `${column} leaked into frozen MfgOperationCost DDL`);
+  for (const column of orderColumns) assert.ok(!frozenOrderDdl.includes(column), `${column} leaked into frozen MfgOrderCost DDL`);
+  assert.ok(!frozenOperationDdl.includes("CostElement IN ('material','machine','labor','overhead','scrap')"));
+});

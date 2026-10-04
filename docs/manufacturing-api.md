@@ -228,29 +228,31 @@
 
 | متد و مسیر | درخواست → پاسخ داده | اعتبارسنجی اصلی | مجوز |
 |---|---|---|---|
-| `GET /cost/orders/{orderId}` | `costVersion?` → مقادیر استاندارد/واقعی به تفکیک ماده، ماشین، نیروی کار، سربار؛ جمع و Gross Margin | سفارش همان Plant؛ نرخ/ارز همان نسخه؛ مقدار خالی به صفر ضمنی تبدیل نمی‌شود | `mfg.cost.view` |
-| `GET /cost/operations/{operationId}` | `costVersion?` → `{items: MfgOperationCost[], derived: boolean}` | Operation همان Plant؛ در نبود ردیف ذخیره‌شده، رول‌آپ لحظه‌ای از داده‌های واقعی با `derived: true` برمی‌گردد | `mfg.cost.view` |
-| `POST /cost/orders/{orderId}/reconcile` | `Idempotency-Key`, `If-Match`; `{CostVersion, ReconcileThrough, ContractRevenue?}` → `MfgOrderCost` نهایی | همهٔ عملیات تکمیل‌شده و مصرف مواد تطبیق‌یافته؛ در همان تراکنش ردیف‌های `MfgOperationCost` با `SourceRef: "derived-from-actuals"` ساخته و در `MfgOrderCost` جمع زده می‌شوند؛ ثبت `Reconciled=true` و `ReconciledAt` فقط سمت سرور و اتمیک | `mfg.cost.reconcile` |
-| `GET /dashboard/overview` | `from, to, workCenterId?` → خلاصهٔ سفارش باز، تحویل به‌موقع، خروجی سالم، ضایعات و کمبود | پنجرهٔ حداکثر ۹۰ روز؛ فقط Plant جاری | `mfg.dashboard.view` |
+| `GET /cost/orders/{orderId}` | `costVersion?` → استاندارد/برنامه‌ریزی‌شده/واقعی برای ماده، ماشین، دستمزد، سربار و ضایعات؛ انحراف مبلغ/درصد، `ByElement` و `OperationBreakdown` | سفارش و همهٔ ردیف‌ها در Plant جاری؛ ارزهای ناسازگار بدون تبدیل رد می‌شوند؛ نسخهٔ ذخیره‌شده با عناصر مشتق‌شدهٔ جاافتاده کامل می‌شود | `mfg.cost.view` |
+| `GET /cost/operations/{operationId}` | `costVersion?` → `{items: MfgOperationCost[], derived: boolean}` شامل پنج عنصر و مقادیر planned/standard/actual و variance | Operation همان Plant؛ ردیف ذخیره‌شده مقدم است و عناصر غایب از دادهٔ واقعی کارگاه مشتق می‌شوند | `mfg.cost.view` |
+| `POST /cost/orders/{orderId}/reconcile` | `Idempotency-Key`, `If-Match`; `{CostVersion, ReconcileThrough, ContractRevenue?, ModelVersion?}` → `MfgOrderCost` نهایی با تفکیک هزینه و عملیات | همهٔ عملیات تکمیل‌شده، نشست اجرای باز و کمبود مواد باز نداشته باشد؛ در همان تراکنش ردیف‌های جاافتادهٔ `MfgOperationCost` ساخته و جمع سه مبنا در `MfgOrderCost` ثبت می‌شود؛ RowVersion سفارش و ردیف هزینه کنترل می‌شود | `mfg.cost.reconcile` |
+| `GET /dashboard/overview` | `from, to, workCenterId?` → شمارش وضعیت سفارش‌ها، OTD و عقب‌افتادگی، کمبودهای باز MRP، هشدارهای باز به تفکیک شدت و خلاصهٔ هزینه | پنجرهٔ حداکثر ۹۰ روز؛ فقط Plant جاری؛ فیلد هزینه فقط برای دارندهٔ `mfg.cost.view` | `mfg.dashboard.view` |
 | `GET /dashboard/work-center-load` | `from, to, bucket=day/week` → بار/ظرفیت هر مرکز و utilization | همان قواعد capacity/load | `mfg.dashboard.view` |
-| `GET /dashboard/oee` | `from, to, workCenterId?` → Availability/Performance/Quality و OEE با شمارنده/مخرج | فقط با دادهٔ قابل‌ردیابی؛ مخرج صفر `null` می‌شود؛ downtime planned و unplanned مطابق تعریف مدل جدا می‌مانند | `mfg.dashboard.view` |
+| `GET /dashboard/oee` | `from, to, workCenterId?` → OEE کل و به‌تفکیک Work Center، تقویم مؤثر، توقف برنامه‌ریزی‌شده/ناخواسته و خروجی سالم/ضایعات/دوباره‌کاری | حداکثر ۹۰ روز؛ تقویم با timezone محلی مرکز، روزهای هفتگی/override، break و `AvailabilityPct`؛ توقف‌ها در تقویم clip و هم‌پوشانی‌شان دوباره‌شماری نمی‌شود؛ مخرج صفر `null` | `mfg.dashboard.view` |
 | `GET /alerts` | `status?, severity?, orderId?, workCenterId?, limit, offset` → `{items: MfgProductionAlert[], page}` | Plant scope؛ فقط فیلترهای مجاز | `mfg.alert.view` |
 | `POST /alerts/{alertId}/acknowledgements` | `If-Match`; `{NoteFa?}` → هشدار acknowledged | فقط هشدار open؛ `AcknowledgedBy/At` سمت سرور؛ وضعیت resolved با acknowledge عوض نمی‌شود | `mfg.alert.ack` |
 
 ### ۵.۸.۱ قرارداد رول‌آپ هزینه و دو گیت بستن سفارش
 
-- **مشاهدهٔ هزینهٔ عملیات (`GET /cost/operations/{operationId}`):** خروجی به شکل `{items, derived}` است. اگر ردیف‌های `MfgOperationCost` برای نسخهٔ درخواستی قبلاً ذخیره شده باشند با `derived: false` برمی‌گردند؛ در غیر این صورت، سرور رول‌آپ لحظه‌ای را از داده‌های واقعی کارگاه محاسبه کرده و با `derived: true` برمی‌گرداند.
-- **تطبیق نهایی هزینه (`POST /cost/orders/{orderId}/reconcile`):** در یک تراکنش اتمیک (Unit of Work)، اگر ردیف‌های `MfgOperationCost` برای نسخهٔ هزینه وجود نداشته باشند، آن‌ها را از داده‌های واقعی کارگاه با `SourceRef: "derived-from-actuals"` می‌سازد و ذخیره می‌کند، سپس مقادیر استاندارد و واقعی هر چهار عنصر را در `MfgOrderCost` جمع می‌زند و `Reconciled = true` و `ReconciledAt` را ثبت می‌کند.
+- **مشاهدهٔ هزینهٔ عملیات (`GET /cost/operations/{operationId}`):** خروجی `{items, derived}` است و همواره پنج عنصر `material | machine | labor | overhead | scrap` را کامل می‌کند. ردیف ذخیره‌شده برای همان عنصر/نسخه مقدم است؛ فقط عنصرهای جاافتاده مشتق می‌شوند. `derived` زمانی `true` است که دست‌کم یک عنصر مشتق شده باشد.
+- **مشاهدهٔ هزینهٔ سفارش (`GET /cost/orders/{orderId}`):** علاوه بر جمع‌های `Standard*`, `Planned*`, `Actual*`، خروجی `ByElement` (مبالغ و انحراف هر پنج عنصر) و `OperationBreakdown` (جمع و انحراف هر عملیات) دارد. جمع سفارش نسخهٔ `costVersion` را می‌گیرد؛ در نبود خلاصه، روی ردیف‌های عملیات کامل‌شده محاسبه می‌شود. `ContractRevenue`/`GrossMargin` تا وقتی درآمد قرارداد ثبت نشده `null` می‌مانند.
+- **تطبیق نهایی هزینه (`POST /cost/orders/{orderId}/reconcile`):** در یک تراکنش اتمیک، ردیف‌های ذخیره‌شده حفظ و عنصرهای مفقود `MfgOperationCost` با `SourceRef: "derived-from-actuals"` درج می‌شوند؛ سپس سه مبنای استاندارد، برنامه‌ریزی‌شده و واقعی برای پنج عنصر در `MfgOrderCost` جمع می‌خورد. اگر خلاصهٔ موجود با جمع جزئیات همان نسخه اختلاف بیش از ۰٫۰۱ داشته باشد، تطبیق با `MFG_COST_TOTAL_MISMATCH` رد می‌شود؛ برای مبنای تازه باید نسخهٔ هزینهٔ تازه ساخت. `Idempotency-Key` تکراری با fingerprint یکسان همان نتیجه را می‌دهد و استفادهٔ متفاوت رد می‌شود؛ `If-Match` روی RowVersion سفارش اجباری است.
+- **انحراف:** `CostVariance = Actual − Standard` و `CostVariancePct = (Actual − Standard) / Standard × 100`; مبنای برنامه نیز در `PlannedCostVariance` و `PlannedCostVariancePct` ارائه می‌شود. وقتی مبنا صفر باشد، درصد `null` است و مقدار خالی به صفر پنهان تبدیل نمی‌شود.
 - **فرمول عنصر ماده (`material`):**
-  - مقدار استاندارد = `Σ NetQuantity` از نیازمندی‌های مواد (`MfgMaterialRequirement`) عملیات؛ مبلغ استاندارد = `Σ (NetQuantity × StandardUnitCost)` بر پایهٔ بهای واحد استاندارد ماده/قطعهٔ جزء.
-  - مقدار واقعی = `Σ Quantity` از مصرف‌های واقعی (`MfgMaterialConsumption`) عملیات؛ مبلغ واقعی = `Σ (Quantity × UnitCost)` مصرف‌ها.
-- **فرمول عناصر ماشین، دستمزد و سربار (`machine` | `labor` | `overhead`):**
-  - ساعت استاندارد = `(PlannedSetupMinutes + PlannedQuantity × PlannedRunMinutesPerUnit) / 60`.
-  - ساعت واقعی = مجموع `(SetupActualMinutes + RunActualMinutes)` ردیف‌های اجرای عملیات (`MfgOperationExecution`) تقسیم بر ۶۰ (و اگر صفر بود، فیلدهای واقعی خود عملیات).
-  - مبلغ استاندارد/واقعی = `ساعت × MfgCostCenter.HourlyRate` عنصر مربوط؛ در نبود مرکز هزینه/نرخ ثبت‌شده، نرخ و مبلغ برابر **صفر** است (نرخ حدسی ساخته نمی‌شود).
-- **دو گیت بستن سفارش (`POST /orders/{orderId}/close`):** علاوه بر تکمیل تمام عملیات (`completed`) و برابری خروجی تجمعی با مقدار سفارش، دو دروازهٔ الزامی بررسی می‌شوند:
-  1. گیت تطبیق مواد: هیچ نیازمندی باز یا بدون مصرف معتبر باقی نمانده باشد (وگرنه `422 MFG_MATERIALS_NOT_RECONCILED`).
-  2. گیت تطبیق هزینه: رکورد `MfgOrderCost` با `Reconciled = true` ثبت شده باشد (وگرنه `422 MFG_COST_NOT_RECONCILED`).
+  - مقدار/مبلغ استاندارد از `GrossQuantity` نسخهٔ آخر نیاز مواد (با fallback به `NetQuantity`) و `StandardUnitCost` ماده/قطعهٔ جزء محاسبه می‌شود.
+  - مقدار/مبلغ برنامه‌ریزی‌شده از `NetQuantity × StandardUnitCost` محاسبه می‌شود؛ مقدار واقعی از `MfgMaterialConsumption.Quantity` و مبلغ واقعی از `Quantity × UnitCost` است.
+- **فرمول ماشین، دستمزد و سربار (`machine` | `labor` | `overhead`):** مقدار استاندارد از زمان تنظیم و چرخهٔ استاندارد عملیات؛ برنامه از ظرفیت برنامهٔ زمان‌بندی آخر (یا `PlannedCapacityMinutes`/استاندارد به‌عنوان fallback)؛ واقعی از زمان Setup/Run گزارش‌شده در نشست‌های اجراست. هر سه مبلغ برابر ساعت × نرخ مؤثر همان عنصر در `MfgCostCenter` است؛ نرخ/ارز در تاریخ مؤثر همان نسخه انتخاب می‌شود و در نبود نرخ، مبلغ صفر است (نرخ حدسی ساخته نمی‌شود).
+- **فرمول ضایعات (`scrap`):** استاندارد و برنامه از `ScrapAllowanceQty` و بهای استاندارد مواد می‌آید؛ واقعی از مقدار ضایعات execution و `MfgScrapRecord` به‌دست می‌آید. ردیف دارای `CostAmount` همان مبلغ ثبت‌شده را به‌کار می‌برد؛ در نبود آن، ارزش‌گذاری از هزینهٔ واحد عملیات برآورد می‌شود. ضایعات متصل به execution برای جلوگیری از دوباره‌شماری تجمیع می‌شوند.
+- **داشبورد OEE:** تقویم مؤثر هر مرکز در timezone محلی‌اش به بازه‌های ظرفیت تبدیل می‌شود؛ date-override بر قاعدهٔ هفتگی مقدم است، break حذف می‌شود و `AvailabilityPct` وزن ظرفیت است. توقف‌های planned ابتدا از زمان برنامه کم می‌شوند؛ توقف‌های unplanned پس از حذف هم‌پوشانی از زمان تولید کسر می‌شوند. Performance از چرخه/Setup استاندارد در برابر زمان Setup/Run واقعی و Quality از خروجی سالم در برابر سالم+ضایعات+دوباره‌کاری محاسبه می‌شود؛ Performance برای OEE حداکثر ۱۰۰٪ است.
+- **داشبورد کارخانه:** وضعیت سفارش‌ها برای scope کارخانه/مرکز کاری شمارش می‌شود؛ OTD بر سفارش‌های موعددار در بازه محاسبه می‌شود؛ کمبودهای باز MRP و هشدارهای `open` به تفکیک `critical/high/medium/low` می‌آیند. جمع هزینه فقط در صورت مجوز `mfg.cost.view` برگردانده می‌شود.
+- **دو گیت بستن سفارش (`POST /orders/{orderId}/close`):** علاوه بر تکمیل تمام عملیات (`completed`) و برابری خروجی تجمعی با مقدار سفارش:
+  1. گیت مواد: نیازمندی باز یا بدون مصرف معتبر باقی نماند (`422 MFG_MATERIALS_NOT_RECONCILED`).
+  2. گیت هزینه: رکورد `MfgOrderCost` همان سفارش با `Reconciled = true` ثبت شده باشد (`422 MFG_COST_NOT_RECONCILED`).
 
 ## ۵.۹ نمونهٔ Request/Response
 

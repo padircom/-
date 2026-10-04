@@ -1116,7 +1116,7 @@ export default function ManufacturingWorkspace({
     try {
       const freshOrder = await MfgClient.getOrder(plantId, mfgUserId, costOrderId);
       const reconciled = await MfgClient.reconcileOrderCost(plantId, mfgUserId, costOrderId, freshOrder.RowVersion, {
-        CostVersion: 1,
+        CostVersion: orderCost?.CostVersion ?? 1,
         ReconcileThrough: new Date().toISOString(),
       });
       setOrderCost(reconciled);
@@ -1321,10 +1321,86 @@ export default function ManufacturingWorkspace({
                 {alerts.filter((a) => a.Status === "open").length} / {alerts.length}
               </div>
               <div className="tx3 text-xs mt-1">
+                {tr("شدت باز:", "Open by severity:")} C {overviewData?.alerts?.bySeverity?.critical ?? 0} · H {overviewData?.alerts?.bySeverity?.high ?? 0} · M {overviewData?.alerts?.bySeverity?.medium ?? 0} · L {overviewData?.alerts?.bySeverity?.low ?? 0}
+              </div>
+              <div className="tx3 text-xs mt-1">
                 {tr("ضایعات ثبت‌شده:", "Scrap Qty:")} {overviewData?.production?.scrapQuantity ?? oeeData?.quality?.scrapQuantity ?? "—"}
               </div>
             </div>
           </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div className="glass-dark rounded-xl p-3">
+              <div className="tx3 text-xs">{tr("تحویل به‌موقع (OTD) سفارش‌های موعددار", "On-Time Delivery (OTD) for Due Orders")}</div>
+              <div className="tx1 text-base font-semibold mt-1" dir="ltr">
+                {overviewData?.onTimeDeliveryPct == null ? "—" : `${overviewData.onTimeDeliveryPct}%`}
+              </div>
+              <div className="tx3 text-xs mt-1">
+                {tr("موعد این بازه:", "Due this window:")} {overviewData?.orders?.dueInWindowCount ?? 0}
+                {" · "}{tr("عقب‌افتادهٔ باز:", "Open late:")} {overviewData?.orders?.openLateCount ?? 0}
+              </div>
+            </div>
+            <div className="glass-dark rounded-xl p-3">
+              <div className="tx3 text-xs">{tr("کمبودهای باز MRP", "Open MRP Shortages")}</div>
+              <div className="tx1 text-base font-semibold mt-1" dir="ltr">
+                {overviewData?.shortages?.openCount ?? overviewData?.openShortagesCount ?? 0}
+              </div>
+              <div className="tx3 text-xs mt-1" dir="ltr">
+                {tr("مقدار کمبود:", "Short quantity:")} {overviewData?.shortages?.totalQuantity ?? overviewData?.totalShortageQuantity ?? 0}
+                {" · "}{tr("در بازه:", "Due in window:")} {overviewData?.shortages?.dueInWindowCount ?? 0}
+              </div>
+            </div>
+            <div className="glass-dark rounded-xl p-3">
+              <div className="tx3 text-xs">{tr("انحراف هزینهٔ سفارش‌ها", "Production Order Cost Variance")}</div>
+              <div className="tx1 text-base font-semibold mt-1" dir="ltr">
+                {overviewData?.costSummary?.available && overviewData?.costSummary?.currency
+                  ? `${overviewData.costSummary.costVariance?.toLocaleString() ?? 0} ${overviewData.costSummary.currency}`
+                  : "—"}
+                {overviewData?.costSummary?.available && overviewData?.costSummary?.costVariancePct != null
+                  ? ` (${overviewData.costSummary.costVariancePct}%)`
+                  : ""}
+              </div>
+              <div className="tx3 text-xs mt-1" dir="ltr">
+                {overviewData?.costSummary?.available
+                  ? `${tr("Actual:", "Actual:")} ${overviewData.costSummary.actualTotalCost?.toLocaleString() ?? 0} ${overviewData.costSummary.currency ?? ""}`
+                  : tr("برای نقش فعلی در دسترس نیست", "Not available to this role")}
+              </div>
+            </div>
+          </div>
+
+          <section className="glass-dark rounded-xl p-3 space-y-2.5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h4 className="tx1 font-semibold">{tr("OEE کارخانه به تفکیک Work Center", "Plant OEE by Work Center")}</h4>
+              <span className="tx3 text-xs" dir="ltr">
+                {tr("وضعیت سفارش:", "Order status:")} {overviewData?.statusCounts?.created ?? 0} {tr("ایجادشده", "created")} · {overviewData?.statusCounts?.released ?? 0} {tr("آزادشده", "released")} · {overviewData?.statusCounts?.["in-progress"] ?? 0} {tr("در اجرا", "in progress")} · {overviewData?.statusCounts?.completed ?? 0} {tr("تکمیل", "completed")}
+              </span>
+            </div>
+            {!oeeData?.workCenters?.length ? (
+              <p className="tx3 text-xs">{tr("دادهٔ تقویم یا مرکز کاری برای این بازه در دسترس نیست.", "No work-center calendar data in this window.")}</p>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2">
+                {oeeData.workCenters.map((center: any) => (
+                  <article key={center.workCenterId} className="rounded-lg border b-line-soft p-2.5 text-xs tx2">
+                    <div className="flex items-center justify-between gap-2">
+                      <strong className="tx1">{center.workCenterCode} — {center.workCenterNameFa}</strong>
+                      <strong dir="ltr">{center.oeePct == null ? "—" : `${center.oeePct}%`}</strong>
+                    </div>
+                    <div className="tx3 mt-1" dir="ltr">
+                      A {center.availability.pct ?? "—"}% · P {center.performance.pct ?? "—"}% · Q {center.quality.pct ?? "—"}%
+                    </div>
+                    <div className="tx3 mt-1" dir="ltr">
+                      {tr("تقویم:", "Calendar:")} {center.calendar.availableMinutes} {tr("دقیقه", "min")} · {tr("توقف ناخواسته:", "Unplanned:")} {center.downtime.unplannedMinutes} {tr("دقیقه", "min")}
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
+            {!!oeeData?.bottlenecks?.length && (
+              <p className="tx3 text-[11px]">
+                {tr("پایین‌ترین OEE:", "Lowest OEE:")} {oeeData.bottlenecks.map((item: any) => `${item.workCenterCode} (${item.oeePct}%)`).join(" · ")}
+              </p>
+            )}
+          </section>
 
           <section className="glass-dark rounded-xl p-3 space-y-2.5">
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -3144,23 +3220,63 @@ export default function ManufacturingWorkspace({
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
             <section className="glass-dark rounded-xl p-3 space-y-2">
-              <h4 className="tx1 font-semibold">{tr("خلاصهٔ هزینهٔ سفارش (GET /cost/orders/:orderId)", "Order Cost Summary")}</h4>
+              <h4 className="tx1 font-semibold">{tr("خلاصهٔ استاندارد، برنامه‌ریزی‌شده و واقعی سفارش", "Standard, Planned & Actual Order Cost")}</h4>
               {orderCost ? (
                 <div className="space-y-2 text-xs tx2">
-                  <div className="flex justify-between rounded border b-line-soft p-2" dir="ltr">
-                    <span>Standard Total: <strong>{orderCost.StandardTotalCost?.toLocaleString()} {orderCost.Currency}</strong></span>
-                    <span>Actual Total: <strong>{orderCost.ActualTotalCost?.toLocaleString()} {orderCost.Currency}</strong></span>
+                  <div className="grid grid-cols-2 xl:grid-cols-4 gap-2" dir="ltr">
+                    {[
+                      ["Standard", orderCost.StandardTotalCost],
+                      ["Planned", orderCost.PlannedTotalCost ?? orderCost.StandardTotalCost],
+                      ["Actual", orderCost.ActualTotalCost],
+                      ["Actual − Standard", orderCost.CostVariance ?? orderCost.Variance ?? 0],
+                    ].map(([label, value]) => (
+                      <div key={String(label)} className="rounded border b-line-soft p-2">
+                        <div className="tx3">{label}</div>
+                        <strong className="tx1">{Number(value ?? 0).toLocaleString()} {orderCost.Currency}</strong>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex flex-wrap justify-between gap-2 rounded border b-line-soft p-2">
+                    <span dir="ltr">
+                      {tr("انحراف از استاندارد:", "Variance vs standard:")} {orderCost.CostVariance?.toLocaleString() ?? orderCost.Variance?.toLocaleString() ?? 0} ({orderCost.CostVariancePct == null ? "—" : `${orderCost.CostVariancePct}%`})
+                      {" · "}{tr("از برنامه:", "vs planned:")} {orderCost.PlannedCostVariance?.toLocaleString() ?? 0} ({orderCost.PlannedCostVariancePct == null ? "—" : `${orderCost.PlannedCostVariancePct}%`})
+                    </span>
                     <span className={orderCost.Reconciled ? "text-emerald-300" : "text-amber-300"}>
-                      {orderCost.Reconciled ? "✓ Reconciled" : "Pending Reconcile"}
+                      {orderCost.Reconciled ? "✓ Reconciled" : tr("در انتظار تطبیق", "Pending reconcile")}
+                      {orderCost.ReconcileThrough ? ` · ${orderCost.ReconcileThrough.slice(0, 16).replace("T", " ")}` : ""}
                     </span>
                   </div>
                   {orderCost.ByElement && (
-                    <div className="grid grid-cols-2 gap-2" dir="ltr">
-                      {(["material", "machine", "labor", "overhead"] as const).map((el) => (
-                        <div key={el} className="rounded border b-line-soft p-2">
-                          <div className="tx1 font-medium uppercase">{el}</div>
-                          <div className="tx3">Std: {orderCost.ByElement?.[el]?.standard?.toLocaleString() ?? 0}</div>
-                          <div className="tx2">Act: {orderCost.ByElement?.[el]?.actual?.toLocaleString() ?? 0}</div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2" dir="ltr">
+                      {(["material", "machine", "labor", "overhead", "scrap"] as const).map((el) => {
+                        const values = orderCost.ByElement?.[el];
+                        return (
+                          <div key={el} className="rounded border b-line-soft p-2">
+                            <div className="tx1 font-medium uppercase">{el}</div>
+                            <div className="tx3">Std: {values?.standard?.toLocaleString() ?? 0}</div>
+                            <div className="tx3">Plan: {values?.planned?.toLocaleString() ?? 0}</div>
+                            <div className="tx2">Act: {values?.actual?.toLocaleString() ?? 0} {orderCost.Currency}</div>
+                            <div className="tx3">
+                              Δ Std: {values?.costVariance?.toLocaleString() ?? 0}
+                              {values?.costVariancePct == null ? "" : ` (${values.costVariancePct}%)`}
+                            </div>
+                            <div className="tx3">
+                              Δ Plan: {values?.plannedCostVariance?.toLocaleString() ?? 0}
+                              {values?.plannedCostVariancePct == null ? "" : ` (${values.plannedCostVariancePct}%)`}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                  {!!orderCost.OperationBreakdown?.length && (
+                    <div className="space-y-1 border-t b-line-soft pt-2">
+                      <h5 className="tx1 font-medium">{tr("تفکیک عملیات", "Operation breakdown")}</h5>
+                      {orderCost.OperationBreakdown.map((operation) => (
+                        <div key={operation.OperationId} className="flex flex-wrap justify-between gap-2 rounded border b-line-soft p-2" dir="ltr">
+                          <span>{operation.SequenceNo} · {operation.OperationCode} · {operation.WorkCenterId}</span>
+                          <span>Std {operation.StandardTotalCost.toLocaleString()} · Plan {operation.PlannedTotalCost.toLocaleString()} · Act <strong>{operation.ActualTotalCost.toLocaleString()} {operation.Currency ?? orderCost.Currency}</strong></span>
+                          <span className="tx3">Δ Std {operation.CostVariance.toLocaleString()} ({operation.CostVariancePct == null ? "—" : `${operation.CostVariancePct}%`}) · Δ Plan {operation.PlannedCostVariance.toLocaleString()} ({operation.PlannedCostVariancePct == null ? "—" : `${operation.PlannedCostVariancePct}%`})</span>
                         </div>
                       ))}
                     </div>
@@ -3200,7 +3316,8 @@ export default function ManufacturingWorkspace({
                       <strong>{row.CostElement}</strong> ({row.SourceRef ?? "stored"})
                     </span>
                     <span>
-                      Std: {row.StandardAmount?.toLocaleString()} · Act: <strong>{row.ActualAmount?.toLocaleString()} {row.Currency}</strong> (Rate: {row.ActualRate?.toLocaleString()})
+                      Std: {row.StandardAmount?.toLocaleString()} · Plan: {row.PlannedAmount?.toLocaleString() ?? row.StandardAmount?.toLocaleString()} · Act: <strong>{row.ActualAmount?.toLocaleString()} {row.Currency}</strong>
+                      {" · Δ "}{row.CostVariance?.toLocaleString() ?? "—"}{row.CostVariancePct == null ? "" : ` (${row.CostVariancePct}%)`}
                     </span>
                   </div>
                 ))}

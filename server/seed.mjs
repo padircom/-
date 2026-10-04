@@ -318,6 +318,7 @@ async function seedMfgWorkCenters() {
   const centers = [
     ["WC-CNC", "مرکز ماشین‌کاری CNC", "machine", 960, 92, "machine", [
       { CostElement: "machine", HourlyRate: 1_250_000, AllocationBasis: "machine_hours" },
+      { CostElement: "labor", HourlyRate: 680_000, AllocationBasis: "labor_hours" },
       { CostElement: "overhead", HourlyRate: 480_000, AllocationBasis: "machine_hours" },
     ]],
     ["WC-ASM", "ایستگاه مونتاژ", "assembly", 960, 95, "labor", [
@@ -686,6 +687,22 @@ async function seedManufacturing(workCenters) {
   for (const operation of firstOperations) {
     await runOperation(operation, { good: Number(operation.PlannedQuantity), startedAt: isoAt(1, 480), finishedAt: isoAt(2, 960) });
   }
+  if (firstOperations[0]) {
+    await mfgStep("ثبت توقف برنامه‌ریزی‌شدهٔ سرویس", () => mfg("/downtime", {
+      user: MFG_ROLES.supervisor,
+      method: "POST",
+      idem: "seed-downtime-planned-1",
+      body: {
+        WorkCenterId: firstOperations[0].WorkCenterId,
+        OperationId: firstOperations[0].Id,
+        StartedAt: isoAt(1, 720),
+        FinishedAt: isoAt(1, 735),
+        DowntimeType: "planned",
+        ReasonCode: "PREVENTIVE-MAINTENANCE",
+        NoteFa: "توقف برنامه‌ریزی‌شده برای سرویس نمونه",
+      },
+    }));
+  }
 
   const mrp = await mfgStep("اجرای MRP برای MO-DEMO-0001", () => mfg("/mrp/calculate", {
     user: MFG_ROLES.plan,
@@ -722,7 +739,7 @@ async function seedManufacturing(workCenters) {
     method: "POST",
     match: closeableBefore.RowVersion,
     idem: "seed-reconcile-1",
-    body: { CostVersion: 1, ReconcileThrough: isoAt(3, 1020) },
+    body: { CostVersion: 1, ReconcileThrough: isoAt(3, 1020), ContractRevenue: 1_200_000_000 },
   }));
   const closableOrder = await mfg(`/orders/${closeable.Id}`, { user: MFG_ROLES.manager });
   await mfgStep("بستن نهایی MO-DEMO-0001", () => mfg(`/orders/${closeable.Id}/close`, {
