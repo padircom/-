@@ -4,8 +4,9 @@ test-results/
 playwright-report/
 .env
 server/data/
-# دادهٔ اجرای محلی (از server/seed.mjs) — جدا از server/data تا آزمون‌ها آلوده نشوند
-server/rundata/
+# دادهٔ اجرای محلی (از server/seed.mjs) — جدا از server/data تا آزمون‌ها آلوده نشوند.
+# الگوی rundata* هر نام‌گذاری مشتق را هم می‌گیرد (مثلاً rundata-ui برای پیش‌نمایش زنده).
+server/rundata*/
 
 # باندل‌های تولیدی esbuild برای تست‌های Node (بازتولید: npm test)
 server/finLogic.js
@@ -19,6 +20,8 @@ server/ckmLogic.js
 server/rptLogic.js
 server/rbacLogic.js
 server/sqlLogic.js
+# موتور برنامه‌ریزی فاز ۵ تولید (بازتولید: npm run build:mfgplan)
+server/mfgPlanLogic.js
 server/itgLogic.js
 
 # پیکربندی موقت پیش‌نمایش (خارج از تحویلی)

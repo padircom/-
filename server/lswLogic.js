@@ -28,6 +28,12 @@ function phasesFor(type) {
       return PC_PHASES;
     case "C":
       return C_PHASES;
+    /* سوئیچ روی اتحادیهٔ نوع در TypeScript کامل به نظر می‌رسد، اما مقدار
+     * ناشناخته از دادهٔ قدیمی یا ورودی خراب می‌آید و بدون default تابع
+     * undefined برمی‌گرداند و فراخوان با «not iterable» می‌شکند. پیش‌فرض
+     * همان جدول EPC است تا کاربر از یک فرم معتبر شروع کند. */
+    default:
+      return EPC_PHASES;
   }
 }
 function roundMoney(n, digits = 2) {

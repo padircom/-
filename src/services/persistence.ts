@@ -5441,10 +5441,38 @@ export function addColumnDdl(tableName: string, columnName: string, dialect: Sql
  * اسکیمای تثبیت‌شدهٔ 0046؛ تغییرات بعدی MFG باید فقط در migration تازه بیایند.
  * MfgScheduleRun و ستون‌های WSPT/BreakStart در 0047 اضافه می‌شوند.
  */
+/** جدول‌های فاز ۵ (MPS/لات/ATP/تقسیم) در مهاجرت 0051 ساخته می‌شوند، نه 0046. */
+const MANUFACTURING_PHASE5_TABLES = new Set([
+  "MfgLotSizingPolicy", "MfgMasterScheduleRun", "MfgDemandForecast",
+  "MfgMasterScheduleLine", "MfgAtpCheck", "MfgOperationSplitLot",
+]);
+
+/** جدول‌های فاز ۵ بخش ۱۱ (Planned Order، Production Version، Pegging) در مهاجرت 0052. */
+const MANUFACTURING_PHASE5B_TABLES = new Set([
+  "MfgProductionVersion", "MfgPlannedOrder", "MfgRequirementPegging",
+]);
+
 function manufacturingTablesFor0046(): TableDef[] {
   return MANUFACTURING_TABLES
-    .filter((table) => table.name !== "MfgScheduleRun")
+    .filter((table) => table.name !== "MfgScheduleRun"
+      && !MANUFACTURING_PHASE5_TABLES.has(table.name)
+      && !MANUFACTURING_PHASE5B_TABLES.has(table.name))
     .map((table) => {
+      /* SplitLotCount/OverlapPct در فاز ۵ (مهاجرت 0051) اضافه شده‌اند؛ 0046 یخ است. */
+      if (table.name === "MfgProductionOrderOperation" || table.name === "MfgRoutingOperation") {
+        return {
+          ...table,
+          columns: table.columns.filter((column) => !["SplitLotCount", "OverlapPct"].includes(column.name)),
+          checks: table.checks?.filter((check) => !["CK_MfgOrderOp_Split", "CK_MfgRoutingOp_Split"].includes(check.name))
+            .map((check) => check.name.startsWith("CK_MfgOrderOp_Overlap") || check.name.startsWith("CK_MfgRoutingOp_Overlap")
+              ? {
+                ...check,
+                expression: "OverlapAllowed = 0 OR (TransferBatchQty IS NOT NULL AND TransferBatchQty > 0)",
+                columns: ["OverlapAllowed", "TransferBatchQty"],
+              }
+              : check),
+        };
+      }
       if (table.name === "MfgWorkCenterResource") {
         return {
           ...table,
@@ -6162,6 +6190,74 @@ export const MIGRATIONS: Migration[] = [
       `IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_MfgOperationCost_Element' AND parent_object_id = OBJECT_ID(N'dbo.MfgOperationCost')) ALTER TABLE dbo.MfgOperationCost WITH CHECK ADD CONSTRAINT CK_MfgOperationCost_Element CHECK (CostElement IN ('material','machine','labor','overhead','scrap'));`,
       `IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_MfgOperationCost_PlannedAmounts' AND parent_object_id = OBJECT_ID(N'dbo.MfgOperationCost')) ALTER TABLE dbo.MfgOperationCost WITH CHECK ADD CONSTRAINT CK_MfgOperationCost_PlannedAmounts CHECK ((PlannedQuantity IS NULL OR PlannedQuantity >= 0) AND (PlannedRate IS NULL OR PlannedRate >= 0) AND (PlannedAmount IS NULL OR PlannedAmount >= 0));`,
       `IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_MfgOrderCost_Phase4Amounts' AND parent_object_id = OBJECT_ID(N'dbo.MfgOrderCost')) ALTER TABLE dbo.MfgOrderCost WITH CHECK ADD CONSTRAINT CK_MfgOrderCost_Phase4Amounts CHECK ((PlannedMaterialCost IS NULL OR PlannedMaterialCost >= 0) AND (PlannedMachineCost IS NULL OR PlannedMachineCost >= 0) AND (PlannedLaborCost IS NULL OR PlannedLaborCost >= 0) AND (PlannedOverheadCost IS NULL OR PlannedOverheadCost >= 0) AND (StandardScrapCost IS NULL OR StandardScrapCost >= 0) AND (PlannedScrapCost IS NULL OR PlannedScrapCost >= 0) AND (ActualScrapCost IS NULL OR ActualScrapCost >= 0) AND (PlannedTotalCost IS NULL OR PlannedTotalCost >= 0));`,
+    ],
+  },
+  {
+    /* MFG-6 (فاز ۵): برنامهٔ اصلی تولید (MPS)، مدیریت تقاضا/پیش‌بینی، قواعد
+     * اندازه‌گذاری لات (L4L/FOQ/EOQ/POQ)، بررسی قابلیت تعهد تحویل (ATP) و
+     * تقسیم/هم‌پوشانی عملیات. 0046 تا 0050 یخ‌زده می‌مانند؛ شش جدول تازه ساخته
+     * می‌شود و دو ستون nullable به عملیات Routing و سفارش اضافه می‌گردد. */
+    version: "0051", name: "manufacturing_mps_lotsizing_atp_overlap",
+    statements: [
+      ...MANUFACTURING_TABLES
+        .filter((table) => MANUFACTURING_PHASE5_TABLES.has(table.name))
+        .flatMap((table) => [
+          tableDdl(table, "mssql"),
+          ...(table.indexes ?? []).map((index) => indexDdl(table, index, "mssql")),
+        ]),
+      ...["MfgRoutingOperation", "MfgProductionOrderOperation"].flatMap((tableName) => [
+        ...["SplitLotCount", "OverlapPct"].map((column) => addColumnDdl(tableName, column, "mssql")),
+        `IF EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_Mfg${tableName === "MfgRoutingOperation" ? "RoutingOp" : "OrderOp"}_Overlap' AND parent_object_id = OBJECT_ID(N'dbo.${tableName}')) ALTER TABLE dbo.${tableName} DROP CONSTRAINT CK_Mfg${tableName === "MfgRoutingOperation" ? "RoutingOp" : "OrderOp"}_Overlap;`,
+        `IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_Mfg${tableName === "MfgRoutingOperation" ? "RoutingOp" : "OrderOp"}_Overlap' AND parent_object_id = OBJECT_ID(N'dbo.${tableName}')) ALTER TABLE dbo.${tableName} WITH CHECK ADD CONSTRAINT CK_Mfg${tableName === "MfgRoutingOperation" ? "RoutingOp" : "OrderOp"}_Overlap CHECK (OverlapAllowed = 0 OR (TransferBatchQty IS NOT NULL AND TransferBatchQty > 0) OR (OverlapPct IS NOT NULL AND OverlapPct > 0 AND OverlapPct < 100));`,
+        `IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_Mfg${tableName === "MfgRoutingOperation" ? "RoutingOp" : "OrderOp"}_Split' AND parent_object_id = OBJECT_ID(N'dbo.${tableName}')) ALTER TABLE dbo.${tableName} WITH CHECK ADD CONSTRAINT CK_Mfg${tableName === "MfgRoutingOperation" ? "RoutingOp" : "OrderOp"}_Split CHECK (SplitLotCount IS NULL OR SplitLotCount >= 1);`,
+      ]),
+    ],
+  },
+
+  /* فاز ۵ بخش ۱۱ — سفارش برنامه‌ریزی‌شده، نسخهٔ تولید و Pegging پایدار.
+   * ترتیب ساخت اهمیت دارد: MfgPlannedOrder به MfgProductionVersion ارجاع می‌دهد
+   * و MfgRequirementPegging به MfgPlannedOrder. */
+  {
+    version: "0052", name: "manufacturing_planned_order_version_pegging",
+    statements: [
+      ...MANUFACTURING_TABLES
+        .filter((table) => MANUFACTURING_PHASE5B_TABLES.has(table.name))
+        .sort((left, right) => {
+          const order = ["MfgProductionVersion", "MfgPlannedOrder", "MfgRequirementPegging"];
+          return order.indexOf(left.name) - order.indexOf(right.name);
+        })
+        .flatMap((table) => [
+          tableDdl(table, "mssql"),
+          ...(table.indexes ?? []).map((index) => indexDdl(table, index, "mssql")),
+        ]),
+    ],
+  },
+
+  /* بخش ۱۱.۳ — «mrp» به منابع تقاضای سفارش تولید اضافه می‌شود تا سفارش
+   * تبدیل‌شده از سفارش برنامه‌ریزی‌شده، منشأ MRP خود را نگه دارد. */
+  {
+    version: "0053", name: "manufacturing_order_demand_source_mrp",
+    statements: [
+      `IF EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_MfgProdOrder_Demand' AND parent_object_id = OBJECT_ID(N'dbo.MfgProductionOrder')) ALTER TABLE dbo.MfgProductionOrder DROP CONSTRAINT CK_MfgProdOrder_Demand;`,
+      `IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_MfgProdOrder_Demand' AND parent_object_id = OBJECT_ID(N'dbo.MfgProductionOrder')) ALTER TABLE dbo.MfgProductionOrder WITH CHECK ADD CONSTRAINT CK_MfgProdOrder_Demand CHECK (DemandSource IN ('sales-order','contract','forecast','manual','mrp'));`,
+    ],
+  },
+
+  /* بخش ۱۱.۱ — تأیید دستی MPS پیش از اجرای MRP. تا پیش از این، اجرای MPS هیچ
+   * ستون وضعیتی نداشت و بنابراین راهی برای «تأیید شد» وجود نداشت؛ MRP می‌توانست
+   * روی برنامهٔ تأییدنشده اجرا شود. ردیف‌های موجود draft می‌مانند. */
+  {
+    version: "0054", name: "manufacturing_mps_run_approval",
+    statements: [
+      /* Status ستون NOT NULL با default است و addColumnDdl فقط ستون nullable
+       * می‌پذیرد؛ همان الگوی DispatchWeight در 0047 به کار می‌رود. SQL Server
+       * ردیف‌های موجود را با default پر می‌کند. */
+      ...["Status", "ApprovedBy", "ApprovedAt", "NoteFa"].map((column) =>
+        `IF COL_LENGTH('dbo.MfgMasterScheduleRun','${column}') IS NULL ALTER TABLE dbo.MfgMasterScheduleRun ADD ${columnDdl(columnDefFor("MfgMasterScheduleRun", column), "mssql")};`),
+      `IF EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_MfgMpsRun_Status' AND parent_object_id = OBJECT_ID(N'dbo.MfgMasterScheduleRun')) ALTER TABLE dbo.MfgMasterScheduleRun DROP CONSTRAINT CK_MfgMpsRun_Status;`,
+      `IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_MfgMpsRun_Status' AND parent_object_id = OBJECT_ID(N'dbo.MfgMasterScheduleRun')) ALTER TABLE dbo.MfgMasterScheduleRun WITH CHECK ADD CONSTRAINT CK_MfgMpsRun_Status CHECK (Status IN ('draft','approved'));`,
+      `IF EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_MfgMpsRun_Approval' AND parent_object_id = OBJECT_ID(N'dbo.MfgMasterScheduleRun')) ALTER TABLE dbo.MfgMasterScheduleRun DROP CONSTRAINT CK_MfgMpsRun_Approval;`,
+      `IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_MfgMpsRun_Approval' AND parent_object_id = OBJECT_ID(N'dbo.MfgMasterScheduleRun')) ALTER TABLE dbo.MfgMasterScheduleRun WITH CHECK ADD CONSTRAINT CK_MfgMpsRun_Approval CHECK (ApprovedAt IS NULL OR ApprovedBy IS NOT NULL);`,
     ],
   },
 ];

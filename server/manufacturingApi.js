@@ -6,13 +6,36 @@
  */
 
 import { SchedulePlanningError, planManufacturingSchedule } from "./manufacturingScheduler.js";
+import { tablesOfModule } from "./sqlLogic.js";
+import {
+  analyzeLeadTimeOverlap,
+  buildPegging,
+  buildTimeBuckets,
+  checkAtpPromise,
+  computeAvailableToPromise,
+  computeCapacityRequirements,
+  computeEconomicOrderQuantity,
+  computeLeadTimeOffsets,
+  computeMasterSchedule,
+  computePlannedOrders,
+  computeSplitLots,
+  isoDateShift,
+  LOT_SIZING_RULES,
+  resolveProductionVersion,
+  MANUFACTURING_PLANNING_MODEL_VERSION,
+  resolvePeriodOrderQuantity,
+  resolveTransferBatchQty,
+  validateLotSizingPolicy,
+} from "./mfgPlanLogic.js";
 
 const API_VERSION = "mfg-api-v1";
 const ROOT = "/api/mfg/plants/:plantId";
 const ID_RE = /^[A-Za-z0-9_-]{1,60}$/;
 const CODE_RE = /^[A-Za-z0-9][A-Za-z0-9._/-]{0,59}$/;
 const PART_TYPES = new Set(["manufactured", "purchased", "phantom", "subcontract"]);
-const DEMAND_SOURCES = new Set(["sales-order", "contract", "forecast", "manual"]);
+/* `mrp` از بخش ۱۱.۳ اضافه شد: سفارش تولیدی که از تبدیل سفارش برنامه‌ریزی‌شده
+ * به وجود آمده باید منشأ MRP خود را در خود رکورد نگه دارد. */
+const DEMAND_SOURCES = new Set(["sales-order", "contract", "forecast", "manual", "mrp"]);
 const PRIORITY_RULES = new Set(["EDD", "CR", "MANUAL"]);
 const DISPATCH_RULES = new Set(["EDD", "SPT", "CR", "WSPT", "FIFO", "MANUAL"]);
 const ORDER_STATUSES = new Set(["created", "released", "in-progress", "completed", "closed"]);
@@ -44,6 +67,17 @@ const PART_PLANNING_FIELDS = new Set([
 const OPENING_INVENTORY_FIELDS = new Set([
   "WarehouseCode", "LocationCode", "LotNo", "OnHandQty",
   "ReservedQty", "BlockedQty", "InTransitQty", "SafetyStockQty",
+]);
+/* ─── فاز ۵: MPS، اندازه‌گذاری لات، ATP، تقسیم/هم‌پوشانی ─── */
+const DEMAND_TYPES = new Set(["sales-order", "forecast", "contract", "manual"]);
+const DEMAND_STATUSES = new Set(["draft", "confirmed", "cancelled"]);
+const TIME_BUCKETS = new Set(["day", "week", "month"]);
+const ATP_MODES = new Set(["discrete", "cumulative"]);
+const SPLIT_LOT_STATUSES = new Set(["planned", "in-progress", "completed", "cancelled"]);
+const LOT_POLICY_FIELDS = new Set([
+  "PolicyCode", "RuleCode", "FixedLotQty", "OrderMultiple", "MinOrderQty", "MaxOrderQty",
+  "OrderingCost", "HoldingCostPerUnitPerYear", "AnnualDemandQty", "PeriodDays",
+  "PeriodOrderQuantity", "Currency", "EffectiveFrom", "EffectiveTo", "IsActive", "NoteFa",
 ]);
 const IDEMPOTENCY_KEY_RE = /^[A-Za-z0-9._:-]{1,160}$/;
 const CURRENCY_RE = /^[A-Z]{3,8}$/;
@@ -116,6 +150,51 @@ export const MANUFACTURING_IMPLEMENTED_ROUTES = Object.freeze([
   `GET ${ROOT}/dashboard/oee`,
   `GET ${ROOT}/alerts`,
   `POST ${ROOT}/alerts/:alertId/acknowledgements`,
+  /* فاز ۵ — مدیریت تقاضا و پیش‌بینی فروش (۵ مسیر) */
+  `GET ${ROOT}/demand-forecasts`,
+  `POST ${ROOT}/demand-forecasts`,
+  `PATCH ${ROOT}/demand-forecasts/:demandId`,
+  `DELETE ${ROOT}/demand-forecasts/:demandId`,
+  `GET ${ROOT}/demand/time-phased`,
+  /* فاز ۵ — قواعد اندازه‌گذاری لات (۴ مسیر) */
+  `GET ${ROOT}/lot-sizing-policies`,
+  `POST ${ROOT}/lot-sizing-policies`,
+  `PATCH ${ROOT}/lot-sizing-policies/:policyId`,
+  `POST ${ROOT}/lot-sizing/evaluate`,
+  /* فاز ۵ — برنامهٔ اصلی تولید MPS (۵ مسیر) */
+  `POST ${ROOT}/mps/runs`,
+  `GET ${ROOT}/mps/runs`,
+  `GET ${ROOT}/mps/runs/:runId`,
+  `GET ${ROOT}/mps/runs/:runId/lines`,
+  `POST ${ROOT}/mps/runs/:runId/firm`,
+  `POST ${ROOT}/mps/runs/:runId/approve`,
+  /* فاز ۵ بخش ۱۱ — نسخهٔ تولید (۴ مسیر) */
+  `GET ${ROOT}/production-versions`,
+  `POST ${ROOT}/production-versions`,
+  `PATCH ${ROOT}/production-versions/:versionId`,
+  `GET ${ROOT}/parts/:partId/production-version`,
+  /* فاز ۵ بخش ۱۱ — سفارش برنامه‌ریزی‌شده (۶ مسیر) */
+  `GET ${ROOT}/planned-orders`,
+  `GET ${ROOT}/planned-orders/:plannedOrderId`,
+  `PATCH ${ROOT}/planned-orders/:plannedOrderId`,
+  `POST ${ROOT}/planned-orders/:plannedOrderId/approve`,
+  `POST ${ROOT}/planned-orders/:plannedOrderId/reject`,
+  `POST ${ROOT}/planned-orders/:plannedOrderId/convert`,
+  /* فاز ۵ بخش ۱۱ — CRP (۲ مسیر)، گزارش MRP (۲ مسیر) و انطباق ISA-95 (۱ مسیر) */
+  `POST ${ROOT}/crp/calculate`,
+  `GET ${ROOT}/crp/summary`,
+  `GET ${ROOT}/mrp/lead-time-offset`,
+  `GET ${ROOT}/mrp/pegging`,
+  `GET ${ROOT}/conformance/isa95`,
+  /* فاز ۵ — قابلیت تعهد تحویل ATP (۳ مسیر) */
+  `POST ${ROOT}/atp/checks`,
+  `GET ${ROOT}/atp/checks`,
+  `GET ${ROOT}/atp/summary`,
+  /* فاز ۵ — تقسیم و هم‌پوشانی عملیات (۴ مسیر) */
+  `GET ${ROOT}/orders/:orderId/operations/:operationId/splits`,
+  `POST ${ROOT}/orders/:orderId/operations/:operationId/splits`,
+  `DELETE ${ROOT}/operation-splits/:splitLotId`,
+  `GET ${ROOT}/orders/:orderId/lead-time-analysis`,
 ]);
 
 class MfgApiError extends Error {
@@ -1515,6 +1594,223 @@ function buildOeeMetrics({ from, to, workCenter = null, calendarMinutes, planned
     oee: oeeValue,
     oeePct: oeeValue === null ? null : roundTo3(oeeValue * 100),
   };
+}
+
+/* ─────────── فاز ۵: کمکی‌های MPS، اندازه‌گذاری لات، ATP و تقسیم لات ─────────── */
+
+/** خطای موتور برنامه‌ریزی به قرارداد خطای REST نگاشت می‌شود؛ هیچ خطایی خام بیرون نمی‌رود. */
+function runPlanning(work) {
+  try {
+    return work();
+  } catch (err) {
+    if (err && typeof err.code === "string" && err.name === "ManufacturingPlanningError") {
+      const status = err.code.endsWith("_INVALID") ? 400 : 422;
+      throw new MfgApiError(status, err.code, err.message, err.details ?? {});
+    }
+    throw err;
+  }
+}
+
+function parseDemandType(value, field) {
+  if (value === undefined || value === null) return "manual";
+  const parsed = text(value, field, { required: true, max: 16 });
+  if (!DEMAND_TYPES.has(parsed)) throw bad(field, `${field} باید sales-order/forecast/contract/manual باشد`);
+  return parsed;
+}
+
+/** ورودی سیاست لات را به دو شکل برمی‌گرداند: ستون‌های پایگاه‌داده و ورودی موتور. */
+function parseLotPolicyInput(body, { allowExistingNulls = false } = {}) {
+  const ruleCode = text(body.RuleCode, "RuleCode", { required: true, max: 8 });
+  if (!LOT_SIZING_RULES.includes(ruleCode)) throw bad("RuleCode", "RuleCode باید L4L/FOQ/EOQ/POQ باشد");
+  const decimalField = (value, field) => {
+    if (value === undefined || value === null) return null;
+    return number(value, field, { required: true, min: 0, max: 99_999_999_999.9999 });
+  };
+  const intField = (value, field, max) => {
+    if (value === undefined || value === null) return null;
+    return number(value, field, { required: true, min: 1, max, integer: true });
+  };
+  const currency = text(body.Currency, "Currency", { max: 8, pattern: CURRENCY_RE }) ?? "IRR";
+  const effectiveFrom = isoDate(body.EffectiveFrom, "EffectiveFrom", { required: !allowExistingNulls }) ?? null;
+  const effectiveTo = body.EffectiveTo === undefined || body.EffectiveTo === null ? null : isoDate(body.EffectiveTo, "EffectiveTo", { required: true });
+  if (effectiveFrom && effectiveTo && effectiveTo < effectiveFrom) {
+    throw bad("EffectiveTo", "EffectiveTo نمی‌تواند پیش از EffectiveFrom باشد");
+  }
+  return {
+    policyCode: text(body.PolicyCode, "PolicyCode", { max: 60, pattern: CODE_RE }),
+    ruleCode,
+    fixedLotQty: decimalField(body.FixedLotQty, "FixedLotQty"),
+    orderMultiple: decimalField(body.OrderMultiple, "OrderMultiple"),
+    minOrderQty: decimalField(body.MinOrderQty, "MinOrderQty"),
+    maxOrderQty: decimalField(body.MaxOrderQty, "MaxOrderQty"),
+    orderingCost: decimalField(body.OrderingCost, "OrderingCost"),
+    holdingCostPerUnitPerYear: decimalField(body.HoldingCostPerUnitPerYear, "HoldingCostPerUnitPerYear"),
+    annualDemandQty: decimalField(body.AnnualDemandQty, "AnnualDemandQty"),
+    periodDays: intField(body.PeriodDays, "PeriodDays", 365),
+    periodOrderQuantity: intField(body.PeriodOrderQuantity, "PeriodOrderQuantity", 260),
+    currency,
+    effectiveFrom,
+    effectiveTo,
+    isActive: bool(body.IsActive, "IsActive", true),
+    noteFa: text(body.NoteFa, "NoteFa", { max: 800 }),
+    engine: {
+      rule: ruleCode,
+      fixedLotQty: decimalField(body.FixedLotQty, "FixedLotQty"),
+      orderMultiple: decimalField(body.OrderMultiple, "OrderMultiple"),
+      minOrderQty: decimalField(body.MinOrderQty, "MinOrderQty"),
+      maxOrderQty: decimalField(body.MaxOrderQty, "MaxOrderQty"),
+      orderingCost: decimalField(body.OrderingCost, "OrderingCost"),
+      holdingCostPerUnitPerYear: decimalField(body.HoldingCostPerUnitPerYear, "HoldingCostPerUnitPerYear"),
+      annualDemandQty: decimalField(body.AnnualDemandQty, "AnnualDemandQty"),
+      periodDays: intField(body.PeriodDays, "PeriodDays", 365),
+      periodOrderQuantity: intField(body.PeriodOrderQuantity, "PeriodOrderQuantity", 260),
+    },
+  };
+}
+
+/** EOQ/POQ محاسبه‌شده برای نمایش کنار ردیف سیاست؛ منبع حقیقت همان ورودی‌های سیاست است. */
+function enrichLotPolicy(row) {
+  const engine = {
+    rule: row.RuleCode,
+    fixedLotQty: row.FixedLotQty,
+    orderMultiple: row.OrderMultiple,
+    minOrderQty: row.MinOrderQty,
+    maxOrderQty: row.MaxOrderQty,
+    orderingCost: row.OrderingCost,
+    holdingCostPerUnitPerYear: row.HoldingCostPerUnitPerYear,
+    annualDemandQty: row.AnnualDemandQty,
+    periodDays: row.PeriodDays,
+    periodOrderQuantity: row.PeriodOrderQuantity,
+  };
+  return runPlanning(() => ({
+    eoq: computeEconomicOrderQuantity(engine),
+    periodOrderQuantity: row.RuleCode === "POQ" ? resolvePeriodOrderQuantity(engine) : null,
+  }));
+}
+
+/** سیاست مؤثر در یک تاریخ؛ تازه‌ترین EffectiveFrom که هنوز منقضی نشده باشد. */
+function pickEffectivePolicy(policies, atDate) {
+  const candidates = policies
+    .filter((row) => String(row.EffectiveFrom).slice(0, 10) <= atDate
+      && (!row.EffectiveTo || String(row.EffectiveTo).slice(0, 10) >= atDate))
+    .sort((left, right) => String(right.EffectiveFrom).localeCompare(String(left.EffectiveFrom)));
+  return candidates[0] ?? null;
+}
+
+/**
+ * زنجیرهٔ حل سیاست اندازه‌گذاری:
+ * ۱) سیاست صریح `MfgLotSizingPolicy` · ۲) بلوک `Planning` ماده (LotSize/OrderMultiple)
+ * · ۳) پیش‌فرض L4L. بدون این زنجیره قطعه‌ای که سیاست صریح ندارد بی‌صدا از MPS بیرون می‌ماند.
+ */
+function resolveLotPolicy({ policyRow, material, override }) {
+  if (override) {
+    return { source: "inline", policyId: null, engine: override.engine };
+  }
+  if (policyRow) {
+    return {
+      source: "policy",
+      policyId: policyRow.Id,
+      engine: {
+        rule: policyRow.RuleCode,
+        fixedLotQty: policyRow.FixedLotQty,
+        orderMultiple: policyRow.OrderMultiple,
+        minOrderQty: policyRow.MinOrderQty,
+        maxOrderQty: policyRow.MaxOrderQty,
+        orderingCost: policyRow.OrderingCost,
+        holdingCostPerUnitPerYear: policyRow.HoldingCostPerUnitPerYear,
+        annualDemandQty: policyRow.AnnualDemandQty,
+        periodDays: policyRow.PeriodDays,
+        periodOrderQuantity: policyRow.PeriodOrderQuantity,
+      },
+    };
+  }
+  if (material) {
+    const lotSize = storedNumber(material.LotSize, 0);
+    return {
+      source: "material-planning",
+      policyId: null,
+      engine: {
+        rule: lotSize > 1 ? "FOQ" : "L4L",
+        fixedLotQty: lotSize > 0 ? lotSize : null,
+        orderMultiple: storedNumber(material.OrderMultiple, 1) || 1,
+        minOrderQty: null,
+        maxOrderQty: null,
+        orderingCost: null,
+        holdingCostPerUnitPerYear: null,
+        annualDemandQty: null,
+        periodDays: null,
+        periodOrderQuantity: null,
+      },
+    };
+  }
+  return { source: "default-l4l", policyId: null, engine: { rule: "L4L" } };
+}
+
+/** جمع موجودی قابل برنامه‌ریزی همهٔ ردیف‌های انبار یک ماده. */
+function sumInventory(rows) {
+  const totals = { onHand: 0, reserved: 0, blocked: 0, inTransit: 0, safety: 0 };
+  for (const row of rows) {
+    totals.onHand = roundTo3(totals.onHand + storedNumber(row.OnHandQty));
+    totals.reserved = roundTo3(totals.reserved + storedNumber(row.ReservedQty));
+    totals.blocked = roundTo3(totals.blocked + storedNumber(row.BlockedQty));
+    totals.inTransit = roundTo3(totals.inTransit + storedNumber(row.InTransitQty));
+    totals.safety = roundTo3(totals.safety + storedNumber(row.SafetyStockQty));
+  }
+  return totals;
+}
+
+async function inventoryForMaterial(repo, plantId, material) {
+  if (!material) return { onHand: 0, reserved: 0, blocked: 0, inTransit: 0, safety: 0 };
+  const rows = await repo.list("MfgInventoryLevel", {
+    where: [{ column: "PlantId", op: "eq", value: plantId }, { column: "MaterialId", op: "eq", value: material.Id }],
+  });
+  return sumInventory(rows.filter((row) => row.PlantId === plantId));
+}
+
+/**
+ * ردیف موتور MPS به شکل رکورد `MfgMasterScheduleLine`.
+ * خروجی پیش‌نمایش و خروجی پایدار عمداً یک شکل دارند تا کلاینت مجبور نباشد
+ * دو شکل مختلف از یک ردیف را بفهمد.
+ */
+function masterScheduleLineRow(line, { plantId = null, mpsRunId = null, policyId = null } = {}) {
+  return {
+    ...(plantId ? { PlantId: plantId } : {}),
+    ...(mpsRunId ? { MpsRunId: mpsRunId } : {}),
+    PartId: line.partId,
+    BucketIndex: line.bucketIndex,
+    BucketStart: line.bucketStart,
+    BucketEnd: line.bucketEnd,
+    ForecastQty: line.forecastQty,
+    SalesOrderQty: line.salesOrderQty,
+    ContractQty: line.contractQty,
+    ManualQty: line.manualQty,
+    ConsumedForecastQty: line.consumedForecastQty,
+    GrossRequirementQty: line.grossRequirementQty,
+    ScheduledReceiptQty: line.scheduledReceiptQty,
+    ProjectedOnHandBefore: line.projectedOnHandBefore,
+    NetRequirementQty: line.netRequirementQty,
+    PlannedOrderReceiptQty: line.plannedOrderReceiptQty,
+    PlannedOrderReleaseQty: line.plannedOrderReleaseQty,
+    PlannedOrderReleaseAt: line.plannedOrderReleaseAt,
+    ProjectedOnHandAfter: line.projectedOnHandAfter,
+    LotSizingRule: line.lotSizingRule,
+    LotSizingPolicyId: policyId,
+    InsideDemandTimeFence: line.insideDemandTimeFence,
+    IsFirm: line.isFirm,
+    AppliedConstraints: line.appliedConstraints.join(",").slice(0, 300) || null,
+    DemandRefsJson: line.demandRefs,
+  };
+}
+
+/** سفارش و عملیات آن را با بررسی دامنهٔ کارخانه بار می‌کند. */
+async function loadOrderOperation(repo, plantId, params) {
+  const orderId = text(params.orderId, "orderId", { required: true, max: 60, pattern: ID_RE });
+  const operationId = text(params.operationId, "operationId", { required: true, max: 60, pattern: ID_RE });
+  const order = await repo.get("MfgProductionOrder", orderId);
+  if (!order || order.PlantId !== plantId) throw notFound();
+  const operation = await repo.get("MfgProductionOrderOperation", operationId);
+  if (!operation || operation.PlantId !== plantId || operation.ProductionOrderId !== order.Id) throw notFound();
+  return { order, operation };
 }
 
 async function parseOrderFilters(req, subject, evaluate, repo) {
@@ -5502,6 +5798,7 @@ export function registerManufacturingRoutes(app, { repo, subjects, evaluate } = 
         allOperations,
         allMaterials,
         allInventories,
+        allLotPolicies,
         scheduleRuns,
       ] = await Promise.all([
         db.list("MfgProductionOrder", { where: [{ column: "PlantId", op: "eq", value: plantId }] }),
@@ -5511,6 +5808,7 @@ export function registerManufacturingRoutes(app, { repo, subjects, evaluate } = 
         db.list("MfgProductionOrderOperation", { where: [{ column: "PlantId", op: "eq", value: plantId }] }),
         db.list("MfgMaterial", { where: [{ column: "PlantId", op: "eq", value: plantId }] }),
         db.list("MfgInventoryLevel", { where: [{ column: "PlantId", op: "eq", value: plantId }] }),
+        db.list("MfgLotSizingPolicy", { where: [{ column: "PlantId", op: "eq", value: plantId }] }),
         db.list("MfgScheduleRun", {
           where: [{ column: "PlantId", op: "eq", value: plantId }],
           orderBy: [{ column: "ScheduleVersion", dir: "desc" }],
@@ -5878,6 +6176,230 @@ export function registerManufacturingRoutes(app, { repo, subjects, evaluate } = 
         });
       }
 
+      /* ── غنی‌سازی گزارش MRP ───────────────────────────────────────────────
+       * سه چیزی که گزارش MRP بدون آن‌ها کامل نیست و هر سه از همان داده‌ای
+       * ساخته می‌شوند که خودِ MRP مصرف کرده است (بارگذاری جداگانه ندارد):
+       *   ۱۱.۵ Lead Time Offset تجمیعی — چه زمانی باید آزادسازی شود،
+       *   ۱۱.۶ Pegging — این نیاز از کدام سفارش سرچشمه گرفته،
+       *   ۱۱.۳ سفارش برنامه‌ریزی‌شده — پیشنهاد موتور با رعایت لات و offset. */
+      const mrpBomEdges = [];
+      const mrpChildPartIds = new Set();
+      for (const [parentPartId, headers] of releasedBomsByPartId) {
+        for (const header of headers) {
+          for (const item of bomItemsByHeaderId.get(header.Id) ?? []) {
+            mrpBomEdges.push({
+              parentPartId,
+              componentPartId: item.ComponentPartId,
+              quantityPer: storedNumber(item.QuantityPer, 1),
+            });
+            mrpChildPartIds.add(item.ComponentPartId);
+          }
+        }
+      }
+      const mrpLeadTimeDaysByPartId = {};
+      for (const material of materialByPartId.values()) {
+        mrpLeadTimeDaysByPartId[material.PartId] = storedNumber(material.LeadTimeDays, 0);
+      }
+      const mrpRootPartIds = [...partById.keys()].filter((partId) => !mrpChildPartIds.has(partId));
+      const leadTimeOffset = mrpBomEdges.length === 0
+        ? { parts: [], levelOffsets: [], finishedGoodsLeadTimeDays: 0, maxLowLevelCode: 0 }
+        : runPlanning(() => computeLeadTimeOffsets({
+          edges: mrpBomEdges,
+          leadTimeDaysByPartId: mrpLeadTimeDaysByPartId,
+          rootPartIds: mrpRootPartIds,
+        }));
+      const lowLevelCodeByPartId = new Map(leadTimeOffset.parts.map((row) => [row.partId, row.lowLevelCode]));
+      const cumulativeLeadTimeByPartId = new Map(leadTimeOffset.parts.map((row) => [row.partId, row.cumulativeLeadTimeDays]));
+
+      /* pegging از نیازهای مواد واقعیِ همین اجرا ساخته می‌شود، نه از گراف تئوری
+       * BOM: پرسش کاربر «این نیاز به کدام سفارش تعلق دارد» است. */
+      const pegSupplies = [];
+      const pegLinks = [];
+      const seenPegSupply = new Set();
+      const requirementIdsByMaterialId = new Map();
+      for (const row of persistedRequirements) {
+        const componentPartId = materialById.get(row.MaterialId)?.PartId;
+        if (!componentPartId) continue;
+        const refList = requirementIdsByMaterialId.get(row.MaterialId) ?? [];
+        refList.push(row.Id);
+        requirementIdsByMaterialId.set(row.MaterialId, refList);
+        if (!seenPegSupply.has(row.Id)) {
+          seenPegSupply.add(row.Id);
+          pegSupplies.push({
+            partId: componentPartId,
+            supplyRef: row.Id,
+            quantity: storedNumber(row.NetQuantity),
+            supplyType: "requirement",
+          });
+        }
+        const parentOrder = orderById.get(row.ProductionOrderId);
+        if (!parentOrder) continue;
+        if (!seenPegSupply.has(parentOrder.Id)) {
+          seenPegSupply.add(parentOrder.Id);
+          pegSupplies.push({
+            partId: parentOrder.PartId,
+            supplyRef: parentOrder.Id,
+            quantity: storedNumber(parentOrder.OrderQuantity),
+            supplyType: "production-order",
+          });
+        }
+        pegLinks.push({
+          parentSupplyRef: parentOrder.Id,
+          componentSupplyRef: row.Id,
+          quantityPer: storedNumber(row.NetQuantity) > 0 && storedNumber(parentOrder.OrderQuantity) > 0
+            ? roundTo3(storedNumber(row.NetQuantity) / storedNumber(parentOrder.OrderQuantity))
+            : 1,
+        });
+      }
+      const pegging = pegSupplies.length === 0
+        ? { singleLevel: {}, multiLevel: {}, rootSupplyRefs: [] }
+        : runPlanning(() => buildPegging({ supplies: pegSupplies, links: pegLinks }));
+      /* multiLevel با ref همهٔ supplyها کلید می‌خورد (هم جزء هم والد)؛ آنچه
+       * گزارش MRP لازم دارد فقط مسیرهای خودِ نیازهای مواد است. */
+      const peggedPathsByRequirementId = new Map();
+      for (const row of persistedRequirements) {
+        const paths = pegging.multiLevel?.[row.Id] ?? [];
+        if (paths.length > 0) peggedPathsByRequirementId.set(row.Id, paths);
+      }
+
+      /* ۱۱.۳ کمبودها به «پیشنهاد» تبدیل می‌شوند، نه به تعهد: سیاست لات قطعه و
+       * offset آزادسازی تجمیعی اعمال می‌شود و ردیف در وضعیت proposed می‌ماند
+       * تا برنامه‌ریز بازبینی، ویرایش و سپس تأیید کند. */
+      const activeLotPolicyByPartId = new Map();
+      for (const policy of allLotPolicies) {
+        if (policy.PlantId !== plantId || !policy.IsActive) continue;
+        activeLotPolicyByPartId.set(policy.PartId, policy);
+      }
+      const plannedOrderDrafts = [];
+      for (const group of shortageByMaterial.values()) {
+        const mat = materialById.get(group.MaterialId);
+        const partId = mat?.PartId;
+        if (!partId || !(group.totalShortage > 0)) continue;
+        const policyRow = activeLotPolicyByPartId.get(partId);
+        const policy = {
+          rule: policyRow && LOT_SIZING_RULES.includes(policyRow.RuleCode) ? policyRow.RuleCode : "L4L",
+          fixedLotQty: policyRow?.FixedLotQty ?? null,
+          orderMultiple: policyRow?.OrderMultiple ?? storedNumber(mat?.OrderMultiple, 1),
+          minOrderQty: policyRow?.MinOrderQty ?? null,
+          maxOrderQty: policyRow?.MaxOrderQty ?? null,
+          orderingCost: policyRow?.OrderingCost ?? null,
+          holdingCostPerUnitPerYear: policyRow?.HoldingCostPerUnitPerYear ?? null,
+          annualDemandQty: policyRow?.AnnualDemandQty ?? null,
+          periodDays: policyRow?.PeriodDays ?? null,
+          periodOrderQuantity: policyRow?.PeriodOrderQuantity ?? null,
+        };
+        /* offset تجمیعی BOM بر زمان تحویل خودِ قطعه اولویت دارد: اگر قطعه زیر
+         * مجموعه دارد، زودتر از زمان تحویل خودش باید آزاد شود. */
+        const cumulativeLeadTimeDays = Math.max(
+          cumulativeLeadTimeByPartId.get(partId) ?? 0,
+          storedNumber(mat?.LeadTimeDays, 0),
+        );
+        const needByIso = Number.isFinite(group.earliestNeedMs)
+          ? new Date(group.earliestNeedMs).toISOString()
+          : throughDate;
+        const drafts = runPlanning(() => computePlannedOrders({
+          partId,
+          partNo: partById.get(partId)?.PartNo ?? partId,
+          uom: group.uom,
+          buckets: buildTimeBuckets({ horizonStart: needByIso.slice(0, 10), bucketUnit: "week", bucketCount: 1 }),
+          netRequirementByBucket: [roundTo3(group.totalShortage)],
+          policy,
+          cumulativeLeadTimeDays,
+          lowLevelCode: lowLevelCodeByPartId.get(partId) ?? 0,
+          source: "mrp",
+          peggedSupplyRefs: requirementIdsByMaterialId.get(group.MaterialId) ?? [],
+        }));
+        for (const draft of drafts) {
+          plannedOrderDrafts.push({
+            ...draft,
+            materialId: group.MaterialId,
+            shortageQuantity: roundTo3(group.totalShortage),
+            productionVersionId: null,
+          });
+        }
+      }
+
+      let plannedOrders = plannedOrderDrafts;
+      let peggingRows = [];
+      if (!previewOnly) {
+        /* اجرای دوبارهٔ MRP، پیشنهادهای بازبینی‌نشدهٔ همان runNo را جایگزین
+         * می‌کند تا انباشته نشوند؛ آنچه برنامه‌ریز تأیید/تبدیل کرده دست‌نخورده
+         * می‌ماند چون دیگر proposed نیست. */
+        const stalePlanned = await db.list("MfgPlannedOrder", {
+          where: [
+            { column: "PlantId", op: "eq", value: plantId },
+            { column: "MrpRunNo", op: "eq", value: scheduleVersion },
+            { column: "Status", op: "eq", value: "proposed" },
+          ],
+        });
+        for (const row of stalePlanned) await db.remove("MfgPlannedOrder", row.Id);
+
+        plannedOrders = [];
+        let plannedSeq = 0;
+        for (const draft of plannedOrderDrafts) {
+          plannedSeq += 1;
+          plannedOrders.push(await db.create("MfgPlannedOrder", {
+            PlantId: plantId,
+            PlannedOrderNo: `MPO-${scheduleVersion}-${String(plannedSeq).padStart(4, "0")}`,
+            PartId: draft.partId,
+            ProductionVersionId: draft.productionVersionId,
+            Source: "mrp",
+            MrpRunNo: scheduleVersion,
+            MpsRunId: null,
+            Quantity: draft.quantity,
+            OriginalQuantity: draft.quantity,
+            Uom: draft.uom,
+            LowLevelCode: draft.lowLevelCode,
+            CumulativeLeadTimeDays: draft.cumulativeLeadTimeDays,
+            PlannedReleaseAt: new Date(`${draft.releaseAt}T00:00:00.000Z`).toISOString(),
+            PlannedDueAt: new Date(`${draft.dueAt}T00:00:00.000Z`).toISOString(),
+            BucketIndex: draft.bucketIndex,
+            LotSizingRule: draft.lotSizingRule,
+            Status: "proposed",
+            NoteFa: `پیشنهاد MRP اجرای ${scheduleVersion} برای کمبود ${draft.shortageQuantity}`,
+          }, subject.id));
+        }
+
+        /* pegging هم ثبت می‌شود تا گزارش‌های بعدی بدون بازمحاسبه خوانده شوند.
+         * کرانهٔ defensive دارد: ردیف‌ها متناسب با نیازها × طول مسیرند. */
+        const stalePegging = await db.list("MfgRequirementPegging", {
+          where: [{ column: "PlantId", op: "eq", value: plantId }],
+          limit: 5000,
+        });
+        for (const row of stalePegging) await db.remove("MfgRequirementPegging", row.Id);
+
+        const partIdBySupplyRef = new Map(pegSupplies.map((supply) => [supply.supplyRef, supply.partId]));
+        const componentPartIdOf = (row) => materialById.get(row.MaterialId)?.PartId ?? null;
+        for (const row of persistedRequirements) {
+          /* هر ورودی multiLevel یک {chain, depth} است، نه آرایهٔ گام‌ها؛ گام‌ها
+           * زیر chain هستند و زنجیره از جزء به ریشه می‌رود. */
+          for (const entry of peggedPathsByRequirementId.get(row.Id) ?? []) {
+            const chain = entry.chain ?? [];
+            for (let step = 1; step < chain.length && peggingRows.length < 5000; step += 1) {
+              const parentRef = chain[step].supplyRef;
+              const parentOrder = orderById.get(parentRef) ?? null;
+              const rootStep = chain[chain.length - 1];
+              peggingRows.push(await db.create("MfgRequirementPegging", {
+                PlantId: plantId,
+                ComponentPartId: componentPartIdOf(row),
+                ComponentSupplyRef: row.Id,
+                ParentPartId: partIdBySupplyRef.get(parentRef) ?? null,
+                ParentSupplyRef: parentRef,
+                MaterialRequirementId: row.Id,
+                ProductionOrderId: parentOrder?.Id ?? row.ProductionOrderId,
+                PlannedOrderId: null,
+                PeggedQuantity: storedNumber(row.NetQuantity),
+                QuantityPer: storedNumber(chain[step].quantityPer, 1),
+                LevelFromRoot: step,
+                IsMultiLevel: chain.length > 2,
+                RootPartId: partIdBySupplyRef.get(rootStep.supplyRef) ?? null,
+                RootSupplyRef: rootStep.supplyRef,
+              }, subject.id));
+            }
+          }
+        }
+      }
+
       return {
         calculationAt: new Date().toISOString(),
         previewOnly,
@@ -5885,6 +6407,25 @@ export function registerManufacturingRoutes(app, { repo, subjects, evaluate } = 
         requirements: persistedRequirements,
         shortages,
         proposals,
+        /* ۱۱.۵/۱۱.۶/۱۱.۳ — گزارش MRP حالا این سه بخش را هم دارد. */
+        leadTimeOffset,
+        pegging: {
+          requirementCount: persistedRequirements.length,
+          singleLevel: pegging.singleLevel,
+          multiLevel: pegging.multiLevel,
+          rootSupplyRefs: pegging.rootSupplyRefs,
+          persistedRowCount: peggingRows.length,
+        },
+        plannedOrders,
+        summary: {
+          requirementCount: persistedRequirements.length,
+          shortageCount: shortages.length,
+          proposalCount: proposals.length,
+          plannedOrderCount: plannedOrders.length,
+          peggedRequirementCount: peggedPathsByRequirementId.size,
+          finishedGoodsLeadTimeDays: leadTimeOffset.finishedGoodsLeadTimeDays,
+          maxLowLevelCode: leadTimeOffset.maxLowLevelCode,
+        },
       };
     };
 
@@ -7271,5 +7812,2481 @@ export function registerManufacturingRoutes(app, { repo, subjects, evaluate } = 
       });
       return updated;
     });
+  }));
+
+  /* ════════════════════════════════════════════════════════════════════════
+   * فاز ۵ — مدیریت تقاضا و پیش‌بینی فروش (Demand Management)
+   * ════════════════════════════════════════════════════════════════════════ */
+
+  app.get(`${ROOT}/demand-forecasts`, route("mfg.demand.view", async ({ repo: r, req, plantId }) => {
+    const q = req.query ?? {};
+    assertOnlyQueryKeys(q, new Set(["partId", "demandType", "status", "customerRef", "requiredFrom", "requiredTo", "q", "limit", "offset"]));
+    const limit = pageNumber(q.limit, "limit", 50, 200);
+    if (limit < 1) throw bad("limit", "limit باید بین ۱ و ۲۰۰ باشد");
+    const offset = pageNumber(q.offset, "offset", 0, 1_000_000);
+    const where = [{ column: "PlantId", op: "eq", value: plantId }];
+    if (q.partId !== undefined) {
+      const partId = text(q.partId, "partId", { required: true, max: 60, pattern: ID_RE });
+      const part = await r.get("MfgPart", partId);
+      if (!part || part.PlantId !== plantId) throw notFound();
+      where.push({ column: "PartId", op: "eq", value: partId });
+    }
+    if (q.demandType !== undefined) {
+      const demandType = text(q.demandType, "demandType", { required: true, max: 16 });
+      if (!DEMAND_TYPES.has(demandType)) throw bad("demandType", "demandType باید sales-order/forecast/contract/manual باشد");
+      where.push({ column: "DemandType", op: "eq", value: demandType });
+    }
+    if (q.status !== undefined) {
+      const status = text(q.status, "status", { required: true, max: 16 });
+      if (!DEMAND_STATUSES.has(status)) throw bad("status", "status باید draft/confirmed/cancelled باشد");
+      where.push({ column: "Status", op: "eq", value: status });
+    }
+    if (q.customerRef !== undefined) where.push({ column: "CustomerRef", op: "eq", value: text(q.customerRef, "customerRef", { required: true, max: 80 }) });
+    if (q.requiredFrom !== undefined) where.push({ column: "RequiredAt", op: "gte", value: isoDate(q.requiredFrom, "requiredFrom", { required: true }) });
+    if (q.requiredTo !== undefined) where.push({ column: "RequiredAt", op: "lte", value: isoDate(q.requiredTo, "requiredTo", { required: true }) });
+    if (q.q !== undefined) where.push({ column: "DemandRef", op: "like", value: `%${text(q.q, "q", { required: true, max: 60 })}%` });
+
+    const [items, total] = await Promise.all([
+      r.list("MfgDemandForecast", { where, orderBy: [{ column: "RequiredAt", dir: "asc" }, { column: "DemandRef", dir: "asc" }], limit, offset }),
+      r.count("MfgDemandForecast", where),
+    ]);
+    return { items, page: { limit, offset, total } };
+  }));
+
+  app.post(`${ROOT}/demand-forecasts`, route("mfg.demand.edit", async ({ repo: r, req, plantId, subject }) => {
+    const body = req.body ?? {};
+    assertOnlyKeys(body, new Set(["PartId", "DemandType", "DemandRef", "RequiredAt", "Quantity", "Uom", "CustomerRef", "CustomerNameSnapshot", "ConfidencePct", "Status", "NoteFa"]));
+    const partId = text(body.PartId, "PartId", { required: true, max: 60, pattern: ID_RE });
+    const part = await r.get("MfgPart", partId);
+    if (!part || part.PlantId !== plantId) throw notFound();
+    if (!part.IsActive) throw businessRule("MFG_PART_INACTIVE", `قطعهٔ ${part.PartNo} غیرفعال است`, { partId });
+
+    const demandType = text(body.DemandType, "DemandType", { required: true, max: 16 });
+    if (!DEMAND_TYPES.has(demandType)) throw bad("DemandType", "DemandType باید sales-order/forecast/contract/manual باشد");
+    const demandRef = text(body.DemandRef, "DemandRef", { required: true, max: 60, pattern: CODE_RE });
+    const requiredAt = isoDate(body.RequiredAt, "RequiredAt", { required: true });
+    const quantity = number(body.Quantity, "Quantity", { required: true, min: Number.MIN_VALUE, max: 99_999_999.9999 });
+    const uom = text(body.Uom, "Uom", { max: 16 }) ?? part.BaseUom;
+    const confidencePct = body.ConfidencePct === undefined || body.ConfidencePct === null
+      ? null
+      : number(body.ConfidencePct, "ConfidencePct", { required: true, min: 0, max: 100 });
+    if (demandType === "forecast" && confidencePct === null) {
+      throw businessRule("MFG_DEMAND_CONFIDENCE_REQUIRED", "ردیف پیش‌بینی فروش باید ConfidencePct داشته باشد", { demandType });
+    }
+    const status = text(body.Status, "Status", { max: 16 }) ?? "draft";
+    if (!DEMAND_STATUSES.has(status)) throw bad("Status", "Status باید draft/confirmed/cancelled باشد");
+    if (status === "cancelled") throw bad("Status", "ثبت اولیه با وضعیت cancelled مجاز نیست؛ ردیف ثبت‌شده را لغو کنید");
+
+    const row = await r.create("MfgDemandForecast", {
+      PlantId: plantId,
+      PartId: part.Id,
+      DemandType: demandType,
+      DemandRef: demandRef,
+      CustomerRef: text(body.CustomerRef, "CustomerRef", { max: 80 }),
+      CustomerNameSnapshot: text(body.CustomerNameSnapshot, "CustomerNameSnapshot", { max: 240 }),
+      RequiredAt: requiredAt,
+      Quantity: roundTo3(quantity),
+      Uom: uom,
+      ConfidencePct: confidencePct,
+      Status: status,
+      ConsumedQuantity: null,
+      MpsRunId: null,
+      NoteFa: text(body.NoteFa, "NoteFa", { max: 800 }),
+    }, subject.id);
+    await writeAudit(r, req, "MFG_DEMAND_CREATED", "MfgDemandForecast", row.Id, "mfg.demand.edit");
+    return row;
+  }, 201));
+
+  app.patch(`${ROOT}/demand-forecasts/:demandId`, route("mfg.demand.edit", async ({ repo: r, req, plantId, subject }) => {
+    const body = req.body ?? {};
+    assertOnlyKeys(body, new Set(["RequiredAt", "Quantity", "Uom", "ConfidencePct", "Status", "CustomerRef", "CustomerNameSnapshot", "NoteFa"]));
+    const expectedVersion = rowVersionFrom(req);
+    const demandId = text(req.params.demandId, "demandId", { required: true, max: 60, pattern: ID_RE });
+    const existing = await r.get("MfgDemandForecast", demandId);
+    if (!existing || existing.PlantId !== plantId) throw notFound();
+    if (existing.RowVersion !== expectedVersion) throw conflict("MFG_ROW_VERSION_CONFLICT", "ردیف تقاضا از زمان خواندن تغییر کرده است؛ تازه‌خوانی کنید");
+
+    const patch = {};
+    if (body.RequiredAt !== undefined) patch.RequiredAt = isoDate(body.RequiredAt, "RequiredAt", { required: true });
+    if (body.Quantity !== undefined) {
+      patch.Quantity = roundTo3(number(body.Quantity, "Quantity", { required: true, min: Number.MIN_VALUE, max: 99_999_999.9999 }));
+      /* مصرف ثبت‌شده نباید از مقدار تازه بیشتر شود؛ وگرنه ردیابی پیش‌بینی مصرف‌شده بی‌معنا می‌شود. */
+      if (storedNumber(existing.ConsumedQuantity) > patch.Quantity) {
+        throw businessRule("MFG_DEMAND_BELOW_CONSUMED", `مقدار تازه از مقدار مصرف‌شده (${storedNumber(existing.ConsumedQuantity)}) کمتر است`, { demandId });
+      }
+    }
+    if (body.Uom !== undefined) patch.Uom = text(body.Uom, "Uom", { required: true, max: 16 });
+    if (body.ConfidencePct !== undefined) {
+      patch.ConfidencePct = body.ConfidencePct === null ? null : number(body.ConfidencePct, "ConfidencePct", { required: true, min: 0, max: 100 });
+    }
+    if (body.Status !== undefined) {
+      const status = text(body.Status, "Status", { required: true, max: 16 });
+      if (!DEMAND_STATUSES.has(status)) throw bad("Status", "Status باید draft/confirmed/cancelled باشد");
+      if (status === "cancelled" && existing.MpsRunId && storedNumber(existing.ConsumedQuantity) > 0) {
+        throw businessRule("MFG_DEMAND_CONSUMED_LOCK", "ردیفی که در اجرای MPS مصرف شده قابل لغو نیست", { demandId });
+      }
+      patch.Status = status;
+    }
+    if (body.CustomerRef !== undefined) patch.CustomerRef = text(body.CustomerRef, "CustomerRef", { max: 80 });
+    if (body.CustomerNameSnapshot !== undefined) patch.CustomerNameSnapshot = text(body.CustomerNameSnapshot, "CustomerNameSnapshot", { max: 240 });
+    if (body.NoteFa !== undefined) patch.NoteFa = text(body.NoteFa, "NoteFa", { max: 800 });
+    if (Object.keys(patch).length === 0) throw bad("body", "هیچ فیلد قابل تغییری ارسال نشده است");
+
+    const result = await r.patch("MfgDemandForecast", existing.Id, patch, subject.id, expectedVersion);
+    if (!result.ok) throw conflict("MFG_ROW_VERSION_CONFLICT", "ردیف تقاضا از زمان خواندن تغییر کرده است؛ تازه‌خوانی کنید");
+    await writeAudit(r, req, "MFG_DEMAND_UPDATED", "MfgDemandForecast", existing.Id, "mfg.demand.edit");
+    return r.get("MfgDemandForecast", existing.Id);
+  }));
+
+  app.delete(`${ROOT}/demand-forecasts/:demandId`, route("mfg.demand.edit", async ({ repo: r, req, plantId, subject }) => {
+    const demandId = text(req.params.demandId, "demandId", { required: true, max: 60, pattern: ID_RE });
+    return r.transaction(async (tx) => {
+      const existing = await tx.get("MfgDemandForecast", demandId);
+      if (!existing || existing.PlantId !== plantId) throw notFound();
+      /* حذف فیزیکی فقط برای پیش‌نویسِ مصرف‌نشده؛ دادهٔ تأییدشده یا مصرف‌شده در
+       * تاریخچهٔ برنامهٔ تولید معنا دارد و فقط لغو (cancelled) می‌شود. */
+      if (existing.Status !== "draft" || existing.MpsRunId) {
+        throw conflict("MFG_STATE_CONFLICT", "فقط ردیف پیش‌نویسِ مصرف‌نشده قابل حذف است؛ برای بقیه Status را به cancelled تغییر دهید");
+      }
+      const removed = await tx.remove("MfgDemandForecast", existing.Id);
+      if (!removed || removed.affected !== 1) throw conflict("MFG_STATE_CONFLICT", "ردیف تقاضا هم‌زمان حذف شده است");
+      await createAuditRecord(tx, req, "MFG_DEMAND_DELETED", "MfgDemandForecast", existing.Id, "mfg.demand.edit", {
+        demandRef: existing.DemandRef,
+        demandType: existing.DemandType,
+      });
+      return { deleted: true, id: existing.Id };
+    });
+  }));
+
+  app.get(`${ROOT}/demand/time-phased`, route("mfg.demand.view", async ({ repo: r, req, plantId }) => {
+    const q = req.query ?? {};
+    assertOnlyQueryKeys(q, new Set(["partId", "bucketUnit", "horizonStart", "bucketCount", "status", "includeCancelled"]));
+    const bucketUnit = text(q.bucketUnit, "bucketUnit", { max: 8 }) ?? "week";
+    if (!TIME_BUCKETS.has(bucketUnit)) throw bad("bucketUnit", "bucketUnit باید day/week/month باشد");
+    const bucketCount = pageNumber(q.bucketCount, "bucketCount", 12, 260);
+    if (bucketCount < 1 || bucketCount > 260) throw bad("bucketCount", "bucketCount باید بین ۱ و ۲۶۰ باشد");
+    const today = new Date().toISOString().slice(0, 10);
+    const horizonStart = isoDate(q.horizonStart, "horizonStart") ?? today;
+    const includeCancelled = q.includeCancelled === "true";
+
+    const where = [{ column: "PlantId", op: "eq", value: plantId }];
+    if (q.partId !== undefined) {
+      const partId = text(q.partId, "partId", { required: true, max: 60, pattern: ID_RE });
+      const part = await r.get("MfgPart", partId);
+      if (!part || part.PlantId !== plantId) throw notFound();
+      where.push({ column: "PartId", op: "eq", value: partId });
+    }
+    if (q.status !== undefined) {
+      const status = text(q.status, "status", { required: true, max: 16 });
+      if (!DEMAND_STATUSES.has(status)) throw bad("status", "status باید draft/confirmed/cancelled باشد");
+      where.push({ column: "Status", op: "eq", value: status });
+    }
+    const [rows, parts] = await Promise.all([
+      r.list("MfgDemandForecast", { where, orderBy: [{ column: "RequiredAt", dir: "asc" }] }),
+      r.list("MfgPart", { where: [{ column: "PlantId", op: "eq", value: plantId }] }),
+    ]);
+    const partById = new Map(parts.filter((item) => item.PlantId === plantId).map((item) => [item.Id, item]));
+    const buckets = runPlanning(() => buildTimeBuckets({ horizonStart, bucketUnit, bucketCount }));
+
+    const byPart = new Map();
+    let outsideHorizonQty = 0;
+    for (const row of rows) {
+      if (row.PlantId !== plantId) continue;
+      if (!includeCancelled && row.Status === "cancelled") continue;
+      const quantity = storedNumber(row.Quantity);
+      const bucket = buckets.find((item) => String(row.RequiredAt).slice(0, 10) >= item.start && String(row.RequiredAt).slice(0, 10) < item.end);
+      if (!bucket) {
+        outsideHorizonQty = roundTo3(outsideHorizonQty + quantity);
+        continue;
+      }
+      if (!byPart.has(row.PartId)) {
+        byPart.set(row.PartId, buckets.map((item) => ({
+          bucketIndex: item.index,
+          bucketStart: item.start,
+          bucketEnd: item.end,
+          salesOrderQty: 0,
+          forecastQty: 0,
+          contractQty: 0,
+          manualQty: 0,
+          totalQty: 0,
+        })));
+      }
+      const line = byPart.get(row.PartId)[bucket.index];
+      const field = row.DemandType === "sales-order" ? "salesOrderQty"
+        : row.DemandType === "forecast" ? "forecastQty"
+          : row.DemandType === "contract" ? "contractQty" : "manualQty";
+      line[field] = roundTo3(line[field] + quantity);
+      line.totalQty = roundTo3(line.totalQty + quantity);
+    }
+
+    return {
+      bucketUnit,
+      bucketCount: buckets.length,
+      horizonStart: buckets[0].start,
+      horizonEnd: buckets[buckets.length - 1].end,
+      outsideHorizonQty,
+      parts: [...byPart.entries()].map(([partId, lines]) => ({
+        partId,
+        partNo: partById.get(partId)?.PartNo ?? null,
+        partNameFa: partById.get(partId)?.NameFa ?? null,
+        uom: partById.get(partId)?.BaseUom ?? null,
+        totalQty: roundTo3(lines.reduce((sum, line) => sum + line.totalQty, 0)),
+        lines,
+      })),
+    };
+  }));
+
+  /* ════════════════════════════════════════════════════════════════════════
+   * فاز ۵ — قواعد اندازه‌گذاری لات (Lot Sizing: L4L / FOQ / EOQ / POQ)
+   * ════════════════════════════════════════════════════════════════════════ */
+
+  app.get(`${ROOT}/lot-sizing-policies`, route("mfg.lotsize.view", async ({ repo: r, req, plantId }) => {
+    const q = req.query ?? {};
+    assertOnlyQueryKeys(q, new Set(["partId", "ruleCode", "isActive", "limit", "offset"]));
+    const limit = pageNumber(q.limit, "limit", 50, 200);
+    if (limit < 1) throw bad("limit", "limit باید بین ۱ و ۲۰۰ باشد");
+    const offset = pageNumber(q.offset, "offset", 0, 1_000_000);
+    const where = [{ column: "PlantId", op: "eq", value: plantId }];
+    if (q.partId !== undefined) {
+      const partId = text(q.partId, "partId", { required: true, max: 60, pattern: ID_RE });
+      const part = await r.get("MfgPart", partId);
+      if (!part || part.PlantId !== plantId) throw notFound();
+      where.push({ column: "PartId", op: "eq", value: partId });
+    }
+    if (q.ruleCode !== undefined) {
+      const ruleCode = text(q.ruleCode, "ruleCode", { required: true, max: 8 });
+      if (!LOT_SIZING_RULES.includes(ruleCode)) throw bad("ruleCode", "ruleCode باید L4L/FOQ/EOQ/POQ باشد");
+      where.push({ column: "RuleCode", op: "eq", value: ruleCode });
+    }
+    if (q.isActive !== undefined) {
+      if (!/^(true|false)$/.test(String(q.isActive))) throw bad("isActive", "isActive باید true یا false باشد");
+      where.push({ column: "IsActive", op: "eq", value: q.isActive === "true" });
+    }
+    const [items, total] = await Promise.all([
+      r.list("MfgLotSizingPolicy", { where, orderBy: [{ column: "EffectiveFrom", dir: "asc" }], limit, offset }),
+      r.count("MfgLotSizingPolicy", where),
+    ]);
+    return {
+      items: items.map((row) => ({ ...row, eoq: enrichLotPolicy(row).eoq, periodOrderQuantity: enrichLotPolicy(row).periodOrderQuantity })),
+      page: { limit, offset, total },
+    };
+  }));
+
+  app.post(`${ROOT}/lot-sizing-policies`, route("mfg.lotsize.edit", async ({ repo: r, req, plantId, subject }) => {
+    const body = req.body ?? {};
+    /* PartId فقط هنگام ثبت پذیرفته می‌شود؛ جابه‌جایی سیاست بین قطعه‌ها مجاز نیست. */
+    assertOnlyKeys(body, new Set([...LOT_POLICY_FIELDS, "PartId"]));
+    const partId = text(body.PartId, "PartId", { required: true, max: 60, pattern: ID_RE });
+    const part = await r.get("MfgPart", partId);
+    if (!part || part.PlantId !== plantId) throw notFound();
+
+    const parsed = parseLotPolicyInput(body, {});
+    const issues = runPlanning(() => validateLotSizingPolicy(parsed.engine));
+    if (issues.length > 0) throw businessRule("MFG_LOT_POLICY_INVALID", `سیاست اندازه‌گذاری لات نامعتبر است: ${issues.join("؛ ")}`, { issues });
+
+    const row = await r.create("MfgLotSizingPolicy", {
+      PlantId: plantId,
+      PartId: part.Id,
+      PolicyCode: parsed.policyCode ?? `LS-${part.PartNo}`.slice(0, 60),
+      RuleCode: parsed.ruleCode,
+      FixedLotQty: parsed.fixedLotQty,
+      OrderMultiple: parsed.orderMultiple,
+      MinOrderQty: parsed.minOrderQty,
+      MaxOrderQty: parsed.maxOrderQty,
+      OrderingCost: parsed.orderingCost,
+      HoldingCostPerUnitPerYear: parsed.holdingCostPerUnitPerYear,
+      AnnualDemandQty: parsed.annualDemandQty,
+      PeriodDays: parsed.periodDays,
+      PeriodOrderQuantity: parsed.periodOrderQuantity,
+      Currency: parsed.currency,
+      EffectiveFrom: parsed.effectiveFrom,
+      EffectiveTo: parsed.effectiveTo,
+      IsActive: parsed.isActive,
+      NoteFa: parsed.noteFa,
+    }, subject.id);
+    await writeAudit(r, req, "MFG_LOT_POLICY_CREATED", "MfgLotSizingPolicy", row.Id, "mfg.lotsize.edit");
+    return { ...row, eoq: enrichLotPolicy(row).eoq, periodOrderQuantity: enrichLotPolicy(row).periodOrderQuantity };
+  }, 201));
+
+  app.patch(`${ROOT}/lot-sizing-policies/:policyId`, route("mfg.lotsize.edit", async ({ repo: r, req, plantId, subject }) => {
+    const body = req.body ?? {};
+    const editable = new Set([...LOT_POLICY_FIELDS].filter((field) => !["PolicyCode", "PartId"].includes(field)));
+    assertOnlyKeys(body, editable);
+    const expectedVersion = rowVersionFrom(req);
+    const policyId = text(req.params.policyId, "policyId", { required: true, max: 60, pattern: ID_RE });
+    const existing = await r.get("MfgLotSizingPolicy", policyId);
+    if (!existing || existing.PlantId !== plantId) throw notFound();
+    if (existing.RowVersion !== expectedVersion) throw conflict("MFG_ROW_VERSION_CONFLICT", "سیاست لات از زمان خواندن تغییر کرده است؛ تازه‌خوانی کنید");
+
+    const merged = {
+      PolicyCode: existing.PolicyCode,
+      RuleCode: body.RuleCode ?? existing.RuleCode,
+      FixedLotQty: body.FixedLotQty === undefined ? existing.FixedLotQty : body.FixedLotQty,
+      OrderMultiple: body.OrderMultiple === undefined ? existing.OrderMultiple : body.OrderMultiple,
+      MinOrderQty: body.MinOrderQty === undefined ? existing.MinOrderQty : body.MinOrderQty,
+      MaxOrderQty: body.MaxOrderQty === undefined ? existing.MaxOrderQty : body.MaxOrderQty,
+      OrderingCost: body.OrderingCost === undefined ? existing.OrderingCost : body.OrderingCost,
+      HoldingCostPerUnitPerYear: body.HoldingCostPerUnitPerYear === undefined ? existing.HoldingCostPerUnitPerYear : body.HoldingCostPerUnitPerYear,
+      AnnualDemandQty: body.AnnualDemandQty === undefined ? existing.AnnualDemandQty : body.AnnualDemandQty,
+      PeriodDays: body.PeriodDays === undefined ? existing.PeriodDays : body.PeriodDays,
+      PeriodOrderQuantity: body.PeriodOrderQuantity === undefined ? existing.PeriodOrderQuantity : body.PeriodOrderQuantity,
+      Currency: body.Currency ?? existing.Currency,
+      EffectiveFrom: body.EffectiveFrom ?? existing.EffectiveFrom,
+      EffectiveTo: body.EffectiveTo === undefined ? existing.EffectiveTo : body.EffectiveTo,
+      IsActive: body.IsActive === undefined ? existing.IsActive : body.IsActive,
+      NoteFa: body.NoteFa === undefined ? existing.NoteFa : body.NoteFa,
+    };
+    const parsed = parseLotPolicyInput(merged, { allowExistingNulls: true });
+    const issues = runPlanning(() => validateLotSizingPolicy(parsed.engine));
+    if (issues.length > 0) throw businessRule("MFG_LOT_POLICY_INVALID", `سیاست اندازه‌گذاری لات نامعتبر است: ${issues.join("؛ ")}`, { issues });
+
+    const patch = {
+      RuleCode: parsed.ruleCode,
+      FixedLotQty: parsed.fixedLotQty,
+      OrderMultiple: parsed.orderMultiple,
+      MinOrderQty: parsed.minOrderQty,
+      MaxOrderQty: parsed.maxOrderQty,
+      OrderingCost: parsed.orderingCost,
+      HoldingCostPerUnitPerYear: parsed.holdingCostPerUnitPerYear,
+      AnnualDemandQty: parsed.annualDemandQty,
+      PeriodDays: parsed.periodDays,
+      PeriodOrderQuantity: parsed.periodOrderQuantity,
+      Currency: parsed.currency,
+      EffectiveFrom: parsed.effectiveFrom,
+      EffectiveTo: parsed.effectiveTo,
+      IsActive: parsed.isActive,
+      NoteFa: parsed.noteFa,
+    };
+    const result = await r.patch("MfgLotSizingPolicy", existing.Id, patch, subject.id, expectedVersion);
+    if (!result.ok) throw conflict("MFG_ROW_VERSION_CONFLICT", "سیاست لات از زمان خواندن تغییر کرده است؛ تازه‌خوانی کنید");
+    await writeAudit(r, req, "MFG_LOT_POLICY_UPDATED", "MfgLotSizingPolicy", existing.Id, "mfg.lotsize.edit");
+    const updated = await r.get("MfgLotSizingPolicy", existing.Id);
+    return { ...updated, eoq: enrichLotPolicy(updated).eoq, periodOrderQuantity: enrichLotPolicy(updated).periodOrderQuantity };
+  }));
+
+  /* ارزیابی خشک (dry-run) اندازه‌گذاری لات روی یک سری تقاضا؛ هیچ رکوردی نوشته نمی‌شود. */
+  app.post(`${ROOT}/lot-sizing/evaluate`, route("mfg.lotsize.view", async ({ repo: r, req, plantId }) => {
+    const body = req.body ?? {};
+    assertOnlyKeys(body, new Set(["PartId", "Policy", "Demand", "OnHandQty", "ReservedQty", "BlockedQty", "SafetyStockQty", "LeadTimeDays", "BucketUnit", "HorizonStart", "BucketCount", "DemandTimeFenceBuckets", "FirmPlannedTimeFenceBuckets"]));
+    const partId = text(body.PartId, "PartId", { required: true, max: 60, pattern: ID_RE });
+    const part = await r.get("MfgPart", partId);
+    if (!part || part.PlantId !== plantId) throw notFound();
+
+    const bucketUnit = text(body.BucketUnit, "BucketUnit", { max: 8 }) ?? "week";
+    if (!TIME_BUCKETS.has(bucketUnit)) throw bad("BucketUnit", "BucketUnit باید day/week/month باشد");
+    const bucketCount = body.BucketCount === undefined ? 12 : number(body.BucketCount, "BucketCount", { required: true, min: 1, max: 260, integer: true });
+    const horizonStart = isoDate(body.HorizonStart, "HorizonStart") ?? new Date().toISOString().slice(0, 10);
+    const buckets = runPlanning(() => buildTimeBuckets({ horizonStart, bucketUnit, bucketCount }));
+
+    /* Demand اختیاری است: وقتی فرستاده نشود، همان رجیستر تقاضایی خوانده می‌شود
+     * که MPS می‌خواند — وگرنه ارزیابی خشک با اجرای واقعی MPS قابل مقایسه نیست.
+     * هر عدد دیگری (OnHandQty، SafetyStockQty، LeadTimeDays) هم همین رفتار را دارد. */
+    let demand;
+    let demandSource;
+    if (body.Demand === undefined || body.Demand === null) {
+      const rows = await r.list("MfgDemandForecast", {
+        where: [
+          { column: "PlantId", op: "eq", value: plantId },
+          { column: "PartId", op: "eq", value: part.Id },
+        ],
+        orderBy: [{ column: "RequiredAt", dir: "asc" }],
+      });
+      demand = rows
+        .filter((row) => row.PlantId === plantId && row.Status !== "cancelled")
+        .map((row) => ({
+          requiredAt: String(row.RequiredAt).slice(0, 10),
+          quantity: storedNumber(row.Quantity),
+          type: DEMAND_TYPES.has(row.DemandType) ? row.DemandType : "manual",
+          demandRef: row.DemandRef,
+          customerRef: row.CustomerRef,
+        }));
+      demandSource = "register";
+    } else {
+      if (!Array.isArray(body.Demand)) throw bad("Demand", "Demand باید آرایه‌ای از ردیف‌های تقاضا باشد");
+      if (body.Demand.length > 5_000) throw bad("Demand", "حداکثر ۵۰۰۰ ردیف تقاضا در هر ارزیابی مجاز است");
+      demand = body.Demand.map((line, index) => ({
+        requiredAt: isoDate(line?.RequiredAt, `Demand[${index}].RequiredAt`, { required: true }),
+        quantity: number(line?.Quantity, `Demand[${index}].Quantity`, { required: true, min: 0, max: 99_999_999.9999 }),
+        type: parseDemandType(line?.Type, `Demand[${index}].Type`),
+        demandRef: text(line?.DemandRef, `Demand[${index}].DemandRef`, { max: 60 }),
+      }));
+      demandSource = "request";
+    }
+
+    const [policyRow, material] = await Promise.all([
+      r.findOne("MfgLotSizingPolicy", [
+        { column: "PlantId", op: "eq", value: plantId },
+        { column: "PartId", op: "eq", value: part.Id },
+        { column: "IsActive", op: "eq", value: true },
+      ]),
+      r.findOne("MfgMaterial", [
+        { column: "PlantId", op: "eq", value: plantId },
+        { column: "PartId", op: "eq", value: part.Id },
+        { column: "IsActive", op: "eq", value: true },
+      ]),
+    ]);
+    /* سیاست درون‌خطی فقط برای ارزیابی خشک است؛ تاریخ اثر در پایگاه‌داده ثبت نمی‌شود. */
+    const inlinePolicy = body.Policy === undefined ? null : parseLotPolicyInput(body.Policy, { allowExistingNulls: true });
+    const resolved = resolveLotPolicy({ policyRow: inlinePolicy ? null : policyRow, material, override: inlinePolicy });
+    const issues = runPlanning(() => validateLotSizingPolicy(resolved.engine));
+    if (issues.length > 0) throw businessRule("MFG_LOT_POLICY_INVALID", `سیاست اندازه‌گذاری لات نامعتبر است: ${issues.join("؛ ")}`, { issues });
+
+    const inventory = await inventoryForMaterial(r, plantId, material);
+    const onHandQty = body.OnHandQty === undefined
+      ? inventory.onHand
+      : number(body.OnHandQty, "OnHandQty", { required: true, min: 0, max: 99_999_999.9999 });
+
+    const result = runPlanning(() => computeMasterSchedule({
+      partId: part.Id,
+      partNo: part.PartNo,
+      uom: part.BaseUom,
+      buckets,
+      demand,
+      policy: resolved.engine,
+      onHandQty,
+      reservedQty: optionalNumber(body.ReservedQty, "ReservedQty", { min: 0, max: 99_999_999.9999 }) ?? inventory.reserved,
+      blockedQty: optionalNumber(body.BlockedQty, "BlockedQty", { min: 0, max: 99_999_999.9999 }) ?? inventory.blocked,
+      safetyStockQty: optionalNumber(body.SafetyStockQty, "SafetyStockQty", { min: 0, max: 99_999_999.9999 })
+        ?? storedNumber(material?.SafetyStockQty),
+      leadTimeDays: optionalNumber(body.LeadTimeDays, "LeadTimeDays", { min: 0, max: 3650, integer: true })
+        ?? storedNumber(material?.LeadTimeDays),
+      demandTimeFenceBuckets: optionalNumber(body.DemandTimeFenceBuckets, "DemandTimeFenceBuckets", { min: 0, max: 260, integer: true }) ?? 0,
+      firmPlannedTimeFenceBuckets: optionalNumber(body.FirmPlannedTimeFenceBuckets, "FirmPlannedTimeFenceBuckets", { min: 0, max: 260, integer: true }) ?? 0,
+    }));
+
+    const eoqDetail = runPlanning(() => computeEconomicOrderQuantity(resolved.engine));
+    return {
+      partId: part.Id,
+      partNo: part.PartNo,
+      uom: result.uom,
+      policySource: resolved.source,
+      policyId: resolved.policyId,
+      demandSource,
+      lotSizingRule: result.lotSizingRule,
+      eoq: eoqDetail,
+      periodOrderQuantity: result.periodOrderQuantity,
+      bucketUnit: result.bucketUnit,
+      bucketCount: result.bucketCount,
+      horizonStart: buckets[0].start,
+      horizonEnd: buckets[buckets.length - 1].end,
+      openingAvailableQty: result.openingAvailableQty,
+      safetyStockQty: result.safetyStockQty,
+      totals: result.totals,
+      lines: result.lines,
+    };
+  }));
+
+  /* ════════════════════════════════════════════════════════════════════════
+   * فاز ۵ — برنامهٔ اصلی تولید (MPS)
+   * ════════════════════════════════════════════════════════════════════════ */
+
+  app.post(`${ROOT}/mps/runs`, route("mfg.mps.run", async ({ repo: r, req, plantId, subject }) => {
+    const body = req.body ?? {};
+    assertOnlyKeys(body, new Set(["TimeBucket", "BucketCount", "HorizonStart", "PartIds", "DemandTimeFenceBuckets", "FirmPlannedTimeFenceBuckets", "ConsumeForecast", "IncludeOpenOrdersAsReceipts", "PreviewOnly"]));
+    const timeBucket = text(body.TimeBucket, "TimeBucket", { max: 8 }) ?? "week";
+    if (!TIME_BUCKETS.has(timeBucket)) throw bad("TimeBucket", "TimeBucket باید day/week/month باشد");
+    const bucketCount = body.BucketCount === undefined ? 12 : number(body.BucketCount, "BucketCount", { required: true, min: 1, max: 260, integer: true });
+    const horizonStart = isoDate(body.HorizonStart, "HorizonStart") ?? new Date().toISOString().slice(0, 10);
+    const dtf = optionalNumber(body.DemandTimeFenceBuckets, "DemandTimeFenceBuckets", { min: 0, max: 260, integer: true }) ?? 0;
+    const fptf = optionalNumber(body.FirmPlannedTimeFenceBuckets, "FirmPlannedTimeFenceBuckets", { min: 0, max: 260, integer: true }) ?? 0;
+    if (fptf < dtf) throw businessRule("MFG_MPS_FENCE_INVALID", "حصار برنامهٔ قطعی نمی‌تواند کوتاه‌تر از حصار تقاضا باشد", { demandTimeFenceBuckets: dtf, firmPlannedTimeFenceBuckets: fptf });
+    const consumeForecast = bool(body.ConsumeForecast, "ConsumeForecast", true);
+    const includeOpenOrders = bool(body.IncludeOpenOrdersAsReceipts, "IncludeOpenOrdersAsReceipts", true);
+    const previewOnly = bool(body.PreviewOnly, "PreviewOnly", false);
+
+    let requestedPartIds = null;
+    if (body.PartIds !== undefined) {
+      if (!Array.isArray(body.PartIds) || body.PartIds.length < 1 || body.PartIds.length > 200) {
+        throw bad("PartIds", "PartIds باید آرایه‌ای شامل ۱ تا ۲۰۰ شناسه باشد");
+      }
+      requestedPartIds = body.PartIds.map((value, index) => text(value, `PartIds[${index}]`, { required: true, max: 60, pattern: ID_RE }));
+      if (new Set(requestedPartIds).size !== requestedPartIds.length) throw bad("PartIds", "شناسهٔ تکراری در PartIds مجاز نیست");
+    }
+
+    const executeMps = async (db) => {
+      const buckets = runPlanning(() => buildTimeBuckets({ horizonStart, bucketUnit: timeBucket, bucketCount }));
+      const [parts, demands, policies, materials, inventories, orders] = await Promise.all([
+        db.list("MfgPart", { where: [{ column: "PlantId", op: "eq", value: plantId }] }),
+        db.list("MfgDemandForecast", { where: [{ column: "PlantId", op: "eq", value: plantId }] }),
+        db.list("MfgLotSizingPolicy", { where: [{ column: "PlantId", op: "eq", value: plantId }] }),
+        db.list("MfgMaterial", { where: [{ column: "PlantId", op: "eq", value: plantId }] }),
+        db.list("MfgInventoryLevel", { where: [{ column: "PlantId", op: "eq", value: plantId }] }),
+        db.list("MfgProductionOrder", { where: [{ column: "PlantId", op: "eq", value: plantId }] }),
+      ]);
+      const partById = new Map(parts.filter((item) => item.PlantId === plantId).map((item) => [item.Id, item]));
+      const materialByPartId = new Map(materials.filter((item) => item.PlantId === plantId && item.IsActive).map((item) => [item.PartId, item]));
+      const inventoryByMaterialId = new Map();
+      for (const row of inventories) {
+        if (row.PlantId !== plantId) continue;
+        const list = inventoryByMaterialId.get(row.MaterialId) ?? [];
+        list.push(row);
+        inventoryByMaterialId.set(row.MaterialId, list);
+      }
+      const policiesByPartId = new Map();
+      for (const row of policies) {
+        if (row.PlantId !== plantId || row.IsActive !== true) continue;
+        const list = policiesByPartId.get(row.PartId) ?? [];
+        list.push(row);
+        policiesByPartId.set(row.PartId, list);
+      }
+
+      const demandByPartId = new Map();
+      for (const row of demands) {
+        if (row.PlantId !== plantId || row.Status === "cancelled") continue;
+        const list = demandByPartId.get(row.PartId) ?? [];
+        list.push(row);
+        demandByPartId.set(row.PartId, list);
+      }
+
+      const targetPartIds = requestedPartIds
+        ? requestedPartIds
+        : [...new Set([...demandByPartId.keys()])].sort();
+      for (const partId of targetPartIds) {
+        if (!partById.has(partId)) throw notFound();
+      }
+      if (targetPartIds.length === 0) {
+        throw businessRule("MFG_MPS_NO_DEMAND", "هیچ تقاضای فعالی در این کارخانه وجود ندارد؛ ابتدا ردیف تقاضا ثبت کنید");
+      }
+
+      const runs = await db.list("MfgMasterScheduleRun", {
+        where: [{ column: "PlantId", op: "eq", value: plantId }],
+        orderBy: [{ column: "RunNo", dir: "desc" }],
+        limit: 1,
+      });
+      const runNo = storedNumber(runs[0]?.RunNo, 0) + 1;
+      const calculatedAt = new Date().toISOString();
+      const horizonEnd = buckets[buckets.length - 1].end;
+
+      const plannedParts = [];
+      const allLines = [];
+      const skippedParts = [];
+      for (const partId of targetPartIds) {
+        const part = partById.get(partId);
+        const material = materialByPartId.get(partId) ?? null;
+        const policyRow = pickEffectivePolicy(policiesByPartId.get(partId) ?? [], horizonStart);
+        const resolved = resolveLotPolicy({ policyRow, material, override: null });
+        const issues = runPlanning(() => validateLotSizingPolicy(resolved.engine));
+        if (issues.length > 0) {
+          skippedParts.push({ partId, partNo: part.PartNo, reason: `MFG_LOT_POLICY_INVALID: ${issues.join("؛ ")}` });
+          continue;
+        }
+        const inventory = sumInventory(inventoryByMaterialId.get(material?.Id) ?? []);
+        const demandRows = demandByPartId.get(partId) ?? [];
+        const demand = demandRows.map((row) => ({
+          requiredAt: String(row.RequiredAt).slice(0, 10),
+          quantity: storedNumber(row.Quantity),
+          type: DEMAND_TYPES.has(row.DemandType) ? row.DemandType : "manual",
+          demandRef: row.DemandRef,
+          customerRef: row.CustomerRef,
+        }));
+        const scheduledReceipts = includeOpenOrders
+          ? orders
+            .filter((order) => order.PlantId === plantId && order.PartId === partId && ["released", "in-progress"].includes(order.Status))
+            .map((order) => ({
+              plannedAt: storedIsoTimestamp(order.DueAt)?.slice(0, 10) ?? horizonStart,
+              quantity: storedNumber(order.OrderQuantity),
+              sourceRef: order.OrderNo,
+            }))
+          : [];
+
+        const result = runPlanning(() => computeMasterSchedule({
+          partId,
+          partNo: part.PartNo,
+          uom: part.BaseUom,
+          buckets,
+          demand,
+          scheduledReceipts,
+          policy: resolved.engine,
+          onHandQty: inventory.onHand,
+          reservedQty: inventory.reserved,
+          blockedQty: inventory.blocked,
+          safetyStockQty: Math.max(inventory.safety, storedNumber(material?.SafetyStockQty)),
+          leadTimeDays: storedNumber(material?.LeadTimeDays),
+          demandTimeFenceBuckets: dtf,
+          firmPlannedTimeFenceBuckets: fptf,
+          consumeForecastWithSalesOrders: consumeForecast,
+        }));
+
+        plannedParts.push({
+          partId,
+          partNo: part.PartNo,
+          uom: result.uom,
+          policySource: resolved.source,
+          policyId: resolved.policyId,
+          lotSizingRule: result.lotSizingRule,
+          eoq: result.eoq,
+          periodOrderQuantity: result.periodOrderQuantity,
+          openingAvailableQty: result.openingAvailableQty,
+          safetyStockQty: result.safetyStockQty,
+          leadTimeBuckets: result.leadTimeBuckets,
+          totals: result.totals,
+          consumedDemandRefs: result.lines.flatMap((line) => (line.consumedForecastQty > 0 ? line.demandRefs : [])),
+        });
+        for (const line of result.lines) {
+          allLines.push({ line, part, policyId: resolved.policyId, demandRows });
+        }
+      }
+
+      if (plannedParts.length === 0) {
+        throw businessRule("MFG_MPS_NOTHING_PLANNED", "هیچ قطعه‌ای برنامه‌ریزی نشد", { skippedParts });
+      }
+      if (!previewOnly && allLines.length > 20_000) {
+        throw businessRule("MFG_MPS_LINE_LIMIT", `هر اجرای MPS حداکثر ۲۰٬۰۰۰ ردیف می‌سازد؛ فعلی ${allLines.length}`, { lineCount: allLines.length });
+      }
+
+      if (previewOnly) {
+        return {
+          previewOnly: true,
+          run: null,
+          timeBucket,
+          bucketCount,
+          horizonStart: buckets[0].start,
+          horizonEnd,
+          parts: plannedParts,
+          skippedParts,
+          lines: allLines.map(({ line, policyId }) => masterScheduleLineRow(line, { plantId, policyId })),
+          totals: {
+            partCount: plannedParts.length,
+            lineCount: allLines.length,
+            plannedOrderQty: roundTo3(allLines.reduce((sum, item) => sum + item.line.plannedOrderReceiptQty, 0)),
+          },
+        };
+      }
+
+      const totalPlanned = roundTo3(allLines.reduce((sum, item) => sum + item.line.plannedOrderReceiptQty, 0));
+      const runRow = await db.create("MfgMasterScheduleRun", {
+        PlantId: plantId,
+        RunNo: runNo,
+        TimeBucket: timeBucket,
+        BucketCount: bucketCount,
+        HorizonStart: buckets[0].start,
+        HorizonEnd: horizonEnd,
+        PartId: requestedPartIds && requestedPartIds.length === 1 ? requestedPartIds[0] : null,
+        DemandTimeFenceBuckets: dtf,
+        FirmPlannedTimeFenceBuckets: fptf,
+        ConsumeForecast: consumeForecast,
+        PreviewOnly: false,
+        CalculatedAt: calculatedAt,
+        CalculatedBy: subject.id,
+        ModelVersion: MANUFACTURING_PLANNING_MODEL_VERSION,
+        PartCount: plannedParts.length,
+        LineCount: allLines.length,
+        TotalPlannedOrderQty: totalPlanned,
+        SummaryJson: { parts: plannedParts, skippedParts },
+      }, subject.id);
+
+      const persistedLines = [];
+      for (const { line, policyId } of allLines) {
+        const created = await db.create("MfgMasterScheduleLine",
+          masterScheduleLineRow(line, { plantId, mpsRunId: runRow.Id, policyId }), subject.id);
+        persistedLines.push(created);
+      }
+
+      /* مصرف پیش‌بینی با سفارش فروش در همان سطل؛ ردیف تقاضا مهرِ اجرای MPS می‌خورد
+       * تا دفعهٔ بعد همان مقدار دوباره شمرده نشود. */
+      const consumedByDemandId = new Map();
+      for (const { line, demandRows } of allLines) {
+        if (line.consumedForecastQty <= 0) continue;
+        const candidates = demandRows
+          .filter((row) => row.DemandType === "forecast" && String(row.RequiredAt).slice(0, 10) >= line.bucketStart && String(row.RequiredAt).slice(0, 10) < line.bucketEnd)
+          .sort((left, right) => String(left.RequiredAt).localeCompare(String(right.RequiredAt)) || String(left.DemandRef).localeCompare(String(right.DemandRef)));
+        let remaining = line.consumedForecastQty;
+        for (const row of candidates) {
+          if (remaining <= 0) break;
+          const already = storedNumber(consumedByDemandId.get(row.Id)?.consumed ?? row.ConsumedQuantity);
+          const room = Math.max(0, storedNumber(row.Quantity) - already);
+          const applied = roundTo3(Math.min(room, remaining));
+          if (applied <= 0) continue;
+          consumedByDemandId.set(row.Id, { row, consumed: roundTo3(already + applied) });
+          remaining = roundTo3(remaining - applied);
+        }
+      }
+      for (const { row, consumed } of consumedByDemandId.values()) {
+        const patchRes = await db.patch("MfgDemandForecast", row.Id, {
+          ConsumedQuantity: consumed,
+          MpsRunId: runRow.Id,
+        }, subject.id, row.RowVersion);
+        if (!patchRes.ok) throw conflict("MFG_ROW_VERSION_CONFLICT", "ردیف تقاضا هم‌زمان تغییر کرده است؛ اجرای MPS لغو شد");
+      }
+
+      await createAuditRecord(db, req, "MFG_MPS_RUN_CREATED", "MfgMasterScheduleRun", runRow.Id, "mfg.mps.run", {
+        runNo,
+        timeBucket,
+        bucketCount,
+        horizonStart: buckets[0].start,
+        horizonEnd,
+        partCount: plannedParts.length,
+        lineCount: allLines.length,
+        totalPlannedOrderQty: totalPlanned,
+      });
+
+      return {
+        previewOnly: false,
+        run: runRow,
+        timeBucket,
+        bucketCount,
+        horizonStart: buckets[0].start,
+        horizonEnd,
+        parts: plannedParts,
+        skippedParts,
+        lines: persistedLines,
+        totals: { partCount: plannedParts.length, lineCount: persistedLines.length, plannedOrderQty: totalPlanned },
+      };
+    };
+
+    return previewOnly ? executeMps(r) : r.transaction((tx) => executeMps(tx));
+  }, 201));
+
+  app.get(`${ROOT}/mps/runs`, route("mfg.mps.view", async ({ repo: r, req, plantId }) => {
+    const q = req.query ?? {};
+    assertOnlyQueryKeys(q, new Set(["timeBucket", "partId", "limit", "offset"]));
+    const limit = pageNumber(q.limit, "limit", 50, 200);
+    if (limit < 1) throw bad("limit", "limit باید بین ۱ و ۲۰۰ باشد");
+    const offset = pageNumber(q.offset, "offset", 0, 1_000_000);
+    const where = [{ column: "PlantId", op: "eq", value: plantId }];
+    if (q.timeBucket !== undefined) {
+      const timeBucket = text(q.timeBucket, "timeBucket", { required: true, max: 8 });
+      if (!TIME_BUCKETS.has(timeBucket)) throw bad("timeBucket", "timeBucket باید day/week/month باشد");
+      where.push({ column: "TimeBucket", op: "eq", value: timeBucket });
+    }
+    if (q.partId !== undefined) where.push({ column: "PartId", op: "eq", value: text(q.partId, "partId", { required: true, max: 60, pattern: ID_RE }) });
+    const [items, total] = await Promise.all([
+      r.list("MfgMasterScheduleRun", { where, orderBy: [{ column: "RunNo", dir: "desc" }], limit, offset }),
+      r.count("MfgMasterScheduleRun", where),
+    ]);
+    return { items, page: { limit, offset, total } };
+  }));
+
+  app.get(`${ROOT}/mps/runs/:runId`, route("mfg.mps.view", async ({ repo: r, req, plantId }) => {
+    const runId = text(req.params.runId, "runId", { required: true, max: 60, pattern: ID_RE });
+    const run = await r.get("MfgMasterScheduleRun", runId);
+    if (!run || run.PlantId !== plantId) throw notFound();
+    return run;
+  }));
+
+  app.get(`${ROOT}/mps/runs/:runId/lines`, route("mfg.mps.view", async ({ repo: r, req, plantId }) => {
+    const q = req.query ?? {};
+    assertOnlyQueryKeys(q, new Set(["partId", "onlyPlannedOrders", "limit", "offset"]));
+    const runId = text(req.params.runId, "runId", { required: true, max: 60, pattern: ID_RE });
+    const run = await r.get("MfgMasterScheduleRun", runId);
+    if (!run || run.PlantId !== plantId) throw notFound();
+    const limit = pageNumber(q.limit, "limit", 200, 2000);
+    if (limit < 1) throw bad("limit", "limit باید بین ۱ و ۲۰۰۰ باشد");
+    const offset = pageNumber(q.offset, "offset", 0, 1_000_000);
+    const where = [
+      { column: "PlantId", op: "eq", value: plantId },
+      { column: "MpsRunId", op: "eq", value: run.Id },
+    ];
+    if (q.partId !== undefined) where.push({ column: "PartId", op: "eq", value: text(q.partId, "partId", { required: true, max: 60, pattern: ID_RE }) });
+    const [rows, total] = await Promise.all([
+      r.list("MfgMasterScheduleLine", { where, orderBy: [{ column: "PartId", dir: "asc" }, { column: "BucketIndex", dir: "asc" }], limit, offset }),
+      r.count("MfgMasterScheduleLine", where),
+    ]);
+    const items = q.onlyPlannedOrders === "true"
+      ? rows.filter((row) => storedNumber(row.PlannedOrderReceiptQty) > 0)
+      : rows;
+    const [parts] = await Promise.all([r.list("MfgPart", { where: [{ column: "PlantId", op: "eq", value: plantId }] })]);
+    const partById = new Map(parts.filter((item) => item.PlantId === plantId).map((item) => [item.Id, item]));
+    return {
+      run: { Id: run.Id, RunNo: run.RunNo, TimeBucket: run.TimeBucket, BucketCount: run.BucketCount, HorizonStart: run.HorizonStart, HorizonEnd: run.HorizonEnd },
+      items: items.map((row) => ({ ...row, PartNo: partById.get(row.PartId)?.PartNo ?? null, PartNameFa: partById.get(row.PartId)?.NameFa ?? null })),
+      page: { limit, offset, total, returned: items.length },
+    };
+  }));
+
+  app.post(`${ROOT}/mps/runs/:runId/firm`, route("mfg.mps.firm", async ({ repo: r, req, plantId, subject }) => {
+    const body = req.body ?? {};
+    assertOnlyKeys(body, new Set(["PartId", "ThroughBucketIndex", "Firm"]));
+    const expectedVersion = rowVersionFrom(req);
+    const runId = text(req.params.runId, "runId", { required: true, max: 60, pattern: ID_RE });
+    const firm = bool(body.Firm, "Firm", true);
+    const throughBucketIndex = optionalNumber(body.ThroughBucketIndex, "ThroughBucketIndex", { min: 0, max: 260, integer: true });
+
+    return r.transaction(async (tx) => {
+      const run = await tx.get("MfgMasterScheduleRun", runId);
+      if (!run || run.PlantId !== plantId) throw notFound();
+      if (run.RowVersion !== expectedVersion) throw conflict("MFG_ROW_VERSION_CONFLICT", "اجرای MPS از زمان خواندن تغییر کرده است؛ تازه‌خوانی کنید");
+      if (run.PreviewOnly === true) throw conflict("MFG_STATE_CONFLICT", "اجرای پیش‌نمایش رکوردی ندارد که قطعی شود");
+
+      const where = [
+        { column: "PlantId", op: "eq", value: plantId },
+        { column: "MpsRunId", op: "eq", value: run.Id },
+      ];
+      if (body.PartId !== undefined) {
+        const partId = text(body.PartId, "PartId", { required: true, max: 60, pattern: ID_RE });
+        const part = await tx.get("MfgPart", partId);
+        if (!part || part.PlantId !== plantId) throw notFound();
+        where.push({ column: "PartId", op: "eq", value: partId });
+      }
+      const lines = await tx.list("MfgMasterScheduleLine", { where, orderBy: [{ column: "PartId", dir: "asc" }, { column: "BucketIndex", dir: "asc" }] });
+      if (lines.length === 0) throw notFound();
+
+      /* حصار اجرا بر حسب تعداد سطل است؛ اندیس آخرین سطل درون حصار
+       * یک کمتر از خود حصار است. حصار صفر یعنی هیچ سطلی قطعی نیست
+       * و باید صریحاً بازه خواسته شود، نه اینکه سطل صفر بی‌سروصدا قطعی شود. */
+      const runFenceIndex = storedNumber(run.FirmPlannedTimeFenceBuckets) - 1;
+      if (throughBucketIndex === null && runFenceIndex < 0) {
+        throw businessRule("MFG_MPS_FENCE_EMPTY", "حصار برنامهٔ قطعی این اجرا صفر است؛ ThroughBucketIndex را صریح بفرستید", {
+          firmPlannedTimeFenceBuckets: run.FirmPlannedTimeFenceBuckets,
+        });
+      }
+      const fence = throughBucketIndex ?? runFenceIndex;
+      const targets = lines.filter((line) => storedNumber(line.BucketIndex) <= fence && storedNumber(line.PlannedOrderReceiptQty) > 0);
+      if (targets.length === 0) {
+        throw businessRule("MFG_MPS_NOTHING_TO_FIRM", "در این حصار هیچ سفارش برنامه‌ریزی‌شده‌ای برای قطعی‌کردن وجود ندارد", { throughBucketIndex: fence });
+      }
+      const updated = [];
+      for (const line of targets) {
+        if (line.IsFirm === firm) {
+          updated.push(line);
+          continue;
+        }
+        const patchRes = await tx.patch("MfgMasterScheduleLine", line.Id, { IsFirm: firm }, subject.id, line.RowVersion);
+        if (!patchRes.ok) throw conflict("MFG_ROW_VERSION_CONFLICT", "ردیف MPS هم‌زمان تغییر کرده است");
+        updated.push(await tx.get("MfgMasterScheduleLine", line.Id));
+      }
+      const patchRes = await tx.patch("MfgMasterScheduleRun", run.Id, {
+        SummaryJson: { ...(run.SummaryJson ?? {}), lastFirmAction: { at: new Date().toISOString(), by: subject.id, firm, throughBucketIndex: fence, lineCount: updated.length } },
+      }, subject.id, expectedVersion);
+      if (!patchRes.ok) throw conflict("MFG_ROW_VERSION_CONFLICT", "اجرای MPS هم‌زمان تغییر کرده است");
+      await createAuditRecord(tx, req, "MFG_MPS_LINES_FIRMED", "MfgMasterScheduleRun", run.Id, "mfg.mps.firm", {
+        runNo: run.RunNo,
+        firm,
+        throughBucketIndex: fence,
+        lineCount: updated.length,
+      });
+      return { run: await tx.get("MfgMasterScheduleRun", run.Id), firmedLineCount: updated.length, throughBucketIndex: fence, firm, lines: updated };
+    });
+  }));
+
+  /* ════════════════════════════════════════════════════════════════════════
+   * فاز ۵ — قابلیت تعهد تحویل به مشتری (ATP)
+   * ════════════════════════════════════════════════════════════════════════ */
+
+  app.post(`${ROOT}/atp/checks`, route("mfg.atp.check", async ({ repo: r, req, plantId, subject }) => {
+    const body = req.body ?? {};
+    assertOnlyKeys(body, new Set(["PartId", "RequestedQty", "RequestedAt", "Mode", "IncludeSafetyStock", "IncludeForecast", "IncludePlannedOrders", "IncludeCapacity", "BucketUnit", "HorizonStart", "BucketCount", "LeadTimeDays", "CustomerRef", "Persist"]));
+    const partId = text(body.PartId, "PartId", { required: true, max: 60, pattern: ID_RE });
+    const requestedQty = number(body.RequestedQty, "RequestedQty", { required: true, min: Number.MIN_VALUE, max: 99_999_999.9999 });
+    const requestedAt = isoDate(body.RequestedAt, "RequestedAt", { required: true });
+    const mode = text(body.Mode, "Mode", { max: 12 }) ?? "cumulative";
+    if (!ATP_MODES.has(mode)) throw bad("Mode", "Mode باید discrete یا cumulative باشد");
+    const includeSafetyStock = bool(body.IncludeSafetyStock, "IncludeSafetyStock", true);
+    const includeForecast = bool(body.IncludeForecast, "IncludeForecast", false);
+    const includePlannedOrders = bool(body.IncludePlannedOrders, "IncludePlannedOrders", true);
+    const includeCapacity = bool(body.IncludeCapacity, "IncludeCapacity", true);
+    const persist = bool(body.Persist, "Persist", true);
+    const bucketUnit = text(body.BucketUnit, "BucketUnit", { max: 8 }) ?? "week";
+    if (!TIME_BUCKETS.has(bucketUnit)) throw bad("BucketUnit", "BucketUnit باید day/week/month باشد");
+    const bucketCount = body.BucketCount === undefined ? 12 : number(body.BucketCount, "BucketCount", { required: true, min: 1, max: 260, integer: true });
+    const horizonStart = isoDate(body.HorizonStart, "HorizonStart") ?? new Date().toISOString().slice(0, 10);
+    const leadTimeDays = optionalNumber(body.LeadTimeDays, "LeadTimeDays", { min: 0, max: 3650, integer: true });
+    const customerRef = text(body.CustomerRef, "CustomerRef", { max: 80 });
+
+    const compute = async (db) => {
+      const [part, material, inventories, demands, orders, latestRuns] = await Promise.all([
+        db.get("MfgPart", partId),
+        db.findOne("MfgMaterial", [{ column: "PlantId", op: "eq", value: plantId }, { column: "PartId", op: "eq", value: partId }, { column: "IsActive", op: "eq", value: true }]),
+        db.list("MfgInventoryLevel", { where: [{ column: "PlantId", op: "eq", value: plantId }] }),
+        db.list("MfgDemandForecast", { where: [{ column: "PlantId", op: "eq", value: plantId }, { column: "PartId", op: "eq", value: partId }] }),
+        db.list("MfgProductionOrder", { where: [{ column: "PlantId", op: "eq", value: plantId }, { column: "PartId", op: "eq", value: partId }] }),
+        db.list("MfgMasterScheduleRun", { where: [{ column: "PlantId", op: "eq", value: plantId }], orderBy: [{ column: "RunNo", dir: "desc" }], limit: 1 }),
+      ]);
+      if (!part || part.PlantId !== plantId) throw notFound();
+      const buckets = runPlanning(() => buildTimeBuckets({ horizonStart, bucketUnit, bucketCount }));
+      const inventory = sumInventory(inventories.filter((row) => row.PlantId === plantId && material && row.MaterialId === material.Id));
+      const effectiveLeadTimeDays = leadTimeDays ?? storedNumber(material?.LeadTimeDays);
+
+      /* ATP فقط در برابر تقاضای متعهدشده سنجیده می‌شود؛ پیش‌بینی به‌صورت اختیاری. */
+      const committedTypes = new Set(includeForecast ? ["sales-order", "forecast", "contract", "manual"] : ["sales-order", "contract", "manual"]);
+      const demandBuckets = buckets.map(() => 0);
+      for (const row of demands) {
+        if (row.PlantId !== plantId || row.Status === "cancelled") continue;
+        if (!committedTypes.has(row.DemandType)) continue;
+        const index = buckets.findIndex((bucket) => {
+          const day = String(row.RequiredAt).slice(0, 10);
+          return day >= bucket.start && day < bucket.end;
+        });
+        if (index < 0) continue;
+        demandBuckets[index] = roundTo3(demandBuckets[index] + storedNumber(row.Quantity));
+      }
+
+      const supplyBuckets = buckets.map(() => 0);
+      const supplyRefs = buckets.map(() => []);
+      for (const order of orders) {
+        if (order.PlantId !== plantId || !["released", "in-progress"].includes(order.Status)) continue;
+        const day = storedIsoTimestamp(order.DueAt)?.slice(0, 10);
+        const index = day ? buckets.findIndex((bucket) => day >= bucket.start && day < bucket.end) : -1;
+        if (index < 0) continue;
+        supplyBuckets[index] = roundTo3(supplyBuckets[index] + storedNumber(order.OrderQuantity));
+        supplyRefs[index].push(order.OrderNo);
+      }
+      let mpsRunId = null;
+      if (includePlannedOrders && latestRuns[0]) {
+        mpsRunId = latestRuns[0].Id;
+        const plannedLines = await db.list("MfgMasterScheduleLine", {
+          where: [
+            { column: "PlantId", op: "eq", value: plantId },
+            { column: "MpsRunId", op: "eq", value: latestRuns[0].Id },
+            { column: "PartId", op: "eq", value: partId },
+          ],
+        });
+        for (const line of plannedLines) {
+          const qty = storedNumber(line.PlannedOrderReceiptQty);
+          if (qty <= 0) continue;
+          const index = buckets.findIndex((bucket) => String(line.BucketStart) === bucket.start);
+          if (index < 0) continue;
+          supplyBuckets[index] = roundTo3(supplyBuckets[index] + qty);
+          supplyRefs[index].push(`MPS-${latestRuns[0].RunNo}`);
+        }
+      }
+
+      const atp = runPlanning(() => computeAvailableToPromise({
+        onHandQty: inventory.onHand,
+        reservedQty: inventory.reserved,
+        blockedQty: inventory.blocked,
+        safetyStockQty: Math.max(inventory.safety, storedNumber(material?.SafetyStockQty)),
+        includeSafetyStock,
+        mode,
+        buckets: buckets.map((bucket, index) => ({
+          bucketStart: bucket.start,
+          bucketEnd: bucket.end,
+          demandQty: demandBuckets[index],
+          supplyQty: supplyBuckets[index],
+        })),
+      }));
+      const check = runPlanning(() => checkAtpPromise({ atp, requestedQty, requestedAt, leadTimeDays: effectiveLeadTimeDays }));
+
+      /* ۱۱.۸ — موجودی تنها نیمی از پاسخ است. ظرفیت آزاد مراکز کاریِ Routing
+       * قطعه هم سنجیده می‌شود و وعدهٔ نهایی دیرترِ این دو است. */
+      let capacity = { considered: false, constrained: false, requestedBucketIndex: null, promiseBucketIndex: null, promiseAt: null, centers: [], message: null };
+      if (includeCapacity) {
+        const [workCenters, resources, routings, allOperations, schedules] = await Promise.all([
+          db.list("MfgWorkCenter", { where: [{ column: "PlantId", op: "eq", value: plantId }] }),
+          db.list("MfgWorkCenterResource", { where: [{ column: "PlantId", op: "eq", value: plantId }] }),
+          db.list("MfgRouting", { where: [{ column: "PlantId", op: "eq", value: plantId }, { column: "PartId", op: "eq", value: partId }] }),
+          db.list("MfgProductionOrderOperation", { where: [{ column: "PlantId", op: "eq", value: plantId }] }),
+          db.list("MfgOperationSchedule", { where: [{ column: "PlantId", op: "eq", value: plantId }], orderBy: [{ column: "ScheduleVersion", dir: "desc" }] }),
+        ]);
+        const routing = routings.find((row) => row.PlantId === plantId && row.Status === "released" && row.IsDefault === true)
+          ?? routings.find((row) => row.PlantId === plantId && row.Status === "released")
+          ?? null;
+        const routingOperations = routing
+          ? await db.list("MfgRoutingOperation", {
+            where: [{ column: "PlantId", op: "eq", value: plantId }, { column: "RoutingId", op: "eq", value: routing.Id }],
+            orderBy: [{ column: "SequenceNo", dir: "asc" }],
+          })
+          : [];
+
+        /* بار فعلی: عملیات سفارش‌های باز در پنجرهٔ زمان‌بندی‌شده‌شان، پخش‌شده
+         * روی سطل‌هایی که آن پنجره می‌پوشاند. */
+        const openOrderIds = new Set(
+          (await db.list("MfgProductionOrder", { where: [{ column: "PlantId", op: "eq", value: plantId }] }))
+            .filter((order) => ["released", "in-progress"].includes(order.Status))
+            .map((order) => order.Id),
+        );
+        const latestScheduleVersion = schedules.find((row) => row.PlantId === plantId)?.ScheduleVersion ?? null;
+        const windows = new Map();
+        for (const segment of schedules) {
+          if (segment.PlantId !== plantId || latestScheduleVersion === null || segment.ScheduleVersion !== latestScheduleVersion) continue;
+          if (segment.Status === "cancelled") continue;
+          const start = storedIsoTimestamp(segment.PlannedStartAt);
+          const end = storedIsoTimestamp(segment.PlannedEndAt);
+          if (!start || !end) continue;
+          /* storedIsoTimestamp رشتهٔ ISO می‌دهد؛ Math.min روی رشته NaN می‌سازد و
+           * بعداً toISOString با RangeError می‌ترکد. ISOهای UTC با مقایسهٔ
+           * رشته‌ای مرتب می‌شوند — همان کاری که runCrp می‌کند. */
+          const existing = windows.get(segment.ProductionOrderOperationId);
+          windows.set(segment.ProductionOrderOperationId, {
+            plannedStartAt: existing && existing.plannedStartAt < start ? existing.plannedStartAt : start,
+            plannedEndAt: existing && existing.plannedEndAt > end ? existing.plannedEndAt : end,
+          });
+        }
+        const loadedMinutesByCenterBucket = new Map();
+        for (const op of allOperations) {
+          if (op.PlantId !== plantId || !openOrderIds.has(op.ProductionOrderId)) continue;
+          const minutes = storedNumber(op.PlannedCapacityMinutes, 0);
+          if (minutes <= 0) continue;
+          const window = windows.get(op.Id);
+          /* مقدار از پیش رشتهٔ ISO است؛ روز آن با slice گرفته می‌شود. */
+          const startDay = window ? String(window.plannedStartAt).slice(0, 10) : null;
+          const endDay = window ? String(window.plannedEndAt).slice(0, 10) : null;
+          let from = startDay ? buckets.findIndex((bucket) => startDay >= bucket.start && startDay < bucket.end) : 0;
+          let to = endDay ? buckets.findIndex((bucket) => endDay >= bucket.start && endDay < bucket.end) : from;
+          if (from < 0) from = 0;
+          if (to < from) to = from;
+          to = Math.min(buckets.length - 1, to);
+          const perBucket = roundTo3(minutes / (to - from + 1));
+          const list = loadedMinutesByCenterBucket.get(op.WorkCenterId) ?? buckets.map(() => 0);
+          for (let index = from; index <= to; index += 1) list[index] = roundTo3(list[index] + perBucket);
+          loadedMinutesByCenterBucket.set(op.WorkCenterId, list);
+        }
+
+        capacity = atpCapacityCheck({
+          buckets, requestedQty, requestedAt, routingOperations,
+          workCenters: workCenters.filter((row) => row.PlantId === plantId && row.Status !== "inactive"),
+          resources: resources.filter((row) => row.PlantId === plantId),
+          loadedMinutesByCenterBucket,
+        });
+      }
+
+      /* وعدهٔ نهایی: دیرترِ وعدهٔ موجودی و وعدهٔ ظرفیت. اگر ظرفیت هیچ سطلی
+       * کافی نداشت، وعدهٔ موجودی دست‌نخورده می‌ماند و فقط هشدار ظرفیت می‌آید. */
+      let promisedAt = check.promisedAt;
+      let promiseConstrainedByCapacity = false;
+      /* فقط وقتی مقید است که سطلِ درخواستی جا نداشته باشد. وعدهٔ ظرفیت انتهای
+       * سطل است و وعدهٔ موجودی یک تاریخ دقیق؛ مقایسهٔ بی‌قیدِ این دو، ظرفیتِ
+       * کافی را هم «مقید» نشان می‌داد. */
+      if (capacity.considered && capacity.constrained && capacity.promiseAt) {
+        if (!promisedAt || capacity.promiseAt > promisedAt) {
+          promisedAt = capacity.promiseAt;
+          promiseConstrainedByCapacity = true;
+        }
+      }
+
+      let persisted = null;
+      if (persist) {
+        persisted = await db.create("MfgAtpCheck", {
+          PlantId: plantId,
+          PartId: part.Id,
+          RequestedQty: roundTo3(requestedQty),
+          RequestedAt: requestedAt,
+          Mode: mode,
+          Result: check.status,
+          PromisedQty: roundTo3(check.promisedQty),
+          ShortageQty: roundTo3(check.shortageQty),
+          PromisedAt: check.promisedAt,
+          DelayBuckets: check.delayBuckets,
+          SourceBucketStart: check.sourceBucketStart,
+          OpeningAvailableQty: atp.openingAvailableQty,
+          IncludeSafetyStock: includeSafetyStock,
+          LeadTimeDays: effectiveLeadTimeDays,
+          BucketCount: atp.buckets.length,
+          CheckedAt: new Date().toISOString(),
+          CheckedBy: subject.id,
+          ModelVersion: MANUFACTURING_PLANNING_MODEL_VERSION,
+          CustomerRef: customerRef,
+          MessageFa: capacity.constrained && capacity.message ? capacity.message : check.message,
+          DetailJson: {
+            buckets: atp.buckets,
+            totals: atp.totals,
+            mpsRunId,
+            supplyRefs,
+            /* ۱۱.۸ — قید ظرفیت هم در رکورد می‌ماند تا بعداً قابل بازخوانی باشد. */
+            includeCapacity,
+            capacity: {
+              considered: capacity.considered,
+              constrained: capacity.constrained,
+              promiseBucketIndex: capacity.promiseBucketIndex,
+              promiseAt: capacity.promiseAt,
+              centers: capacity.centers.map((center) => ({
+                workCenterId: center.workCenterId,
+                code: center.code,
+                requiredMinutes: center.requiredMinutes,
+                freeMinutesByBucket: center.buckets.map((row) => row.freeMinutes),
+                sufficientByBucket: center.buckets.map((row) => row.sufficient),
+              })),
+            },
+            promisedAt,
+            promiseConstrainedByCapacity,
+          },
+        }, subject.id);
+        await createAuditRecord(db, req, "MFG_ATP_CHECKED", "MfgAtpCheck", persisted.Id, "mfg.atp.check", {
+          partNo: part.PartNo,
+          requestedQty: roundTo3(requestedQty),
+          requestedAt,
+          result: check.status,
+          promisedAt: check.promisedAt,
+          shortageQty: roundTo3(check.shortageQty),
+        });
+      }
+
+      return {
+        partId: part.Id,
+        partNo: part.PartNo,
+        uom: part.BaseUom,
+        mode,
+        includeSafetyStock,
+        includeForecast,
+        includePlannedOrders,
+        includeCapacity,
+        mpsRunId,
+        leadTimeDays: effectiveLeadTimeDays,
+        bucketUnit,
+        horizonStart: buckets[0].start,
+        horizonEnd: buckets[buckets.length - 1].end,
+        openingAvailableQty: atp.openingAvailableQty,
+        buckets: atp.buckets,
+        totals: atp.totals,
+        check,
+        /* ۱۱.۸ — ظرفیت آزاد مراکز کاری و وعدهٔ نهاییِ حاصل از هر دو قید. */
+        capacity,
+        promisedAt,
+        promiseConstrainedByCapacity,
+        record: persisted,
+      };
+    };
+
+    return persist ? r.transaction((tx) => compute(tx)) : compute(r);
+  }, 201));
+
+  app.get(`${ROOT}/atp/checks`, route("mfg.atp.view", async ({ repo: r, req, plantId }) => {
+    const q = req.query ?? {};
+    assertOnlyQueryKeys(q, new Set(["partId", "result", "mode", "limit", "offset"]));
+    const limit = pageNumber(q.limit, "limit", 50, 200);
+    if (limit < 1) throw bad("limit", "limit باید بین ۱ و ۲۰۰ باشد");
+    const offset = pageNumber(q.offset, "offset", 0, 1_000_000);
+    const where = [{ column: "PlantId", op: "eq", value: plantId }];
+    if (q.partId !== undefined) {
+      const partId = text(q.partId, "partId", { required: true, max: 60, pattern: ID_RE });
+      const part = await r.get("MfgPart", partId);
+      if (!part || part.PlantId !== plantId) throw notFound();
+      where.push({ column: "PartId", op: "eq", value: partId });
+    }
+    if (q.result !== undefined) {
+      const result = text(q.result, "result", { required: true, max: 12 });
+      if (!["available", "delayed", "unavailable"].includes(result)) throw bad("result", "result باید available/delayed/unavailable باشد");
+      where.push({ column: "Result", op: "eq", value: result });
+    }
+    if (q.mode !== undefined) {
+      const mode = text(q.mode, "mode", { required: true, max: 12 });
+      if (!ATP_MODES.has(mode)) throw bad("mode", "mode باید discrete یا cumulative باشد");
+      where.push({ column: "Mode", op: "eq", value: mode });
+    }
+    const [items, total] = await Promise.all([
+      r.list("MfgAtpCheck", { where, orderBy: [{ column: "CheckedAt", dir: "desc" }], limit, offset }),
+      r.count("MfgAtpCheck", where),
+    ]);
+    return { items, page: { limit, offset, total } };
+  }));
+
+  app.get(`${ROOT}/atp/summary`, route("mfg.atp.view", async ({ repo: r, req, plantId }) => {
+    const q = req.query ?? {};
+    assertOnlyQueryKeys(q, new Set(["partId", "mode", "includeSafetyStock", "includeForecast", "includePlannedOrders", "bucketUnit", "horizonStart", "bucketCount"]));
+    const partId = text(q.partId, "partId", { required: true, max: 60, pattern: ID_RE });
+    const part = await r.get("MfgPart", partId);
+    if (!part || part.PlantId !== plantId) throw notFound();
+    const mode = text(q.mode, "mode", { max: 12 }) ?? "cumulative";
+    if (!ATP_MODES.has(mode)) throw bad("mode", "mode باید discrete یا cumulative باشد");
+    const includeSafetyStock = q.includeSafetyStock !== "false";
+    const includeForecast = q.includeForecast === "true";
+    const includePlannedOrders = q.includePlannedOrders !== "false";
+    const bucketUnit = text(q.bucketUnit, "bucketUnit", { max: 8 }) ?? "week";
+    if (!TIME_BUCKETS.has(bucketUnit)) throw bad("bucketUnit", "bucketUnit باید day/week/month باشد");
+    const bucketCount = pageNumber(q.bucketCount, "bucketCount", 12, 260);
+    if (bucketCount < 1 || bucketCount > 260) throw bad("bucketCount", "bucketCount باید بین ۱ و ۲۶۰ باشد");
+    const horizonStart = isoDate(q.horizonStart, "horizonStart") ?? new Date().toISOString().slice(0, 10);
+
+    const [material, inventories, demands, orders, latestRuns] = await Promise.all([
+      r.findOne("MfgMaterial", [{ column: "PlantId", op: "eq", value: plantId }, { column: "PartId", op: "eq", value: partId }, { column: "IsActive", op: "eq", value: true }]),
+      r.list("MfgInventoryLevel", { where: [{ column: "PlantId", op: "eq", value: plantId }] }),
+      r.list("MfgDemandForecast", { where: [{ column: "PlantId", op: "eq", value: plantId }, { column: "PartId", op: "eq", value: partId }] }),
+      r.list("MfgProductionOrder", { where: [{ column: "PlantId", op: "eq", value: plantId }, { column: "PartId", op: "eq", value: partId }] }),
+      r.list("MfgMasterScheduleRun", { where: [{ column: "PlantId", op: "eq", value: plantId }], orderBy: [{ column: "RunNo", dir: "desc" }], limit: 1 }),
+    ]);
+    const buckets = runPlanning(() => buildTimeBuckets({ horizonStart, bucketUnit, bucketCount }));
+    const inventory = sumInventory(inventories.filter((row) => row.PlantId === plantId && material && row.MaterialId === material.Id));
+    const committedTypes = new Set(includeForecast ? ["sales-order", "forecast", "contract", "manual"] : ["sales-order", "contract", "manual"]);
+
+    const demandBuckets = buckets.map(() => 0);
+    for (const row of demands) {
+      if (row.PlantId !== plantId || row.Status === "cancelled" || !committedTypes.has(row.DemandType)) continue;
+      const day = String(row.RequiredAt).slice(0, 10);
+      const index = buckets.findIndex((bucket) => day >= bucket.start && day < bucket.end);
+      if (index < 0) continue;
+      demandBuckets[index] = roundTo3(demandBuckets[index] + storedNumber(row.Quantity));
+    }
+    const supplyBuckets = buckets.map(() => 0);
+    for (const order of orders) {
+      if (order.PlantId !== plantId || !["released", "in-progress"].includes(order.Status)) continue;
+      const day = storedIsoTimestamp(order.DueAt)?.slice(0, 10);
+      const index = day ? buckets.findIndex((bucket) => day >= bucket.start && day < bucket.end) : -1;
+      if (index < 0) continue;
+      supplyBuckets[index] = roundTo3(supplyBuckets[index] + storedNumber(order.OrderQuantity));
+    }
+    if (includePlannedOrders && latestRuns[0]) {
+      const plannedLines = await r.list("MfgMasterScheduleLine", {
+        where: [
+          { column: "PlantId", op: "eq", value: plantId },
+          { column: "MpsRunId", op: "eq", value: latestRuns[0].Id },
+          { column: "PartId", op: "eq", value: partId },
+        ],
+      });
+      for (const line of plannedLines) {
+        const index = buckets.findIndex((bucket) => String(line.BucketStart) === bucket.start);
+        if (index < 0) continue;
+        supplyBuckets[index] = roundTo3(supplyBuckets[index] + storedNumber(line.PlannedOrderReceiptQty));
+      }
+    }
+
+    const atp = runPlanning(() => computeAvailableToPromise({
+      onHandQty: inventory.onHand,
+      reservedQty: inventory.reserved,
+      blockedQty: inventory.blocked,
+      safetyStockQty: Math.max(inventory.safety, storedNumber(material?.SafetyStockQty)),
+      includeSafetyStock,
+      mode,
+      buckets: buckets.map((bucket, index) => ({
+        bucketStart: bucket.start,
+        bucketEnd: bucket.end,
+        demandQty: demandBuckets[index],
+        supplyQty: supplyBuckets[index],
+      })),
+    }));
+    return {
+      partId: part.Id,
+      partNo: part.PartNo,
+      partNameFa: part.NameFa,
+      uom: part.BaseUom,
+      mode,
+      includeSafetyStock,
+      includeForecast,
+      includePlannedOrders,
+      mpsRunId: includePlannedOrders ? latestRuns[0]?.Id ?? null : null,
+      bucketUnit,
+      horizonStart: buckets[0].start,
+      horizonEnd: buckets[buckets.length - 1].end,
+      openingAvailableQty: atp.openingAvailableQty,
+      buckets: atp.buckets,
+      totals: atp.totals,
+    };
+  }));
+
+  /* ════════════════════════════════════════════════════════════════════════
+   * فاز ۵ — تقسیم لات و هم‌پوشانی عملیات (Splitting & Overlapping)
+   * ════════════════════════════════════════════════════════════════════════ */
+
+  app.get(`${ROOT}/orders/:orderId/operations/:operationId/splits`, route("mfg.order.view", async ({ repo: r, req, plantId }) => {
+    const { order, operation } = await loadOrderOperation(r, plantId, req.params);
+    const lots = await r.list("MfgOperationSplitLot", {
+      where: [
+        { column: "PlantId", op: "eq", value: plantId },
+        { column: "ProductionOrderOperationId", op: "eq", value: operation.Id },
+      ],
+      orderBy: [{ column: "SplitNo", dir: "asc" }],
+    });
+    return {
+      order: { Id: order.Id, OrderNo: order.OrderNo, Status: order.Status },
+      operation: {
+        Id: operation.Id,
+        OperationCode: operation.OperationCode,
+        SequenceNo: operation.SequenceNo,
+        Status: operation.Status,
+        PlannedQuantity: storedNumber(operation.PlannedQuantity),
+        PlannedSetupMinutes: storedNumber(operation.PlannedSetupMinutes),
+        PlannedRunMinutesPerUnit: storedNumber(operation.PlannedRunMinutesPerUnit),
+        OverlapAllowed: operation.OverlapAllowed === true,
+        TransferBatchQty: operation.TransferBatchQty ?? null,
+        OverlapPct: operation.OverlapPct ?? null,
+        SplitLotCount: operation.SplitLotCount ?? null,
+        effectiveTransferBatchQty: runPlanning(() => resolveTransferBatchQty({
+          quantity: storedNumber(operation.PlannedQuantity),
+          overlapAllowed: operation.OverlapAllowed === true,
+          transferBatchQty: operation.TransferBatchQty,
+          overlapPct: operation.OverlapPct,
+        })),
+      },
+      lots,
+    };
+  }));
+
+  app.post(`${ROOT}/orders/:orderId/operations/:operationId/splits`, route("mfg.split.edit", async ({ repo: r, req, plantId, subject }) => {
+    const body = req.body ?? {};
+    assertOnlyKeys(body, new Set(["SplitLotCount", "TransferBatchQty", "OverlapPct", "OverlapAllowed", "MinLotQty", "NoteFa"]));
+    const { order, operation } = await loadOrderOperation(r, plantId, req.params);
+    if (!["created", "released", "in-progress"].includes(order.Status)) {
+      throw conflict("MFG_STATE_CONFLICT", `سفارش در وضعیت ${order.Status} قابل تقسیم لات نیست`);
+    }
+    if (!["pending", "queued", "ready"].includes(operation.Status)) {
+      throw conflict("MFG_STATE_CONFLICT", `عملیات ${operation.OperationCode} در وضعیت ${operation.Status} قابل تقسیم نیست`);
+    }
+
+    const orderQuantity = storedNumber(operation.PlannedQuantity);
+    const splitLotCount = optionalNumber(body.SplitLotCount, "SplitLotCount", { min: 1, max: 50, integer: true });
+    const transferBatchQty = body.TransferBatchQty === undefined ? null
+      : (body.TransferBatchQty === null ? null : number(body.TransferBatchQty, "TransferBatchQty", { required: true, min: Number.MIN_VALUE, max: 99_999_999.9999 }));
+    const overlapPct = body.OverlapPct === undefined ? null
+      : (body.OverlapPct === null ? null : number(body.OverlapPct, "OverlapPct", { required: true, min: 0.001, max: 99.999 }));
+    const overlapAllowed = body.OverlapAllowed === undefined ? operation.OverlapAllowed === true : bool(body.OverlapAllowed, "OverlapAllowed", false);
+    const minLotQty = optionalNumber(body.MinLotQty, "MinLotQty", { min: 0, max: 99_999_999.9999 });
+    const splitNote = text(body.NoteFa, "NoteFa", { max: 400 });
+
+    const plan = runPlanning(() => computeSplitLots({
+      orderQuantity,
+      splitLotCount: splitLotCount ?? operation.SplitLotCount ?? 1,
+      transferBatchQty: transferBatchQty ?? operation.TransferBatchQty,
+      minLotQty: minLotQty ?? 0,
+    }));
+    if (overlapAllowed && transferBatchQty === null && overlapPct === null && !operation.TransferBatchQty && !operation.OverlapPct) {
+      throw businessRule("MFG_SPLIT_OVERLAP_INPUT_MISSING", "برای فعال‌کردن هم‌پوشانی باید TransferBatchQty یا OverlapPct تعیین شود", {
+        operationId: operation.Id,
+      });
+    }
+    if (transferBatchQty !== null && transferBatchQty >= orderQuantity) {
+      throw businessRule("MFG_SPLIT_TRANSFER_BATCH_TOO_LARGE", `لات انتقال (${transferBatchQty}) باید از مقدار عملیات (${orderQuantity}) کمتر باشد`, {
+        operationId: operation.Id,
+      });
+    }
+
+    return r.transaction(async (tx) => {
+      const existingLots = await tx.list("MfgOperationSplitLot", {
+        where: [
+          { column: "PlantId", op: "eq", value: plantId },
+          { column: "ProductionOrderOperationId", op: "eq", value: operation.Id },
+        ],
+      });
+      const started = existingLots.filter((lot) => lot.Status !== "planned" && lot.Status !== "cancelled");
+      if (started.length > 0) {
+        throw conflict("MFG_STATE_CONFLICT", `${started.length} لات تقسیم‌شده از قبل شروع یا تمام شده است؛ تقسیم جدید مجاز نیست`);
+      }
+      for (const lot of existingLots) {
+        const removed = await tx.remove("MfgOperationSplitLot", lot.Id);
+        if (!removed || removed.affected !== 1) throw conflict("MFG_STATE_CONFLICT", "لات تقسیم‌شده هم‌زمان تغییر کرده است");
+      }
+
+      const created = [];
+      for (const lot of plan.lots) {
+        created.push(await tx.create("MfgOperationSplitLot", {
+          PlantId: plantId,
+          ProductionOrderOperationId: operation.Id,
+          SplitNo: lot.splitNo,
+          Quantity: roundTo3(lot.quantity),
+          CumulativeQuantity: roundTo3(lot.cumulativeQuantity),
+          IsTransferBatch: lot.splitNo === 1 && plan.transferBatchQty !== null,
+          Status: "planned",
+          StartedAt: null,
+          CompletedAt: null,
+          NoteFa: splitNote,
+        }, subject.id));
+      }
+
+      const patch = {
+        SplitLotCount: plan.effectiveSplitCount,
+        OverlapAllowed: overlapAllowed,
+        TransferBatchQty: transferBatchQty ?? (overlapAllowed ? operation.TransferBatchQty ?? null : null),
+        OverlapPct: overlapAllowed ? (overlapPct ?? operation.OverlapPct ?? null) : null,
+      };
+      const patchRes = await tx.patch("MfgProductionOrderOperation", operation.Id, patch, subject.id, operation.RowVersion);
+      if (!patchRes.ok) throw conflict("MFG_ROW_VERSION_CONFLICT", "عملیات هم‌زمان تغییر کرده است؛ تازه‌خوانی کنید");
+      await createAuditRecord(tx, req, "MFG_OPERATION_SPLIT", "MfgProductionOrderOperation", operation.Id, "mfg.split.edit", {
+        orderNo: order.OrderNo,
+        operationCode: operation.OperationCode,
+        splitLotCount: plan.effectiveSplitCount,
+        transferBatchQty: patch.TransferBatchQty,
+        overlapPct: patch.OverlapPct,
+        overlapAllowed,
+        notes: plan.notes,
+      });
+      return {
+        order: { Id: order.Id, OrderNo: order.OrderNo },
+        operation: await tx.get("MfgProductionOrderOperation", operation.Id),
+        plan: {
+          orderQuantity: plan.orderQuantity,
+          requestedSplitCount: plan.requestedSplitCount,
+          effectiveSplitCount: plan.effectiveSplitCount,
+          transferBatchQty: plan.transferBatchQty,
+          minLotQty: plan.minLotQty,
+          notes: plan.notes,
+        },
+        lots: created,
+      };
+    });
+  }, 201));
+
+  app.delete(`${ROOT}/operation-splits/:splitLotId`, route("mfg.split.edit", async ({ repo: r, req, plantId, subject }) => {
+    const splitLotId = text(req.params.splitLotId, "splitLotId", { required: true, max: 60, pattern: ID_RE });
+    return r.transaction(async (tx) => {
+      const lot = await tx.get("MfgOperationSplitLot", splitLotId);
+      if (!lot || lot.PlantId !== plantId) throw notFound();
+      if (lot.Status !== "planned") {
+        throw conflict("MFG_STATE_CONFLICT", `لات در وضعیت ${lot.Status} قابل حذف نیست`);
+      }
+      const removed = await tx.remove("MfgOperationSplitLot", lot.Id);
+      if (!removed || removed.affected !== 1) throw conflict("MFG_STATE_CONFLICT", "لات تقسیم‌شده هم‌زمان حذف شده است");
+      await createAuditRecord(tx, req, "MFG_OPERATION_SPLIT_DELETED", "MfgOperationSplitLot", lot.Id, "mfg.split.edit", {
+        operationId: lot.ProductionOrderOperationId,
+        splitNo: lot.SplitNo,
+        quantity: lot.Quantity,
+      });
+      return { deleted: true, id: lot.Id };
+    });
+  }));
+
+  app.get(`${ROOT}/orders/:orderId/lead-time-analysis`, route("mfg.schedule.view", async ({ repo: r, req, plantId }) => {
+    const q = req.query ?? {};
+    assertOnlyQueryKeys(q, new Set(["scheduleVersion"]));
+    const orderId = text(req.params.orderId, "orderId", { required: true, max: 60, pattern: ID_RE });
+    const order = await r.get("MfgProductionOrder", orderId);
+    if (!order || order.PlantId !== plantId) throw notFound();
+
+    const [operations, segments, lots, runs] = await Promise.all([
+      r.list("MfgProductionOrderOperation", {
+        where: [{ column: "PlantId", op: "eq", value: plantId }, { column: "ProductionOrderId", op: "eq", value: order.Id }],
+        orderBy: [{ column: "SequenceNo", dir: "asc" }],
+      }),
+      r.list("MfgOperationSchedule", { where: [{ column: "PlantId", op: "eq", value: plantId }] }),
+      r.list("MfgOperationSplitLot", { where: [{ column: "PlantId", op: "eq", value: plantId }] }),
+      r.list("MfgScheduleRun", { where: [{ column: "PlantId", op: "eq", value: plantId }], orderBy: [{ column: "ScheduleVersion", dir: "desc" }], limit: 1 }),
+    ]);
+    if (operations.length === 0) throw businessRule("MFG_ORDER_NO_OPERATIONS", "سفارش هیچ عملیاتی ندارد", { orderId });
+
+    let scheduleVersion = q.scheduleVersion === undefined || q.scheduleVersion === ""
+      ? runs[0]?.ScheduleVersion ?? null
+      : pageNumber(q.scheduleVersion, "scheduleVersion", 1, 1_000_000);
+    if (scheduleVersion !== null && scheduleVersion < 1) throw bad("scheduleVersion", "scheduleVersion باید عدد صحیح مثبت باشد");
+
+    const operationIds = new Set(operations.map((item) => item.Id));
+    const relevantSegments = segments.filter((segment) => segment.PlantId === plantId
+      && operationIds.has(segment.ProductionOrderOperationId)
+      && segment.Status !== "cancelled"
+      && (scheduleVersion === null || segment.ScheduleVersion === scheduleVersion));
+    const windowsByOperation = new Map();
+    for (const segment of relevantSegments) {
+      const list = windowsByOperation.get(segment.ProductionOrderOperationId) ?? [];
+      list.push({ operationId: segment.ProductionOrderOperationId, startAt: segment.PlannedStartAt, endAt: segment.PlannedEndAt });
+      windowsByOperation.set(segment.ProductionOrderOperationId, list);
+    }
+    const splitCountByOperation = new Map();
+    for (const lot of lots) {
+      if (lot.PlantId !== plantId || lot.Status === "cancelled") continue;
+      splitCountByOperation.set(lot.ProductionOrderOperationId, (splitCountByOperation.get(lot.ProductionOrderOperationId) ?? 0) + 1);
+    }
+
+    const analysis = runPlanning(() => analyzeLeadTimeOverlap({
+      operations: operations.map((item) => ({
+        operationId: item.Id,
+        operationCode: item.OperationCode,
+        sequenceNo: storedNumber(item.SequenceNo),
+        quantity: storedNumber(item.PlannedQuantity),
+        setupMinutes: storedNumber(item.PlannedSetupMinutes),
+        runMinutesPerUnit: storedNumber(item.PlannedRunMinutesPerUnit),
+        queueMinutes: storedNumber(item.PlannedQueueMinutes),
+        moveMinutes: storedNumber(item.PlannedMoveMinutes),
+        overlapAllowed: item.OverlapAllowed === true,
+        transferBatchQty: item.TransferBatchQty,
+        overlapPct: item.OverlapPct,
+      })),
+      scheduledWindows: [...windowsByOperation.values()].flat(),
+      splitLotCountByOperation: Object.fromEntries(splitCountByOperation),
+    }));
+
+    return {
+      order: { Id: order.Id, OrderNo: order.OrderNo, Status: order.Status, OrderQuantity: storedNumber(order.OrderQuantity), DueAt: order.DueAt },
+      scheduleVersion,
+      operationCount: operations.length,
+      scheduledOperationCount: windowsByOperation.size,
+      analysis,
+    };
+  }));
+  /* ════════════════════════════════════════════════════════════════════════
+   * فاز ۵ — بخش ۱۱.۹ نسخهٔ تولید (Production Version)
+   * ════════════════════════════════════════════════════════════════════════ */
+
+  const VERSION_FIELDS = new Set([
+    "PartId", "VersionCode", "BomRevision", "RoutingRevision", "WorkCenterId",
+    "Priority", "IsActive", "IsDefault", "EffectiveFrom", "EffectiveTo", "NoteFa",
+  ]);
+
+  app.get(`${ROOT}/production-versions`, route("mfg.version.view", async ({ repo: r, req, plantId }) => {
+    const q = req.query ?? {};
+    assertOnlyQueryKeys(q, new Set(["partId", "isActive", "limit", "offset"]));
+    const limit = pageNumber(q.limit, "limit", 100, 200);
+    const offset = pageNumber(q.offset, "offset", 0, 1_000_000);
+    const where = [{ column: "PlantId", op: "eq", value: plantId }];
+    if (q.partId) where.push({ column: "PartId", op: "eq", value: text(q.partId, "partId", { required: true, max: 60, pattern: ID_RE }) });
+    if (q.isActive !== undefined) where.push({ column: "IsActive", op: "eq", value: q.isActive === "true" || q.isActive === true });
+    const [items, total] = await Promise.all([
+      r.list("MfgProductionVersion", { where, orderBy: [{ column: "PartId", dir: "asc" }, { column: "Priority", dir: "asc" }], limit, offset }),
+      r.count("MfgProductionVersion", where),
+    ]);
+    return { items, page: { limit, offset, total } };
+  }));
+
+  /** نسخهٔ تولید باید به BOM و Routing آزادشدهٔ همان قطعه اشاره کند. */
+  const assertVersionRevisionsExist = async (db, plantId, partId, bomRevision, routingRevision) => {
+    const bom = await db.findOne("MfgBomHeader", [
+      { column: "PlantId", op: "eq", value: plantId },
+      { column: "PartId", op: "eq", value: partId },
+      { column: "Revision", op: "eq", value: bomRevision },
+      { column: "Status", op: "eq", value: "released" },
+    ]);
+    if (!bom) {
+      throw businessRule("MFG_VERSION_BOM_NOT_RELEASED", `BOM آزادشده با نسخهٔ ${bomRevision} برای این قطعه وجود ندارد`, { bomRevision });
+    }
+    const routing = await db.findOne("MfgRouting", [
+      { column: "PlantId", op: "eq", value: plantId },
+      { column: "PartId", op: "eq", value: partId },
+      { column: "Revision", op: "eq", value: routingRevision },
+      { column: "Status", op: "eq", value: "released" },
+    ]);
+    if (!routing) {
+      throw businessRule("MFG_VERSION_ROUTING_NOT_RELEASED", `Routing آزادشده با نسخهٔ ${routingRevision} برای این قطعه وجود ندارد`, { routingRevision });
+    }
+    return { bom, routing };
+  };
+
+  app.post(`${ROOT}/production-versions`, route("mfg.version.edit", async ({ repo: r, req, plantId, subject }) => {
+    const body = req.body ?? {};
+    assertOnlyKeys(body, VERSION_FIELDS);
+    const partId = text(body.PartId, "PartId", { required: true, max: 60, pattern: ID_RE });
+    const part = await r.get("MfgPart", partId);
+    if (!part || part.PlantId !== plantId) throw notFound();
+    const versionCode = text(body.VersionCode, "VersionCode", { required: true, max: 32, pattern: CODE_RE });
+    const bomRevision = text(body.BomRevision, "BomRevision", { required: true, max: 32 });
+    const routingRevision = text(body.RoutingRevision, "RoutingRevision", { required: true, max: 32 });
+    const workCenterId = text(body.WorkCenterId, "WorkCenterId", { max: 60, pattern: ID_RE });
+    if (workCenterId) {
+      const wc = await r.get("MfgWorkCenter", workCenterId);
+      if (!wc || wc.PlantId !== plantId) throw bad("WorkCenterId", "مرکز کاری در این کارخانه یافت نشد");
+    }
+    const priority = body.Priority === undefined || body.Priority === null ? null : number(body.Priority, "Priority", { required: true, min: 0, max: 999, integer: true });
+    const effectiveFrom = isoDate(body.EffectiveFrom, "EffectiveFrom");
+    const effectiveTo = isoDate(body.EffectiveTo, "EffectiveTo");
+    if (effectiveFrom && effectiveTo && effectiveTo < effectiveFrom) throw bad("EffectiveTo", "پایان بازه نباید پیش از آغاز آن باشد");
+
+    await assertVersionRevisionsExist(r, plantId, partId, bomRevision, routingRevision);
+
+    const duplicate = await r.findOne("MfgProductionVersion", [
+      { column: "PlantId", op: "eq", value: plantId },
+      { column: "PartId", op: "eq", value: partId },
+      { column: "VersionCode", op: "eq", value: versionCode },
+    ]);
+    if (duplicate) throw conflict("MFG_DUPLICATE", "VersionCode برای این قطعه قبلاً ثبت شده است");
+
+    const isDefault = bool(body.IsDefault, "IsDefault", false);
+    const execute = async (db) => {
+      /* پیش‌فرض یکتا: اگر این نسخه پیش‌فرض شد، بقیهٔ نسخه‌های همان قطعه از
+       * حالت پیش‌فرض خارج می‌شوند تا resolveProductionVersion بی‌ابهام بماند. */
+      if (isDefault) {
+        const others = await db.list("MfgProductionVersion", {
+          where: [
+            { column: "PlantId", op: "eq", value: plantId },
+            { column: "PartId", op: "eq", value: partId },
+            { column: "IsDefault", op: "eq", value: true },
+          ],
+        });
+        for (const other of others) {
+          const res = await db.patch("MfgProductionVersion", other.Id, { IsDefault: false }, subject.id, other.RowVersion);
+          if (!res.ok) throw conflict("MFG_ROW_VERSION_CONFLICT", "نسخهٔ پیش‌فرض قبلی هم‌زمان تغییر کرده است");
+        }
+      }
+      const row = await db.create("MfgProductionVersion", {
+        PlantId: plantId,
+        PartId: partId,
+        VersionCode: versionCode,
+        BomRevision: bomRevision,
+        RoutingRevision: routingRevision,
+        WorkCenterId: workCenterId,
+        Priority: priority,
+        IsActive: body.IsActive === undefined ? true : bool(body.IsActive, "IsActive", true),
+        IsDefault: isDefault,
+        EffectiveFrom: effectiveFrom,
+        EffectiveTo: effectiveTo,
+        NoteFa: text(body.NoteFa, "NoteFa", { max: 800 }),
+      }, subject.id);
+      await createAuditRecord(db, req, "MFG_PRODUCTION_VERSION_CREATED", "MfgProductionVersion", row.Id, "mfg.version.edit", { versionCode });
+      return row;
+    };
+    return r.transaction((tx) => execute(tx));
+  }, 201));
+
+  app.patch(`${ROOT}/production-versions/:versionId`, route("mfg.version.edit", async ({ repo: r, req, plantId, subject }) => {
+    const versionId = text(req.params.versionId, "versionId", { required: true, max: 60, pattern: ID_RE });
+    const row = await r.get("MfgProductionVersion", versionId);
+    if (!row || row.PlantId !== plantId) throw notFound();
+    const body = req.body ?? {};
+    assertOnlyKeys(body, new Set([...VERSION_FIELDS].filter((key) => key !== "PartId")));
+    if (body.PartId !== undefined) throw bad("PartId", "نسخهٔ تولید نمی‌تواند به قطعهٔ دیگری منتقل شود");
+    const ifMatch = rowVersionFrom(req);
+
+    const patch = {};
+    if (body.BomRevision !== undefined || body.RoutingRevision !== undefined) {
+      const bomRevision = text(body.BomRevision ?? row.BomRevision, "BomRevision", { required: true, max: 32 });
+      const routingRevision = text(body.RoutingRevision ?? row.RoutingRevision, "RoutingRevision", { required: true, max: 32 });
+      await assertVersionRevisionsExist(r, plantId, row.PartId, bomRevision, routingRevision);
+      patch.BomRevision = bomRevision;
+      patch.RoutingRevision = routingRevision;
+    }
+    if (body.VersionCode !== undefined) {
+      const versionCode = text(body.VersionCode, "VersionCode", { required: true, max: 32, pattern: CODE_RE });
+      const duplicate = await r.findOne("MfgProductionVersion", [
+        { column: "PlantId", op: "eq", value: plantId },
+        { column: "PartId", op: "eq", value: row.PartId },
+        { column: "VersionCode", op: "eq", value: versionCode },
+      ]);
+      if (duplicate && duplicate.Id !== row.Id) throw conflict("MFG_DUPLICATE", "VersionCode برای این قطعه قبلاً ثبت شده است");
+      patch.VersionCode = versionCode;
+    }
+    if (body.WorkCenterId !== undefined) {
+      const workCenterId = text(body.WorkCenterId, "WorkCenterId", { max: 60, pattern: ID_RE });
+      if (workCenterId) {
+        const wc = await r.get("MfgWorkCenter", workCenterId);
+        if (!wc || wc.PlantId !== plantId) throw bad("WorkCenterId", "مرکز کاری در این کارخانه یافت نشد");
+      }
+      patch.WorkCenterId = workCenterId;
+    }
+    if (body.Priority !== undefined) patch.Priority = body.Priority === null ? null : number(body.Priority, "Priority", { required: true, min: 0, max: 999, integer: true });
+    if (body.IsActive !== undefined) patch.IsActive = bool(body.IsActive, "IsActive", true);
+    if (body.EffectiveFrom !== undefined) patch.EffectiveFrom = isoDate(body.EffectiveFrom, "EffectiveFrom");
+    if (body.EffectiveTo !== undefined) patch.EffectiveTo = isoDate(body.EffectiveTo, "EffectiveTo");
+    if (body.NoteFa !== undefined) patch.NoteFa = text(body.NoteFa, "NoteFa", { max: 800 });
+    const nextFrom = patch.EffectiveFrom ?? row.EffectiveFrom;
+    const nextTo = patch.EffectiveTo ?? row.EffectiveTo;
+    if (nextFrom && nextTo && nextTo < nextFrom) throw bad("EffectiveTo", "پایان بازه نباید پیش از آغاز آن باشد");
+    if (Object.keys(patch).length === 0) throw bad("body", "هیچ فیلد قابل‌ویرایشی ارسال نشده است");
+
+    const execute = async (db) => {
+      if (body.IsDefault === true) {
+        patch.IsDefault = true;
+        const others = await db.list("MfgProductionVersion", {
+          where: [
+            { column: "PlantId", op: "eq", value: plantId },
+            { column: "PartId", op: "eq", value: row.PartId },
+            { column: "IsDefault", op: "eq", value: true },
+          ],
+        });
+        for (const other of others) {
+          if (other.Id === row.Id) continue;
+          const res = await db.patch("MfgProductionVersion", other.Id, { IsDefault: false }, subject.id, other.RowVersion);
+          if (!res.ok) throw conflict("MFG_ROW_VERSION_CONFLICT", "نسخهٔ پیش‌فرض قبلی هم‌زمان تغییر کرده است");
+        }
+      } else if (body.IsDefault === false) {
+        patch.IsDefault = false;
+      }
+      const res = await db.patch("MfgProductionVersion", row.Id, patch, subject.id, ifMatch);
+      if (!res.ok) throw conflict(res.code === "CONCURRENCY_CONFLICT" ? "MFG_ROW_VERSION_CONFLICT" : res.code, "نسخهٔ تولید هم‌زمان تغییر کرده است");
+      await createAuditRecord(db, req, "MFG_PRODUCTION_VERSION_UPDATED", "MfgProductionVersion", row.Id, "mfg.version.edit", { fields: Object.keys(patch) });
+      return db.get("MfgProductionVersion", row.Id);
+    };
+    return r.transaction((tx) => execute(tx));
+  }));
+
+  app.get(`${ROOT}/parts/:partId/production-version`, route("mfg.version.view", async ({ repo: r, req, plantId }) => {
+    const partId = text(req.params.partId, "partId", { required: true, max: 60, pattern: ID_RE });
+    const part = await r.get("MfgPart", partId);
+    if (!part || part.PlantId !== plantId) throw notFound();
+    const q = req.query ?? {};
+    assertOnlyQueryKeys(q, new Set(["versionId", "workCenterId", "effectiveAt"]));
+    const versions = await r.list("MfgProductionVersion", {
+      where: [{ column: "PlantId", op: "eq", value: plantId }, { column: "PartId", op: "eq", value: partId }],
+    });
+    const selected = runPlanning(() => resolveProductionVersion({
+      versions: versions.map((row) => ({
+        versionId: row.Id,
+        partId: row.PartId,
+        versionCode: row.VersionCode,
+        bomRevision: row.BomRevision,
+        routingRevision: row.RoutingRevision,
+        workCenterId: row.WorkCenterId ?? null,
+        isActive: row.IsActive === true,
+        isDefault: row.IsDefault === true,
+        effectiveFrom: row.EffectiveFrom ?? null,
+        effectiveTo: row.EffectiveTo ?? null,
+        priority: storedNumber(row.Priority, null),
+      })),
+      partId,
+      versionId: text(q.versionId, "versionId", { max: 60, pattern: ID_RE }),
+      workCenterId: text(q.workCenterId, "workCenterId", { max: 60, pattern: ID_RE }),
+      effectiveAt: isoDate(q.effectiveAt, "effectiveAt"),
+    }));
+    const matched = selected ? versions.find((row) => row.Id === selected.versionId) ?? null : null;
+    return {
+      partId,
+      partNo: part.PartNo,
+      candidates: versions.filter((row) => row.IsActive === true).length,
+      selected: matched,
+      selection: selected
+        ? { versionId: selected.versionId, versionCode: selected.versionCode, bomRevision: selected.bomRevision, routingRevision: selected.routingRevision }
+        : null,
+    };
+  }));
+
+  /* ════════════════════════════════════════════════════════════════════════
+   * فاز ۵ — بخش ۱۱.۱ تأیید دستی MPS پیش از اجرای MRP
+   * ════════════════════════════════════════════════════════════════════════ */
+
+  app.post(`${ROOT}/mps/runs/:runId/approve`, route("mfg.mps.approve", async ({ repo: r, req, plantId, subject }) => {
+    const runId = text(req.params.runId, "runId", { required: true, max: 60, pattern: ID_RE });
+    const run = await r.get("MfgMasterScheduleRun", runId);
+    if (!run || run.PlantId !== plantId) throw notFound();
+    const body = req.body ?? {};
+    assertOnlyKeys(body, new Set(["Approved", "NoteFa"]));
+    const ifMatch = rowVersionFrom(req);
+    const approved = body.Approved === undefined ? true : bool(body.Approved, "Approved", true);
+
+    if (run.PreviewOnly === true) {
+      throw businessRule("MFG_MPS_PREVIEW_NOT_APPROVABLE", "اجرای پیش‌نمایش چیزی ثبت نکرده است؛ ابتدا MPS را ثبت کنید", { runId });
+    }
+    if (storedNumber(run.LineCount) < 1) {
+      throw businessRule("MFG_MPS_NOTHING_TO_APPROVE", "این اجرا هیچ سطری ندارد که تأیید شود", { runId });
+    }
+
+    const execute = async (db) => {
+      const res = await db.patch("MfgMasterScheduleRun", run.Id, {
+        Status: approved ? "approved" : "rejected",
+        ApprovedBy: approved ? subject.id : null,
+        ApprovedAt: approved ? new Date().toISOString() : null,
+        NoteFa: text(body.NoteFa, "NoteFa", { max: 800 }) ?? run.NoteFa ?? null,
+      }, subject.id, ifMatch);
+      if (!res.ok) throw conflict("MFG_ROW_VERSION_CONFLICT", "اجرای MPS هم‌زمان تغییر کرده است");
+      await createAuditRecord(db, req, approved ? "MFG_MPS_APPROVED" : "MFG_MPS_REJECTED", "MfgMasterScheduleRun", run.Id, "mfg.mps.approve", {
+        runNo: run.RunNo,
+      });
+      return db.get("MfgMasterScheduleRun", run.Id);
+    };
+    return r.transaction((tx) => execute(tx));
+  }));
+
+  /* ════════════════════════════════════════════════════════════════════════
+   * فاز ۵ — بخش ۱۱.۵ Lead Time Offset و ۱۱.۶ Pegging در گزارش MRP
+   * ════════════════════════════════════════════════════════════════════════ */
+
+  /** گراف BOM آزادشده + زمان تحویل هر قطعه؛ ورودی مشترک offset و pegging. */
+  const loadBomGraph = async (db, plantId) => {
+    const [parts, bomHeaders, bomItems, materials] = await Promise.all([
+      db.list("MfgPart", { where: [{ column: "PlantId", op: "eq", value: plantId }] }),
+      db.list("MfgBomHeader", { where: [{ column: "PlantId", op: "eq", value: plantId }, { column: "Status", op: "eq", value: "released" }] }),
+      db.list("MfgBomItem", { where: [{ column: "PlantId", op: "eq", value: plantId }] }),
+      db.list("MfgMaterial", { where: [{ column: "PlantId", op: "eq", value: plantId }] }),
+    ]);
+    const partIds = parts.filter((part) => part.PlantId === plantId).map((part) => part.Id);
+    const itemsByHeader = new Map();
+    for (const item of bomItems) {
+      if (item.PlantId !== plantId) continue;
+      const list = itemsByHeader.get(item.BomHeaderId) ?? [];
+      list.push(item);
+      itemsByHeader.set(item.BomHeaderId, list);
+    }
+    const edges = [];
+    const rootPartIds = [];
+    const childPartIds = new Set();
+    for (const header of bomHeaders) {
+      if (header.PlantId !== plantId) continue;
+      for (const item of itemsByHeader.get(header.Id) ?? []) {
+        edges.push({
+          parentPartId: header.PartId,
+          componentPartId: item.ComponentPartId,
+          quantityPer: storedNumber(item.QuantityPer, 1),
+        });
+        childPartIds.add(item.ComponentPartId);
+      }
+    }
+    for (const partId of partIds) {
+      if (!childPartIds.has(partId)) rootPartIds.push(partId);
+    }
+    const leadTimeDaysByPartId = {};
+    for (const material of materials) {
+      if (material.PlantId !== plantId) continue;
+      leadTimeDaysByPartId[material.PartId] = storedNumber(material.LeadTimeDays, 0);
+    }
+    return { partIds, edges, rootPartIds, leadTimeDaysByPartId };
+  };
+
+  app.get(`${ROOT}/mrp/lead-time-offset`, route("mfg.mrp.view", async ({ repo: r, req, plantId }) => {
+    const q = req.query ?? {};
+    assertOnlyQueryKeys(q, new Set(["partId", "maxLevels"]));
+    const graph = await loadBomGraph(r, plantId);
+    if (graph.edges.length === 0) {
+      return { parts: [], levelOffsets: [], finishedGoodsLeadTimeDays: 0, maxLowLevelCode: 0, rootPartIds: [] };
+    }
+    const onlyPartId = text(q.partId, "partId", { max: 60, pattern: ID_RE });
+    const result = runPlanning(() => computeLeadTimeOffsets({
+      edges: graph.edges,
+      leadTimeDaysByPartId: graph.leadTimeDaysByPartId,
+      rootPartIds: onlyPartId ? [onlyPartId] : graph.rootPartIds,
+      maxLevels: q.maxLevels === undefined ? 32 : Number(q.maxLevels),
+    }));
+    return { ...result, rootPartIds: onlyPartId ? [onlyPartId] : graph.rootPartIds };
+  }));
+
+  app.get(`${ROOT}/mrp/pegging`, route("mfg.mrp.view", async ({ repo: r, req, plantId }) => {
+    const q = req.query ?? {};
+    assertOnlyQueryKeys(q, new Set(["partId", "level", "rootPartId", "productionOrderId"]));
+    const level = text(q.level ?? "multi", "level", { required: true, max: 8 });
+    if (!["single", "multi"].includes(level)) throw bad("level", "level باید single یا multi باشد");
+    const partId = text(q.partId, "partId", { max: 60, pattern: ID_RE });
+    const productionOrderId = text(q.productionOrderId, "productionOrderId", { max: 60, pattern: ID_RE });
+
+    /* pegging از نیازهای مواد واقعی ساخته می‌شود، نه از گراف تئوری BOM:
+     * آنچه کاربر می‌پرسد «این نیاز به کدام سفارش تعلق دارد» است. */
+    const where = [{ column: "PlantId", op: "eq", value: plantId }];
+    if (productionOrderId) where.push({ column: "ProductionOrderId", op: "eq", value: productionOrderId });
+    const requirements = await r.list("MfgMaterialRequirement", { where, limit: 5000 });
+    const [parts, materials] = await Promise.all([
+      r.list("MfgPart", { where: [{ column: "PlantId", op: "eq", value: plantId }] }),
+      r.list("MfgMaterial", { where: [{ column: "PlantId", op: "eq", value: plantId }] }),
+    ]);
+    const partById = new Map(parts.map((part) => [part.Id, part]));
+    const partIdByMaterialId = new Map(materials.map((material) => [material.Id, material.PartId]));
+    const orderById = new Map();
+    if (requirements.length > 0) {
+      const orders = await r.list("MfgProductionOrder", { where: [{ column: "PlantId", op: "eq", value: plantId }] });
+      for (const order of orders) orderById.set(order.Id, order);
+    }
+
+    const supplies = [];
+    const links = [];
+    const seenSupply = new Set();
+    for (const row of requirements) {
+      if (row.PlantId !== plantId) continue;
+      const componentPartId = partIdByMaterialId.get(row.MaterialId);
+      if (!componentPartId) continue;
+      if (partId && componentPartId !== partId) continue;
+      const order = orderById.get(row.ProductionOrderId);
+      const componentRef = row.Id;
+      const parentRef = row.ProductionOrderId;
+      if (!seenSupply.has(componentRef)) {
+        seenSupply.add(componentRef);
+        supplies.push({ partId: componentPartId, supplyRef: componentRef, quantity: storedNumber(row.NetQuantity), supplyType: "requirement" });
+      }
+      if (order && !seenSupply.has(parentRef)) {
+        seenSupply.add(parentRef);
+        supplies.push({ partId: order.PartId, supplyRef: parentRef, quantity: storedNumber(order.OrderQuantity), supplyType: "production-order" });
+      }
+      if (order) {
+        links.push({
+          parentSupplyRef: parentRef,
+          componentSupplyRef: componentRef,
+          quantityPer: storedNumber(row.NetQuantity) > 0 && storedNumber(order.OrderQuantity) > 0
+            ? roundTo3(storedNumber(row.NetQuantity) / storedNumber(order.OrderQuantity))
+            : 1,
+        });
+      }
+    }
+
+    const rootPartId = text(q.rootPartId, "rootPartId", { max: 60, pattern: ID_RE });
+    const rootSupplyRefs = rootPartId
+      ? supplies.filter((supply) => supply.partId === rootPartId).map((supply) => supply.supplyRef)
+      : undefined;
+
+    const pegging = runPlanning(() => buildPegging({ supplies, links, rootSupplyRefs }));
+    const wanted = level === "single" ? pegging.singleLevel : pegging.multiLevel;
+    const items = Object.entries(wanted).map(([supplyRef, paths]) => ({
+      supplyRef,
+      partId: supplies.find((supply) => supply.supplyRef === supplyRef)?.partId ?? null,
+      partNo: partById.get(supplies.find((supply) => supply.supplyRef === supplyRef)?.partId ?? "")?.PartNo ?? null,
+      paths: paths.map((path) => path.chain.map((step) => ({
+        partId: step.partId,
+        partNo: partById.get(step.partId)?.PartNo ?? null,
+        supplyRef: step.supplyRef,
+        quantityPer: step.quantityPer,
+      }))),
+    }));
+    return {
+      level,
+      requirementCount: requirements.length,
+      supplyCount: supplies.length,
+      rootSupplyRefs: pegging.rootSupplyRefs,
+      items: items.filter((item) => item.paths.length > 0).slice(0, 1000),
+    };
+  }));
+
+  /* ════════════════════════════════════════════════════════════════════════
+   * فاز ۵ — بخش ۱۱.۳ سفارش برنامه‌ریزی‌شده (Planned Order)
+   * ════════════════════════════════════════════════════════════════════════ */
+
+  const PLANNED_STATUS = new Set(["proposed", "approved", "converted", "rejected", "cancelled"]);
+
+  const nextPlannedOrderNo = async (db) => {
+    const rows = await db.list("MfgPlannedOrder", {
+      where: [{ column: "PlantId", op: "eq", value: plantId }],
+      orderBy: [{ column: "CreatedAt", dir: "desc" }],
+      limit: 1,
+    });
+    const last = rows[0]?.PlannedOrderNo ?? "";
+    const match = /^PO-(\d+)$/.exec(String(last));
+    const next = (match ? Number(match[1]) : 0) + 1;
+    return `PO-${String(next).padStart(4, "0")}`;
+  };
+
+  const plannedOrderWithPegging = async (db, plantId, row) => {
+    const pegging = await db.list("MfgRequirementPegging", {
+      where: [{ column: "PlantId", op: "eq", value: plantId }, { column: "PlannedOrderId", op: "eq", value: row.Id }],
+    });
+    return { ...row, pegging };
+  };
+
+  app.get(`${ROOT}/planned-orders`, route("mfg.plannedorder.view", async ({ repo: r, req, plantId }) => {
+    const q = req.query ?? {};
+    assertOnlyQueryKeys(q, new Set(["partId", "status", "source", "dueFrom", "dueTo", "limit", "offset"]));
+    const limit = pageNumber(q.limit, "limit", 50, 200);
+    const offset = pageNumber(q.offset, "offset", 0, 1_000_000);
+    const where = [{ column: "PlantId", op: "eq", value: plantId }];
+    if (q.partId) where.push({ column: "PartId", op: "eq", value: text(q.partId, "partId", { required: true, max: 60, pattern: ID_RE }) });
+    if (q.status) {
+      const status = text(q.status, "status", { required: true, max: 16 });
+      if (!PLANNED_STATUS.has(status)) throw bad("status", "status باید proposed/approved/converted/rejected/cancelled باشد");
+      where.push({ column: "Status", op: "eq", value: status });
+    }
+    if (q.source) where.push({ column: "Source", op: "eq", value: text(q.source, "source", { required: true, max: 8 }) });
+    if (q.dueFrom) where.push({ column: "PlannedDueAt", op: "gte", value: isoDateTime(q.dueFrom, "dueFrom", { required: true }) });
+    if (q.dueTo) where.push({ column: "PlannedDueAt", op: "lte", value: isoDateTime(q.dueTo, "dueTo", { required: true }) });
+    const [items, total] = await Promise.all([
+      r.list("MfgPlannedOrder", { where, orderBy: [{ column: "PlannedDueAt", dir: "asc" }, { column: "PlannedOrderNo", dir: "asc" }], limit, offset }),
+      r.count("MfgPlannedOrder", where),
+    ]);
+    return { items, page: { limit, offset, total } };
+  }));
+
+  app.get(`${ROOT}/planned-orders/:plannedOrderId`, route("mfg.plannedorder.view", async ({ repo: r, req, plantId }) => {
+    const plannedOrderId = text(req.params.plannedOrderId, "plannedOrderId", { required: true, max: 60, pattern: ID_RE });
+    const row = await r.get("MfgPlannedOrder", plannedOrderId);
+    if (!row || row.PlantId !== plantId) throw notFound();
+    return plannedOrderWithPegging(r, plantId, row);
+  }));
+
+  /** ویرایش سفارش برنامه‌ریزی‌شده — فقط تا پیش از تبدیل مجاز است (۱۱.۳). */
+  app.patch(`${ROOT}/planned-orders/:plannedOrderId`, route("mfg.plannedorder.edit", async ({ repo: r, req, plantId, subject }) => {
+    const plannedOrderId = text(req.params.plannedOrderId, "plannedOrderId", { required: true, max: 60, pattern: ID_RE });
+    const row = await r.get("MfgPlannedOrder", plannedOrderId);
+    if (!row || row.PlantId !== plantId) throw notFound();
+    if (row.Status === "converted") {
+      throw businessRule("MFG_PLANNED_ORDER_CONVERTED", "سفارش برنامه‌ریزی‌شدهٔ تبدیل‌شده قابل ویرایش نیست؛ سفارش تولید را ویرایش کنید", {
+        productionOrderId: row.ConvertedProductionOrderId,
+      });
+    }
+    if (row.Status === "cancelled") throw businessRule("MFG_PLANNED_ORDER_CANCELLED", "سفارش برنامه‌ریزی‌شدهٔ لغوشده قابل ویرایش نیست");
+    const body = req.body ?? {};
+    assertOnlyKeys(body, new Set(["Quantity", "PlannedReleaseAt", "PlannedDueAt", "ProductionVersionId", "NoteFa"]));
+    const ifMatch = rowVersionFrom(req);
+
+    const patch = {};
+    if (body.Quantity !== undefined) patch.Quantity = number(body.Quantity, "Quantity", { required: true, min: Number.MIN_VALUE, max: 99_999_999.9999 });
+    if (body.PlannedReleaseAt !== undefined) patch.PlannedReleaseAt = isoDateTime(body.PlannedReleaseAt, "PlannedReleaseAt", { required: true });
+    if (body.PlannedDueAt !== undefined) patch.PlannedDueAt = isoDateTime(body.PlannedDueAt, "PlannedDueAt", { required: true });
+    if (body.ProductionVersionId !== undefined) {
+      const versionId = text(body.ProductionVersionId, "ProductionVersionId", { max: 60, pattern: ID_RE });
+      if (versionId) {
+        const version = await r.get("MfgProductionVersion", versionId);
+        if (!version || version.PlantId !== plantId || version.PartId !== row.PartId) {
+          throw bad("ProductionVersionId", "نسخهٔ تولید باید فعال و متعلق به همین قطعه باشد");
+        }
+      }
+      patch.ProductionVersionId = versionId ?? null;
+    }
+    if (body.NoteFa !== undefined) patch.NoteFa = text(body.NoteFa, "NoteFa", { max: 800 });
+    if (Object.keys(patch).length === 0) throw bad("body", "هیچ فیلد قابل‌ویرایشی ارسال نشده است");
+
+    const nextRelease = patch.PlannedReleaseAt ?? row.PlannedReleaseAt;
+    const nextDue = patch.PlannedDueAt ?? row.PlannedDueAt;
+    if (Date.parse(nextRelease) > Date.parse(nextDue)) {
+      throw bad("PlannedReleaseAt", "آزادسازی برنامه‌ریزی‌شده نباید پس از موعد آن باشد");
+    }
+
+    const execute = async (db) => {
+      /* ویرایش، وضعیت را به proposed برمی‌گرداند: تأیید قبلی روی مقدار قبلی
+       * داده شده بود و نباید بی‌سروصدا به مقدار تازه منتقل شود. */
+      if (row.Status === "approved") patch.Status = "proposed";
+      const res = await db.patch("MfgPlannedOrder", row.Id, patch, subject.id, ifMatch);
+      if (!res.ok) throw conflict("MFG_ROW_VERSION_CONFLICT", "سفارش برنامه‌ریزی‌شده هم‌زمان تغییر کرده است");
+      await createAuditRecord(db, req, "MFG_PLANNED_ORDER_UPDATED", "MfgPlannedOrder", row.Id, "mfg.plannedorder.edit", { fields: Object.keys(patch) });
+      return plannedOrderWithPegging(db, plantId, await db.get("MfgPlannedOrder", row.Id));
+    };
+    return r.transaction((tx) => execute(tx));
+  }));
+
+  const transitionPlannedOrder = (targetStatus, permission, auditAction) => async ({ repo: r, req, plantId, subject }) => {
+    const plannedOrderId = text(req.params.plannedOrderId, "plannedOrderId", { required: true, max: 60, pattern: ID_RE });
+    const row = await r.get("MfgPlannedOrder", plannedOrderId);
+    if (!row || row.PlantId !== plantId) throw notFound();
+    const body = req.body ?? {};
+    assertOnlyKeys(body, new Set(["NoteFa", "RejectReasonFa"]));
+    const ifMatch = rowVersionFrom(req);
+
+    if (row.Status === "converted") throw businessRule("MFG_PLANNED_ORDER_CONVERTED", "این سفارش قبلاً به سفارش تولید تبدیل شده است", { productionOrderId: row.ConvertedProductionOrderId });
+    if (row.Status === "cancelled") throw businessRule("MFG_PLANNED_ORDER_CANCELLED", "سفارش برنامه‌ریزی‌شدهٔ لغوشده قابل تغییر وضعیت نیست");
+    if (targetStatus === "approved" && row.Status === "approved") {
+      throw businessRule("MFG_PLANNED_ORDER_ALREADY_APPROVED", "این سفارش پیش‌تر تأیید شده است");
+    }
+    if (targetStatus === "rejected") {
+      const reason = text(body.RejectReasonFa ?? body.NoteFa, "RejectReasonFa", { max: 400 });
+      if (!reason) throw bad("RejectReasonFa", "دلیل رد الزامی است تا برنامه‌ریز بعدی بداند چرا رد شده");
+    }
+
+    const execute = async (db) => {
+      const patch = {
+        Status: targetStatus,
+        ReviewedBy: subject.id,
+        ReviewedAt: new Date().toISOString(),
+      };
+      if (targetStatus === "rejected") patch.RejectReasonFa = text(body.RejectReasonFa ?? body.NoteFa, "RejectReasonFa", { max: 400 });
+      if (body.NoteFa !== undefined) patch.NoteFa = text(body.NoteFa, "NoteFa", { max: 800 });
+      const res = await db.patch("MfgPlannedOrder", row.Id, patch, subject.id, ifMatch);
+      if (!res.ok) throw conflict("MFG_ROW_VERSION_CONFLICT", "سفارش برنامه‌ریزی‌شده هم‌زمان تغییر شده است");
+      await createAuditRecord(db, req, auditAction, "MfgPlannedOrder", row.Id, permission, { status: targetStatus });
+      return plannedOrderWithPegging(db, plantId, await db.get("MfgPlannedOrder", row.Id));
+    };
+    return r.transaction((tx) => execute(tx));
+  };
+
+  app.post(`${ROOT}/planned-orders/:plannedOrderId/approve`, route("mfg.plannedorder.approve",
+    transitionPlannedOrder("approved", "mfg.plannedorder.approve", "MFG_PLANNED_ORDER_APPROVED")));
+
+  app.post(`${ROOT}/planned-orders/:plannedOrderId/reject`, route("mfg.plannedorder.approve",
+    transitionPlannedOrder("rejected", "mfg.plannedorder.approve", "MFG_PLANNED_ORDER_REJECTED")));
+
+  /**
+   * تبدیل سفارش برنامه‌ریزی‌شده به سفارش تولید (۱۱.۳).
+   *
+   * تنها مسیر «approved» قابل تبدیل است؛ وگرنه هر پیشنهاد MRP می‌توانست بی‌آنکه
+   * کسی بازبینی کند کار روی کف کارگاه ایجاد کند. سفارش تولید در وضعیت created
+   * ساخته می‌شود تا آزادسازی (Release) همچنان گیت جداگانهٔ خودش را داشته باشد.
+   */
+  app.post(`${ROOT}/planned-orders/:plannedOrderId/convert`, route("mfg.plannedorder.convert", async ({ repo: r, req, plantId, subject }) => {
+    const plannedOrderId = text(req.params.plannedOrderId, "plannedOrderId", { required: true, max: 60, pattern: ID_RE });
+    const row = await r.get("MfgPlannedOrder", plannedOrderId);
+    if (!row || row.PlantId !== plantId) throw notFound();
+    const body = req.body ?? {};
+    assertOnlyKeys(body, new Set(["OrderNo", "NoteFa", "PriorityRule"]));
+    const ifMatch = rowVersionFrom(req);
+
+    if (row.Status === "converted") {
+      throw businessRule("MFG_PLANNED_ORDER_CONVERTED", "این سفارش قبلاً تبدیل شده است", { productionOrderId: row.ConvertedProductionOrderId });
+    }
+    if (row.Status !== "approved") {
+      throw businessRule("MFG_PLANNED_ORDER_NOT_APPROVED", `سفارش برنامه‌ریزی‌شده با وضعیت ${row.Status} قابل تبدیل نیست؛ ابتدا تأیید کنید`, {
+        status: row.Status,
+      });
+    }
+
+    const part = await r.get("MfgPart", row.PartId);
+    if (!part || part.PlantId !== plantId || part.IsActive !== true) {
+      throw businessRule("MFG_PART_UNAVAILABLE", "قطعهٔ این سفارش برنامه‌ریزی‌شده دیگر فعال نیست", { partId: row.PartId });
+    }
+    /* قطعهٔ خریدنی Routing ندارد و تبدیلش به «سفارش تولید» یک سفارش بی‌عملیات
+     * می‌سازد که نه زمان‌بندی می‌شود نه اجرا. مسیر درستش پیشنهاد تأمین است. */
+    const partMaterial = await r.findOne("MfgMaterial", [
+      { column: "PlantId", op: "eq", value: plantId },
+      { column: "PartId", op: "eq", value: row.PartId },
+      { column: "IsActive", op: "eq", value: true },
+    ]);
+    if (part.PartType === "purchased" || partMaterial?.ProcurementType === "buy") {
+      throw businessRule("MFG_PLANNED_ORDER_NOT_MAKE",
+        "این قطعه خریدنی است و به سفارش تولید تبدیل نمی‌شود؛ از مسیر پیشنهاد تأمین استفاده کنید", {
+          partId: row.PartId,
+          partNo: part.PartNo,
+          procurementRoute: `POST ${ROOT}/material-procurement-proposals`,
+        });
+    }
+    const orderNo = text(body.OrderNo, "OrderNo", { max: 60, pattern: CODE_RE }) ?? `MO-${String(row.PlannedOrderNo).replace(/^PO-/, "")}`;
+    const duplicate = await r.findOne("MfgProductionOrder", [
+      { column: "PlantId", op: "eq", value: plantId },
+      { column: "OrderNo", op: "eq", value: orderNo },
+    ]);
+    if (duplicate) throw conflict("MFG_DUPLICATE", "OrderNo در این کارخانه قبلاً ثبت شده است");
+    const priorityRule = text(body.PriorityRule ?? "EDD", "PriorityRule", { required: true, max: 12 });
+    if (!PRIORITY_RULES.has(priorityRule)) throw bad("PriorityRule", "PriorityRule باید EDD، CR یا MANUAL باشد");
+
+    const execute = async (db) => {
+      const order = await db.create("MfgProductionOrder", {
+        PlantId: plantId,
+        OrderNo: orderNo,
+        PartId: row.PartId,
+        OrderQuantity: storedNumber(row.Quantity),
+        Uom: row.Uom,
+        DueAt: row.PlannedDueAt,
+        RequestedStartAt: row.PlannedReleaseAt,
+        Status: "created",
+        PriorityRule: priorityRule,
+        ManualRank: null,
+        DispatchWeight: 1,
+        DemandSource: "mrp",
+        DemandRef: row.PlannedOrderNo,
+        CustomerRef: null,
+        CustomerNameSnapshot: null,
+        ContractId: null,
+        ProjectId: null,
+        AllowOverrun: false,
+        NoteFa: text(body.NoteFa, "NoteFa", { max: 1200 }) ?? `تبدیل‌شده از سفارش برنامه‌ریزی‌شدهٔ ${row.PlannedOrderNo}`,
+      }, subject.id);
+
+      /* snapshot عملیات از Routing نسخهٔ تولید (یا Routing پیش‌فرض) ساخته می‌شود
+       * تا سفارشِ تازه مثل هر سفارش دیگری قابل آزادسازی باشد. */
+      const version = row.ProductionVersionId ? await db.get("MfgProductionVersion", row.ProductionVersionId) : null;
+      const routing = await db.findOne("MfgRouting", [
+        { column: "PlantId", op: "eq", value: plantId },
+        { column: "PartId", op: "eq", value: row.PartId },
+        ...(version?.RoutingRevision ? [{ column: "Revision", op: "eq", value: version.RoutingRevision }] : []),
+        { column: "Status", op: "eq", value: "released" },
+      ]);
+      let operationCount = 0;
+      if (routing) {
+        const templateOps = await db.list("MfgRoutingOperation", {
+          where: [
+            { column: "PlantId", op: "eq", value: plantId },
+            { column: "RoutingId", op: "eq", value: routing.Id },
+          ],
+          orderBy: [{ column: "SequenceNo", dir: "asc" }],
+        });
+        for (const template of templateOps) {
+          await db.create("MfgProductionOrderOperation", {
+            PlantId: plantId,
+            ProductionOrderId: order.Id,
+            SequenceNo: template.SequenceNo,
+            OperationCode: template.OperationCode,
+            OperationNameFa: template.OperationNameFa,
+            WorkCenterId: template.WorkCenterId,
+            PredecessorOperationId: null,
+            PlannedQuantity: storedNumber(row.Quantity),
+            PlannedSetupMinutes: template.SetupMinutes,
+            PlannedRunMinutesPerUnit: template.RunMinutesPerUnit,
+            PlannedQueueMinutes: template.QueueMinutes,
+            PlannedMoveMinutes: template.MoveMinutes,
+            PlannedCapacityMinutes: template.CapacityMinutes,
+            OverlapAllowed: template.OverlapAllowed === true,
+            TransferBatchQty: template.TransferBatchQty ?? null,
+            OverlapPct: template.OverlapPct ?? null,
+            SplitLotCount: template.SplitLotCount ?? null,
+            Status: "pending",
+          }, subject.id);
+          operationCount += 1;
+        }
+      }
+
+      const res = await db.patch("MfgPlannedOrder", row.Id, {
+        Status: "converted",
+        ConvertedProductionOrderId: order.Id,
+        ConvertedAt: new Date().toISOString(),
+      }, subject.id, ifMatch);
+      if (!res.ok) throw conflict("MFG_ROW_VERSION_CONFLICT", "سفارش برنامه‌ریزی‌شده هم‌زمان تغییر کرده است");
+
+      await createAuditRecord(db, req, "MFG_PLANNED_ORDER_CONVERTED", "MfgPlannedOrder", row.Id, "mfg.plannedorder.convert", {
+        productionOrderId: order.Id,
+        orderNo,
+        operationCount,
+      });
+      return {
+        plannedOrder: await plannedOrderWithPegging(db, plantId, await db.get("MfgPlannedOrder", row.Id)),
+        productionOrder: order,
+        operationCount,
+        routingRevision: routing?.Revision ?? null,
+        requiresRelease: true,
+      };
+    };
+    return r.transaction((tx) => execute(tx));
+  }, 201));
+
+  /* ════════════════════════════════════════════════════════════════════════
+   * فاز ۵ — بخش ۱۱.۷ برنامه‌ریزی نیاز ظرفیت (CRP)
+   * ════════════════════════════════════════════════════════════════════════ */
+
+  /** ظرفیت دقیقه‌ای هر مرکز کاری در هر سطل، از تقویم و منابع همان مرکز. */
+  const crpCapacityByBucket = (workCenter, resources, buckets) => {
+    const activeResources = resources.filter((resource) => resource.IsActive !== false);
+    const capacityUnits = activeResources.reduce((sum, resource) => sum + storedNumber(resource.CapacityUnits, 1), 0);
+    return buckets.map((bucket) => {
+      const days = Math.max(1, bucket.days);
+      /* یک شیفت ۸ ساعته به ازای هر روز کاری؛ تقویم دقیق در زمان‌بند خودش
+       * لحاظ می‌شود و CRP در سطح «ظرفیت ناخالص در دسترس» مقایسه می‌کند. */
+      const minutesPerDay = 480 * Math.max(0, capacityUnits);
+      return roundTo3(minutesPerDay * days);
+    });
+  };
+
+  /**
+   * ظرفیت آزاد مراکز کاری برای یک مقدار درخواستی (۱۱.۸).
+   *
+   * ATP مبتنی بر موجودی تنها نیمی از پاسخ است: اگر خط ظرفیت خالی نداشته باشد،
+   * همان موجودی هم در تاریخ خواسته‌شده قابل تحویل نیست. این هلپر برای هر سطل
+   * بار فعلی را از ظرفیت ناخالص کم می‌کند و نخستین سطلی را برمی‌گرداند که همهٔ
+   * مراکز کاریِ Routing قطعه در آن جا دارند.
+   */
+  const atpCapacityCheck = ({ buckets, requestedQty, requestedAt, routingOperations, workCenters, resources, loadedMinutesByCenterBucket }) => {
+    const neededByCenter = new Map();
+    for (const op of routingOperations) {
+      const minutes = roundTo3(storedNumber(op.SetupMinutes, 0) + storedNumber(op.RunMinutesPerUnit, 0) * Math.max(0, requestedQty));
+      if (minutes <= 0) continue;
+      neededByCenter.set(op.WorkCenterId, roundTo3((neededByCenter.get(op.WorkCenterId) ?? 0) + minutes));
+    }
+    const centers = [];
+    for (const [workCenterId, requiredMinutes] of neededByCenter) {
+      const center = workCenters.find((row) => row.Id === workCenterId) ?? null;
+      const availableByBucket = crpCapacityByBucket(
+        center ?? { Id: workCenterId },
+        resources.filter((resource) => resource.WorkCenterId === workCenterId),
+        buckets,
+      );
+      const loadedByBucket = loadedMinutesByCenterBucket.get(workCenterId) ?? buckets.map(() => 0);
+      centers.push({
+        workCenterId,
+        code: center?.Code ?? null,
+        requiredMinutes,
+        buckets: buckets.map((bucket, index) => {
+          const availableMinutes = availableByBucket[index];
+          const loadedMinutes = roundTo3(loadedByBucket[index] ?? 0);
+          const freeMinutes = roundTo3(Math.max(0, availableMinutes - loadedMinutes));
+          return {
+            bucketIndex: index,
+            bucketStart: bucket.start,
+            bucketEnd: bucket.end,
+            availableMinutes,
+            loadedMinutes,
+            freeMinutes,
+            sufficient: freeMinutes >= requiredMinutes - 1e-9,
+          };
+        }),
+      });
+    }
+    if (centers.length === 0) {
+      return {
+        considered: false, constrained: false, requestedBucketIndex: null,
+        promiseBucketIndex: null, promiseAt: null, centers: [], message: null,
+      };
+    }
+    const requestedIndex = buckets.findIndex((bucket) => requestedAt >= bucket.start && requestedAt < bucket.end);
+    const firstIndex = Math.max(0, requestedIndex);
+    let promiseIndex = null;
+    for (let index = firstIndex; index < buckets.length; index += 1) {
+      if (centers.every((center) => center.buckets[index].sufficient)) { promiseIndex = index; break; }
+    }
+    return {
+      considered: true,
+      constrained: promiseIndex !== null && promiseIndex > firstIndex,
+      requestedBucketIndex: requestedIndex < 0 ? null : requestedIndex,
+      promiseBucketIndex: promiseIndex,
+      promiseAt: promiseIndex === null ? null : buckets[promiseIndex].end,
+      centers,
+      message: promiseIndex === null
+        ? "ظرفیت آزاد هیچ مرکز کاری در افق بررسی برای این مقدار کافی نیست"
+        : promiseIndex > firstIndex
+          ? `ظرفیت آزاد در سطل درخواستی کافی نیست؛ نخستین سطل با ظرفیت کافی ${buckets[promiseIndex].start} است`
+          : null,
+    };
+  };
+
+  const runCrp = async (db, plantId, { bucketUnit, bucketCount, horizonStart, overloadPct, underloadPct, includePlannedOrders }) => {
+    const buckets = runPlanning(() => buildTimeBuckets({ horizonStart, bucketUnit, bucketCount }));
+    const [workCenters, resources, orders, operations, schedules, plannedOrders, parts] = await Promise.all([
+      db.list("MfgWorkCenter", { where: [{ column: "PlantId", op: "eq", value: plantId }] }),
+      db.list("MfgWorkCenterResource", { where: [{ column: "PlantId", op: "eq", value: plantId }] }),
+      db.list("MfgProductionOrder", { where: [{ column: "PlantId", op: "eq", value: plantId }] }),
+      db.list("MfgProductionOrderOperation", { where: [{ column: "PlantId", op: "eq", value: plantId }] }),
+      db.list("MfgOperationSchedule", { where: [{ column: "PlantId", op: "eq", value: plantId }], orderBy: [{ column: "ScheduleVersion", dir: "desc" }] }),
+      includePlannedOrders ? db.list("MfgPlannedOrder", { where: [{ column: "PlantId", op: "eq", value: plantId }] }) : Promise.resolve([]),
+      db.list("MfgPart", { where: [{ column: "PlantId", op: "eq", value: plantId }] }),
+    ]);
+
+    const centers = workCenters
+      .filter((center) => center.PlantId === plantId && center.Status !== "inactive")
+      .map((center) => ({
+        workCenterId: center.Id,
+        code: center.Code,
+        availableMinutesByBucket: crpCapacityByBucket(center, resources.filter((resource) => resource.WorkCenterId === center.Id), buckets),
+      }));
+
+    const latestVersion = schedules[0]?.ScheduleVersion ?? null;
+    const windows = new Map();
+    for (const segment of schedules) {
+      if (segment.PlantId !== plantId || latestVersion === null || segment.ScheduleVersion !== latestVersion) continue;
+      if (segment.Status === "cancelled") continue;
+      const existing = windows.get(segment.ProductionOrderOperationId);
+      const start = storedIsoTimestamp(segment.PlannedStartAt);
+      const end = storedIsoTimestamp(segment.PlannedEndAt);
+      if (!start || !end) continue;
+      windows.set(segment.ProductionOrderOperationId, {
+        plannedStartAt: existing && existing.plannedStartAt < start ? existing.plannedStartAt : start,
+        plannedEndAt: existing && existing.plannedEndAt > end ? existing.plannedEndAt : end,
+      });
+    }
+
+    const openStatuses = new Set(["released", "in-progress"]);
+    const crpOperations = operations
+      .filter((op) => op.PlantId === plantId && openStatuses.has(orders.find((order) => order.Id === op.ProductionOrderId)?.Status ?? ""))
+      .map((op) => ({
+        operationId: op.Id,
+        workCenterId: op.WorkCenterId,
+        capacityMinutes: storedNumber(op.PlannedCapacityMinutes),
+        plannedStartAt: windows.get(op.Id)?.plannedStartAt ?? null,
+        plannedEndAt: windows.get(op.Id)?.plannedEndAt ?? null,
+        quantity: storedNumber(op.PlannedQuantity),
+        productionOrderId: op.ProductionOrderId,
+      }));
+
+    /* سفارش‌های برنامه‌ریزی‌شده هنوز زمان‌بندی ندارند؛ CRP باید بار آیندهٔ آن‌ها
+     * را هم ببیند وگرنه ظرفیت «خالی» نشان داده می‌شود در حالی که تعهد شده است. */
+    const partById = new Map(parts.map((part) => [part.Id, part]));
+    const plannedLoad = plannedOrders
+      .filter((row) => row.PlantId === plantId && ["proposed", "approved"].includes(row.Status))
+      .map((row) => ({
+        operationId: `planned:${row.Id}`,
+        workCenterId: null,
+        capacityMinutes: 0,
+        plannedStartAt: row.PlannedReleaseAt,
+        plannedEndAt: row.PlannedDueAt,
+        quantity: storedNumber(row.Quantity),
+        plannedOrderId: row.Id,
+        partNo: partById.get(row.PartId)?.PartNo ?? null,
+      }));
+
+    const result = runPlanning(() => computeCapacityRequirements({
+      buckets,
+      operations: crpOperations,
+      workCenters: centers,
+      overloadThresholdPct: overloadPct,
+      underloadThresholdPct: underloadPct,
+    }));
+
+    return {
+      bucketUnit,
+      bucketCount,
+      horizonStart: buckets[0].start,
+      horizonEnd: buckets[buckets.length - 1].end,
+      scheduleVersion: latestVersion,
+      includePlannedOrders,
+      scheduledOperationCount: crpOperations.length,
+      plannedOrderCount: plannedLoad.length,
+      ...result,
+    };
+  };
+
+  const parseCrpQuery = (q) => {
+    assertOnlyQueryKeys(q, new Set(["bucket", "bucketCount", "horizonStart", "overloadPct", "underloadPct", "includePlannedOrders"]));
+    const bucketUnit = text(q.bucket ?? "week", "bucket", { required: true, max: 8 });
+    if (!TIME_BUCKETS.has(bucketUnit)) throw bad("bucket", "bucket باید day/week/month باشد");
+    /* مقدارهای query رشته‌اند؛ number() فقط typeof number را می‌پذیرد و هر
+     * درخواست GET با bucketCount را ۴۰۰ می‌کرد. pageNumber رشتهٔ صحیح می‌گیرد. */
+    const bucketCount = pageNumber(q.bucketCount, "bucketCount", 8, 260);
+    const overloadPct = pageNumber(q.overloadPct, "overloadPct", 100, 500);
+    const underloadPct = pageNumber(q.underloadPct, "underloadPct", 60, 100);
+    if (bucketCount < 1) throw bad("bucketCount", "«bucketCount» باید دست‌کم ۱ باشد");
+    if (overloadPct < 1) throw bad("overloadPct", "«overloadPct» باید دست‌کم ۱ باشد");
+    return {
+      bucketUnit,
+      bucketCount,
+      horizonStart: isoDate(q.horizonStart, "horizonStart") ?? new Date().toISOString().slice(0, 10),
+      overloadPct,
+      underloadPct,
+      includePlannedOrders: q.includePlannedOrders === "false" ? false : true,
+    };
+  };
+
+  app.post(`${ROOT}/crp/calculate`, route("mfg.crp.view", async ({ repo: r, req, plantId }) => {
+    const body = req.body ?? {};
+    assertOnlyKeys(body, new Set(["Bucket", "BucketCount", "HorizonStart", "OverloadPct", "UnderloadPct", "IncludePlannedOrders"]));
+    const options = parseCrpQuery({
+      ...(body.Bucket !== undefined ? { bucket: body.Bucket } : {}),
+      ...(body.BucketCount !== undefined ? { bucketCount: body.BucketCount } : {}),
+      ...(body.HorizonStart !== undefined ? { horizonStart: body.HorizonStart } : {}),
+      ...(body.OverloadPct !== undefined ? { overloadPct: body.OverloadPct } : {}),
+      ...(body.UnderloadPct !== undefined ? { underloadPct: body.UnderloadPct } : {}),
+      ...(body.IncludePlannedOrders !== undefined ? { includePlannedOrders: body.IncludePlannedOrders === true || body.IncludePlannedOrders === "true" ? "true" : "false" } : {}),
+    });
+    return runCrp(r, plantId, options);
+  }));
+
+  app.get(`${ROOT}/crp/summary`, route("mfg.crp.view", async ({ repo: r, req, plantId }) => {
+    const options = parseCrpQuery(req.query ?? {});
+    const full = await runCrp(r, plantId, options);
+    return {
+      ...full,
+      workCenters: full.workCenters.map((center) => ({
+        workCenterId: center.workCenterId,
+        code: center.code,
+        totalLoadMinutes: center.totalLoadMinutes,
+        totalCapacityMinutes: center.totalCapacityMinutes,
+        utilizationPct: center.utilizationPct,
+        peakUtilizationPct: center.peakUtilizationPct,
+        overloadBucketCount: center.overloadBucketCount,
+        underloadBucketCount: center.underloadBucketCount,
+      })),
+    };
+  }));
+
+  /* ════════════════════════════════════════════════════════════════════════
+   * فاز ۵ — بخش ۱۱.۱۱ انطباق ISA-95 / MESA-11
+   * ════════════════════════════════════════════════════════════════════════ */
+
+  app.get(`${ROOT}/conformance/isa95`, route("mfg.conformance.view", async ({ repo: r, req, plantId }) => {
+    const q = req.query ?? {};
+    assertOnlyQueryKeys(q, new Set([]));
+    /* پوشش هر یک از ۱۱ عملکرد MESA با مسیر واقعی همان عملکرد سنجیده می‌شود،
+     * نه با یک ادعای ثابت؛ اگر مسیری حذف شود این گزارش هم دروغ نمی‌گوید
+     * چون از همان فهرست مسیرهای پیاده‌شده خوانده می‌شود. */
+    const implemented = new Set(MANUFACTURING_IMPLEMENTED_ROUTES);
+    const has = (route) => implemented.has(route);
+    const mesaFunctions = [
+      { id: 1, code: "operations-scheduling", fa: "زمان‌بندی عملیات", en: "Operations / Detail Scheduling", routes: [`POST ${ROOT}/scheduling/runs`, `POST ${ROOT}/scheduling/reschedules`] },
+      { id: 2, code: "dispatching", fa: "اعزام تولید", en: "Dispatching Production Units", routes: [`GET ${ROOT}/operation-queue`, `POST ${ROOT}/orders/:orderId/release`] },
+      { id: 3, code: "data-collection", fa: "گردآوری داده", en: "Data Collection / Acquisition", routes: [`POST ${ROOT}/operations/:operationId/executions`, `POST ${ROOT}/executions/:executionId/reports`] },
+      { id: 4, code: "resource-management", fa: "مدیریت منابع", en: "Resource Allocation & Status", routes: [`GET ${ROOT}/work-centers`, `POST ${ROOT}/work-centers/:workCenterId/resources`, `GET ${ROOT}/capacity/load`] },
+      { id: 5, code: "product-tracking", fa: "ردیابی محصول", en: "Product Tracking & Genealogy", routes: [`GET ${ROOT}/mrp/pegging`, `GET ${ROOT}/orders/:orderId`] },
+      { id: 6, code: "performance-analysis", fa: "تحلیل عملکرد", en: "Performance Analysis", routes: [`GET ${ROOT}/dashboard/oee`, `GET ${ROOT}/operations/:operationId/variance`, `GET ${ROOT}/crp/summary`] },
+      { id: 7, code: "quality-management", fa: "مدیریت کیفیت", en: "Quality Management", routes: [`POST ${ROOT}/scrap`, `POST ${ROOT}/rework`, `POST ${ROOT}/executions/:executionId/finish`] },
+      { id: 8, code: "maintenance-management", fa: "مدیریت نگهداری", en: "Maintenance Management", routes: [`POST ${ROOT}/downtime`, `GET ${ROOT}/alerts`] },
+      { id: 9, code: "document-control", fa: "کنترل مستندات", en: "Document Control", routes: [`GET ${ROOT}/routings`, `GET ${ROOT}/bom-headers`, `GET ${ROOT}/production-versions`] },
+      { id: 10, code: "labor-management", fa: "مدیریت نیروی کار", en: "Labor Management", routes: [`POST ${ROOT}/operations/:operationId/executions`, `GET ${ROOT}/operation-queue`] },
+      { id: 11, code: "production-tracking", fa: "پیگیری تولید", en: "Production Tracking", routes: [`GET ${ROOT}/orders`, `GET ${ROOT}/scheduling/gantt`] },
+    ];
+    const rows = mesaFunctions.map((fn) => {
+      const covered = fn.routes.filter((route) => has(route));
+      return {
+        id: fn.id,
+        code: fn.code,
+        titleFa: fn.fa,
+        titleEn: fn.en,
+        coveredRouteCount: covered.length,
+        totalRouteCount: fn.routes.length,
+        coveragePct: roundTo3((covered.length / fn.routes.length) * 100),
+        routes: fn.routes.map((route) => ({ route, implemented: has(route) })),
+      };
+    });
+    /* استقلال منطقی دیتابیس یک ادعای دستی نیست: از خود اسکیما شمرده می‌شود تا
+     * اگر روزی FK تازه‌ای به جدولی بیرون ماژول اضافه شد، این گزارش همان لحظه
+     * نقض را نشان دهد. */
+    const mfgTables = tablesOfModule("mfg");
+    const foreignKeysToLevel4 = [];
+    let mfgForeignKeyCount = 0;
+    for (const table of mfgTables) {
+      for (const fk of table.foreignKeys ?? []) {
+        mfgForeignKeyCount += 1;
+        if (!String(fk.refTable ?? "").startsWith("Mfg")) {
+          foreignKeysToLevel4.push(`${table.name}.${fk.column} -> ${fk.refTable}`);
+        }
+      }
+    }
+
+    const counts = await Promise.all([
+      r.count("MfgProductionOrder", [{ column: "PlantId", op: "eq", value: plantId }]),
+      r.count("MfgPlannedOrder", [{ column: "PlantId", op: "eq", value: plantId }]),
+      r.count("MfgMasterScheduleRun", [{ column: "PlantId", op: "eq", value: plantId }]),
+      r.count("MfgOperationExecution", [{ column: "PlantId", op: "eq", value: plantId }]),
+    ]);
+    return {
+      modelVersion: MANUFACTURING_PLANNING_MODEL_VERSION,
+      isa95: {
+        level3: {
+          role: "MES — اجرای تولید",
+          roleEn: "Manufacturing Operations Management",
+          implementedRouteCount: MANUFACTURING_IMPLEMENTED_ROUTES.length,
+          counts: {
+            productionOrders: counts[0],
+            plannedOrders: counts[1],
+            masterScheduleRuns: counts[2],
+            operationExecutions: counts[3],
+          },
+        },
+        level4: {
+          role: "ERP — مالی، فروش و تدارکات",
+          roleEn: "Business Planning & Logistics",
+          integration: "REST",
+          /* MES این سامانه عمداً مستقل است؛ سطح ۴ از طریق کلیدهای نرم
+           * (ProjectId/ContractId/CustomerRef) و تبادل REST وصل می‌شود، نه FK. */
+          softKeys: ["ProjectId", "ContractId", "CustomerRef", "DemandRef"],
+          foreignKeysToLevel4: foreignKeysToLevel4.length,
+          foreignKeysToLevel4Detail: foreignKeysToLevel4,
+          mfgTableCount: mfgTables.length,
+          mfgForeignKeyCount: mfgForeignKeyCount,
+        },
+        boundary: foreignKeysToLevel4.length === 0
+          ? "هیچ کلید خارجی از جداول Mfg* به جداول سطح ۴ وجود ندارد؛ استقلال منطقی دیتابیس حفظ شده است."
+          : `${foreignKeysToLevel4.length} کلید خارجی از جداول Mfg* به جداول بیرون ماژول وجود دارد و استقلال منطقی دیتابیس نقض شده است.`,
+      },
+      mesa11: {
+        functionCount: rows.length,
+        fullyCovered: rows.filter((row) => row.coveragePct === 100).length,
+        averageCoveragePct: roundTo3(rows.reduce((sum, row) => sum + row.coveragePct, 0) / rows.length),
+        functions: rows,
+      },
+    };
   }));
 }

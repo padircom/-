@@ -76,7 +76,11 @@ test("کاتالوگ: نسخه موتور و اندازه‌ها", () => {
   // Asking and reading ready insights are internal; the interaction history and
   // producing a document/table export are confidential (history may expose other
   // people's questions, export leaves the system as a file).
-  assert.equal(PERMISSION_CATALOG.length, 275);
+  // P5 MES (Advanced MES) adds ten explicit manufacturing-planning permissions:
+  // mfg.demand.view/edit, mfg.lotsize.view/edit, mfg.mps.view/run/firm,
+  // mfg.atp.view/check and mfg.split.edit — the write/run/firm gates are
+  // confidential so the production planner can plan without touching cost data.
+  assert.equal(PERMISSION_CATALOG.length, 294);
   assert.equal(ROLE_CATALOG.length, 28);
 });
 

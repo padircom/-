@@ -211,12 +211,144 @@ function resourceActiveOnDate(resource, date) {
   return (!from || from <= date) && (!to || to >= date);
 }
 
-function segmentsForOperation(operation, assignment) {
-  if (!assignment?.segments?.length) return null;
-  const starts = assignment.segments.map((segment) => instant(segment.PlannedStartAt)).filter(Number.isFinite);
-  const ends = assignment.segments.map((segment) => instant(segment.PlannedEndAt)).filter(Number.isFinite);
+/**
+ * فاز ۵ — مقدار مؤثر لات انتقال.
+ * `TransferBatchQty` اولویت دارد؛ اگر تعیین نشده باشد از `OverlapPct` مشتق می‌شود
+ * (درصد هم‌پوشانی = بخشی از لات که پیش از پایان عملیات قبلی منتقل می‌شود).
+ */
+function transferBatchQtyOf(operation) {
+  if (operation.OverlapAllowed !== true) return null;
+  const quantity = finiteNumber(operation.PlannedQuantity, 0);
+  if (!(quantity > 0)) return null;
+  const explicit = finiteNumber(operation.TransferBatchQty, 0);
+  if (explicit > 0) return Math.min(explicit, quantity);
+  const overlapPct = finiteNumber(operation.OverlapPct, 0);
+  if (overlapPct > 0 && overlapPct < 100) return Math.max(1, (quantity * (100 - overlapPct)) / 100);
+  return null;
+}
+
+/**
+ * دقایق لازم برای آماده‌شدن لات انتقال از لحظهٔ شروع عملیات.
+ * عملیات بعدی می‌تواند از این لحظه آغاز شود، نه از پایان کامل عملیات قبلی؛
+ * اختلاف این دو همان صرفه‌جویی هم‌پوشانی است.
+ */
+function transferReadyMinutesOf(operation) {
+  const transferQty = transferBatchQtyOf(operation);
+  if (transferQty === null) return null;
+  const quantity = finiteNumber(operation.PlannedQuantity, 0);
+  if (transferQty >= quantity) return null;
+  const setup = finiteNumber(operation.PlannedSetupMinutes, 0);
+  const run = finiteNumber(operation.PlannedRunMinutesPerUnit, 0);
+  const minutes = setup + run * transferQty;
+  return minutes > 0 ? round3(minutes) : null;
+}
+
+/**
+ * زمان تقویمیِ آماده‌شدن لات انتقال (epoch میلی‌ثانیه) با پیمایش قطعه‌های زمان‌بندی.
+ * بین قطعه‌ها (استراحت شیفت، پایان روز کاری) زمان ظرفیت جلو نمی‌رود، پس
+ * درون هر قطعه به نسبت دقایق ظرفیت درون‌یابی می‌شود.
+ */
+function transferReadyAtFromSegments(segments, minutes) {
+  if (!(minutes > 0)) return null;
+  const ordered = [...segments]
+    .map((segment) => ({
+      start: instant(segment.PlannedStartAt),
+      end: instant(segment.PlannedEndAt),
+      capacity: finiteNumber(segment.PlannedCapacityMinutes, 0),
+    }))
+    .filter((segment) => Number.isFinite(segment.start) && Number.isFinite(segment.end) && segment.end > segment.start)
+    .sort((left, right) => left.start - right.start);
+  let accumulated = 0;
+  for (const segment of ordered) {
+    if (segment.capacity <= 0) continue;
+    if (accumulated + segment.capacity >= minutes) {
+      const ratio = (minutes - accumulated) / segment.capacity;
+      /* مقدار epoch برمی‌گردد: timingFromSegments این عدد را با Math.min
+       * مقایسه می‌کند و مرحلهٔ جلو/عقب با عدد کند کار می‌کند. تبدیل
+       * به ISO فقط در مرز خروجی انجام می‌شود. */
+      return segment.start + (segment.end - segment.start) * ratio;
+    }
+    accumulated += segment.capacity;
+  }
+  return null;
+}
+
+/**
+ * فاز ۵ — تقسیم قطعه‌های زمان‌بندی یک عملیات به زیرلات‌های متوالی.
+ * جمع دقایق ظرفیت دست‌نخورده می‌ماند؛ فقط مرز قطعه‌ها جابه‌جا می‌شود تا
+ * لات اول (لات انتقال) در گانت دیده شود و عملیات بعدی از همان‌جا آغاز شود.
+ */
+function splitSegmentsByLot(segments, splitCount) {
+  const ordered = [...segments].sort((left, right) => instant(left.PlannedStartAt) - instant(right.PlannedStartAt));
+  const count = Math.max(1, Math.trunc(finiteNumber(splitCount, 1)));
+  if (count <= 1 || ordered.length === 0) return ordered;
+  const total = ordered.reduce((sum, segment) => sum + finiteNumber(segment.PlannedCapacityMinutes, 0), 0);
+  if (!(total > 0)) return ordered;
+  const target = total / count;
+  const output = [];
+  let lotNo = 1;
+  let consumedInLot = 0;
+  for (const segment of ordered) {
+    const start = instant(segment.PlannedStartAt);
+    const end = instant(segment.PlannedEndAt);
+    const capacity = finiteNumber(segment.PlannedCapacityMinutes, 0);
+    if (capacity <= 0) {
+      output.push(segment);
+      continue;
+    }
+    let offset = 0;
+    let remaining = capacity;
+    while (remaining > EPSILON_MINUTES) {
+      const room = target - consumedInLot;
+      const take = lotNo < count ? Math.min(remaining, Math.max(0, room)) : remaining;
+      if (take <= EPSILON_MINUTES) {
+        if (lotNo >= count) {
+          output.push(segment);
+          break;
+        }
+        lotNo++;
+        consumedInLot = 0;
+        continue;
+      }
+      const ratioStart = capacity > 0 ? offset / capacity : 0;
+      const ratioEnd = capacity > 0 ? (offset + take) / capacity : 1;
+      output.push({
+        ...segment,
+        SegmentNo: lotNo,
+        PlannedStartAt: new Date(start + (end - start) * ratioStart).toISOString(),
+        PlannedEndAt: new Date(start + (end - start) * ratioEnd).toISOString(),
+        PlannedCapacityMinutes: round3(take),
+        _splitLotNo: lotNo,
+      });
+      offset += take;
+      remaining = round3(remaining - take);
+      consumedInLot = round3(consumedInLot + take);
+      if (consumedInLot + EPSILON_MINUTES >= target && lotNo < count) {
+        lotNo++;
+        consumedInLot = 0;
+      }
+    }
+  }
+  return output.map((segment, index) => ({ ...segment, SegmentNo: Number(segment.SegmentNo) > 0 ? Number(segment.SegmentNo) : index + 1 }));
+}
+
+function timingFromSegments(operation, segments) {
+  if (!segments?.length) return null;
+  const starts = segments.map((segment) => instant(segment.PlannedStartAt)).filter(Number.isFinite);
+  const ends = segments.map((segment) => instant(segment.PlannedEndAt)).filter(Number.isFinite);
   if (!starts.length || !ends.length) return null;
-  return { start: Math.min(...starts), end: Math.max(...ends), operation };
+  const transferReadyMinutes = transferReadyMinutesOf(operation);
+  const transferReadyAt = transferReadyMinutes === null ? null : transferReadyAtFromSegments(segments, transferReadyMinutes);
+  return {
+    start: Math.min(...starts),
+    end: Math.max(...ends),
+    transferReadyAt: transferReadyAt !== null ? Math.min(transferReadyAt, Math.max(...ends)) : null,
+    operation,
+  };
+}
+
+function segmentsForOperation(operation, assignment) {
+  return timingFromSegments(operation, assignment?.segments);
 }
 
 function freeWindows(interval, resource, reservations, mode) {
@@ -506,7 +638,18 @@ function assignmentFrom(operation, order, segments, preserved = false) {
     PlannedCapacityMinutes: round3(sorted.reduce((sum, segment) => sum + finiteNumber(segment.PlannedCapacityMinutes, 0), 0)),
     Status: sorted[0]?.Status === "firm" ? "firm" : preserved ? "preserved" : "tentative",
     Preserved: preserved,
-    Segments: sorted.map(({ _orderId, _preserved, ...segment }) => segment),
+    /* فاز ۵ — اثر تقسیم لات و هم‌پوشانی روی خروجی زمان‌بندی. */
+    OverlapAllowed: operation.OverlapAllowed === true,
+    TransferBatchQty: transferBatchQtyOf(operation),
+    TransferReadyMinutes: transferReadyMinutesOf(operation),
+    /* قرارداد خروجی زمان‌بند ISO است (هم‌راستا با PlannedStartAt/PlannedEndAt)؛
+       * محاسبهٔ داخلی با epoch انجام می‌شود. */
+    TransferReadyAt: (() => {
+      const ready = transferReadyAtFromSegments(sorted, transferReadyMinutesOf(operation) ?? 0);
+      return Number.isFinite(ready) ? new Date(ready).toISOString() : null;
+    })(),
+    SplitLotCount: sorted.length,
+    Segments: sorted.map(({ _orderId, _preserved, _splitLotNo, ...segment }) => segment),
   };
 }
 
@@ -1105,7 +1248,10 @@ export function planManufacturingSchedule({
           processed++;
           continue;
         }
-        lowerBound = Math.max(lowerBound, predecessorTime.end);
+        /* فاز ۵ — هم‌پوشانی: اگر عملیات قبلی لات انتقال داشته باشد، این عملیات
+         * از آماده‌شدن آن لات شروع می‌شود نه از پایان کامل عملیات قبلی. */
+        const predecessorReady = Number.isFinite(predecessorTime.transferReadyAt) ? predecessorTime.transferReadyAt : predecessorTime.end;
+        lowerBound = Math.max(lowerBound, predecessorReady);
       }
       lowerBound += (finiteNumber(operation.PlannedQueueMinutes, 0) + finiteNumber(operation.PlannedMoveMinutes, 0)) * MINUTE_MS;
       const fixedBound = fixedSuccessorUpperBound(operation.Id);
@@ -1121,11 +1267,17 @@ export function planManufacturingSchedule({
         processed++;
         continue;
       }
+      const ownTransferMinutes = transferReadyMinutesOf(operation);
+      const ownOverlapTailMs = ownTransferMinutes === null
+        ? 0
+        : Math.max(0, processingMinutes(operation) - ownTransferMinutes) * MINUTE_MS;
       for (const successorId of successorIds) {
         const successorTime = scheduledTimes.get(successorId);
         const successor = operationsById.get(successorId);
         if (!successorTime || !Number.isFinite(successorTime.start) || !successor) continue;
-        upperBound = Math.min(upperBound, successorTime.start - (finiteNumber(successor.PlannedQueueMinutes, 0) + finiteNumber(successor.PlannedMoveMinutes, 0)) * MINUTE_MS);
+        /* فاز ۵ — در زمان‌بندی رو‌به‌عقب هم هم‌پوشانی رعایت می‌شود: انتهای این
+         * عملیات می‌تواند به اندازهٔ دنبالهٔ هم‌پوشان از شروع عملیات بعدی دیرتر باشد. */
+        upperBound = Math.min(upperBound, successorTime.start - (finiteNumber(successor.PlannedQueueMinutes, 0) + finiteNumber(successor.PlannedMoveMinutes, 0)) * MINUTE_MS + ownOverlapTailMs);
       }
       if (predecessorId) {
         const predecessorState = states.get(predecessorId);
@@ -1174,7 +1326,8 @@ export function planManufacturingSchedule({
       continue;
     }
 
-    const segments = selected.segments;
+    /* فاز ۵ — تقسیم لات: قطعه‌های زمان‌بندی به زیرلات‌های متوالی تقسیم می‌شوند. */
+    const segments = splitSegmentsByLot(selected.segments, finiteNumber(operation.SplitLotCount, 1));
     if (allStoredSegments.length + segments.length > MAX_SCHEDULE_SEGMENTS) {
       invalid("MFG_SCHEDULE_SEGMENT_LIMIT", `هر اجرا حداکثر ${MAX_SCHEDULE_SEGMENTS} قطعهٔ زمان‌بندی را نگه می‌دارد`);
     }
@@ -1193,7 +1346,7 @@ export function planManufacturingSchedule({
       });
     });
     operationSegments.set(operation.Id, segments);
-    scheduledTimes.set(operation.Id, { start: selected.start, end: selected.end, operation });
+    scheduledTimes.set(operation.Id, timingFromSegments(operation, segments) ?? { start: selected.start, end: selected.end, transferReadyAt: null, operation });
     assignmentsByOperation.set(operation.Id, assignmentFrom(operation, order, segments, false));
     states.set(operation.Id, { status: "done", planned: true });
     remainingByOrder.set(operation.ProductionOrderId, Math.max(0, (remainingByOrder.get(operation.ProductionOrderId) ?? 0) - requiredMinutes));
@@ -1213,7 +1366,7 @@ export function planManufacturingSchedule({
   }
 
   const scheduleSegments = allStoredSegments.map((segment) => {
-    const { _orderId, _preserved, ...row } = segment;
+    const { _orderId, _preserved, _splitLotNo, ...row } = segment;
     return {
       ...row,
       PlantId: plantId,

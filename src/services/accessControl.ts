@@ -540,6 +540,33 @@ export const PERMISSION_CATALOG: PermissionDef[] = [
   P("mfg.dashboard.view", "mfg", "مشاهدهٔ داشبورد تولید", "View manufacturing dashboard", "internal"),
   P("mfg.alert.view", "mfg", "مشاهدهٔ هشدارهای تولید", "View manufacturing alerts", "internal"),
   P("mfg.alert.ack", "mfg", "رسیدگی و تأیید هشدار تولید", "Acknowledge manufacturing alert", "confidential", true),
+  /* فاز ۵ — MES پیشرفته: تقاضا، اندازه‌گذاری لات، MPS، ATP و تقسیم/هم‌پوشانی */
+  P("mfg.demand.view", "mfg", "مشاهدهٔ تقاضا و پیش‌بینی فروش", "View demand and sales forecast", "internal"),
+  P("mfg.demand.edit", "mfg", "ثبت و ویرایش تقاضا و پیش‌بینی فروش", "Create and edit demand lines", "confidential", true),
+  P("mfg.lotsize.view", "mfg", "مشاهدهٔ سیاست اندازه‌گذاری لات", "View lot sizing policies", "internal"),
+  P("mfg.lotsize.edit", "mfg", "مدیریت سیاست اندازه‌گذاری لات", "Manage lot sizing policies", "confidential", true),
+  P("mfg.mps.view", "mfg", "مشاهدهٔ برنامهٔ اصلی تولید", "View master production schedule", "internal"),
+  P("mfg.mps.run", "mfg", "اجرای محاسبهٔ MPS", "Run master production schedule", "confidential", true),
+  /* قطعی‌کردن ردیف MPS تعهد برنامه‌ای است نه آزادسازی مالی؛ هم‌طراز
+   * `mfg.mps.run` confidential است تا برنامه‌ریز تولید که clearance او
+   * confidential است بتواند برنامهٔ خودش را قطعی کند (با ثبت مموزی). */
+  P("mfg.mps.firm", "mfg", "قطعی‌کردن سفارش‌های برنامه‌ریزی‌شدهٔ MPS", "Firm planned MPS orders", "confidential", true),
+  P("mfg.atp.view", "mfg", "مشاهدهٔ قابلیت تعهد تحویل", "View available-to-promise", "internal"),
+  P("mfg.atp.check", "mfg", "بررسی تعهد تحویل به مشتری", "Run ATP promise check", "confidential", true),
+  P("mfg.split.edit", "mfg", "تقسیم لات و هم‌پوشانی عملیات", "Split lots and overlap operations", "confidential", true),
+
+  /* بخش ۱۱ فاز ۵ — تفکیک اقتدارها عمداً ریز است، چون «دیدن پیشنهاد MRP»،
+   * «ویرایش مقدار لات» و «تبدیل به سفارش تولید» سه مسئولیت متفاوت‌اند:
+   * تبدیل، کار واقعی روی کف کارگاه ایجاد می‌کند و باید جدا گیت شود. */
+  P("mfg.plannedorder.view", "mfg", "مشاهدهٔ سفارش‌های برنامه‌ریزی‌شده", "View planned orders", "internal"),
+  P("mfg.plannedorder.edit", "mfg", "ویرایش سفارش برنامه‌ریزی‌شده پیش از تبدیل", "Edit planned order before conversion", "confidential", true),
+  P("mfg.plannedorder.approve", "mfg", "تأیید یا رد سفارش برنامه‌ریزی‌شده", "Approve or reject planned order", "confidential", true),
+  P("mfg.plannedorder.convert", "mfg", "تبدیل سفارش برنامه‌ریزی‌شده به سفارش تولید", "Convert planned order to production order", "confidential", true),
+  P("mfg.version.view", "mfg", "مشاهدهٔ نسخه‌های تولید", "View production versions", "internal"),
+  P("mfg.version.edit", "mfg", "تعریف و ویرایش نسخهٔ تولید", "Maintain production versions", "confidential", true),
+  P("mfg.crp.view", "mfg", "مشاهدهٔ برنامه‌ریزی نیاز ظرفیت (CRP)", "View capacity requirements planning", "internal"),
+  P("mfg.mps.approve", "mfg", "تأیید دستی MPS پیش از اجرای MRP", "Approve MPS before MRP run", "confidential", true),
+  P("mfg.conformance.view", "mfg", "مشاهدهٔ انطباق ISA-95 و MESA-11", "View ISA-95 / MESA-11 conformance", "internal"),
 
   /* P10/AI-1..4: دستیار هوشمند. پرسش فقط‌خواندنی است، ولی چهار اقتدار جدا
    * دارد و یکی گرفته نمی‌شوند: پرسیدن (ai.assistant.ask)، دیدن بینش آماده
@@ -1106,6 +1133,11 @@ export const ROLE_CATALOG: RoleDef[] = [
       "mfg.routing.view", "mfg.routing.edit", "mfg.routing.release",
       "mfg.workcenter.view", "mfg.workcenter.edit", "mfg.calendar.edit", "mfg.capacity.view",
       "mfg.alert.view",
+      /* فاز ۵: الگوی اندازه‌گذاری لات و تقسیم/هم‌پوشانی در مستر مهندسی تعریف می‌شود. */
+      "mfg.lotsize.view", "mfg.lotsize.edit", "mfg.split.edit",
+      /* بخش ۱۱: نسخهٔ تولید ترکیب BOM+Routing است، پس مالکیتش با مهندسی ساخت است؛
+       * اما تبدیل سفارش برنامه‌ریزی‌شده به او داده نمی‌شود (تفکیک وظایف). */
+      "mfg.version.view", "mfg.version.edit", "mfg.plannedorder.view", "mfg.conformance.view",
     ],
   },
   {
@@ -1120,6 +1152,15 @@ export const ROLE_CATALOG: RoleDef[] = [
       "mfg.schedule.view", "mfg.schedule.run", "mfg.schedule.resequence", "mfg.capacity.view",
       "mfg.material.view", "mfg.mrp.view", "mfg.mrp.run", "mfg.requisition.create",
       "mfg.dashboard.view", "mfg.alert.view",
+      /* فاز ۵: برنامه‌ریز تولید مالک تقاضا، MPS و پاسخ ATP است. */
+      "mfg.demand.view", "mfg.demand.edit", "mfg.lotsize.view", "mfg.lotsize.edit",
+      "mfg.mps.view", "mfg.mps.run", "mfg.mps.firm",
+      "mfg.atp.view", "mfg.atp.check", "mfg.split.edit",
+      /* بخش ۱۱: برنامه‌ریز مالک سفارش برنامه‌ریزی‌شده، نسخهٔ تولید، MPS تأییدشده
+       * و گزارش CRP است. تبدیل به سفارش تولید هم با اوست چون آزادسازی سفارش
+       * (mfg.order.create) را هم دارد. */
+      "mfg.plannedorder.view", "mfg.plannedorder.edit", "mfg.plannedorder.approve", "mfg.plannedorder.convert",
+      "mfg.version.view", "mfg.version.edit", "mfg.crp.view", "mfg.mps.approve", "mfg.conformance.view",
     ],
   },
   {
@@ -1132,6 +1173,12 @@ export const ROLE_CATALOG: RoleDef[] = [
       "mfg.order.view", "mfg.order.release", "mfg.order.close",
       "mfg.schedule.view", "mfg.schedule.run", "mfg.capacity.view", "mfg.execution.view",
       "mfg.dashboard.view", "mfg.alert.view", "mfg.alert.ack",
+      /* فاز ۵: مدیر تولید برنامهٔ اصلی را تصویب و تعهد تحویل را دیده‌بانی می‌کند. */
+      "mfg.demand.view", "mfg.mps.view", "mfg.mps.firm", "mfg.atp.view", "mfg.split.edit",
+      /* بخش ۱۱: مدیر تولید تأیید MPS، تصویب و تبدیل سفارش برنامه‌ریزی‌شده و
+       * گزارش ظرفیت را دارد؛ ویرایش مستقیم مقدار لات پیشنهادی با برنامه‌ریز است. */
+      "mfg.mps.approve", "mfg.plannedorder.view", "mfg.plannedorder.approve", "mfg.plannedorder.convert",
+      "mfg.crp.view", "mfg.version.view", "mfg.conformance.view",
     ],
   },
   {
@@ -1145,6 +1192,8 @@ export const ROLE_CATALOG: RoleDef[] = [
       "mfg.execution.start", "mfg.execution.report", "mfg.execution.finish",
       "mfg.downtime.report", "mfg.scrap.report", "mfg.rework.report",
       "mfg.material.view", "mfg.material.consume", "mfg.dashboard.view", "mfg.alert.view", "mfg.alert.ack",
+      /* فاز ۵: سرپرست سالن لات را پای کار تقسیم می‌کند. */
+      "mfg.split.edit",
     ],
   },
   {
@@ -1168,6 +1217,8 @@ export const ROLE_CATALOG: RoleDef[] = [
     grants: [
       "mfg.part.view", "mfg.order.view", "mfg.material.view", "mfg.mrp.view", "mfg.mrp.run",
       "mfg.requisition.create", "mfg.dashboard.view", "mfg.alert.view",
+      /* فاز ۵: برنامه‌ریز مواد تقاضا، MPS و ATP را می‌خواند و تعهد مواد را بررسی می‌کند. */
+      "mfg.demand.view", "mfg.lotsize.view", "mfg.mps.view", "mfg.atp.view", "mfg.atp.check",
     ],
   },
   {
@@ -1176,7 +1227,9 @@ export const ROLE_CATALOG: RoleDef[] = [
     inherits: ["viewer"],
     clearance: "restricted",
     party: "contractor",
-    grants: ["mfg.order.view", "mfg.cost.view", "mfg.cost.reconcile", "mfg.dashboard.view"],
+    grants: ["mfg.order.view", "mfg.cost.view", "mfg.cost.reconcile", "mfg.dashboard.view",
+      /* فاز ۵: حسابدار صنعتی برنامهٔ اصلی را برای تعهدات مالی می‌بیند. */
+      "mfg.mps.view", "mfg.atp.view"],
   },
   {
     code: "admin",

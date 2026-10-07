@@ -8,9 +8,24 @@ import {
   MFG_DEMO_USERS,
   MfgClient,
   MfgRequestError,
+  type MfgAtpBucket,
+  type MfgAtpCheck,
   type MfgBomHeader,
   type MfgBomItem,
   type MfgCapacityBucket,
+  type MfgCrpReport,
+  type MfgDemandForecast,
+  type MfgDemandType,
+  type MfgLotSizingPolicy,
+  type MfgLotSizingRule,
+  type MfgIsa95Conformance,
+  type MfgLeadTimeOffsetReport,
+  type MfgMasterScheduleLine,
+  type MfgMasterScheduleRun,
+  type MfgPeggingReport,
+  type MfgPlannedOrder,
+  type MfgProductionVersion,
+
   type MfgGanttResponse,
   type MfgMaterial,
   type MfgMaterialRequirement,
@@ -19,6 +34,7 @@ import {
   type MfgOperationVariance,
   type MfgOrderCost,
   type MfgOrderDetail,
+  type MfgOperationSplitLot,
   type MfgOrderOperation,
   type MfgPart,
   type MfgProductionAlert,
@@ -33,6 +49,7 @@ import type { DispatchRule } from "../services/manufacturingModel";
 export type MfgTab =
   | "overview"
   | "engineering"
+  | "planning"
   | "orders"
   | "scheduling"
   | "execution"
@@ -57,6 +74,7 @@ const TABS: Array<{
 }> = [
   { id: "overview", fa: "داشبورد، OEE و هشدارها", en: "Overview, OEE & Alerts", defaultUser: "u-mfg-manager", permission: "mfg.dashboard.view" },
   { id: "engineering", fa: "مهندسی ساخت (قطعه/BOM/مسیر/مرکز کاری)", en: "Engineering Master", defaultUser: "u-mfg-eng", permission: "mfg.part.view" },
+  { id: "planning", fa: "برنامه‌ریزی پیشرفته (MPS، لات، ATP، تقسیم)", en: "Advanced Planning (MPS, Lot Sizing, ATP, Splitting)", defaultUser: "u-mfg-plan", permission: "mfg.mps.view" },
   { id: "orders", fa: "سفارش‌های تولید", en: "Production Orders", defaultUser: "u-mfg-plan", permission: "mfg.order.view" },
   { id: "scheduling", fa: "زمان‌بندی ظرفیت، گانت و گلوگاه", en: "Scheduling, Gantt & Capacity", defaultUser: "u-mfg-plan", permission: "mfg.schedule.view" },
   { id: "execution", fa: "اجرای کارگاهی، توقف و ضایعات", en: "Shop-Floor Execution", defaultUser: "u-mfg-supervisor", permission: "mfg.execution.view" },
@@ -242,6 +260,76 @@ export default function ManufacturingWorkspace({
   const [orderCost, setOrderCost] = useState<MfgOrderCost | null>(null);
   const [costOpId, setCostOpId] = useState<string>("");
   const [opCosts, setOpCosts] = useState<{ items: MfgOperationCost[]; derived: boolean } | null>(null);
+
+  /* Phase 5 state — Advanced MES: MPS, lot sizing, ATP and operation splitting.
+   * The default horizon starts on Monday 2026-10-05 so the planning grid lines
+   * up with the demo orders and with the seeded demand/supply of that week. */
+  const PLANNING_HORIZON_START = "2026-10-05";
+  const [demandRows, setDemandRows] = useState<MfgDemandForecast[]>([]);
+  const [timePhased, setTimePhased] = useState<any>(null);
+  const [lotPolicies, setLotPolicies] = useState<MfgLotSizingPolicy[]>([]);
+  const [lotEvaluation, setLotEvaluation] = useState<any>(null);
+  const [mpsRuns, setMpsRuns] = useState<MfgMasterScheduleRun[]>([]);
+  const [mpsResult, setMpsResult] = useState<any>(null);
+  const [mpsLines, setMpsLines] = useState<MfgMasterScheduleLine[]>([]);
+  const [atpChecks, setAtpChecks] = useState<MfgAtpCheck[]>([]);
+  const [atpResult, setAtpResult] = useState<any>(null);
+  const [atpBuckets, setAtpBuckets] = useState<MfgAtpBucket[]>([]);
+  const [splitView, setSplitView] = useState<any>(null);
+  const [leadTime, setLeadTime] = useState<any>(null);
+  /* فاز ۵ بخش ۱۱ — سفارش برنامه‌ریزی‌شده، CRP، نسخهٔ تولید، pegging و انطباق. */
+  const [plannedOrders, setPlannedOrders] = useState<MfgPlannedOrder[]>([]);
+  const [crpReport, setCrpReport] = useState<MfgCrpReport | null>(null);
+  const [leadTimeOffset, setLeadTimeOffset] = useState<MfgLeadTimeOffsetReport | null>(null);
+  const [peggingReport, setPeggingReport] = useState<MfgPeggingReport | null>(null);
+  const [productionVersions, setProductionVersions] = useState<MfgProductionVersion[]>([]);
+  const [conformance, setConformance] = useState<MfgIsa95Conformance | null>(null);
+  const [versionForm, setVersionForm] = useState({ PartId: "" });
+  const [planSubTab, setPlanSubTab] = useState<
+    "mps" | "demand" | "lotsize" | "atp" | "split" | "planned" | "crp" | "pegging" | "version" | "conformance"
+  >("mps");
+  const [mpsForm, setMpsForm] = useState({
+    TimeBucket: "week" as "day" | "week" | "month",
+    BucketCount: 4,
+    HorizonStart: PLANNING_HORIZON_START,
+    DemandTimeFenceBuckets: 1,
+    FirmPlannedTimeFenceBuckets: 2,
+    IncludeOpenOrdersAsReceipts: true,
+    ConsumeForecast: true,
+    PartIds: "" as string,
+  });
+  const [demandForm, setDemandForm] = useState({
+    PartId: "",
+    DemandType: "sales-order" as MfgDemandType,
+    DemandRef: "SO-DEMO-101",
+    RequiredAt: "2026-10-06",
+    Quantity: "50",
+    ConfidencePct: "",
+  });
+  const [lotForm, setLotForm] = useState({
+    PartId: "",
+    RuleCode: "EOQ" as MfgLotSizingRule,
+    OrderingCost: "500000",
+    HoldingCostPerUnitPerYear: "25000",
+    AnnualDemandQty: "12000",
+    PeriodDays: "30",
+    EffectiveFrom: PLANNING_HORIZON_START,
+  });
+  const [atpForm, setAtpForm] = useState({
+    PartId: "",
+    RequestedQty: "30",
+    RequestedAt: "2026-10-08",
+    Mode: "cumulative" as "discrete" | "cumulative",
+    IncludeForecast: false,
+  });
+  const [splitForm, setSplitForm] = useState({
+    OrderId: "",
+    OperationId: "",
+    SplitLotCount: "2",
+    TransferBatchQty: "",
+    OverlapPct: "",
+    OverlapAllowed: true,
+  });
 
   const aliveRef = useRef(true);
   useEffect(() => {
@@ -464,6 +552,66 @@ export default function ManufacturingWorkspace({
             LotNo: firstLoc?.LotNo || "",
           }));
         }
+      } else if (tab === "planning") {
+        /* Master data comes first: every Phase-5 picker is keyed by part or order.
+         * Each list is gated by its own permission so a cost analyst who lands
+         * here by mistake sees an empty grid instead of a 403 wall. */
+        const [pRes, oRes] = await Promise.all([
+          canMfgAccess(mfgUserId, "mfg.part.view", plantId)
+            ? MfgClient.listParts(plantId, mfgUserId, { limit: 100 })
+            : Promise.resolve({ items: [], page: { limit: 100, offset: 0, total: 0 } }),
+          canMfgAccess(mfgUserId, "mfg.order.view", plantId)
+            ? MfgClient.listOrders(plantId, mfgUserId, { limit: 100 })
+            : Promise.resolve({ items: [], page: { limit: 100, offset: 0, total: 0 } }),
+        ]);
+        if (!aliveRef.current) return;
+        setParts(pRes.items ?? []);
+        setOrders(oRes.items ?? []);
+        const defaultPartId = pRes.items?.[0]?.Id ?? "";
+        if (defaultPartId && !atpForm.PartId) setAtpForm((f) => ({ ...f, PartId: defaultPartId }));
+        if (defaultPartId && !lotForm.PartId) setLotForm((f) => ({ ...f, PartId: defaultPartId }));
+        if (defaultPartId && !demandForm.PartId) setDemandForm((f) => ({ ...f, PartId: defaultPartId }));
+        if (oRes.items?.length && !splitForm.OrderId) setSplitForm((f) => ({ ...f, OrderId: oRes.items[0].Id }));
+
+        const [dRes, lRes, rRes, aRes] = await Promise.all([
+          canMfgAccess(mfgUserId, "mfg.demand.view", plantId)
+            ? MfgClient.listDemandForecasts(plantId, mfgUserId, { limit: 100 })
+            : Promise.resolve({ items: [], page: { limit: 100, offset: 0, total: 0 } }),
+          canMfgAccess(mfgUserId, "mfg.lotsize.view", plantId)
+            ? MfgClient.listLotSizingPolicies(plantId, mfgUserId, { limit: 100 })
+            : Promise.resolve({ items: [], page: { limit: 100, offset: 0, total: 0 } }),
+          canMfgAccess(mfgUserId, "mfg.mps.view", plantId)
+            ? MfgClient.listMasterScheduleRuns(plantId, mfgUserId, { limit: 20 })
+            : Promise.resolve({ items: [], page: { limit: 20, offset: 0, total: 0 } }),
+          canMfgAccess(mfgUserId, "mfg.atp.view", plantId)
+            ? MfgClient.listAtpChecks(plantId, mfgUserId, { limit: 50 })
+            : Promise.resolve({ items: [], page: { limit: 50, offset: 0, total: 0 } }),
+        ]);
+        if (!aliveRef.current) return;
+        setDemandRows(dRes.items ?? []);
+        setLotPolicies(lRes.items ?? []);
+        setMpsRuns(rRes.items ?? []);
+        setAtpChecks(aRes.items ?? []);
+
+        /* فاز ۵ بخش ۱۱ — فهرست‌های تازه با مجوز خودشان بارگذاری می‌شوند تا نقش
+         * بدون دسترسی، دیوار ۴۰۳ نبیند. */
+        const [poRes, pvRes] = await Promise.all([
+          canMfgAccess(mfgUserId, "mfg.plannedorder.view", plantId)
+            ? MfgClient.listPlannedOrders(plantId, mfgUserId, { limit: 100 })
+            : Promise.resolve({ items: [], page: { limit: 100, offset: 0, total: 0 } }),
+          canMfgAccess(mfgUserId, "mfg.version.view", plantId)
+            ? MfgClient.listProductionVersions(plantId, mfgUserId, { limit: 100 })
+            : Promise.resolve({ items: [], page: { limit: 100, offset: 0, total: 0 } }),
+        ]);
+        if (!aliveRef.current) return;
+        setPlannedOrders(poRes.items ?? []);
+        setProductionVersions(pvRes.items ?? []);
+        if (defaultPartId && !versionForm.PartId) setVersionForm((f) => ({ ...f, PartId: defaultPartId }));
+
+        if (rRes.items?.length && canMfgAccess(mfgUserId, "mfg.mps.view", plantId)) {
+          const lineRes = await MfgClient.listMasterScheduleLines(plantId, mfgUserId, rRes.items[0].Id, { limit: 200 });
+          if (aliveRef.current) setMpsLines(lineRes.items ?? []);
+        }
       } else if (tab === "cost") {
         const oRes = await MfgClient.listOrders(plantId, mfgUserId, { limit: 100 });
         if (!aliveRef.current) return;
@@ -538,6 +686,414 @@ export default function ManufacturingWorkspace({
       });
       setNotice(tr(`هشدار ${alert.AlertCode} تأیید دریافت شد (v${alert.RowVersion + 1}).`, `Alert ${alert.AlertCode} acknowledged.`));
       await loadActiveTab();
+    } catch (err) {
+      setError(formatError(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /* ── Phase 5 handlers: MPS, demand, lot sizing, ATP and splitting ── */
+  function mpsBody(previewOnly: boolean) {
+    const partIds = mpsForm.PartIds.split(",").map((v) => v.trim()).filter(Boolean);
+    return {
+      TimeBucket: mpsForm.TimeBucket,
+      BucketCount: mpsForm.BucketCount,
+      HorizonStart: mpsForm.HorizonStart || undefined,
+      DemandTimeFenceBuckets: mpsForm.DemandTimeFenceBuckets,
+      FirmPlannedTimeFenceBuckets: mpsForm.FirmPlannedTimeFenceBuckets,
+      IncludeOpenOrdersAsReceipts: mpsForm.IncludeOpenOrdersAsReceipts,
+      ConsumeForecast: mpsForm.ConsumeForecast,
+      PreviewOnly: previewOnly,
+      ...(partIds.length ? { PartIds: partIds } : {}),
+    };
+  }
+
+  async function handleRunMps(previewOnly: boolean) {
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const res = await MfgClient.runMasterSchedule(plantId, mfgUserId, mpsBody(previewOnly));
+      setMpsResult(res);
+      setMpsLines(res.lines ?? []);
+      const count = res.lines?.length ?? 0;
+      setNotice(
+        previewOnly
+          ? tr(`پیش‌نمایش MPS: ${count} سطر، بدون نوشتن در پایگاه‌داده.`, `MPS preview: ${count} lines, nothing persisted.`)
+          : tr(`اجرای MPS شمارهٔ ${res.run?.RunNo ?? "?"} با ${count} سطر ثبت شد.`, `MPS run #${res.run?.RunNo ?? "?"} saved with ${count} lines.`),
+      );
+      if (!previewOnly) {
+        const runRes = await MfgClient.listMasterScheduleRuns(plantId, mfgUserId, { limit: 20 });
+        setMpsRuns(runRes.items ?? []);
+      }
+    } catch (err) {
+      setError(formatError(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleFirmMps() {
+    const run = mpsResult?.run ?? mpsRuns[0];
+    if (!run) return;
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const res = await MfgClient.firmMasterScheduleLines(plantId, mfgUserId, run.Id, run.RowVersion, {});
+      setNotice(tr(`${res.firmedLineCount} سطر تا سطل ${res.throughBucketIndex} قطعی شد.`, `${res.firmedLineCount} lines firmed through bucket ${res.throughBucketIndex}.`));
+      await loadActiveTab();
+    } catch (err) {
+      setError(formatError(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /* ── فاز ۵ بخش ۱۱: هندلرهای سفارش برنامه‌ریزی‌شده، CRP، pegging، نسخه و انطباق ── */
+
+  /** بارگذاری فهرست سفارش‌های برنامه‌ریزی‌شده؛ مجوزش جدا از MPS است. */
+  async function loadPlannedOrders() {
+    if (!canMfgAccess(mfgUserId, "mfg.plannedorder.view", plantId)) {
+      setPlannedOrders([]);
+      return;
+    }
+    try {
+      const res = await MfgClient.listPlannedOrders(plantId, mfgUserId, { limit: 100 });
+      setPlannedOrders(res.items ?? []);
+    } catch (err) {
+      setError(formatError(err));
+    }
+  }
+
+  async function handleTransitionPlannedOrder(row: MfgPlannedOrder, action: "approve" | "reject") {
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const updated = action === "approve"
+        ? await MfgClient.approvePlannedOrder(plantId, mfgUserId, row.Id, row.RowVersion, {})
+        : await MfgClient.rejectPlannedOrder(plantId, mfgUserId, row.Id, row.RowVersion, {
+          RejectReasonFa: tr("برنامه‌ریز نیاز را تأیید نکرد", "Planner did not confirm the requirement"),
+        });
+      setNotice(tr(
+        `سفارش ${row.PlannedOrderNo} به وضعیت «${updated.Status}» رفت.`,
+        `Planned order ${row.PlannedOrderNo} moved to "${updated.Status}".`,
+      ));
+      await loadPlannedOrders();
+    } catch (err) {
+      setError(formatError(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleConvertPlannedOrder(row: MfgPlannedOrder) {
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const res = await MfgClient.convertPlannedOrder(plantId, mfgUserId, row.Id, row.RowVersion, {});
+      setNotice(tr(
+        `سفارش تولید ${res.productionOrder.OrderNo} با ${res.operationCount} عملیات ساخته شد؛ هنوز آزاد نشده است.`,
+        `Production order ${res.productionOrder.OrderNo} created with ${res.operationCount} operations; release is still pending.`,
+      ));
+      await Promise.all([loadPlannedOrders(), loadActiveTab()]);
+    } catch (err) {
+      setError(formatError(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleCalculateCrp() {
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const res = await MfgClient.calculateCapacityRequirements(plantId, mfgUserId, {
+        Bucket: "week", BucketCount: 4, HorizonStart: PLANNING_HORIZON_START,
+      });
+      setCrpReport(res);
+      const overloaded = res.totals.overloadBucketCount;
+      setNotice(tr(
+        `بار ${res.workCenters.length} مرکز کاری محاسبه شد؛ ${overloaded} سطل پربار و ${res.levelingSuggestions.length} پیشنهاد تسطیح.`,
+        `Loaded ${res.workCenters.length} work centers; ${overloaded} overloaded buckets and ${res.levelingSuggestions.length} leveling suggestions.`,
+      ));
+    } catch (err) {
+      setError(formatError(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleLoadLeadTimeAndPegging() {
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const [offset, pegging] = await Promise.all([
+        MfgClient.getMrpLeadTimeOffset(plantId, mfgUserId),
+        MfgClient.getMrpPegging(plantId, mfgUserId, { level: "multi" }),
+      ]);
+      setLeadTimeOffset(offset);
+      setPeggingReport(pegging);
+      setNotice(tr(
+        `زمان تحویل تجمیعی محصول نهایی ${offset.finishedGoodsLeadTimeDays} روز؛ ${pegging.items.length} ردیف pegging.`,
+        `Finished-goods cumulative lead time is ${offset.finishedGoodsLeadTimeDays} days; ${pegging.items.length} pegging rows.`,
+      ));
+    } catch (err) {
+      setError(formatError(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function loadProductionVersions() {
+    if (!canMfgAccess(mfgUserId, "mfg.version.view", plantId)) {
+      setProductionVersions([]);
+      return;
+    }
+    try {
+      const res = await MfgClient.listProductionVersions(plantId, mfgUserId, { limit: 100 });
+      setProductionVersions(res.items ?? []);
+    } catch (err) {
+      setError(formatError(err));
+    }
+  }
+
+  async function handleCreateProductionVersion(partId: string) {
+    if (!partId) return;
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const created = await MfgClient.createProductionVersion(plantId, mfgUserId, {
+        PartId: partId,
+        VersionCode: `V${productionVersions.filter((row) => row.PartId === partId).length + 1}`,
+        BomRevision: "A",
+        RoutingRevision: "A",
+        Priority: 1,
+      });
+      setNotice(tr(
+        `نسخهٔ ${created.VersionCode} ساخته شد؛ BOM و Routing باید آزادشده باشند.`,
+        `Version ${created.VersionCode} created; BOM and routing must be released.`,
+      ));
+      await loadProductionVersions();
+    } catch (err) {
+      setError(formatError(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function loadConformance() {
+    if (!canMfgAccess(mfgUserId, "mfg.conformance.view", plantId)) {
+      setConformance(null);
+      return;
+    }
+    try {
+      setConformance(await MfgClient.getIsa95Conformance(plantId, mfgUserId));
+    } catch (err) {
+      setError(formatError(err));
+    }
+  }
+
+  async function handleCreateDemand() {
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const row = await MfgClient.createDemandForecast(plantId, mfgUserId, {
+        PartId: demandForm.PartId,
+        DemandType: demandForm.DemandType,
+        DemandRef: demandForm.DemandRef,
+        RequiredAt: demandForm.RequiredAt,
+        Quantity: Number(demandForm.Quantity),
+        ...(demandForm.ConfidencePct.trim() === "" ? {} : { ConfidencePct: Number(demandForm.ConfidencePct) }),
+      });
+      setNotice(tr(`تقاضای ${row.DemandRef} با مقدار ${row.Quantity} ثبت شد.`, `Demand ${row.DemandRef} for ${row.Quantity} created.`));
+      await loadActiveTab();
+    } catch (err) {
+      setError(formatError(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleDeleteDemand(demand: MfgDemandForecast) {
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      await MfgClient.deleteDemandForecast(plantId, mfgUserId, demand.Id);
+      setNotice(tr(`تقاضای ${demand.DemandRef} حذف شد.`, `Demand ${demand.DemandRef} deleted.`));
+      await loadActiveTab();
+    } catch (err) {
+      setError(formatError(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleLoadTimePhased() {
+    setBusy(true);
+    setError("");
+    try {
+      const res = await MfgClient.getTimePhasedDemand(plantId, mfgUserId, {
+        ...(demandForm.PartId ? { partIds: demandForm.PartId } : {}),
+        bucket: mpsForm.TimeBucket,
+        bucketCount: mpsForm.BucketCount,
+        horizonStart: mpsForm.HorizonStart || undefined,
+      });
+      setTimePhased(res);
+    } catch (err) {
+      setError(formatError(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleCreateLotPolicy() {
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const row = await MfgClient.createLotSizingPolicy(plantId, mfgUserId, {
+        PartId: lotForm.PartId,
+        RuleCode: lotForm.RuleCode,
+        OrderingCost: lotForm.OrderingCost.trim() === "" ? null : Number(lotForm.OrderingCost),
+        HoldingCostPerUnitPerYear: lotForm.HoldingCostPerUnitPerYear.trim() === "" ? null : Number(lotForm.HoldingCostPerUnitPerYear),
+        AnnualDemandQty: lotForm.AnnualDemandQty.trim() === "" ? null : Number(lotForm.AnnualDemandQty),
+        PeriodDays: lotForm.PeriodDays.trim() === "" ? null : Number(lotForm.PeriodDays),
+        EffectiveFrom: lotForm.EffectiveFrom,
+      });
+      setNotice(tr(`سیاست ${row.RuleCode} ثبت شد${row.eoq ? ` (EOQ = ${row.eoq})` : ""}.`, `Policy ${row.RuleCode} saved${row.eoq ? ` (EOQ = ${row.eoq})` : ""}.`));
+      await loadActiveTab();
+    } catch (err) {
+      setError(formatError(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleEvaluateLot() {
+    setBusy(true);
+    setError("");
+    try {
+      /* Dry run: the API computes the plan but writes nothing, so the grid can
+       * be compared against the live MPS run without polluting history. */
+      const res = await MfgClient.evaluateLotSizing(plantId, mfgUserId, {
+        PartId: lotForm.PartId,
+        Policy: {
+          RuleCode: lotForm.RuleCode,
+          OrderingCost: lotForm.OrderingCost.trim() === "" ? null : Number(lotForm.OrderingCost),
+          HoldingCostPerUnitPerYear: lotForm.HoldingCostPerUnitPerYear.trim() === "" ? null : Number(lotForm.HoldingCostPerUnitPerYear),
+          AnnualDemandQty: lotForm.AnnualDemandQty.trim() === "" ? null : Number(lotForm.AnnualDemandQty),
+          PeriodDays: lotForm.PeriodDays.trim() === "" ? null : Number(lotForm.PeriodDays),
+        },
+        BucketUnit: mpsForm.TimeBucket,
+        BucketCount: mpsForm.BucketCount,
+        HorizonStart: mpsForm.HorizonStart || undefined,
+      });
+      setLotEvaluation(res);
+    } catch (err) {
+      setError(formatError(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleAtpCheck() {
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const res = await MfgClient.checkAtp(plantId, mfgUserId, {
+        PartId: atpForm.PartId,
+        RequestedQty: Number(atpForm.RequestedQty),
+        RequestedAt: atpForm.RequestedAt,
+        Mode: atpForm.Mode,
+        IncludeForecast: atpForm.IncludeForecast,
+        BucketUnit: mpsForm.TimeBucket,
+        BucketCount: mpsForm.BucketCount,
+        HorizonStart: mpsForm.HorizonStart || undefined,
+      });
+      setAtpResult(res);
+      setAtpBuckets(res.buckets ?? []);
+      const c = res.check;
+      setNotice(
+        c.status === "available"
+          ? tr(`قابل تعهد: ${c.promisedQty} تا ${c.promisedAt}.`, `Available: ${c.promisedQty} by ${c.promisedAt}.`)
+          : c.status === "delayed"
+            ? tr(`با تأخیر: ${c.promisedQty} تا ${c.promisedAt} (${c.delayBuckets} سطل دیرتر).`, `Delayed: ${c.promisedQty} by ${c.promisedAt} (${c.delayBuckets} buckets later).`)
+            : tr(`غیرقابل تعهد: کمبود ${c.shortageQty}.`, `Unavailable: shortage ${c.shortageQty}.`),
+      );
+      const history = await MfgClient.listAtpChecks(plantId, mfgUserId, { limit: 50 });
+      setAtpChecks(history.items ?? []);
+    } catch (err) {
+      setError(formatError(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleLoadSplits() {
+    if (!splitForm.OrderId || !splitForm.OperationId) return;
+    setBusy(true);
+    setError("");
+    try {
+      const res = await MfgClient.listOperationSplits(plantId, mfgUserId, splitForm.OrderId, splitForm.OperationId);
+      setSplitView(res);
+    } catch (err) {
+      setError(formatError(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleReplaceSplits() {
+    if (!splitForm.OrderId || !splitForm.OperationId) return;
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const res = await MfgClient.replaceOperationSplits(plantId, mfgUserId, splitForm.OrderId, splitForm.OperationId, {
+        SplitLotCount: Number(splitForm.SplitLotCount),
+        ...(splitForm.TransferBatchQty.trim() === "" ? {} : { TransferBatchQty: Number(splitForm.TransferBatchQty) }),
+        ...(splitForm.OverlapPct.trim() === "" ? {} : { OverlapPct: Number(splitForm.OverlapPct) }),
+        OverlapAllowed: splitForm.OverlapAllowed,
+        NoteFa: "تقسیم عملیات به لات‌های متوالی برای هم‌پوشانی با عملیات بعدی",
+      });
+      setNotice(tr(`${res.created} لات ثبت و ${res.deleted} لات قبلی حذف شد.`, `${res.created} lots created, ${res.deleted} replaced.`));
+      await handleLoadSplits();
+    } catch (err) {
+      setError(formatError(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleDeleteSplit(splitLotId: string) {
+    setBusy(true);
+    setError("");
+    try {
+      await MfgClient.deleteOperationSplit(plantId, mfgUserId, splitLotId);
+      await handleLoadSplits();
+    } catch (err) {
+      setError(formatError(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleLeadTimeAnalysis(orderId: string) {
+    setBusy(true);
+    setError("");
+    try {
+      const res = await MfgClient.getLeadTimeAnalysis(plantId, mfgUserId, orderId);
+      setLeadTime(res);
     } catch (err) {
       setError(formatError(err));
     } finally {
@@ -3196,6 +3752,708 @@ export default function ManufacturingWorkspace({
       )}
 
       {/* ══════════════════════ ۷) تب بهای تمام‌شده و تطبیق مالی ══════════════════════ */}
+      {!loading && tab === "planning" && (
+        <div className="space-y-3">
+          <section className="glass-dark rounded-xl p-3 flex flex-wrap items-center gap-2 text-xs">
+            <span className="tx1 font-semibold">{tr("زیربخش برنامه‌ریزی:", "Planning area:")}</span>
+            {([
+              ["mps", "برنامهٔ اصلی تولید (MPS)", "Master Production Schedule"],
+              ["demand", "تقاضا و پیش‌بینی", "Demand & Forecast"],
+              ["lotsize", "اندازه‌گذاری لات (EOQ/POQ/L4L/FOQ)", "Lot Sizing (EOQ/POQ/L4L/FOQ)"],
+              ["atp", "قابل‌تعهد بودن (ATP)", "Available-to-Promise"],
+              ["split", "تقسیم و هم‌پوشانی عملیات", "Splitting & Overlap"],
+              ["planned", "سفارش برنامه‌ریزی‌شده", "Planned Orders"],
+              ["crp", "ظرفیت و بار (CRP)", "Capacity Requirements"],
+              ["pegging", "Lead Time و Pegging", "Lead Time & Pegging"],
+              ["version", "نسخهٔ تولید", "Production Versions"],
+              ["conformance", "انطباق ISA-95", "ISA-95 Conformance"],
+            ] as const).map(([id, fa, en]) => (
+              <button key={id} className={`${btnCls} ${planSubTab === id ? "toggle-on" : ""}`} onClick={() => setPlanSubTab(id)}>
+                {tr(fa, en)}
+              </button>
+            ))}
+          </section>
+
+          {/* ═══ MPS ═══ */}
+          {planSubTab === "mps" && (
+            <div className="space-y-3">
+              <section className="glass-dark rounded-xl p-3 space-y-2">
+                <h4 className="tx1 font-semibold">{tr("پارامترهای افق برنامه‌ریزی", "Planning Horizon Parameters")}</h4>
+                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-2">
+                  <select aria-label="TimeBucket" className={inputCls} value={mpsForm.TimeBucket} onChange={(e) => setMpsForm((f) => ({ ...f, TimeBucket: e.target.value as "day" | "week" | "month" }))}>
+                    <option value="day">day</option>
+                    <option value="week">week</option>
+                    <option value="month">month</option>
+                  </select>
+                  <input type="number" min={1} max={52} title="BucketCount" className={inputCls} value={mpsForm.BucketCount} onChange={(e) => setMpsForm((f) => ({ ...f, BucketCount: Number(e.target.value) }))} />
+                  <input type="date" title="HorizonStart" className={inputCls} dir="ltr" value={mpsForm.HorizonStart} onChange={(e) => setMpsForm((f) => ({ ...f, HorizonStart: e.target.value }))} />
+                  <input type="number" min={0} title="DemandTimeFenceBuckets" placeholder="DTF" className={inputCls} value={mpsForm.DemandTimeFenceBuckets} onChange={(e) => setMpsForm((f) => ({ ...f, DemandTimeFenceBuckets: Number(e.target.value) }))} />
+                  <input type="number" min={0} title="FirmPlannedTimeFenceBuckets" placeholder="FPTF" className={inputCls} value={mpsForm.FirmPlannedTimeFenceBuckets} onChange={(e) => setMpsForm((f) => ({ ...f, FirmPlannedTimeFenceBuckets: Number(e.target.value) }))} />
+                  <input placeholder={tr("شناسهٔ قطعه‌ها (اختیاری، با کاما)", "PartIds (optional, csv)")} className={inputCls} dir="ltr" value={mpsForm.PartIds} onChange={(e) => setMpsForm((f) => ({ ...f, PartIds: e.target.value }))} />
+                  <div className="flex items-center gap-2 text-[11px] tx2">
+                    <label className="flex items-center gap-1">
+                      <input type="checkbox" checked={mpsForm.IncludeOpenOrdersAsReceipts} onChange={(e) => setMpsForm((f) => ({ ...f, IncludeOpenOrdersAsReceipts: e.target.checked }))} />
+                      {tr("رسید سفارش باز", "Open-order receipts")}
+                    </label>
+                    <label className="flex items-center gap-1">
+                      <input type="checkbox" checked={mpsForm.ConsumeForecast} onChange={(e) => setMpsForm((f) => ({ ...f, ConsumeForecast: e.target.checked }))} />
+                      {tr("مصرف پیش‌بینی با سفارش", "Forecast consumption")}
+                    </label>
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button className={btnCls} disabled={busy || !canMfgAccess(mfgUserId, "mfg.mps.run", plantId)} onClick={() => void handleRunMps(true)}>
+                    {tr("پیش‌نمایش (بدون ذخیره)", "Preview (no write)")}
+                  </button>
+                  <button className={btnCls} disabled={busy || !canMfgAccess(mfgUserId, "mfg.mps.run", plantId)} onClick={() => void handleRunMps(false)}>
+                    {tr("اجرا و ثبت MPS (POST /mps/runs)", "Run & Persist MPS")}
+                  </button>
+                  <button className={btnCls} disabled={busy || !canMfgAccess(mfgUserId, "mfg.mps.firm", plantId) || !(mpsResult?.run ?? mpsRuns[0])} onClick={() => void handleFirmMps()}>
+                    {tr("قطعی‌کردن سطرهای درون حصار", "Firm Lines Inside Fence")}
+                  </button>
+                </div>
+                {mpsResult?.run && (
+                  <div className="text-[11px] tx3 flex flex-wrap gap-3" dir="ltr">
+                    <span>RunNo: <strong>{mpsResult.run.RunNo}</strong></span>
+                    <span>Lines: <strong>{mpsResult.run.LineCount}</strong></span>
+                    <span>PlannedQty: <strong>{mpsResult.run.TotalPlannedOrderQty}</strong></span>
+                    <span>Horizon: {mpsResult.horizonStart} → {mpsResult.horizonEnd}</span>
+                  </div>
+                )}
+              </section>
+
+              <section className="glass-dark rounded-xl p-3 space-y-2">
+                <h4 className="tx1 font-semibold">{tr("سطرهای زمان‌بندی‌شده", "Time-Phased Schedule Lines")}</h4>
+                <div className="overflow-x-auto">
+                  <div className="min-w-[900px] space-y-1" dir="ltr">
+                    <div className="grid grid-cols-11 gap-1 text-[10px] tx3 font-semibold">
+                      {["Bucket", "Start", "Gross", "Sched.Rcpt", "Proj.Before", "Net", "Planned Rcpt", "Release", "Release At", "Proj.After", "Rule / Firm"].map((h) => (
+                        <div key={h} className="rounded border b-line-soft p-1 text-center">{h}</div>
+                      ))}
+                    </div>
+                    {mpsLines.map((line, idx) => (
+                      <div key={line.Id ?? `${line.PartId}-${line.BucketIndex}-${idx}`} className={`grid grid-cols-11 gap-1 text-[11px] tx2 ${line.IsFirm ? "toggle-on" : ""}`}>
+                        <div className="rounded border b-line-soft p-1 text-center">{line.BucketIndex}</div>
+                        <div className="rounded border b-line-soft p-1 text-center">{line.BucketStart}</div>
+                        <div className="rounded border b-line-soft p-1 text-center">{line.GrossRequirementQty}</div>
+                        <div className="rounded border b-line-soft p-1 text-center">{line.ScheduledReceiptQty}</div>
+                        <div className="rounded border b-line-soft p-1 text-center">{line.ProjectedOnHandBefore}</div>
+                        <div className="rounded border b-line-soft p-1 text-center">{line.NetRequirementQty}</div>
+                        <div className="rounded border b-line-soft p-1 text-center font-semibold">{line.PlannedOrderReceiptQty}</div>
+                        <div className="rounded border b-line-soft p-1 text-center">{line.PlannedOrderReleaseQty}</div>
+                        <div className="rounded border b-line-soft p-1 text-center">{line.PlannedOrderReleaseAt ?? "—"}</div>
+                        <div className="rounded border b-line-soft p-1 text-center">{line.ProjectedOnHandAfter}</div>
+                        <div className="rounded border b-line-soft p-1 text-center">{line.LotSizingRule}{line.IsFirm ? " · FIRM" : line.InsideDemandTimeFence ? " · DTF" : ""}</div>
+                      </div>
+                    ))}
+                    {mpsLines.length === 0 && <div className="text-[11px] tx3">{tr("هنوز سطری محاسبه نشده است؛ ابتدا MPS را اجرا کنید.", "No lines yet — run the MPS first.")}</div>}
+                  </div>
+                </div>
+              </section>
+
+              <section className="glass-dark rounded-xl p-3 space-y-2">
+                <h4 className="tx1 font-semibold">{tr("تاریخچهٔ اجراهای MPS", "MPS Run History")}</h4>
+                <div className="space-y-1.5">
+                  {mpsRuns.map((run) => (
+                    <div key={run.Id} className="rounded border b-line-soft p-2 text-[11px] tx2 flex flex-wrap justify-between gap-2" dir="ltr">
+                      <span>#{run.RunNo} · {run.TimeBucket} × {run.BucketCount} · DTF {run.DemandTimeFenceBuckets} / FPTF {run.FirmPlannedTimeFenceBuckets}</span>
+                      <span>{run.HorizonStart} → {run.HorizonEnd} · Lines <strong>{run.LineCount}</strong> · Qty <strong>{run.TotalPlannedOrderQty}</strong> · v{run.RowVersion}</span>
+                    </div>
+                  ))}
+                  {mpsRuns.length === 0 && <div className="text-[11px] tx3">{tr("اجرایی ثبت نشده است.", "No runs recorded.")}</div>}
+                </div>
+              </section>
+            </div>
+          )}
+
+          {/* ═══ Demand & Forecast ═══ */}
+          {planSubTab === "demand" && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+              <section className="glass-dark rounded-xl p-3 space-y-2">
+                <h4 className="tx1 font-semibold">{tr("ثبت تقاضا / پیش‌بینی", "Create Demand / Forecast")}</h4>
+                <form className="space-y-2" onSubmit={(e) => { e.preventDefault(); void handleCreateDemand(); }}>
+                  <select aria-label="PartId" className={inputCls} value={demandForm.PartId} onChange={(e) => setDemandForm((f) => ({ ...f, PartId: e.target.value }))}>
+                    <option value="">{tr("— انتخاب قطعه —", "— select part —")}</option>
+                    {parts.map((part) => (
+                      <option key={part.Id} value={part.Id}>{part.PartNo} · {part.NameFa}</option>
+                    ))}
+                  </select>
+                  <div className="grid grid-cols-2 gap-2">
+                    <select aria-label="DemandType" className={inputCls} value={demandForm.DemandType} onChange={(e) => setDemandForm((f) => ({ ...f, DemandType: e.target.value as MfgDemandType }))}>
+                      <option value="sales-order">sales-order</option>
+                      <option value="forecast">forecast</option>
+                      <option value="contract">contract</option>
+                      <option value="manual">manual</option>
+                    </select>
+                    <input placeholder="DemandRef" className={inputCls} dir="ltr" value={demandForm.DemandRef} onChange={(e) => setDemandForm((f) => ({ ...f, DemandRef: e.target.value }))} />
+                    <input type="date" className={inputCls} dir="ltr" value={demandForm.RequiredAt} onChange={(e) => setDemandForm((f) => ({ ...f, RequiredAt: e.target.value }))} />
+                    <input type="number" min={0} placeholder="Quantity" className={inputCls} value={demandForm.Quantity} onChange={(e) => setDemandForm((f) => ({ ...f, Quantity: e.target.value }))} />
+                  </div>
+                  <input type="number" min={0} max={100} placeholder={tr("درصد اطمینان (برای forecast الزامی)", "ConfidencePct (required for forecast)")} className={inputCls} value={demandForm.ConfidencePct} onChange={(e) => setDemandForm((f) => ({ ...f, ConfidencePct: e.target.value }))} />
+                  <button type="submit" className={btnCls} disabled={busy || !demandForm.PartId || !canMfgAccess(mfgUserId, "mfg.demand.edit", plantId)}>
+                    {tr("ثبت تقاضا (POST /demand-forecasts)", "Create Demand")}
+                  </button>
+                </form>
+                <button className={btnCls} disabled={busy} onClick={() => void handleLoadTimePhased()}>
+                  {tr("نمایش زمان‌بندی‌شدهٔ تقاضا", "Show Time-Phased Demand")}
+                </button>
+                {timePhased && (
+                  <div className="space-y-1.5 pt-1">
+                    <div className="text-[11px] tx3" dir="ltr">
+                      {timePhased.bucketUnit} × {timePhased.bucketCount} · {timePhased.horizonStart} → {timePhased.horizonEnd}
+                      {timePhased.outsideHorizonQty > 0 ? ` · ${tr("خارج از افق", "outside horizon")}: ${timePhased.outsideHorizonQty}` : ""}
+                    </div>
+                    {(timePhased.parts ?? []).map((part: any) => (
+                      <div key={part.partId} className="rounded border b-line-soft p-2 text-[11px] tx2" dir="ltr">
+                        <strong>{part.partNo ?? part.partId}</strong> · total {part.totalQty} {part.uom ?? ""}
+                        <div className="flex flex-wrap gap-1 pt-1">
+                          {(part.lines ?? []).map((line: any, idx: number) => (
+                            <span key={idx} className="rounded border b-line-soft px-1.5 py-0.5">{line.bucketStart}: {line.totalQty}</span>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+
+              <section className="glass-dark rounded-xl p-3 space-y-2">
+                <h4 className="tx1 font-semibold">{tr("فهرست تقاضا", "Demand Register")}</h4>
+                <div className="space-y-1.5 max-h-[420px] overflow-y-auto">
+                  {demandRows.map((row) => (
+                    <div key={row.Id} className="rounded border b-line-soft p-2 text-[11px] tx2 flex flex-wrap items-center justify-between gap-2">
+                      <span dir="ltr">
+                        <strong>{row.DemandRef}</strong> · {row.DemandType} · {row.RequiredAt} · <strong>{row.Quantity}</strong> {row.Uom}
+                        {row.ConfidencePct != null ? ` · ${row.ConfidencePct}%` : ""} · {row.Status}
+                      </span>
+                      {canMfgAccess(mfgUserId, "mfg.demand.edit", plantId) && row.Status !== "consumed" && (
+                        <button className={btnCls} disabled={busy} onClick={() => void handleDeleteDemand(row)}>
+                          {tr("حذف", "Delete")}
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  {demandRows.length === 0 && <div className="text-[11px] tx3">{tr("تقاضایی ثبت نشده است.", "No demand rows.")}</div>}
+                </div>
+              </section>
+            </div>
+          )}
+
+          {/* ═══ Lot Sizing ═══ */}
+          {planSubTab === "lotsize" && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+              <section className="glass-dark rounded-xl p-3 space-y-2">
+                <h4 className="tx1 font-semibold">{tr("سیاست اندازه‌گذاری لات", "Lot Sizing Policy")}</h4>
+                <div className="space-y-2">
+                  <select aria-label="PartId" className={inputCls} value={lotForm.PartId} onChange={(e) => setLotForm((f) => ({ ...f, PartId: e.target.value }))}>
+                    <option value="">{tr("— انتخاب قطعه —", "— select part —")}</option>
+                    {parts.map((part) => (
+                      <option key={part.Id} value={part.Id}>{part.PartNo} · {part.NameFa}</option>
+                    ))}
+                  </select>
+                  <div className="grid grid-cols-2 gap-2">
+                    <select aria-label="RuleCode" className={inputCls} value={lotForm.RuleCode} onChange={(e) => setLotForm((f) => ({ ...f, RuleCode: e.target.value as MfgLotSizingRule }))}>
+                      <option value="L4L">L4L</option>
+                      <option value="FOQ">FOQ</option>
+                      <option value="EOQ">EOQ</option>
+                      <option value="POQ">POQ</option>
+                    </select>
+                    <input type="date" className={inputCls} dir="ltr" value={lotForm.EffectiveFrom} onChange={(e) => setLotForm((f) => ({ ...f, EffectiveFrom: e.target.value }))} />
+                    <input type="number" min={0} placeholder="OrderingCost" className={inputCls} value={lotForm.OrderingCost} onChange={(e) => setLotForm((f) => ({ ...f, OrderingCost: e.target.value }))} />
+                    <input type="number" min={0} placeholder="HoldingCost/Unit/Year" className={inputCls} value={lotForm.HoldingCostPerUnitPerYear} onChange={(e) => setLotForm((f) => ({ ...f, HoldingCostPerUnitPerYear: e.target.value }))} />
+                    <input type="number" min={0} placeholder="AnnualDemandQty" className={inputCls} value={lotForm.AnnualDemandQty} onChange={(e) => setLotForm((f) => ({ ...f, AnnualDemandQty: e.target.value }))} />
+                    <input type="number" min={1} placeholder="PeriodDays" className={inputCls} value={lotForm.PeriodDays} onChange={(e) => setLotForm((f) => ({ ...f, PeriodDays: e.target.value }))} />
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <button className={btnCls} disabled={busy || !lotForm.PartId || !canMfgAccess(mfgUserId, "mfg.lotsize.edit", plantId)} onClick={() => void handleCreateLotPolicy()}>
+                      {tr("ثبت سیاست (POST /lot-sizing-policies)", "Save Policy")}
+                    </button>
+                    <button className={btnCls} disabled={busy || !lotForm.PartId} onClick={() => void handleEvaluateLot()}>
+                      {tr("ارزیابی خشک (بدون ذخیره)", "Dry-Run Evaluate")}
+                    </button>
+                  </div>
+                </div>
+                {lotEvaluation && (
+                  <div className="space-y-1.5 pt-1">
+                    <div className="text-[11px] tx3" dir="ltr">
+                      {lotEvaluation.lotSizingRule} · source {lotEvaluation.policySource}
+                      {lotEvaluation.eoq ? ` · EOQ ${lotEvaluation.eoq.eoq ?? "—"} (raw ${lotEvaluation.eoq.rawEoq ?? "—"}, ${lotEvaluation.eoq.ordersPerYear ?? "—"} orders/yr)` : ""}
+                      {lotEvaluation.periodOrderQuantity != null ? ` · POQ ${lotEvaluation.periodOrderQuantity}` : ""}
+                    </div>
+                    <div className="space-y-1" dir="ltr">
+                      {(lotEvaluation.lines ?? []).map((line: MfgMasterScheduleLine, idx: number) => (
+                        <div key={idx} className="rounded border b-line-soft p-1.5 text-[11px] tx2 flex justify-between">
+                          <span>{line.BucketStart}</span>
+                          <span>gross {line.GrossRequirementQty} → receipt <strong>{line.PlannedOrderReceiptQty}</strong> · on-hand {line.ProjectedOnHandAfter}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </section>
+
+              <section className="glass-dark rounded-xl p-3 space-y-2">
+                <h4 className="tx1 font-semibold">{tr("سیاست‌های ثبت‌شده", "Saved Policies")}</h4>
+                <div className="space-y-1.5">
+                  {lotPolicies.map((policy) => (
+                    <div key={policy.Id} className="rounded border b-line-soft p-2 text-[11px] tx2 flex flex-wrap justify-between gap-2" dir="ltr">
+                      <span><strong>{policy.RuleCode}</strong> {policy.PolicyCode ?? ""} · from {policy.EffectiveFrom}</span>
+                      <span>
+                        {policy.eoq ? `EOQ ${policy.eoq}` : ""}
+                        {policy.PeriodOrderQuantity ? ` · POQ ${policy.PeriodOrderQuantity}` : ""}
+                        {policy.FixedLotQty ? ` · FOQ ${policy.FixedLotQty}` : ""}
+                        {policy.OrderMultiple ? ` · mult ${policy.OrderMultiple}` : ""}
+                        {policy.MinOrderQty ? ` · min ${policy.MinOrderQty}` : ""}
+                        {policy.MaxOrderQty ? ` · max ${policy.MaxOrderQty}` : ""}
+                        {!policy.IsActive ? " · inactive" : ""}
+                      </span>
+                    </div>
+                  ))}
+                  {lotPolicies.length === 0 && <div className="text-[11px] tx3">{tr("سیاستی ثبت نشده؛ از پارامترهای قطعه استفاده می‌شود.", "No policies — part planning parameters apply.")}</div>}
+                </div>
+              </section>
+            </div>
+          )}
+
+          {/* ═══ ATP ═══ */}
+          {planSubTab === "atp" && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+              <section className="glass-dark rounded-xl p-3 space-y-2">
+                <h4 className="tx1 font-semibold">{tr("بررسی تعهد تحویل", "Delivery Promise Check")}</h4>
+                <select aria-label="PartId" className={inputCls} value={atpForm.PartId} onChange={(e) => setAtpForm((f) => ({ ...f, PartId: e.target.value }))}>
+                  <option value="">{tr("— انتخاب قطعه —", "— select part —")}</option>
+                  {parts.map((part) => (
+                    <option key={part.Id} value={part.Id}>{part.PartNo} · {part.NameFa}</option>
+                  ))}
+                </select>
+                <div className="grid grid-cols-2 gap-2">
+                  <input type="number" min={0} placeholder="RequestedQty" className={inputCls} value={atpForm.RequestedQty} onChange={(e) => setAtpForm((f) => ({ ...f, RequestedQty: e.target.value }))} />
+                  <input type="date" className={inputCls} dir="ltr" value={atpForm.RequestedAt} onChange={(e) => setAtpForm((f) => ({ ...f, RequestedAt: e.target.value }))} />
+                </div>
+                <div className="flex flex-wrap items-center gap-3 text-[11px] tx2">
+                  <select aria-label="Mode" className={inputCls} value={atpForm.Mode} onChange={(e) => setAtpForm((f) => ({ ...f, Mode: e.target.value as "discrete" | "cumulative" }))}>
+                    <option value="cumulative">cumulative</option>
+                    <option value="discrete">discrete</option>
+                  </select>
+                  <label className="flex items-center gap-1">
+                    <input type="checkbox" checked={atpForm.IncludeForecast} onChange={(e) => setAtpForm((f) => ({ ...f, IncludeForecast: e.target.checked }))} />
+                    {tr("پیش‌بینی هم کسر شود", "Consume forecast too")}
+                  </label>
+                </div>
+                <button className={btnCls} disabled={busy || !atpForm.PartId || !canMfgAccess(mfgUserId, "mfg.atp.check", plantId)} onClick={() => void handleAtpCheck()}>
+                  {tr("بررسی ATP (POST /atp/checks)", "Check ATP")}
+                </button>
+                {atpResult?.check && (
+                  <div className={`rounded border b-line-soft p-2 text-[11px] tx2 space-y-1 ${atpResult.check.status === "available" ? "toggle-on" : ""}`} dir="ltr">
+                    <div>Status: <strong>{atpResult.check.status}</strong> · promised {atpResult.check.promisedQty} · opening ATP {atpResult.openingAvailableQty}</div>
+                    <div>Promised at: {atpResult.check.promisedAt ?? "—"}{atpResult.check.delayBuckets ? ` (${atpResult.check.delayBuckets} buckets late)` : ""}</div>
+                    {atpResult.check.shortageQty > 0 && <div className="text-amber-300">Shortage: {atpResult.check.shortageQty}</div>}
+                  </div>
+                )}
+                {atpBuckets.length > 0 && (
+                  <div className="space-y-1 pt-1" dir="ltr">
+                    {atpBuckets.map((bucket) => (
+                      <div key={bucket.bucketIndex} className="rounded border b-line-soft p-1.5 text-[11px] tx2 flex justify-between">
+                        <span>{bucket.bucketStart}</span>
+                        <span>demand {bucket.demandQty} · supply {bucket.supplyQty} · ATP <strong>{bucket.availableToPromise}</strong> · cum {bucket.cumulativeAtp}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+
+              <section className="glass-dark rounded-xl p-3 space-y-2">
+                <h4 className="tx1 font-semibold">{tr("تاریخچهٔ تعهدها", "Promise History")}</h4>
+                <div className="space-y-1.5 max-h-[420px] overflow-y-auto">
+                  {atpChecks.map((row) => (
+                    <div key={row.Id} className="rounded border b-line-soft p-2 text-[11px] tx2 flex flex-wrap justify-between gap-2" dir="ltr">
+                      <span>{row.RequestedAt} · qty <strong>{row.RequestedQty}</strong> · {row.Mode}</span>
+                      <span className={row.Result === "unavailable" ? "text-amber-300" : ""}>
+                        {row.Result} · promised {row.PromisedQty}{row.PromisedAt ? ` by ${row.PromisedAt}` : ""}{row.ShortageQty ? ` · short ${row.ShortageQty}` : ""}
+                      </span>
+                    </div>
+                  ))}
+                  {atpChecks.length === 0 && <div className="text-[11px] tx3">{tr("بررسی‌ای ثبت نشده است.", "No checks recorded.")}</div>}
+                </div>
+              </section>
+            </div>
+          )}
+
+          {/* ═══ Splitting & Overlap ═══ */}
+          {planSubTab === "split" && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+              <section className="glass-dark rounded-xl p-3 space-y-2">
+                <h4 className="tx1 font-semibold">{tr("تقسیم لات و هم‌پوشانی عملیات", "Operation Splitting & Overlap")}</h4>
+                <select aria-label="OrderId" className={inputCls} value={splitForm.OrderId} onChange={(e) => { setSplitForm((f) => ({ ...f, OrderId: e.target.value, OperationId: "" })); setSplitView(null); }}>
+                  <option value="">{tr("— انتخاب سفارش —", "— select order —")}</option>
+                  {orders.map((ord) => (
+                    <option key={ord.Id} value={ord.Id}>{ord.OrderNo} · {ord.Status}</option>
+                  ))}
+                </select>
+                <select aria-label="OperationId" className={inputCls} value={splitForm.OperationId} onChange={(e) => setSplitForm((f) => ({ ...f, OperationId: e.target.value }))}>
+                  <option value="">{tr("— انتخاب عملیات —", "— select operation —")}</option>
+                  {(selectedOrder?.Operations ?? []).map((op) => (
+                    <option key={op.Id} value={op.Id}>{op.OperationCode} · seq {op.SequenceNo} · {op.Status}</option>
+                  ))}
+                </select>
+                <div className="grid grid-cols-2 gap-2">
+                  <input type="number" min={1} placeholder="SplitLotCount" className={inputCls} value={splitForm.SplitLotCount} onChange={(e) => setSplitForm((f) => ({ ...f, SplitLotCount: e.target.value }))} />
+                  <input type="number" min={1} placeholder="TransferBatchQty" className={inputCls} value={splitForm.TransferBatchQty} onChange={(e) => setSplitForm((f) => ({ ...f, TransferBatchQty: e.target.value }))} />
+                  <input type="number" min={1} max={99} placeholder="OverlapPct" className={inputCls} value={splitForm.OverlapPct} onChange={(e) => setSplitForm((f) => ({ ...f, OverlapPct: e.target.value }))} />
+                  <label className="flex items-center gap-1 text-[11px] tx2">
+                    <input type="checkbox" checked={splitForm.OverlapAllowed} onChange={(e) => setSplitForm((f) => ({ ...f, OverlapAllowed: e.target.checked }))} />
+                    {tr("هم‌پوشانی مجاز", "Overlap allowed")}
+                  </label>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button className={btnCls} disabled={busy || !splitForm.OrderId || !splitForm.OperationId} onClick={() => void handleLoadSplits()}>
+                    {tr("بارگذاری لات‌ها", "Load Lots")}
+                  </button>
+                  <button className={btnCls} disabled={busy || !splitForm.OrderId || !splitForm.OperationId || !canMfgAccess(mfgUserId, "mfg.split.edit", plantId)} onClick={() => void handleReplaceSplits()}>
+                    {tr("اعمال تقسیم", "Apply Split")}
+                  </button>
+                  <button className={btnCls} disabled={busy || !splitForm.OrderId} onClick={() => void handleLeadTimeAnalysis(splitForm.OrderId)}>
+                    {tr("تحلیل زمان تحویل", "Lead-Time Analysis")}
+                  </button>
+                </div>
+                {splitView?.operation && (
+                  <div className="text-[11px] tx3" dir="ltr">
+                    {splitView.operation.OperationCode} · qty {splitView.operation.PlannedQuantity} · transfer batch {splitView.operation.effectiveTransferBatchQty ?? "—"}
+                    {splitView.operation.SplitLotCount ? ` · split ${splitView.operation.SplitLotCount}` : ""}
+                  </div>
+                )}
+              </section>
+
+              <section className="glass-dark rounded-xl p-3 space-y-2">
+                <h4 className="tx1 font-semibold">{tr("لات‌ها و اثر هم‌پوشانی", "Lots & Overlap Effect")}</h4>
+                <div className="space-y-1.5">
+                  {(splitView?.lots ?? []).map((lot: MfgOperationSplitLot) => (
+                    <div key={lot.Id} className={`rounded border b-line-soft p-2 text-[11px] tx2 flex flex-wrap justify-between gap-2 ${lot.IsTransferBatch ? "toggle-on" : ""}`} dir="ltr">
+                      <span>
+                        Lot {lot.SplitNo} · qty <strong>{lot.Quantity}</strong> · cum {lot.CumulativeQuantity ?? "—"}
+                        {lot.IsTransferBatch ? ` · ${tr("لات انتقال", "transfer batch")}` : ""}
+                      </span>
+                      <span>
+                        {lot.StartedAt ? `${lot.StartedAt} → ${lot.CompletedAt ?? "…"}` : tr("شروع نشده", "not started")}
+                        {canMfgAccess(mfgUserId, "mfg.split.edit", plantId) && (
+                          <button className={`${btnCls} ms-2`} disabled={busy} onClick={() => void handleDeleteSplit(lot.Id)}>{tr("حذف", "Delete")}</button>
+                        )}
+                      </span>
+                    </div>
+                  ))}
+                  {(!splitView?.lots || splitView.lots.length === 0) && <div className="text-[11px] tx3">{tr("لاتی ثبت نشده است.", "No split lots.")}</div>}
+                </div>
+                {leadTime?.analysis && (
+                  <div className="rounded border b-line-soft p-2 text-[11px] tx2 space-y-1 pt-2" dir="ltr">
+                    <div className="tx1 font-semibold">{tr("تحلیل زمان تحویل سفارش", "Order Lead-Time Analysis")} · {leadTime.order.OrderNo}</div>
+                    <div>Operations: {leadTime.operationCount} (scheduled {leadTime.scheduledOperationCount})</div>
+                    <div>Baseline capacity: {leadTime.analysis.baselineCapacityMinutes ?? "—"} min · overlapped {leadTime.analysis.overlappedCapacityMinutes ?? "—"} min</div>
+                    <div>Baseline lead time: {leadTime.analysis.baselineLeadTimeMinutes ?? "—"} min · overlapped {leadTime.analysis.overlappedLeadTimeMinutes ?? "—"} min</div>
+                    <div>Saving: <strong>{leadTime.analysis.savedLeadTimeMinutes ?? 0}</strong> min{leadTime.analysis.scheduledSpanMinutes != null ? ` · measured span ${leadTime.analysis.scheduledSpanMinutes} min` : ""}</div>
+                  </div>
+                )}
+              </section>
+            </div>
+          )}
+
+          {/* ═══ ۱۱.۳ سفارش برنامه‌ریزی‌شده ═══ */}
+          {planSubTab === "planned" && (
+            <div className="space-y-3">
+              <section className="glass-dark rounded-xl p-3 space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h4 className="tx1 font-semibold">{tr("سفارش‌های برنامه‌ریزی‌شدهٔ MRP", "MRP Planned Orders")}</h4>
+                  <button className={btnCls} disabled={busy} onClick={() => void loadPlannedOrders()}>
+                    {tr("بارگذاری مجدد", "Reload")}
+                  </button>
+                </div>
+                <p className="text-[11px] tx3">
+                  {tr(
+                    "خروجی MRP پیشنهاد است نه تعهد: بازبینی و تأیید کنید، سپس به سفارش تولید تبدیل کنید. آزادسازی همچنان گیت جداست.",
+                    "MRP output is a suggestion, not a commitment: review and approve, then convert to a production order. Release remains a separate gate.",
+                  )}
+                </p>
+                <div className="space-y-1.5 max-h-[460px] overflow-y-auto">
+                  {plannedOrders.map((row) => (
+                    <div key={row.Id} className="rounded border b-line-soft p-2 text-[11px] tx2 flex flex-wrap items-center justify-between gap-2" dir="ltr">
+                      <div className="space-y-0.5">
+                        <div><strong>{row.PlannedOrderNo}</strong> · {row.Source} · LLC {row.LowLevelCode}</div>
+                        <div>
+                          qty <strong>{row.Quantity}</strong>{row.Quantity !== row.OriginalQuantity ? ` (was ${row.OriginalQuantity})` : ""} · {row.Uom}
+                          {" · "}lead {row.CumulativeLeadTimeDays}d · {row.LotSizingRule}
+                        </div>
+                        <div>release {row.PlannedReleaseAt?.slice(0, 10) ?? "—"} → due {row.PlannedDueAt?.slice(0, 10) ?? "—"}</div>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className={`px-1.5 py-0.5 rounded border b-line-soft ${row.Status === "converted" ? "toggle-on" : row.Status === "rejected" ? "text-amber-300" : ""}`}>
+                          {row.Status}
+                        </span>
+                        {row.Status === "proposed" && (
+                          <>
+                            <button
+                              className={btnCls}
+                              disabled={busy || !canMfgAccess(mfgUserId, "mfg.plannedorder.approve", plantId)}
+                              onClick={() => void handleTransitionPlannedOrder(row, "approve")}
+                            >
+                              {tr("تأیید", "Approve")}
+                            </button>
+                            <button
+                              className={btnCls}
+                              disabled={busy || !canMfgAccess(mfgUserId, "mfg.plannedorder.approve", plantId)}
+                              onClick={() => void handleTransitionPlannedOrder(row, "reject")}
+                            >
+                              {tr("رد", "Reject")}
+                            </button>
+                          </>
+                        )}
+                        {row.Status === "approved" && (
+                          <button
+                            className={btnCls}
+                            disabled={busy || !canMfgAccess(mfgUserId, "mfg.plannedorder.convert", plantId)}
+                            onClick={() => void handleConvertPlannedOrder(row)}
+                          >
+                            {tr("تبدیل به سفارش تولید", "Convert to production order")}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                  {plannedOrders.length === 0 && (
+                    <div className="text-[11px] tx3">{tr("سفارش برنامه‌ریزی‌شده‌ای نیست؛ ابتدا MRP را اجرا کنید.", "No planned orders; run MRP first.")}</div>
+                  )}
+                </div>
+              </section>
+            </div>
+          )}
+
+          {/* ═══ ۱۱.۷ CRP ═══ */}
+          {planSubTab === "crp" && (
+            <div className="space-y-3">
+              <section className="glass-dark rounded-xl p-3 space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h4 className="tx1 font-semibold">{tr("بار در برابر ظرفیت مراکز کاری", "Work Center Load vs Capacity")}</h4>
+                  <button
+                    className={btnCls}
+                    disabled={busy || !canMfgAccess(mfgUserId, "mfg.crp.view", plantId)}
+                    onClick={() => void handleCalculateCrp()}
+                  >
+                    {tr("محاسبهٔ CRP", "Calculate CRP")}
+                  </button>
+                </div>
+                {crpReport && (
+                  <>
+                    <div className="text-[11px] tx2" dir="ltr">
+                      {tr("افق:", "Horizon:")} {crpReport.horizonStart} → {crpReport.horizonEnd} ·{" "}
+                      {tr("بار کل:", "total load:")} {crpReport.totals.loadMinutes} / {crpReport.totals.capacityMinutes} min ·{" "}
+                      {tr("بهره‌وری:", "utilization:")} {crpReport.totals.utilizationPct}%
+                    </div>
+                    <div className="space-y-2 max-h-[420px] overflow-y-auto">
+                      {crpReport.workCenters.map((center) => (
+                        <div key={center.workCenterId} className="rounded border b-line-soft p-2 space-y-1">
+                          <div className="text-[11px] tx1 font-semibold" dir="ltr">
+                            {center.code ?? center.workCenterId} · {center.utilizationPct}% ·{" "}
+                            {tr("پربار:", "overload:")} {center.overloadBucketCount} · {tr("کم‌بار:", "underload:")} {center.underloadBucketCount}
+                          </div>
+                          {/* نمودار میله‌ای بار/ظرفیت: سطل‌های پربار قرمز و کم‌بار کهربایی. */}
+                          <div className="flex items-end gap-1 h-16" dir="ltr">
+                            {(center.buckets ?? []).map((bucket) => {
+                              const pct = bucket.capacityMinutes > 0 ? Math.min(160, (bucket.loadMinutes / bucket.capacityMinutes) * 100) : 0;
+                              const tone = bucket.status === "overload" ? "bg-rose-400" : bucket.status === "underload" ? "bg-amber-300" : "bg-emerald-300";
+                              return (
+                                <div key={bucket.bucketIndex} className="flex-1 flex flex-col items-center gap-0.5" title={`${bucket.bucketStart}: ${bucket.loadMinutes}/${bucket.capacityMinutes} min`}>
+                                  <div className="w-full rounded-t" style={{ height: `${Math.max(2, pct * 0.35)}px` }}>
+                                    <div className={`w-full h-full rounded-t ${tone} opacity-80`} />
+                                  </div>
+                                  <span className="text-[9px] tx3">{bucket.bucketStart.slice(5)}</span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    {crpReport.levelingSuggestions.length > 0 && (
+                      <div className="space-y-1 pt-1">
+                        <h5 className="tx1 text-[11px] font-semibold">{tr("پیشنهاد تسطیح بار", "Load Leveling Suggestions")}</h5>
+                        {crpReport.levelingSuggestions.map((suggestion, index) => (
+                          <div key={index} className="rounded border b-line-soft p-1.5 text-[11px] tx2" dir="ltr">
+                            {JSON.stringify(suggestion)}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+                {!crpReport && <div className="text-[11px] tx3">{tr("هنوز محاسبه‌ای انجام نشده است.", "No calculation yet.")}</div>}
+              </section>
+            </div>
+          )}
+
+          {/* ═══ ۱۱.۵/۱۱.۶ Lead Time Offset و Pegging ═══ */}
+          {planSubTab === "pegging" && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+              <section className="glass-dark rounded-xl p-3 space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h4 className="tx1 font-semibold">{tr("زمان تحویل تجمیعی و Offset", "Cumulative Lead Time & Offset")}</h4>
+                  <button
+                    className={btnCls}
+                    disabled={busy || !canMfgAccess(mfgUserId, "mfg.mrp.view", plantId)}
+                    onClick={() => void handleLoadLeadTimeAndPegging()}
+                  >
+                    {tr("محاسبه", "Calculate")}
+                  </button>
+                </div>
+                {leadTimeOffset && (
+                  <>
+                    <div className="text-[11px] tx2" dir="ltr">
+                      {tr("محصول نهایی:", "Finished goods:")} <strong>{leadTimeOffset.finishedGoodsLeadTimeDays}</strong> {tr("روز", "days")} ·{" "}
+                      {tr("بیشترین سطح BOM:", "max BOM level:")} {leadTimeOffset.maxLowLevelCode}
+                    </div>
+                    <div className="space-y-1 max-h-[420px] overflow-y-auto">
+                      {leadTimeOffset.parts.map((row) => (
+                        <div key={row.partId} className="rounded border b-line-soft p-1.5 text-[11px] tx2 flex flex-wrap justify-between gap-2" dir="ltr">
+                          <span>{row.partNo ?? row.partId} · L{row.lowLevelCode}</span>
+                          <span>own {row.ownLeadTimeDays}d · cum <strong>{row.cumulativeLeadTimeDays}d</strong> · avail offset {row.availabilityOffsetDays}d</span>
+                        </div>
+                      ))}
+                      {leadTimeOffset.parts.length === 0 && <div className="text-[11px] tx3">{tr("BOM آزادشده‌ای نیست.", "No released BOM.")}</div>}
+                    </div>
+                  </>
+                )}
+              </section>
+
+              <section className="glass-dark rounded-xl p-3 space-y-2">
+                <h4 className="tx1 font-semibold">{tr("Pegging چندسطحی", "Multi-level Pegging")}</h4>
+                {peggingReport && (
+                  <>
+                    <div className="text-[11px] tx2" dir="ltr">
+                      {tr("نیازها:", "Requirements:")} {peggingReport.requirementCount} · {tr("ریشه‌ها:", "roots:")} {peggingReport.rootSupplyRefs.length}
+                    </div>
+                    <div className="space-y-1 max-h-[420px] overflow-y-auto">
+                      {peggingReport.items.map((item) => (
+                        <div key={item.supplyRef} className="rounded border b-line-soft p-1.5 text-[11px] tx2 space-y-0.5" dir="ltr">
+                          <div><strong>{item.partNo ?? item.partId}</strong> · {item.paths.length} {tr("مسیر", "path(s)")}</div>
+                          {item.paths.slice(0, 3).map((path, index) => (
+                            <div key={index} className="tx3">
+                              {path.map((step) => step.partNo ?? step.partId).join(" ← ")}
+                            </div>
+                          ))}
+                        </div>
+                      ))}
+                      {peggingReport.items.length === 0 && <div className="text-[11px] tx3">{tr("نیازی برای pegging نیست.", "Nothing to peg.")}</div>}
+                    </div>
+                  </>
+                )}
+                {!peggingReport && <div className="text-[11px] tx3">{tr("هنوز محاسبه‌ای انجام نشده است.", "No calculation yet.")}</div>}
+              </section>
+            </div>
+          )}
+
+          {/* ═══ ۱۱.۹ نسخهٔ تولید ═══ */}
+          {planSubTab === "version" && (
+            <div className="space-y-3">
+              <section className="glass-dark rounded-xl p-3 space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h4 className="tx1 font-semibold">{tr("نسخه‌های تولید (BOM/Routing چندگانه)", "Production Versions (multiple BOM/Routing)")}</h4>
+                  <div className="flex items-center gap-1.5">
+                    <select
+                      aria-label="PartId"
+                      className={inputCls}
+                      value={versionForm.PartId}
+                      onChange={(e) => setVersionForm((f) => ({ ...f, PartId: e.target.value }))}
+                    >
+                      <option value="">{tr("— انتخاب قطعه —", "— select part —")}</option>
+                      {parts.map((part) => (
+                        <option key={part.Id} value={part.Id}>{part.PartNo} · {part.NameFa}</option>
+                      ))}
+                    </select>
+                    <button
+                      className={btnCls}
+                      disabled={busy || !versionForm.PartId || !canMfgAccess(mfgUserId, "mfg.version.edit", plantId)}
+                      onClick={() => void handleCreateProductionVersion(versionForm.PartId)}
+                    >
+                      {tr("نسخهٔ تازه", "New version")}
+                    </button>
+                    <button className={btnCls} disabled={busy} onClick={() => void loadProductionVersions()}>
+                      {tr("بارگذاری مجدد", "Reload")}
+                    </button>
+                  </div>
+                </div>
+                <div className="space-y-1.5 max-h-[420px] overflow-y-auto">
+                  {productionVersions.map((row) => (
+                    <div key={row.Id} className="rounded border b-line-soft p-2 text-[11px] tx2 flex flex-wrap items-center justify-between gap-2" dir="ltr">
+                      <span>
+                        <strong>{row.VersionCode}</strong> · BOM {row.BomRevision} · Routing {row.RoutingRevision}
+                        {row.WorkCenterId ? ` · line ${row.WorkCenterId.slice(-6)}` : ""}
+                      </span>
+                      <span className="flex items-center gap-1.5">
+                        {row.IsDefault && <span className="px-1.5 py-0.5 rounded border b-line-soft toggle-on">{tr("پیش‌فرض", "default")}</span>}
+                        {!row.IsActive && <span className="px-1.5 py-0.5 rounded border b-line-soft text-amber-300">{tr("غیرفعال", "inactive")}</span>}
+                        {row.Priority !== null && <span className="tx3">priority {row.Priority}</span>}
+                      </span>
+                    </div>
+                  ))}
+                  {productionVersions.length === 0 && (
+                    <div className="text-[11px] tx3">{tr("نسخه‌ای تعریف نشده است.", "No versions defined.")}</div>
+                  )}
+                </div>
+              </section>
+            </div>
+          )}
+
+          {/* ═══ ۱۱.۱۱ انطباق ISA-95 / MESA-11 ═══ */}
+          {planSubTab === "conformance" && (
+            <div className="space-y-3">
+              <section className="glass-dark rounded-xl p-3 space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h4 className="tx1 font-semibold">{tr("انطباق ISA-95 و یازده عملکرد MESA", "ISA-95 & MESA-11 Conformance")}</h4>
+                  <button
+                    className={btnCls}
+                    disabled={busy || !canMfgAccess(mfgUserId, "mfg.conformance.view", plantId)}
+                    onClick={() => void loadConformance()}
+                  >
+                    {tr("بررسی انطباق", "Check conformance")}
+                  </button>
+                </div>
+                {conformance && (
+                  <>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-[11px] tx2">
+                      <div className="rounded border b-line-soft p-2 space-y-1">
+                        <div className="tx1 font-semibold">{tr("سطح ۳ — این MES", "Level 3 — this MES")}</div>
+                        <div dir="ltr">{conformance.isa95.level3.roleEn}</div>
+                        <div dir="ltr">{tr("مسیرهای پیاده‌شده:", "implemented routes:")} <strong>{conformance.isa95.level3.implementedRouteCount}</strong></div>
+                      </div>
+                      <div className="rounded border b-line-soft p-2 space-y-1">
+                        <div className="tx1 font-semibold">{tr("سطح ۴ — ERP", "Level 4 — ERP")}</div>
+                        <div dir="ltr">{conformance.isa95.level4.roleEn}</div>
+                        <div dir="ltr">
+                          {tr("کلید خارجی به سطح ۴:", "foreign keys to level 4:")} <strong>{conformance.isa95.level4.foreignKeysToLevel4}</strong>
+                        </div>
+                        <div className="tx3">{conformance.isa95.boundary}</div>
+                      </div>
+                    </div>
+                    <div className="text-[11px] tx2" dir="ltr">
+                      {tr("عملکردهای MESA:", "MESA functions:")} <strong>{conformance.mesa11.fullyCovered}/{conformance.mesa11.functionCount}</strong> ·{" "}
+                      {tr("میانگین پوشش:", "average coverage:")} {conformance.mesa11.averageCoveragePct}%
+                    </div>
+                    <div className="space-y-1 max-h-[420px] overflow-y-auto">
+                      {conformance.mesa11.functions.map((fn) => (
+                        <div key={fn.id} className="rounded border b-line-soft p-1.5 text-[11px] tx2 flex flex-wrap justify-between gap-2" dir="ltr">
+                          <span>{fn.id}. {fn.titleEn} <span className="tx3">/ {fn.titleFa}</span></span>
+                          <span className={fn.coveragePct === 100 ? "toggle-on" : "text-amber-300"}>
+                            {fn.coveredRouteCount}/{fn.totalRouteCount} · {fn.coveragePct}%
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+                {!conformance && <div className="text-[11px] tx3">{tr("هنوز بررسی نشده است.", "Not checked yet.")}</div>}
+              </section>
+            </div>
+          )}
+        </div>
+      )}
+
       {!loading && tab === "cost" && (
         <div className="space-y-3">
           <section className="glass-dark rounded-xl p-3 flex flex-wrap items-center justify-between gap-2">

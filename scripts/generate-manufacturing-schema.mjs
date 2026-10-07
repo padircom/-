@@ -9,9 +9,10 @@ import { fileURLToPath } from "node:url";
 import { indexDdl, tableDdl, tablesOfModule, validateSchema } from "../server/sqlLogic.js";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const EXPECTED_MFG_TABLES = 35;
 const tables = tablesOfModule("mfg");
-if (tables.length !== 26) {
-  throw new Error(`اسکیما MFG باید دقیقاً ۲۶ جدول داشته باشد؛ تعداد فعلی: ${tables.length}`);
+if (tables.length !== EXPECTED_MFG_TABLES) {
+  throw new Error(`اسکیما MFG باید دقیقاً ${EXPECTED_MFG_TABLES} جدول داشته باشد؛ تعداد فعلی: ${tables.length}`);
 }
 const issues = validateSchema();
 if (issues.length) throw new Error(`اسکیما نامعتبر:\n${issues.join("\n")}`);

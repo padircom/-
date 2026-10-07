@@ -848,6 +848,222 @@ async function seedManufacturing(workCenters) {
       body: { NoteFa: "رسیدگی نمونهٔ کارخانهٔ نمایشی" },
     }));
   }
+
+  await seedMfgPlanning(parts, shortageOrder ?? closeable);
+}
+
+/**
+ * فاز ۵ — برنامه‌ریزی پیشرفته: تقاضا، اندازه‌گذاری لات، MPS، ATP و تقسیم لات.
+ * افق برنامه از دوشنبهٔ ۲۰۲۶-۱۰-۰۵ شروع می‌شود تا با پنجرهٔ نمایشی داشبورد
+ * و با مقدار پیش‌فرض تب «برنامه‌ریزی» در رابط کاربری هم‌تراز باشد.
+ */
+async function seedMfgPlanning(parts, splitOrder) {
+  console.log("\n── تولید: برنامه‌ریزی پیشرفته (MPS، لات، ATP، تقسیم) ──");
+  if (!parts?.FG) {
+    console.log("  ⏭  قطعهٔ محصول نهایی نیست؛ بخش برنامه‌ریزی رد شد");
+    return;
+  }
+  const HORIZON_START = "2026-10-05";
+  /* MPS افق را با TimeBucket می‌گیرد؛ ارزیابی لات و ATP با BucketUnit.
+   * این دو نام عمداً متفاوت‌اند چون در قرارداد REST جدا تعریف شده‌اند. */
+  const HORIZON = { TimeBucket: "week", BucketCount: 4, HorizonStart: HORIZON_START };
+  const BUCKETS = { BucketUnit: "week", BucketCount: 4, HorizonStart: HORIZON_START };
+
+  /* تقاضای ترکیبی: سفارش قطعی، پیش‌بینی (با درصد اطمینان) و قرارداد. */
+  const demands = [
+    { DemandType: "sales-order", DemandRef: "SO-DEMO-201", RequiredAt: "2026-10-06", Quantity: 6 },
+    { DemandType: "sales-order", DemandRef: "SO-DEMO-202", RequiredAt: "2026-10-13", Quantity: 8 },
+    { DemandType: "forecast", DemandRef: "FC-DEMO-Q4-01", RequiredAt: "2026-10-20", Quantity: 10, ConfidencePct: 70 },
+    { DemandType: "contract", DemandRef: "CT-DEMO-01", RequiredAt: "2026-10-27", Quantity: 4 },
+  ];
+  for (const demand of demands) {
+    await mfgStep(`تقاضای ${demand.DemandRef}`, () => mfg("/demand-forecasts", {
+      user: MFG_ROLES.plan,
+      method: "POST",
+      body: { ...demand, PartId: parts.FG.Id },
+    }));
+  }
+
+  /* EOQ = √(2DS/H) = √(2·1200·4٬500٬000 / 9٬600٬000) ≈ ۳۴ — هم‌اندازهٔ یک لات گیربکس. */
+  await mfgStep("سیاست اندازه‌گذاری EOQ گیربکس", () => mfg("/lot-sizing-policies", {
+    user: MFG_ROLES.plan,
+    method: "POST",
+    body: {
+      PartId: parts.FG.Id,
+      PolicyCode: "LP-FG-EOQ-01",
+      RuleCode: "EOQ",
+      OrderingCost: 4_500_000,
+      HoldingCostPerUnitPerYear: 9_600_000,
+      AnnualDemandQty: 1_200,
+      PeriodDays: 30,
+      EffectiveFrom: HORIZON_START,
+      NoteFa: "سیاست نمونهٔ کارخانهٔ نمایشی برای گیربکس صنعتی",
+    },
+  }));
+
+  await mfgStep("ارزیابی خشک قاعدهٔ لات", () => mfg("/lot-sizing/evaluate", {
+    user: MFG_ROLES.plan,
+    method: "POST",
+    body: { PartId: parts.FG.Id, ...BUCKETS },
+  }));
+
+  const mps = await mfgStep("اجرای MPS هفتگی", () => mfg("/mps/runs", {
+    user: MFG_ROLES.plan,
+    method: "POST",
+    body: {
+      ...HORIZON,
+      PartIds: [parts.FG.Id],
+      DemandTimeFenceBuckets: 1,
+      /* حصار قطعی سه سطل است تا سفارش برنامه‌ریزی‌شدهٔ سطل سوم (EOQ ۳۴ عددی)
+       * درون حصار بیفتد و گام قطعی‌کردن واقعاً چیزی برای قطعی‌کردن داشته باشد. */
+      FirmPlannedTimeFenceBuckets: 3,
+      IncludeOpenOrdersAsReceipts: true,
+      ConsumeForecast: true,
+    },
+  }));
+
+  if (mps?.run) {
+    await mfgStep("قطعی‌کردن سطرهای درون حصار برنامه", () => mfg(`/mps/runs/${mps.run.Id}/firm`, {
+      user: MFG_ROLES.plan,
+      method: "POST",
+      match: mps.run.RowVersion,
+      body: {},
+    }));
+  }
+
+  await mfgStep("بررسی ATP سفارش مشتری", () => mfg("/atp/checks", {
+    user: MFG_ROLES.plan,
+    method: "POST",
+    body: {
+      PartId: parts.FG.Id,
+      RequestedQty: 6,
+      RequestedAt: "2026-10-08",
+      CustomerRef: "CUST-DEMO-01",
+      Mode: "cumulative",
+      ...BUCKETS,
+    },
+  }));
+
+  if (splitOrder?.Id) {
+    const detail = await mfgStep("جزئیات سفارش برای تقسیم لات", () => mfg(`/orders/${splitOrder.Id}`, { user: MFG_ROLES.plan }));
+    /* گیت تقسیم فقط عملیات pending/queued/ready را می‌پذیرد؛ OP-10 در گام‌های
+     * پیشین اجرا و تمام شده است، پس نخستین عملیاتِ هنوز شروع‌نشده انتخاب می‌شود. */
+    const target = (detail?.Operations ?? []).find((op) => ["pending", "queued", "ready"].includes(op.Status));
+    if (target) {
+      await mfgStep(`تقسیم عملیات ${target.OperationCode} به دو لات هم‌پوشان`, () => mfg(
+        `/orders/${splitOrder.Id}/operations/${target.Id}/splits`,
+        {
+          user: MFG_ROLES.plan,
+          method: "POST",
+          body: {
+            SplitLotCount: 2,
+            OverlapAllowed: true,
+            OverlapPct: 50,
+            NoteFa: "تقسیم برای هم‌پوشانی با عملیات مونتاژ",
+          },
+        },
+      ));
+    }
+    await mfgStep("تحلیل زمان تحویل با هم‌پوشانی", () => mfg(`/orders/${splitOrder.Id}/lead-time-analysis`, { user: MFG_ROLES.plan }));
+  }
+
+  /* ── فاز ۵ بخش ۱۱: نسخهٔ تولید، تأیید MPS، سفارش برنامه‌ریزی‌شده، CRP، انطباق ── */
+  console.log("\n── تولید: بخش ۱۱ (نسخهٔ تولید، سفارش برنامه‌ریزی‌شده، CRP، ISA-95) ──");
+
+  const version = await mfgStep("تعریف نسخهٔ تولید برای گیربکس", async () => {
+    try {
+      return await mfg("/production-versions", {
+        user: MFG_ROLES.eng,
+        method: "POST",
+        idem: "mfg-prod-version-fg-a",
+        body: {
+          PartId: parts.FG.Id,
+          VersionCode: "V1-LINE-A",
+          BomRevision: "A",
+          RoutingRevision: "A",
+          Priority: 1,
+          IsDefault: true,
+          NoteFa: "نسخهٔ خط مونتاژ A",
+        },
+      });
+    } catch {
+      const list = await mfg(`/production-versions?partId=${encodeURIComponent(parts.FG.Id)}`, { user: MFG_ROLES.eng });
+      return (list?.items ?? [])[0] ?? null;
+    }
+  });
+  if (version?.Id) {
+    await mfgStep("resolve نسخهٔ فعال قطعه", () => mfg(`/parts/${parts.FG.Id}/production-version`, { user: MFG_ROLES.plan }));
+  }
+
+  /* تأیید دستی MPS باید پیش از اتکای MRP به آن انجام شود. RowVersion تازه از
+   * خود رکورد خوانده می‌شود چون گام قطعی‌کردن آن را بالا برده است. */
+  if (mps?.run?.Id) {
+    const freshRun = await mfgStep("خواندن اجرای MPS برای تأیید", () => mfg(`/mps/runs/${mps.run.Id}`, { user: MFG_ROLES.manager }));
+    if (freshRun?.RowVersion) {
+      await mfgStep("تأیید MPS توسط مدیر تولید", () => mfg(`/mps/runs/${mps.run.Id}/approve`, {
+        user: MFG_ROLES.manager,
+        method: "POST",
+        match: freshRun.RowVersion,
+        body: { NoteFa: "برنامهٔ اصلی تولید تأیید شد؛ MRP مجاز به اجراست" },
+      }));
+    }
+  }
+
+  /* اجرای MRP حالا سفارش برنامه‌ریزی‌شده، lead-time offset و pegging هم می‌دهد. */
+  /* افق MRP باید سررسیدِ خودِ سفارشِ هدف را بپوشاند، وگرنه MRP هیچ نیازمندی
+   * نمی‌بیند و صفر سفارش برنامه‌ریزی‌شده می‌سازد — گردش ۱۱.۳ بی‌صدا رد می‌شود.
+   * مقدار ثابت قبلی (۲۰۲۶-۱۰-۳۰) یک روز پیش از سررسید MO-DEMO-0002 بود. */
+  const mrpThroughAt = splitOrder?.DueAt
+    ? new Date(Date.parse(splitOrder.DueAt) + 14 * 86_400_000).toISOString()
+    : "2026-12-31T23:59:59.000Z";
+  const mrp = await mfgStep("اجرای MRP با ثبت نیازمندی‌ها و پیشنهاد سفارش", () => {
+    const target = splitOrder?.Id;
+    return mfg("/mrp/calculate", {
+      user: MFG_ROLES.material,
+      method: "POST",
+      ...(target ? { body: { OrderIds: [target], ThroughDate: mrpThroughAt } } : {}),
+    });
+  });
+  if (mrp?.plannedOrders?.length) {
+    console.log(`  ✓ ${mrp.plannedOrders.length} سفارش برنامه‌ریزی‌شده پیشنهاد شد`);
+  }
+
+  /* گردش کامل ۱۱.۳ روی یک قطعهٔ ساختنی: تأیید سپس تبدیل به سفارش تولید.
+   * قطعهٔ خریدنی عمداً انتخاب نمی‌شود — تبدیلش با MFG_PLANNED_ORDER_NOT_MAKE رد می‌شود. */
+  const plannedList = await mfgStep("فهرست سفارش‌های برنامه‌ریزی‌شده", () => mfg("/planned-orders?limit=50", { user: MFG_ROLES.plan }));
+  const candidate = (plannedList?.items ?? []).find((row) => row.Status === "proposed" && row.PartId === parts.SA?.Id)
+    ?? (plannedList?.items ?? []).find((row) => row.Status === "proposed" && [parts.FG?.Id, parts.SA?.Id].includes(row.PartId));
+  if (candidate) {
+    const approved = await mfgStep(`تأیید سفارش برنامه‌ریزی‌شدهٔ ${candidate.PlannedOrderNo}`, () => mfg(
+      `/planned-orders/${candidate.Id}/approve`,
+      { user: MFG_ROLES.plan, method: "POST", match: candidate.RowVersion, body: { NoteFa: "مقدار لات تأیید شد" } },
+    ));
+    if (approved?.RowVersion) {
+      await mfgStep(`تبدیل ${candidate.PlannedOrderNo} به سفارش تولید`, () => mfg(
+        `/planned-orders/${candidate.Id}/convert`,
+        {
+          user: MFG_ROLES.plan,
+          method: "POST",
+          match: approved.RowVersion,
+          idem: `mfg-convert-${candidate.PlannedOrderNo}`,
+          body: { OrderNo: `MO-FROM-MRP-${candidate.PlannedOrderNo}`, NoteFa: "تبدیل‌شده از پیشنهاد MRP" },
+        },
+      ));
+    }
+  } else {
+    console.log("  ⏭  سفارش برنامه‌ریزی‌شدهٔ ساختنیِ تأییدپذیری نبود؛ گردش تبدیل رد شد");
+  }
+
+  await mfgStep("محاسبهٔ CRP (بار در برابر ظرفیت)", () => mfg("/crp/calculate", {
+    user: MFG_ROLES.plan,
+    method: "POST",
+    body: { Bucket: "week", BucketCount: 4, HorizonStart: HORIZON_START, OverloadPct: 100, UnderloadPct: 60 },
+  }));
+
+  await mfgStep("گزارش Lead Time Offset تجمیعی", () => mfg("/mrp/lead-time-offset", { user: MFG_ROLES.plan }));
+  await mfgStep("گزارش Pegging چندسطحی", () => mfg("/mrp/pegging?level=multi", { user: MFG_ROLES.plan }));
+
+  await mfgStep("بررسی انطباق ISA-95 / MESA-11", () => mfg("/conformance/isa95", { user: MFG_ROLES.manager }));
 }
 
 async function seedMfgAndReport() {
