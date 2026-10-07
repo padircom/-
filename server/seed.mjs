@@ -869,9 +869,16 @@ async function seedMfgPlanning(parts, splitOrder) {
   const HORIZON = { TimeBucket: "week", BucketCount: 4, HorizonStart: HORIZON_START };
   const BUCKETS = { BucketUnit: "week", BucketCount: 4, HorizonStart: HORIZON_START };
 
-  /* تقاضای ترکیبی: سفارش قطعی، پیش‌بینی (با درصد اطمینان) و قرارداد. */
+  /* تقاضای ترکیبی: سفارش قطعی، پیش‌بینی (با درصد اطمینان) و قرارداد.
+   *
+   * FC-DEMO-Q4-00 عمداً در همان سطلِ SO-DEMO-201 (هفتهٔ ۲۰۲۶-۱۰-۰۵) نشسته است تا
+   * منطق مصرف پیش‌بینی (۱۱.۲) روی دادهٔ نمایشی فعال شود: شش عدد از پیش‌بینیِ ده‌تایی
+   * با سفارش قطعی مصرف می‌شود و تقاضای ناخالص ۱۰ می‌ماند، نه ۱۶. بی‌این ردیف،
+   * پیش‌بینی و سفارش قطعی هرگز هم‌سطل نمی‌شدند و ConsumedForecastQty در همهٔ
+   * سطل‌ها صفر می‌ماند — یعنی این قاعده در رابط کاربری هرگز دیده نمی‌شد. */
   const demands = [
     { DemandType: "sales-order", DemandRef: "SO-DEMO-201", RequiredAt: "2026-10-06", Quantity: 6 },
+    { DemandType: "forecast", DemandRef: "FC-DEMO-Q4-00", RequiredAt: "2026-10-07", Quantity: 10, ConfidencePct: 60 },
     { DemandType: "sales-order", DemandRef: "SO-DEMO-202", RequiredAt: "2026-10-13", Quantity: 8 },
     { DemandType: "forecast", DemandRef: "FC-DEMO-Q4-01", RequiredAt: "2026-10-20", Quantity: 10, ConfidencePct: 70 },
     { DemandType: "contract", DemandRef: "CT-DEMO-01", RequiredAt: "2026-10-27", Quantity: 4 },
