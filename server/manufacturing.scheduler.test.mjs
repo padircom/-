@@ -312,3 +312,129 @@ test("باززمان‌بندی firm blockها را حفظ می‌کند و عم
     selectedOperationIds: ["op-missing"],
   }), (error) => error instanceof SchedulePlanningError && error.code === "MFG_OPERATION_NOT_FOUND");
 });
+
+/* ═══════════════════════ فاز ۵ — تقسیم لات و هم‌پوشانی ═══════════════════════
+ * هر دو عملیات روی مرکز کاری/منبع جداگانه هستند تا ظرفیت محدودِ یک منبع،
+ * اثر هم‌پوشانی را پنهان نکند. */
+
+function dualInput({ orders, operations, direction = "forward", capacityMode = "finite", dispatchRule = "EDD", fromMs = WINDOW_FROM, toMs = WINDOW_TO }) {
+  const workCenters = [
+    { Id: "wc-1", PlantId: PLANT, Code: "WC-1", Status: "active", TimeZoneId: "UTC", EfficiencyPct: 100 },
+    { Id: "wc-2", PlantId: PLANT, Code: "WC-2", Status: "active", TimeZoneId: "UTC", EfficiencyPct: 100 },
+  ];
+  const resources = [
+    { Id: "res-1", PlantId: PLANT, WorkCenterId: "wc-1", ResourceCode: "RES-1", IsActive: true, CapacityUnits: 1, AvailabilityPct: 100 },
+    { Id: "res-2", PlantId: PLANT, WorkCenterId: "wc-2", ResourceCode: "RES-2", IsActive: true, CapacityUnits: 1, AvailabilityPct: 100 },
+  ];
+  const calendars = [
+    calendar(),
+    { ...calendar(), Id: "cal-2", WorkCenterId: "wc-2", RuleKey: "mon-b" },
+  ];
+  return {
+    plantId: PLANT, direction, capacityMode, dispatchRule, fromMs, toMs, scheduleVersion: 1,
+    orders, operations, workCenters, resources, calendars,
+    existingSchedules: [], executions: [], downtime: [],
+    selectedOrderIds: new Set(orders.map((item) => item.Id)),
+  };
+}
+
+const tenUnitsAt20 = { PlannedQuantity: 10, PlannedSetupMinutes: 0, PlannedRunMinutesPerUnit: 20, PlannedCapacityMinutes: 200 };
+
+test("فاز۵: هم‌پوشانی، عملیات بعدی را از آماده‌شدن لات انتقال شروع می‌کند", () => {
+  const orders = [order("o-1")];
+  const makeOperations = (overlap) => [
+    operation("op-1", "o-1", 1, 200, null, {
+      WorkCenterId: "wc-1", ...tenUnitsAt20,
+      OverlapAllowed: overlap, TransferBatchQty: overlap ? 5 : null,
+    }),
+    operation("op-2", "o-1", 2, 200, "op-1", { WorkCenterId: "wc-2", ...tenUnitsAt20 }),
+  ];
+
+  const baseline = planManufacturingSchedule(dualInput({ orders, operations: makeOperations(false) }));
+  const baselineSecond = baseline.assignments.find((item) => item.ProductionOrderOperationId === "op-2");
+  assert.equal(baselineSecond.PlannedStartAt, "2026-10-05T11:20:00.000Z", "بدون هم‌پوشانی از پایان کامل عملیات قبلی");
+  assert.equal(baselineSecond.PlannedEndAt, "2026-10-05T14:40:00.000Z");
+
+  const overlapped = planManufacturingSchedule(dualInput({ orders, operations: makeOperations(true) }));
+  const first = overlapped.assignments.find((item) => item.ProductionOrderOperationId === "op-1");
+  const second = overlapped.assignments.find((item) => item.ProductionOrderOperationId === "op-2");
+  /* لات انتقال ۵ عدد × ۲۰ دقیقه = ۱۰۰ دقیقه پس از شروع عملیات اول آماده است. */
+  assert.equal(first.TransferReadyMinutes, 100);
+  assert.equal(first.TransferReadyAt, "2026-10-05T09:40:00.000Z");
+  assert.equal(first.PlannedEndAt, "2026-10-05T11:20:00.000Z", "انتهای عملیات اول تغییر نمی‌کند");
+  assert.equal(second.PlannedStartAt, "2026-10-05T09:40:00.000Z", "عملیات دوم ۱۰۰ دقیقه زودتر شروع می‌شود");
+  assert.equal(second.PlannedEndAt, "2026-10-05T13:00:00.000Z");
+});
+
+test("فاز۵: درصد هم‌پوشانی جایگزین مقدار لات انتقال است", () => {
+  const orders = [order("o-1")];
+  const operations = [
+    operation("op-1", "o-1", 1, 200, null, {
+      WorkCenterId: "wc-1", ...tenUnitsAt20, OverlapAllowed: true, TransferBatchQty: null, OverlapPct: 50,
+    }),
+    operation("op-2", "o-1", 2, 200, "op-1", { WorkCenterId: "wc-2", ...tenUnitsAt20 }),
+  ];
+  const planned = planManufacturingSchedule(dualInput({ orders, operations }));
+  const first = planned.assignments.find((item) => item.ProductionOrderOperationId === "op-1");
+  const second = planned.assignments.find((item) => item.ProductionOrderOperationId === "op-2");
+  /* ۵۰٪ هم‌پوشانی روی ۱۰ عدد یعنی لات انتقال ۵ عدد → همان ۱۰۰ دقیقه. */
+  assert.equal(first.TransferBatchQty, 5);
+  assert.equal(second.PlannedStartAt, "2026-10-05T09:40:00.000Z");
+});
+
+test("فاز۵: تقسیم لات قطعه‌های زمان‌بندی را به زیرلات‌های متوالی می‌شکند", () => {
+  const orders = [order("o-1")];
+  const operations = [
+    operation("op-1", "o-1", 1, 200, null, { WorkCenterId: "wc-1", ...tenUnitsAt20, SplitLotCount: 2 }),
+  ];
+  const planned = planManufacturingSchedule(dualInput({ orders, operations }));
+  const assignment = planned.assignments.find((item) => item.ProductionOrderOperationId === "op-1");
+  assert.equal(assignment.SplitLotCount, 2);
+  assert.equal(assignment.Segments.length, 2);
+  assert.deepEqual(assignment.Segments.map((segment) => segment.SegmentNo), [1, 2]);
+  assert.deepEqual(assignment.Segments.map((segment) => [segment.PlannedStartAt, segment.PlannedEndAt]), [
+    ["2026-10-05T08:00:00.000Z", "2026-10-05T09:40:00.000Z"],
+    ["2026-10-05T09:40:00.000Z", "2026-10-05T11:20:00.000Z"],
+  ]);
+  /* جمع دقایق ظرفیت پس از تقسیم دست‌نخورده می‌ماند. */
+  assert.equal(assignment.PlannedCapacityMinutes, 200);
+  assert.deepEqual(assignment.Segments.map((segment) => segment.PlannedCapacityMinutes), [100, 100]);
+  assert.equal(planned.scheduleSegments.every((segment) => segment._splitLotNo === undefined), true, "نشانگر داخلی به خروجی نشت نمی‌کند");
+});
+
+test("فاز۵: هم‌پوشانی در زمان‌بندی رو‌به‌عقب انتهای عملیات قبلی را دیرتر می‌برد", () => {
+  const orders = [order("o-1", { due: "2026-10-05T17:00:00.000Z" })];
+  const makeOperations = (overlap) => [
+    operation("op-1", "o-1", 1, 200, null, {
+      WorkCenterId: "wc-1", ...tenUnitsAt20,
+      OverlapAllowed: overlap, TransferBatchQty: overlap ? 5 : null,
+    }),
+    operation("op-2", "o-1", 2, 200, "op-1", { WorkCenterId: "wc-2", ...tenUnitsAt20 }),
+  ];
+
+  const baseline = planManufacturingSchedule(dualInput({ orders, operations: makeOperations(false), direction: "backward" }));
+  const baselineFirst = baseline.assignments.find((item) => item.ProductionOrderOperationId === "op-1");
+  assert.equal(baselineFirst.PlannedEndAt, "2026-10-05T13:40:00.000Z", "بدون هم‌پوشانی باید پیش از شروع عملیات بعدی تمام شود");
+
+  const overlapped = planManufacturingSchedule(dualInput({ orders, operations: makeOperations(true), direction: "backward" }));
+  const first = overlapped.assignments.find((item) => item.ProductionOrderOperationId === "op-1");
+  const second = overlapped.assignments.find((item) => item.ProductionOrderOperationId === "op-2");
+  assert.equal(second.PlannedStartAt, "2026-10-05T13:40:00.000Z");
+  /* دنبالهٔ هم‌پوشان ۱۰۰ دقیقه است؛ پس عملیات اول تا ۱۵:۲۰ ادامه دارد. */
+  assert.equal(first.PlannedEndAt, "2026-10-05T15:20:00.000Z");
+});
+
+test("فاز۵: لات انتقال برابر کل مقدار، هم‌پوشانی نمی‌سازد", () => {
+  const orders = [order("o-1")];
+  const operations = [
+    operation("op-1", "o-1", 1, 200, null, {
+      WorkCenterId: "wc-1", ...tenUnitsAt20, OverlapAllowed: true, TransferBatchQty: 10,
+    }),
+    operation("op-2", "o-1", 2, 200, "op-1", { WorkCenterId: "wc-2", ...tenUnitsAt20 }),
+  ];
+  const planned = planManufacturingSchedule(dualInput({ orders, operations }));
+  const first = planned.assignments.find((item) => item.ProductionOrderOperationId === "op-1");
+  const second = planned.assignments.find((item) => item.ProductionOrderOperationId === "op-2");
+  assert.equal(first.TransferReadyAt, null);
+  assert.equal(second.PlannedStartAt, "2026-10-05T11:20:00.000Z");
+});

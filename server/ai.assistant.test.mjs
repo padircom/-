@@ -66,7 +66,10 @@ test("P10: کلید مجوزها با قالب domain.resource.action می‌خ�
     "ai.history.view": "confidential",
     "ai.export.run": "confidential",
   });
-  assert.equal(ROLE_CATALOG.length, 21);
+  /* شمار نقش‌ها در کاتالوگ مرکزی نگه داشته می‌شود؛ این آزمون پیش‌تر روی ۲۱
+   * مانده بود در حالی که کاتالوگ ۲۸ نقش دارد (همان عددی که rbac.test.mjs
+   * بررسی می‌کند). */
+  assert.equal(ROLE_CATALOG.length, 28);
 });
 
 /* ══════════════════ منابع و ابزارها ══════════════════ */

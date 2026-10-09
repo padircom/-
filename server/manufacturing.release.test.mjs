@@ -15,7 +15,8 @@ function fixture(t, { creatorId = "u-mfg-plan", bomCycle = false, extraRoutingOp
   const repo = createRepository(new JsonFileDriver(dir));
   let apiRepo = repo;
   const handlers = new Map();
-  const app = Object.fromEntries(["get", "post", "patch"].map((method) => [method, (route, handler) => handlers.set(`${method.toUpperCase()} ${route}`, handler)]));
+  /* `delete` از فاز ۵ لازم شد: حذف تقاضا و حذف لات تقسیمی مسیر DELETE دارند. */
+  const app = Object.fromEntries(["get", "post", "patch", "delete"].map((method) => [method, (route, handler) => handlers.set(`${method.toUpperCase()} ${route}`, handler)]));
   const bothRoleSubject = {
     id: "u-mfg-both",
     displayName: "کاربر چندنقشی آزمون",

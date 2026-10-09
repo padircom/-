@@ -66,8 +66,8 @@
 | نقش | مجوزهای اصلی |
 |---|---|
 | `manufacturing_engineer` | `mfg.part.view/edit`, `mfg.bom.view/edit/release`, `mfg.routing.view/edit/release`, `mfg.workcenter.view/edit`, `mfg.calendar.edit`, `mfg.capacity.view`, `mfg.alert.view` |
-| `production_planner` | مشاهدهٔ قطعه/BOM/Routing/مرکز کاری؛ `mfg.order.view/create/priority.edit`, `mfg.schedule.view/run/resequence`, `mfg.capacity.view`, `mfg.material.view`, `mfg.mrp.view/run`, `mfg.requisition.create`, داشبورد و هشدار |
-| `production_manager` | `mfg.order.view/release/close`, `mfg.schedule.view/run`, ظرفیت، مشاهدهٔ اجرا، داشبورد و رسیدگی به هشدار |
+| `production_planner` | مشاهدهٔ قطعه/BOM/Routing/مرکز کاری؛ `mfg.order.view/create/priority.edit`, `mfg.schedule.view/run/resequence`, `mfg.capacity.view`, `mfg.material.view`, `mfg.mrp.view/run`, `mfg.requisition.create`, داشبورد و هشدار؛ **فاز ۵:** `mfg.demand.view/edit`, `mfg.lotsize.view/edit`, `mfg.mps.view/run/firm`, `mfg.atp.view/check`, `mfg.split.edit`؛ **بخش ۱۱:** `mfg.plannedorder.view/edit/approve/convert`, `mfg.version.view`, `mfg.crp.view`, `mfg.mps.approve`, `mfg.conformance.view` |
+| `production_manager` | `mfg.order.view/release/close`, `mfg.schedule.view/run`, ظرفیت، مشاهدهٔ اجرا، داشبورد و رسیدگی به هشدار؛ **فاز ۵:** همهٔ مجوزهای فاز ۵ برنامه‌ریزی |
 | `shop_floor_supervisor` | مشاهدهٔ صف/سفارش/ظرفیت، شروع/گزارش/اتمام عملیات، توقف، ضایعات، دوباره‌کاری، مصرف مواد و رسیدگی به هشدار |
 | `production_operator` | فقط اقتدار اجرایی: مشاهده/شروع/گزارش/اتمام عملیات، ثبت توقف/ضایعات/دوباره‌کاری و مصرف مواد؛ بدون آزادسازی سفارش یا ویرایش Engineering master |
 | `material_planner` | مشاهدهٔ سفارش/ماده، MRP، ایجاد پیشنهاد تأمین و داشبورد مواد |
@@ -614,10 +614,11 @@ Content-Type: application/json
 
 ## ۵.۱۰ پیاده‌سازی در ساختار فعلی پروژه
 
-- routeها در ماژول جداگانهٔ `server/manufacturingApi.js` با الگوی `registerManufacturingRoutes(app, { repo, subjects, evaluate })` پیاده می‌شوند و در `server/index.js` پس از middlewareهای `requestId` ثبت شده‌اند. هر شصت‌وپنج مسیر قرارداد (۱۰۰٪ بخش‌های ۵.۳ تا ۵.۸: قطعه، BOM، مسیر ساخت و عملیات آن، مراکز کاری، منابع و تقویم، سفارش تولید، زمان‌بندی/باززمان‌بندی/Gantt/ظرفیت، اجرای کارگاهی/توقف/ضایعات/دوباره‌کاری/انحراف، مواد/MRP/مصرف/پیشنهاد تأمین، و هزینه/داشبورد/OEE/هشدارها) فعال‌اند.
+- routeها در ماژول جداگانهٔ `server/manufacturingApi.js` با الگوی `registerManufacturingRoutes(app, { repo, subjects, evaluate })` پیاده می‌شوند و در `server/index.js` پس از middlewareهای `requestId` ثبت شده‌اند. هر صدودو مسیر قرارداد (۱۰۰٪ بخش‌های ۵.۳ تا ۵.۸، بخش ۵.۱۱ و بخش ۵.۱۲ فاز ۵: قطعه، BOM، مسیر ساخت و عملیات آن، مراکز کاری، منابع و تقویم، سفارش تولید، زمان‌بندی/باززمان‌بندی/Gantt/ظرفیت، اجرای کارگاهی/توقف/ضایعات/دوباره‌کاری/انحراف، مواد/MRP/مصرف/پیشنهاد تأمین، و هزینه/داشبورد/OEE/هشدارها) فعال‌اند.
 - route guard از `subjects` و `evaluate(subject, permission, { plantId })` استفاده می‌کند؛ هیچ `projectId` ساختگی برای سفارش/رویداد MFG تولید نمی‌شود.
 - پاسخ/خطا با الگوی `{ok,data,meta:{traceId}}` و `{ok:false,error:{code,message,traceId}}` است؛ شناسهٔ actor فقط از Subject احراز‌شده می‌آید.
-- مسیرهای فعال: `GET/POST /parts`, `GET/PATCH /parts/{partId}`, `GET/POST /bom-headers`, `GET/PATCH /bom-headers/{bomId}`, `GET/POST /bom-headers/{bomId}/items`, `PATCH/DELETE /bom-items/{itemId}`, `POST /bom-headers/{bomId}/release`, `POST /bom-headers/{bomId}/explosions`, `GET/POST /routings`, `GET/PATCH /routings/{routingId}`, `GET/POST /routings/{routingId}/operations`, `PATCH/DELETE /routing-operations/{routingOperationId}`, `POST /routings/{routingId}/release`, `GET/POST /work-centers`, `GET/PATCH /work-centers/{workCenterId}`, `GET/POST /work-centers/{workCenterId}/resources`, `PATCH /work-center-resources/{resourceId}`, `GET/POST /work-centers/{workCenterId}/calendars`, `PATCH /work-center-calendars/{calendarId}`, `GET/POST /orders`, `GET /orders/{orderId}`, `PATCH /orders/{orderId}/priority`, `POST /orders/{orderId}/release`, `POST /orders/{orderId}/close`, `POST /scheduling/runs`, `POST /scheduling/reschedules`, `GET /scheduling/gantt`, `GET /capacity/load`, `GET /capacity/bottlenecks`, `GET /operation-queue`, `POST /operations/{operationId}/executions`, `POST /executions/{executionId}/reports`, `POST /executions/{executionId}/finish`, `POST /downtime`, `POST /scrap`, `POST /rework`, `GET /operations/{operationId}/variance`, `GET /materials`, `POST /mrp/calculate`, `GET /mrp/shortages`, `POST /material-consumptions`, `POST /material-procurement-proposals`, `GET /cost/orders/{orderId}`, `GET /cost/operations/{operationId}`, `POST /cost/orders/{orderId}/reconcile`, `GET /dashboard/overview`, `GET /dashboard/work-center-load`, `GET /dashboard/oee`, `GET /alerts` و `POST /alerts/{alertId}/acknowledgements`.
+- مسیرهای فعال: `GET/POST /parts`, `GET/PATCH /parts/{partId}`, `GET/POST /bom-headers`, `GET/PATCH /bom-headers/{bomId}`, `GET/POST /bom-headers/{bomId}/items`, `PATCH/DELETE /bom-items/{itemId}`, `POST /bom-headers/{bomId}/release`, `POST /bom-headers/{bomId}/explosions`, `GET/POST /routings`, `GET/PATCH /routings/{routingId}`, `GET/POST /routings/{routingId}/operations`, `PATCH/DELETE /routing-operations/{routingOperationId}`, `POST /routings/{routingId}/release`, `GET/POST /work-centers`, `GET/PATCH /work-centers/{workCenterId}`, `GET/POST /work-centers/{workCenterId}/resources`, `PATCH /work-center-resources/{resourceId}`, `GET/POST /work-centers/{workCenterId}/calendars`, `PATCH /work-center-calendars/{calendarId}`, `GET/POST /orders`, `GET /orders/{orderId}`, `PATCH /orders/{orderId}/priority`, `POST /orders/{orderId}/release`, `POST /orders/{orderId}/close`, `POST /scheduling/runs`, `POST /scheduling/reschedules`, `GET /scheduling/gantt`, `GET /capacity/load`, `GET /capacity/bottlenecks`, `GET /operation-queue`, `POST /operations/{operationId}/executions`, `POST /executions/{executionId}/reports`, `POST /executions/{executionId}/finish`, `POST /downtime`, `POST /scrap`, `POST /rework`, `GET /operations/{operationId}/variance`, `GET /materials`, `POST /mrp/calculate`, `GET /mrp/shortages`, `POST /material-consumptions`, `POST /material-procurement-proposals`, `GET /cost/orders/{orderId}`, `GET /cost/operations/{operationId}`, `POST /cost/orders/{orderId}/reconcile`, `GET /dashboard/overview`, `GET /dashboard/work-center-load`, `GET /dashboard/oee`, `GET /alerts` و `POST /alerts/{alertId}/acknowledgements`؛ به‌علاوهٔ ۲۱ مسیر فاز ۵ (بخش ۵.۱۱) و ۱۶ مسیر بخش ۱۱ (بخش ۵.۱۲) که فهرست شده‌اند.
+- مهاجرت‌های افزایشی: `0051` (`manufacturing_mps_lotsizing_atp_overlap`) شش جدول فاز ۵ را می‌سازد و به هر دو جدول عملیات ستون‌های `SplitLotCount` و `OverlapPct` را اضافه می‌کند؛ `0052` (`manufacturing_planned_order_version_pegging`) سه جدول `MfgProductionVersion`، `MfgPlannedOrder` و `MfgRequirementPegging` را به همان ترتیب وابستگی می‌سازد؛ `0053` (`manufacturing_order_demand_source_mrp`) مقدار `mrp` را به `CK_MfgProdOrder_Demand` اضافه می‌کند؛ `0054` (`manufacturing_mps_run_approval`) ستون‌های `Status`/`ApprovedBy`/`ApprovedAt`/`NoteFa` را به `MfgMasterScheduleRun` می‌افزاید. مهاجرت `0046` منجمد و بدون هیچ جدول یا ستون فاز ۵ باقی مانده است.
 - migration افزایشی `0047`، جدول سربرگ `MfgScheduleRun` و ستون‌های `DispatchWeight`/`BreakStartMinuteOfDay` را می‌سازد؛ migration افزایشی `0048` ستون `ClosedBy` را به `MfgProductionOrder` اضافه می‌کند (بدون آن `POST /orders/{id}/close` با `ROW_VALIDATION_FAILED` رد می‌شد)؛ و migration افزایشی `0049` کلیدهای خارجی به جداول بیرونی را حذف می‌کند تا دیتابیس تولید ۱۰۰٪ مستقل (Standalone MES) باشد. قاعدهٔ مهاجرت: هر ستون یا قید تازهٔ MFG باید در `manufacturingTablesFor0046()` در `src/services/persistence.ts` فیلتر شود و در مهاجرت جدید بیاید تا `0046/0047/0048` دست‌نخورده بمانند. پس از هر تغییر اسکیما باید `npm run db:mfg` اجرا شود تا `database/manufacturing-schema.sql` بازتولید گردد.
 - repository اکنون `transaction(work)` دارد و callback را با repository محدود به همان تراکنش اجرا می‌کند. ایجاد/ویرایش قطعه همراه با `Planning`، ایجاد مرکز کاری همراه با `Rates`، آزادسازی BOM و Routing، آزادسازی و بستن سفارش، اجرای زمان‌بندی و باززمان‌بندی، رخدادهای اجرایی کارگاه (شروع/گزارش/اتمام نشست، توقف، ضایعات و دوباره‌کاری)، ثبت MRP، مصرف هم‌زمان مواد و کاهش موجودی، تطبیق نهایی هزینه و رسیدگی به هشدارها تغییرات جدول‌ها و AuditLog را در یک UoW ثبت می‌کنند. استفادهٔ تصادفی از repository بیرونی در callback رد می‌شود و nested transaction پشتیبانی نمی‌شود. این قابلیت به معنی Outbox اتمیک نیست؛ Observer فعلی همچنان درون‌فرایندی است. در JSON، mutex فقط درون همان process تضمین می‌دهد و journal redo برای recovery استفاده می‌شود؛ در SQL Server از `sql.Transaction` استفاده می‌شود.
 - SQL Server این محیط در دسترس نیست؛ آزمون مسیر release روی `JsonFileDriver` واقعی با Unit of Work اجرا شده و آزمون تراکنش SQL صرفاً از harness ساختگی استفاده می‌کند. این نتایج را نباید اجرای integration روی SQL Server تلقی کرد. محدودیت multi-process در JSON نیز پابرجاست.
@@ -628,3 +629,244 @@ Content-Type: application/json
 2. ۳۷ مجوز `mfg.*` و ۷ نقش تخصصی MFG به `ROLE_CATALOG` اضافه شده‌اند؛ `admin` به‌صورت ضمنی مجوز business تولید نمی‌گیرد.
 3. آزمون‌های RBAC برای عدم عبور بین دو Plant، نبود Plant assignment و جداسازی نقش‌های تولید افزوده شده‌اند.
 4. آزمون‌ها: API تولید `29/29`، scheduler خالص `9/9`، release تراکنشی `4/4`، و schema مستقل تولید `7/7` (جمعاً **۴۹/۴۹** در مجموعهٔ تولید) به‌همراه Unit of Work تراکنش `13/13` و persistence/SQL موجود موفق‌اند. آزمون API، مدیریت قطعه (همراه با بلوک اتمیک `Planning` برای ماده و موجودی افتتاحیه) و نسخه‌های BOM پیش‌نویس/آزادشده و انفجار چندسطحی BOM؛ مدیریت Routing پیش‌نویس، عملیات آن و آزادسازی Routing؛ مدیریت مراکز کاری (همراه با بلوک `Rates` برای ساخت نرخ هزینه)، منابع و تقویم شیفت (با کنترل `BreakStartMinuteOfDay` و قفل تقویم در برنامهٔ `firm`)؛ باززمان‌بندی هدفمند با زنجیرهٔ وابستگی، حفظ بلوک `firm`، تولید `diff`، رد نسخهٔ کهنه/خارج از Plant/عملیات غیرقابل‌اعزام و rollback تراکنش؛ Gantt و گزارش ظرفیت؛ اجرای کارگاهی با صف عملیات، شروع/گزارش تجمعی/اتمام نشست اجرا، کنترل پیش‌نیاز و گیت بازرسی، Idempotency، توقف، ضایعات، دوباره‌کاری و انحراف عملیات (با تفکیک دسترسی هزینه)؛ مواد، محاسبهٔ MRP (پیش‌نمایش و ثبت اتمیک)، کمبودها، پیشنهاد خرید و مصرف واقعی مواد (با کنترل LotNo و کسر اتمیک موجودی)؛ و رول‌آپ هزینهٔ سفارش/عملیات از داده‌های واقعی کارگاه، تطبیق نهایی هزینه، بستن دوگیتی سفارش (`MFG_MATERIALS_NOT_RECONCILED` و `MFG_COST_NOT_RECONCILED`)، داشبورد خلاصه/OEE و رسیدگی به هشدارها را می‌پوشاند. API زمان‌بندی در mock تراکنشی و یک اجرای واقعی با `JsonFileDriver` آزموده شد؛ SQL Server واقعی در دسترس نبود.
+
+## ۵.۱۱ فاز ۵ — MES پیشرفته (MPS، اندازه‌گذاری لات، ATP، تقسیم و هم‌پوشانی)
+
+بیست‌ویک مسیر تازه، همگی زیر همان ریشهٔ `/api/mfg/plants/{plantId}` و با همان قرارداد `{ok,data,meta}`، Plant scope، `If-Match` و Audit. موتور محاسبات در `src/services/manufacturingPlanning.ts` است و با `npm run build:mfgplan` به `server/mfgPlanLogic.js` بسته‌بندی می‌شود؛ ویرایش دستی فایل بسته‌بندی‌شده ممنوع است.
+
+### ۵.۱۱.۱ تقاضا و پیش‌بینی (۵ مسیر)
+
+| مسیر | مجوز | توضیح |
+|---|---|---|
+| `GET /demand-forecasts` | `mfg.demand.view` | فیلتر با `partId`, `demandType`, `from`, `to`, `status` |
+| `POST /demand-forecasts` | `mfg.demand.edit` | کلید یکتا `(PlantId, DemandType, DemandRef, RequiredAt)` |
+| `PATCH /demand-forecasts/{demandId}` | `mfg.demand.edit` | `If-Match` الزامی؛ کاهش زیر `ConsumedQuantity` رد می‌شود |
+| `DELETE /demand-forecasts/{demandId}` | `mfg.demand.edit` | ردیف `consumed` حذف نمی‌شود (`MFG_STATE_CONFLICT`) |
+| `GET /demand/time-phased` | `mfg.demand.view` | تقاضا روی سطل‌های زمانی؛ `outsideHorizonQty` تقاضای بیرون افق را جدا گزارش می‌کند |
+
+قاعدهٔ دامنه: `DemandType=forecast` بدون `ConfidencePct` با `MFG_DEMAND_CONFIDENCE_REQUIRED` رد می‌شود. وقتی اجرای MPS بخشی از یک پیش‌بینی را با سفارش فروش مصرف کرده باشد، ویرایش بعدی روی آن ردیف با `MFG_DEMAND_CONSUMED_LOCK` و کاهش مقدار با `MFG_DEMAND_BELOW_CONSUMED` رد می‌شود.
+
+### ۵.۱۱.۲ اندازه‌گذاری لات (۴ مسیر)
+
+| مسیر | مجوز | توضیح |
+|---|---|---|
+| `GET /lot-sizing-policies` | `mfg.lotsize.view` | هر ردیف با `eoq` و `periodOrderQuantity` محاسبه‌شده غنی می‌شود |
+| `POST /lot-sizing-policies` | `mfg.lotsize.edit` | `PartId` فقط هنگام ثبت پذیرفته می‌شود؛ جابه‌جایی سیاست بین قطعه‌ها مجاز نیست |
+| `PATCH /lot-sizing-policies/{policyId}` | `mfg.lotsize.edit` | `If-Match` الزامی |
+| `POST /lot-sizing/evaluate` | `mfg.lotsize.view` | ارزیابی خشک؛ هیچ رکوردی نمی‌نویسد |
+
+چهار قاعده پشتیبانی می‌شود: `L4L` (lot-for-lot)، `FOQ` (مقدار ثابت)، `EOQ` و `POQ` (دورهٔ زمانی).
+
+- `EOQ = √(2·D·S / H)` از `AnnualDemandQty`، `OrderingCost` و `HoldingCostPerUnitPerYear`؛ وقتی داده ناکافی باشد `eoq` تهی است و قاعدهٔ EOQ با `MFG_LOT_POLICY_INVALID` رد می‌شود.
+- `POQ` از `PeriodOrderQuantity` می‌آید و اگر تهی باشد از نسبت `EOQ` به تقاضای هر سطل مشتق می‌شود.
+- قیدهای لات همیشه اعمال می‌شوند: `applyLotConstraints` هرگز از `MaxOrderQty` عبور نمی‌کند و `OrderMultiple` با سقف `MaxOrderQty` گرد می‌شود (`{max:40, multiple:15}` روی ۱۰۰ می‌شود ۳۰).
+- `OrderMultiple` تعیین‌نشده یعنی ۱، نه صفر.
+- در `POST /lot-sizing/evaluate` بلوک `Demand` اختیاری است: وقتی فرستاده نشود همان رجیستر تقاضایی خوانده می‌شود که MPS می‌خواند، تا ارزیابی خشک با اجرای واقعی قابل مقایسه باشد. بقیهٔ ورودی‌ها (`OnHandQty`, `SafetyStockQty`, `LeadTimeDays`) نیز در نبود، از رکورد قطعه/ماده گرفته می‌شوند.
+
+### ۵.۱۱.۳ برنامهٔ اصلی تولید (۵ مسیر)
+
+| مسیر | مجوز | توضیح |
+|---|---|---|
+| `POST /mps/runs` | `mfg.mps.run` | `PreviewOnly:true` هیچ چیز نمی‌نویسد؛ در غیر این صورت اجرا، سطرها و مصرف پیش‌بینی در یک تراکنش ثبت می‌شوند |
+| `GET /mps/runs` | `mfg.mps.view` | تاریخچه با `RunNo` نزولی |
+| `GET /mps/runs/{runId}` | `mfg.mps.view` | هدر اجرا |
+| `GET /mps/runs/{runId}/lines` | `mfg.mps.view` | سطرهای زمان‌بندی‌شده |
+| `POST /mps/runs/{runId}/firm` | `mfg.mps.firm` | `If-Match` روی هدر اجرا الزامی |
+
+معادلات هر سطل:
+
+```
+consumedForecast = min(forecast, salesOrder)
+gross            = forecastLeft + salesOrder + contract + manual
+projectedBefore  = projectedAfter(سطل قبل) + scheduledReceipts
+net              = max(0, gross + safetyStock − projectedBefore)
+releaseBucket    = receiptBucket − round(leadTimeDays / daysOfBucket)
+```
+
+- **حصار زمان تقاضا (DTF):** در سطل‌های `bucketIndex < DTF` رسید برنامه‌ریزی‌شده سرکوب می‌شود — تقاضای آن بازه فقط با موجودی/رسید واقعی پاسخ داده می‌شود.
+- **حصار برنامهٔ قطعی (FPTF):** سطری که `receiptQty > 0` و `bucketIndex < FPTF` دارد `IsFirm=true` می‌شود. قید `FPTF ≥ DTF` در سطح جدول هم کنترل می‌شود.
+- `POST /mps/runs/{runId}/firm` وقتی `ThroughBucketIndex` فرستاده نشود از حصار خود اجرا استفاده می‌کند؛ اگر آن حصار صفر باشد با `MFG_MPS_FENCE_EMPTY` رد می‌شود و سطل صفر بی‌سروصدا قطعی نمی‌شود.
+- خروجی پیش‌نمایش و خروجی پایدار **شکل یکسانی** دارند (همان کلیدهای `MfgMasterScheduleLine`) تا کلاینت مجبور نباشد دو قرارداد را بفهمد.
+- مصرف پیش‌بینی: روی هر ردیف پیش‌بینی `ConsumedQuantity` و `MpsRunId` ثبت می‌شود تا اجرای بعدی همان مقدار را دوباره نشمرد.
+
+### ۵.۱۱.۴ قابل‌تعهد بودن — ATP (۳ مسیر)
+
+| مسیر | مجوز | توضیح |
+|---|---|---|
+| `POST /atp/checks` | `mfg.atp.check` | `Persist:false` ثبت نمی‌کند |
+| `GET /atp/checks` | `mfg.atp.view` | تاریخچهٔ تعهدها |
+| `GET /atp/summary` | `mfg.atp.view` | پروفایل ATP یک قطعه بدون ثبت |
+
+دو حالت: `discrete` (قابل‌تعهد هر سطل تا رسید بعدی) و `cumulative` (موجودی جاری، کف صفر). نتیجهٔ تعهد یکی از سه حالت است:
+
+- `available` — سقف تعهد از سطل‌های **تاریخ درخواست به بعد** گرفته می‌شود، نه از موجودی آغازین؛ موجودی آغازین پیش از تقاضای متعهدشدهٔ همان سطل وجود دارد و شمردنش تعهد را بزرگ‌تر از واقع نشان می‌دهد.
+- `delayed` — `promisedAt` = آغاز سطل بعدی + `leadTimeDays` و `delayBuckets` = فاصلهٔ سطلی.
+- `unavailable` — همراه با `shortageQty` و `promisedQty` (بیشترین مقدار قابل تعهد در افق).
+
+پیش‌بینی فقط وقتی کسر می‌شود که `includeForecast` صریحاً `true` باشد.
+
+### ۵.۱۱.۵ تقسیم لات و هم‌پوشانی عملیات (۴ مسیر)
+
+| مسیر | مجوز | توضیح |
+|---|---|---|
+| `GET /orders/{orderId}/operations/{operationId}/splits` | `mfg.schedule.view` | لات‌های جاری + `effectiveTransferBatchQty` |
+| `POST /orders/{orderId}/operations/{operationId}/splits` | `mfg.split.edit` | جایگزینی کامل لات‌ها در یک فراخوانی |
+| `DELETE /operation-splits/{splitLotId}` | `mfg.split.edit` | حذف یک لات |
+| `GET /orders/{orderId}/lead-time-analysis` | `mfg.schedule.view` | زمان تحویل با و بدون هم‌پوشانی |
+
+- لات انتقال: `TransferBatchQty` اولویت دارد و در نبود، از `OverlapPct` روی مقدار سفارش مشتق می‌شود. لات انتقال برابر کل مقدار، هم‌پوشانی نمی‌سازد.
+- `computeSplitLots` وقتی `TransferBatchQty` تعیین شده باشد دست‌کم ۲ لات می‌سازد؛ با `MinLotQty` تعداد لات به `floor(orderQty / minLotQty)` کاهش می‌یابد و باقی‌ماندهٔ کسری به لات آخر می‌رود (`10/3 → 3.333, 3.333, 3.334`).
+- گیت وضعیت: فقط عملیات `pending`/`queued`/`ready` قابل تقسیم است؛ غیر آن `MFG_STATE_CONFLICT`.
+- اثر هم‌پوشانی در زمان‌بند: عملیات بعدی از `transferReadyAt` پیش‌نیاز شروع می‌شود (نه از پایان کامل آن) و در زمان‌بندی رو‌به‌عقب، انتهای پیش‌نیاز به همان اندازهٔ `processingMinutes − transferReadyMinutes` دیرتر می‌رود.
+- `analyzeLeadTimeOverlap` برای هر پیش‌نیاز هم‌پوشان `overlapTailMinutes = capacityMinutes − (setup + run × transferBatch)` را حساب می‌کند و `baseline*`/`overlapped*` را برای ظرفیت و زمان تحویل، به‌همراه `scheduledSpanMinutes` اندازه‌گیری‌شده گزارش می‌دهد (وقتی پنجرهٔ زمان‌بندی نباشد تهی است).
+
+## ۵.۱۲ فاز ۵ بخش ۱۱ — مفاهیم APICS / ISA-95 / MRP II
+
+شانزده مسیر تازه روی همان ریشه و همان قرارداد. سه جدول جدید (`MfgProductionVersion`, `MfgPlannedOrder`, `MfgRequirementPegging`) با مهاجرت `0052` و ستون‌های تأیید MPS با مهاجرت `0054` ساخته می‌شوند؛ `0046` و `0051` دست‌نخورده و منجمد مانده‌اند.
+
+### ۵.۱۲.۱ MPS جدا از MRP و تأیید دستی آن (۱۱.۱)
+
+| مسیر | مجوز | توضیح |
+|---|---|---|
+| `POST /mps/runs/{runId}/approve` | `mfg.mps.approve` | `If-Match` الزامی. اجرای `PreviewOnly` با `MFG_MPS_PREVIEW_NOT_APPROVABLE` رد می‌شود |
+
+اجرای MPS در ستون تازهٔ `Status` مقدار `draft` می‌گیرد و با تأیید به `approved` می‌رود؛ `ApprovedBy`/`ApprovedAt`/`NoteFa` همراهش ثبت می‌شود. قید `CK_MfgMpsRun_Approval` تضمین می‌کند `ApprovedAt` بدون `ApprovedBy` ممکن نیست.
+
+### ۵.۱۲.۲ سفارش برنامه‌ریزی‌شده در برابر سفارش تولید (۱۱.۳)
+
+| مسیر | مجوز | توضیح |
+|---|---|---|
+| `GET /planned-orders` | `mfg.plannedorder.view` | فیلتر با `partId`, `status`, `source`, `dueFrom`, `dueTo` |
+| `GET /planned-orders/{plannedOrderId}` | `mfg.plannedorder.view` | ردیف به‌همراه `pegging` |
+| `PATCH /planned-orders/{plannedOrderId}` | `mfg.plannedorder.edit` | ویرایش پیش از تبدیل؛ `OriginalQuantity` پیشنهاد موتور را نگه می‌دارد و ویرایش، تأیید قبلی را به `proposed` برمی‌گرداند |
+| `POST /planned-orders/{plannedOrderId}/approve` | `mfg.plannedorder.approve` | `proposed → approved` |
+| `POST /planned-orders/{plannedOrderId}/reject` | `mfg.plannedorder.approve` | `RejectReasonFa` الزامی است |
+| `POST /planned-orders/{plannedOrderId}/convert` | `mfg.plannedorder.convert` | `approved → converted`؛ سفارش تولید در وضعیت `created` ساخته می‌شود تا آزادسازی گیت جدا بماند |
+
+- خروجی MRP **پیشنهاد** است نه تعهد: `POST /mrp/calculate` ردیف‌های `MfgPlannedOrder` را با `Status='proposed'` می‌سازد و اجرای دوبارهٔ همان `MrpRunNo` فقط پیشنهادهای بازبینی‌نشده را جایگزین می‌کند؛ آنچه تأیید یا تبدیل شده دست‌نخورده می‌ماند.
+- تبدیل تنها از وضعیت `approved` ممکن است (`MFG_PLANNED_ORDER_NOT_APPROVED`) و تبدیل دوباره با `MFG_PLANNED_ORDER_CONVERTED` رد می‌شود.
+- قطعهٔ خریدنی (`PartType='purchased'` یا `ProcurementType='buy'`) به سفارش تولید تبدیل نمی‌شود: `MFG_PLANNED_ORDER_NOT_MAKE` با اشاره به `POST /material-procurement-proposals`. دلیلش این است که چنین سفارشی بی‌عملیات ساخته می‌شد و نه زمان‌بندی می‌شد نه اجرا.
+- تفکیک وظایف: مهندس ساخت `mfg.version.edit` دارد ولی `mfg.plannedorder.convert` ندارد؛ مدیر تولید برعکس.
+
+### ۵.۱۲.۳ نسخهٔ تولید (۱۱.۹)
+
+| مسیر | مجوز | توضیح |
+|---|---|---|
+| `GET /production-versions` | `mfg.version.view` | فیلتر با `partId`, `isActive` |
+| `POST /production-versions` | `mfg.version.edit` | فقط با BOM و Routing **آزادشدهٔ همان قطعه**؛ وگرنه `MFG_VERSION_BOM_NOT_RELEASED` |
+| `PATCH /production-versions/{versionId}` | `mfg.version.edit` | `If-Match` الزامی؛ انتقال نسخه به قطعهٔ دیگر رد می‌شود |
+| `GET /parts/{partId}/production-version` | `mfg.version.view` | resolve نسخهٔ فعال با `workCenterId`, `at`, `versionId` |
+
+ترتیب resolve: شناسهٔ صریح ← نسخهٔ فعال ← بازهٔ اثر (`EffectiveFrom`/`EffectiveTo`) ← مرکز کاری ← `IsDefault` ← `Priority` صعودی و سپس `VersionCode`. نسخهٔ غیرفعال `null` برمی‌گرداند. `VersionCode` در هر قطعه یکتاست و نسخهٔ پیش‌فرض تازه، بقیه را از حالت پیش‌فرض خارج می‌کند.
+
+### ۵.۱۲.۴ CRP — ظرفیت موردنیاز (۱۱.۷)
+
+| مسیر | مجوز | توضیح |
+|---|---|---|
+| `POST /crp/calculate` | `mfg.crp.view` | کلیدها: `Bucket`, `BucketCount`, `HorizonStart`, `OverloadPct`, `UnderloadPct`, `IncludePlannedOrders` |
+| `GET /crp/summary` | `mfg.crp.view` | همان خروجی بدون `buckets` هر مرکز کاری؛ queryها `bucket`, `bucketCount`, `horizonStart`, `overloadPct`, `underloadPct`, `includePlannedOrders` |
+
+خروجی برای هر مرکز کاری `loadMinutes` در برابر `capacityMinutes` را در هر سطل، `utilizationPct`، `surplusMinutes` و `status` (`overload`/`underload`/`idle`/`balanced`) می‌دهد، به‌همراه `levelingSuggestions` که نزدیک‌ترین سطل کم‌بار و `suggestedMinutes` قابل جابه‌جایی را پیشنهاد می‌کند. عملیات زمان‌بندی‌نشده در سطل صفر شمرده می‌شود تا مرکز کاری کم‌بارتر از واقع به نظر نرسد.
+
+### ۵.۱۲.۵ Lead Time Offset و Pegging در گزارش MRP (۱۱.۵ و ۱۱.۶)
+
+| مسیر | مجوز | توضیح |
+|---|---|---|
+| `GET /mrp/lead-time-offset` | `mfg.mrp.view` | فیلتر با `partId`, `maxLevels` |
+| `GET /mrp/pegging` | `mfg.mrp.view` | فیلتر با `partId`, `level` (`single`/`multi`), `rootPartId`, `productionOrderId` |
+
+`POST /mrp/calculate` حالا سه بخش تازه هم برمی‌گرداند:
+
+- `leadTimeOffset` — `cumulativeLeadTimeDays` (پایین‌به‌بالا: ساخت این قطعه با همهٔ زیرمجموعه‌اش) و `availabilityOffsetDays` (بالا‌به‌پایین: این قطعه چند روز پیش از سررسید محصول نهایی باید دم دست باشد)، به‌همراه `finishedGoodsLeadTimeDays` و `levelOffsets`.
+- `pegging` — از نیازهای مواد واقعیِ همان اجرا ساخته می‌شود، نه از گراف تئوری BOM؛ زنجیره از جزء به ریشه می‌رود و `quantityPer` روی گام **والد** می‌نشیند (گام مبدأ نسبت به خودش ۱ است). ردیف‌های `MfgRequirementPegging` هم ثبت می‌شوند.
+- `plannedOrders` — کمبودها با سیاست لات قطعه و offset آزادسازی تجمیعی به پیشنهاد تبدیل می‌شوند؛ `PlannedReleaseAt` به اندازهٔ `CumulativeLeadTimeDays` پیش از `PlannedDueAt` است.
+
+### ۵.۱۲.۶ ATP ظرفیت‌آگاه (۱۱.۸)
+
+`POST /atp/checks` کلید تازهٔ `IncludeCapacity` (پیش‌فرض `true`) را می‌پذیرد و بخش `capacity` را برمی‌گرداند: برای هر مرکز کاریِ Routing قطعه، `requiredMinutes` در برابر `availableMinutes − loadedMinutes` هر سطل. وعدهٔ نهایی در فیلد `promisedAt` **دیرترِ** وعدهٔ موجودی و وعدهٔ ظرفیت است و `promiseConstrainedByCapacity` می‌گوید کدام قید تعیین‌کننده بوده. ظرفیت فقط وقتی مقید شمرده می‌شود که سطل درخواستی جا نداشته باشد؛ اگر ظرفیت کافی باشد وعدهٔ موجودی دست‌نخورده می‌ماند. قطعهٔ بدون Routing آزادشده `capacity.considered=false` می‌گیرد نه خطا.
+
+### ۵.۱۲.۷ انطباق ISA-95 / MESA-11 (۱۱.۱۱)
+
+| مسیر | مجوز | توضیح |
+|---|---|---|
+| `GET /conformance/isa95` | `mfg.conformance.view` | سطح ۳ در برابر سطح ۴ و پوشش یازده عملکرد MESA با مسیر واقعی |
+
+خروجی `mesa11.functions` را با `coveredRouteCount`/`totalRouteCount`/`coveragePct` و `routes[].implemented` می‌دهد تا ادعای پوشش قابل سنجش باشد نه ادعای دستی. `isa95.level4.foreignKeysToLevel4` شمار کلیدهای خارجی از جداول `Mfg*` به جداول سطح ۴ است و باید صفر بماند — استقلال منطقی دیتابیس با همین عدد سنجیده می‌شود.
+
+### ۵.۱۲.۸ کدهای قاعدهٔ کسب‌وکار بخش ۱۱
+
+`MFG_VERSION_BOM_NOT_RELEASED`, `MFG_PLANNED_ORDER_NOT_APPROVED`, `MFG_PLANNED_ORDER_CONVERTED`, `MFG_PLANNED_ORDER_NOT_MAKE`, `MFG_MPS_PREVIEW_NOT_APPROVABLE`, `MFG_PART_UNAVAILABLE` — با `422 MFG_BUSINESS_RULE_FAILED`. رویدادهای ممیزی: `MFG_PRODUCTION_VERSION_CREATED/UPDATED`, `MFG_PLANNED_ORDER_UPDATED/APPROVED/REJECTED/CONVERTED`, `MFG_MPS_RUN_APPROVED`. مجوزهای تازه (۹): `mfg.plannedorder.view/edit/approve/convert`, `mfg.version.view/edit`, `mfg.crp.view`, `mfg.mps.approve`, `mfg.conformance.view`.
+
+### ۵.۱۱.۶ کدهای قاعدهٔ کسب‌وکار فاز ۵
+
+`MFG_DEMAND_CONFIDENCE_REQUIRED`, `MFG_DEMAND_CONSUMED_LOCK`, `MFG_DEMAND_BELOW_CONSUMED`, `MFG_LOT_POLICY_INVALID`, `MFG_MPS_FENCE_INVALID`, `MFG_MPS_NO_DEMAND`, `MFG_MPS_FENCE_EMPTY`, `MFG_MPS_NOTHING_TO_FIRM`, `MFG_SPLIT_OVERLAP_INPUT_MISSING`, `MFG_SPLIT_TRANSFER_BATCH_TOO_LARGE` — همگی با `422 MFG_BUSINESS_RULE_FAILED`. رویدادهای ممیزی: `MFG_DEMAND_CREATED/UPDATED/DELETED`, `MFG_LOT_POLICY_CREATED/UPDATED`, `MFG_MPS_RUN_CREATED`, `MFG_MPS_LINES_FIRMED`, `MFG_ATP_CHECKED`, `MFG_OPERATION_SPLIT`, `MFG_OPERATION_SPLIT_DELETED`.
+
+## ۵.۱۳ تنظیمات کارخانه و نوع صنعت
+
+### ۵.۱۳.۱ چرا این بخش لازم بود
+
+تا این نقطه `PlantId` در ۳۵ جدول تولید **فقط یک ستون متنی آزاد** بود که با هلپر `plant()` تزریق می‌شد و هیچ موجودیتی پشتش نبود. scoping کارخانه هم از آرایهٔ `plantIds` روی کاربر انجام می‌شد، نه با مراجعه به رجیستری کارخانه. یعنی «کارخانه» به‌عنوان یک موجودیت قابل پیکربندی وجود نداشت و جایی برای نشستنِ ویژگی‌های سطح کارخانه — از جمله نوع صنعت — نبود.
+
+جدول `MfgPlant` (شمارهٔ ۳۶) آن شناسه را صاحب‌دار می‌کند.
+
+### ۵.۱۳.۲ سه تصمیم طراحی که باید صریح خوانده شوند
+
+**۱) `Id` برابر خودِ `plantId` است، نه یک کلید جانشین.** چون `PlantId` در ۳۵ جدول دیگر یک رشتهٔ آزاد است، این تنها راهی است که بدون backfill و بدون مهاجرت داده، ردیف تنظیمات به همان شناسه‌ای گره بخورد که در حال استفاده است.
+
+**۲) `MfgPlant` عمداً بدون کلید خارجی ساخته شده.** این یک معاملهٔ پذیرفته‌شده است: یکپارچگی ارجاعی تضمین نمی‌شود و `PlantId` در جدول‌های دیگر آزاد می‌ماند، ولی در عوض **هیچ مسیر، آزمون یا دادهٔ موجودی نمی‌شکند** و backfill لازم نیست. اگر روزی FK خواسته شد، باید با backfill و اصلاح مسیرها جدا انجام شود. تست `MFG-PLANT: جدول MfgPlant با ستون‌ها، CHECK و بدون کلید خارجی` این تصمیم را قفل می‌کند.
+
+**۳) نگاشت قابلیت فقط توصیفی است و هیچ رفتاری را گیت نمی‌کند.** هیچ مسیری بر اساس خروجی `GET /capabilities` فعال یا غیرفعال نمی‌شود. اگر روزی خواسته شد مسیری بر اساس صنعت بسته شود، باید جدا و با آزمون خودش پیاده شود.
+
+### ۵.۱۳.۳ جدول `MfgPlant`
+
+| ستون | نوع | قید |
+|---|---|---|
+| `Id` | `text(60)` | PK؛ برابر `PlantId` |
+| `PlantId` | `text(60)` | NOT NULL، یکتا (`UX_MfgPlant_PlantId`) |
+| `PlantCode` | `text(60)` | NOT NULL، یکتا در محدودهٔ `PlantId` |
+| `NameFa` / `NameEn` | `text(240)` | `NameFa` NOT NULL |
+| `IndustryType` | `text(24)` | NOT NULL + `CK_MfgPlant_Industry` |
+| `IsActive` | `bool` | پیش‌فرض `1` |
+| `NoteFa` | `text(1000)` | اختیاری |
+
+`IndustryType` یکی از هفت مقدار است: `discrete` (گسسته/مونتاژ)، `process` (فرایندی/شیمیایی)، `food` (غذایی)، `pharma` (دارویی/GMP)، `automotive` (خودروسازی)، `metal` (فلزات و ریخته‌گری)، `drilling_energy` (نفت، گاز و حفاری). مهاجرت‌ها: **۰۰۵۵** `manufacturing_plant_registry_industry` (جدول) و **۰۰۵۶** `manufacturing_plant_industry_drilling_energy` (افزودن صنعت هفتم به قید `CK_MfgPlant_Industry`).
+
+### ۵.۱۳.۴ سه مسیر
+
+| متد و مسیر | مجوز | رفتار |
+|---|---|---|
+| `GET /settings` | `mfg.plant.view` | ردیف تنظیمات + نگاشت قابلیت همان صنعت؛ **۴۰۴ اگر کارخانه پیکربندی نشده باشد** |
+| `PATCH /settings` | `mfg.plant.edit` | **upsert**: ساخت در نخستین فراخوانی (بدون If-Match)، به‌روزرسانی بعد از آن (If-Match اجباری) |
+| `GET /capabilities` | `mfg.plant.view` | نگاشت قابلیت؛ با `?industryType=` پیش‌نمایش بدون ذخیره |
+
+`PATCH` یک upsert است چون تصمیم بر «حداقلی» بودن بود (یک GET و یک PATCH، بدون POST)؛ پس ساخت رکورد هم باید از همان PATCH انجام شود. `Id` برابر `plantId` گرفته می‌شود و `PlantCode` در نبودِ مقدار صریح به `plantId` برمی‌گردد.
+
+`GET /settings` وقتی رکورد نیست **۴۰۴** می‌دهد نه یک پیش‌فرض ساختگی، چون `IndustryType` یک تصمیم واقعی است نه حدس.
+
+### ۵.۱۳.۵ نگاشت قابلیت
+
+۲۲ قابلیت تعریف شده است. ده مورد اول همان زیربخش‌های فاز ۵ و بخش ۱۱ است که **در همین مخزن پیاده شده‌اند**؛ دوازده مورد باقی قابلیت‌های صنعت‌محورند که هنوز ساخته نشده‌اند و صریحاً `implemented: false` دارند.
+
+هر ورودی چهار فیلد دارد: `enabled` (آیا این صنعت باید فعال ببیند)، `implemented` (آیا واقعاً ساخته شده)، `reasonFa` (دلیل، برای بازبین انسانی) و عنوان فارسی/انگلیسی.
+
+**چرا `implemented` لازم است:** بدون آن، فهرست قابلیتی را که وجود ندارد به‌عنوان فعال جا می‌زد — همان اشتباهی که پیش‌تر در شمارش مسیرهای انطباق بود و اصلاح شد.
+
+شمارش فعال‌ها به تفکیک صنعت (قفل‌شده در آزمون):
+
+| صنعت | فعال | پیاده‌شده | فعال و پیاده‌شده | نمونهٔ اختصاصی |
+|---|---|---|---|---|
+| `discrete` | ۱۰ | ۱۰ | ۱۰ | — |
+| `process` | ۱۳ | ۱۰ | ۱۰ | ایمنی فرایند، نگهداری پیش‌بینانه |
+| `food` | ۱۳ | ۱۰ | ۹ | HACCP، تاریخ انقضا، GMP |
+| `pharma` | ۱۲ | ۱۰ | ۹ | اعتبارسنجی GMP، ردیابی دسته |
+| `automotive` | ۱۲ | ۱۰ | ۱۰ | PPAP، IATF 16949 |
+| `metal` | ۱۴ | ۱۰ | ۱۰ | ردیابی ذوب/کویل، ایمنی فرایند |
+| `drilling_energy` | ۱۸ | ۱۰ | ۱۰ | انطباق API Spec، مجوز کار، یکپارچگی تجهیز |
+
+تفاوت‌ها واقعی‌اند نه تزئینی: `quality.haccp` فقط برای غذایی فعال است، `quality.ppapDocumentation` فقط برای خودرو، و `scheduling.splitOverlap` در غذایی/دارویی **غیرفعال** است چون دسته در این صنایع یکپارچه است.
+
+سه قابلیت `quality.apiSpecification`، `hse.permitToWork` و `maintenance.assetIntegrity` **فقط** برای `drilling_energy` فعال‌اند؛ آزمون `MFG-PLANT: نفت، گاز و حفاری سه قابلیت اختصاصی…` هم فعال بودنشان برای این صنعت و هم غیرفعال بودنشان برای شش صنعت دیگر را قفل می‌کند. این صنعت هم‌زمان پروفایل صنایع پیوسته/خطرناک را هم دارد (ایمنی فرایند، نگهداری پیش‌بینانه، ردیابی ذوب، ردیابی دسته) — به همین دلیل با ۱۸ قابلیت فعال، بیشترین تعداد را دارد.
+
+### ۵.۱۳.۶ تفکیک وظایف
+
+`mfg.plant.view` به مهندس ساخت، برنامه‌ریز تولید و مدیر تولید داده شده؛ `mfg.plant.edit` **فقط به مدیر تولید**، چون پیکربندی سطح کارخانه یک تصمیم مدیریتی است. `mfg.plant.edit` حسابرسی‌شده (`audited`) است و رویداد `MFG_PLANT_SETTINGS_UPDATED` روی موجودیت `MfgPlant` می‌نویسد.

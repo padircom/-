@@ -17,7 +17,7 @@ const plant = () => req("PlantId", "text", { len: 60, comment: "دامنهٔ ا�
 const code = (name = "Code") => req(name, "text", { len: 60 });
 const status = (comment: string, initial = "'draft'") => req("Status", "text", { len: 24, default: initial, comment });
 
-/** ۲۶ جدول منطقی تولید؛ همه در ماژول مستقل `mfg` ثبت می‌شوند. */
+/** ۳۲ جدول منطقی تولید؛ همه در ماژول مستقل `mfg` ثبت می‌شوند. */
 export const MANUFACTURING_TABLES: TableDef[] = [
   /* 01 — قطعه/محصول؛ شناسهٔ یکتا در محدودهٔ کارخانه. */
   {
@@ -215,7 +215,10 @@ export const MANUFACTURING_TABLES: TableDef[] = [
       req("OperationNameFa", "text", { len: 240 }), c("OperationNameEn", "text", { len: 240 }),
       req("WorkCenterId", "text", { len: 60 }), mins("SetupMinutes"), mins("RunMinutesPerUnit"),
       mins("QueueMinutes"), mins("MoveMinutes"), req("OverlapAllowed", "bool", { default: "0" }),
-      qty("TransferBatchQty", true), c("PredecessorSequence", "int"), req("InspectionRequired", "bool", { default: "0" }),
+      qty("TransferBatchQty", true),
+      /* فاز ۵ — الگوی تقسیم/هم‌پوشانی از Routing به عملیات سفارش کپی می‌شود. */
+      c("SplitLotCount", "int"), pct("OverlapPct", true),
+      c("PredecessorSequence", "int"), req("InspectionRequired", "bool", { default: "0" }),
       c("CostCenterId", "text", { len: 60 }), c("WorkInstructionRef", "text", { len: 120 }), c("NoteFa", "text", { len: 800 }),
     ],
     indexes: [
@@ -230,7 +233,8 @@ export const MANUFACTURING_TABLES: TableDef[] = [
     checks: [
       ck("CK_MfgRoutingOp_Sequence", "SequenceNo > 0", ["SequenceNo"]),
       ck("CK_MfgRoutingOp_Times", "SetupMinutes >= 0 AND RunMinutesPerUnit >= 0 AND QueueMinutes >= 0 AND MoveMinutes >= 0", ["SetupMinutes", "RunMinutesPerUnit", "QueueMinutes", "MoveMinutes"]),
-      ck("CK_MfgRoutingOp_Overlap", "OverlapAllowed = 0 OR (TransferBatchQty IS NOT NULL AND TransferBatchQty > 0)", ["OverlapAllowed", "TransferBatchQty"]),
+      ck("CK_MfgRoutingOp_Overlap", "OverlapAllowed = 0 OR (TransferBatchQty IS NOT NULL AND TransferBatchQty > 0) OR (OverlapPct IS NOT NULL AND OverlapPct > 0 AND OverlapPct < 100)", ["OverlapAllowed", "TransferBatchQty", "OverlapPct"]),
+      ck("CK_MfgRoutingOp_Split", "SplitLotCount IS NULL OR SplitLotCount >= 1", ["SplitLotCount"]),
       ck("CK_MfgRoutingOp_Predecessor", "PredecessorSequence IS NULL OR (PredecessorSequence > 0 AND PredecessorSequence < SequenceNo)", ["PredecessorSequence", "SequenceNo"]),
     ],
   },
@@ -243,7 +247,7 @@ export const MANUFACTURING_TABLES: TableDef[] = [
       req("DueAt", "datetime"), c("RequestedStartAt", "datetime"), status("created|released|in-progress|completed|closed", "'created'"),
       req("PriorityRule", "text", { len: 12, default: "'EDD'", comment: "EDD|CR|MANUAL" }), c("ManualRank", "int"),
       req("DispatchWeight", "decimal", { precision: 12, scale: 4, default: "1", comment: "وزن سفارش برای WSPT؛ بزرگ‌تر یعنی اولویت بیشتر" }),
-      req("DemandSource", "text", { len: 16, comment: "sales-order|contract|forecast|manual" }), c("DemandRef", "text", { len: 80 }),
+      req("DemandSource", "text", { len: 16, comment: "sales-order|contract|forecast|manual|mrp" }), c("DemandRef", "text", { len: 80 }),
       c("CustomerRef", "text", { len: 80, comment: "کلید نرم؛ جدول مشتری در مخزن فعلی وجود ندارد" }), c("CustomerNameSnapshot", "text", { len: 240 }),
       c("ContractId", "text", { len: 60, comment: "کلید نرم قرارداد بیرونی برای تبادل REST API؛ بدون وابستگی FK" }),
       c("ProjectId", "text", { len: 60, comment: "کلید نرم مرجع بیرونی برای تبادل REST API؛ بدون وابستگی FK" }),
@@ -271,7 +275,7 @@ export const MANUFACTURING_TABLES: TableDef[] = [
       ck("CK_MfgProdOrder_Status", "Status IN ('created','released','in-progress','completed','closed')", ["Status"]),
       ck("CK_MfgProdOrder_Priority", "PriorityRule IN ('EDD','CR','MANUAL')", ["PriorityRule"]),
       ck("CK_MfgProdOrder_DispatchWeight", "DispatchWeight > 0", ["DispatchWeight"]),
-      ck("CK_MfgProdOrder_Demand", "DemandSource IN ('sales-order','contract','forecast','manual')", ["DemandSource"]),
+      ck("CK_MfgProdOrder_Demand", "DemandSource IN ('sales-order','contract','forecast','manual','mrp')", ["DemandSource"]),
       ck("CK_MfgProdOrder_Rank", "ManualRank IS NULL OR ManualRank >= 0", ["ManualRank"]),
       ck("CK_MfgProdOrder_Release", "Status = 'created' OR (BomHeaderId IS NOT NULL AND RoutingId IS NOT NULL AND ReleasedAt IS NOT NULL AND ReleasedBy IS NOT NULL)", ["Status", "BomHeaderId", "RoutingId", "ReleasedAt", "ReleasedBy"]),
     ],
@@ -287,6 +291,11 @@ export const MANUFACTURING_TABLES: TableDef[] = [
       status("pending|queued|ready|setup|running|blocked|completed", "'pending'"), qty("PlannedQuantity"),
       mins("PlannedSetupMinutes"), mins("PlannedRunMinutesPerUnit"), mins("PlannedQueueMinutes"), mins("PlannedMoveMinutes"),
       mins("PlannedCapacityMinutes"), req("OverlapAllowed", "bool", { default: "0" }), qty("TransferBatchQty", true),
+      /* فاز ۵ — تقسیم و هم‌پوشانی: SplitLotCount عملیات را به زیرلات‌های متوالی
+       * تقسیم می‌کند و OverlapPct جایگزین درصدی برای TransferBatchQty است.
+       * هر دو nullable هستند تا مهاجرت 0051 روی دادهٔ موجود آمن بماند و 0046 یخ نشکند. */
+      c("SplitLotCount", "int", { comment: "تعداد زیرلات‌های عملیات؛ NULL یعنی یک لات" }),
+      pct("OverlapPct", true),
       req("InspectionRequired", "bool", { default: "0" }), c("BlockedReasonFa", "text", { len: 500 }),
     ],
     indexes: [
@@ -305,7 +314,8 @@ export const MANUFACTURING_TABLES: TableDef[] = [
       ck("CK_MfgOrderOp_Status", "Status IN ('pending','queued','ready','setup','running','blocked','completed')", ["Status"]),
       ck("CK_MfgOrderOp_Qty", "PlannedQuantity > 0", ["PlannedQuantity"]),
       ck("CK_MfgOrderOp_Times", "PlannedSetupMinutes >= 0 AND PlannedRunMinutesPerUnit >= 0 AND PlannedQueueMinutes >= 0 AND PlannedMoveMinutes >= 0 AND PlannedCapacityMinutes >= 0", ["PlannedSetupMinutes", "PlannedRunMinutesPerUnit", "PlannedQueueMinutes", "PlannedMoveMinutes", "PlannedCapacityMinutes"]),
-      ck("CK_MfgOrderOp_Overlap", "OverlapAllowed = 0 OR (TransferBatchQty IS NOT NULL AND TransferBatchQty > 0)", ["OverlapAllowed", "TransferBatchQty"]),
+      ck("CK_MfgOrderOp_Overlap", "OverlapAllowed = 0 OR (TransferBatchQty IS NOT NULL AND TransferBatchQty > 0) OR (OverlapPct IS NOT NULL AND OverlapPct > 0 AND OverlapPct < 100)", ["OverlapAllowed", "TransferBatchQty", "OverlapPct"]),
+      ck("CK_MfgOrderOp_Split", "SplitLotCount IS NULL OR SplitLotCount >= 1", ["SplitLotCount"]),
     ],
   },
 
@@ -696,6 +706,331 @@ export const MANUFACTURING_TABLES: TableDef[] = [
       ck("CK_MfgScheduleRun_Direction", "Direction IN ('forward','backward')", ["Direction"]),
       ck("CK_MfgScheduleRun_Rule", "DispatchRule IN ('EDD','SPT','CR','WSPT','FIFO','MANUAL')", ["DispatchRule"]),
       ck("CK_MfgScheduleRun_Counts", "ScheduledOperationCount >= 0 AND UnscheduledOperationCount >= 0", ["ScheduledOperationCount", "UnscheduledOperationCount"]),
+    ],
+  },
+
+  /* ═══════ فاز ۵ — MPS، اندازه‌گذاری لات، ATP و تقسیم/هم‌پوشانی ═══════ */
+
+  /* 27 — سیاست اندازه‌گذاری لات؛ یک سیاست فعال برای هر قطعه در هر کارخانه.
+   * قاعدهٔ EOQ به D/S/H و قاعدهٔ POQ به PeriodDays یا PeriodOrderQuantity نیاز دارد؛
+   * اعتبارسنجی ترکیب قاعده و ورودی‌ها در موتور `manufacturingPlanning.ts` انجام می‌شود. */
+  {
+    name: "MfgLotSizingPolicy", module: "mfg", title: { fa: "سیاست اندازه‌گذاری لات", en: "Lot sizing policy" }, pk: "Id",
+    columns: [
+      id(), plant(), req("PartId", "text", { len: 60 }), code("PolicyCode"),
+      req("RuleCode", "text", { len: 8, comment: "L4L|FOQ|EOQ|POQ" }),
+      qty("FixedLotQty", true), qty("OrderMultiple", true), qty("MinOrderQty", true), qty("MaxOrderQty", true),
+      money("OrderingCost"), money("HoldingCostPerUnitPerYear"), qty("AnnualDemandQty", true),
+      c("PeriodDays", "int"), c("PeriodOrderQuantity", "int"), req("Currency", "text", { len: 8, default: "'IRR'" }),
+      req("EffectiveFrom", "date"), c("EffectiveTo", "date"), req("IsActive", "bool", { default: "1" }),
+      c("NoteFa", "text", { len: 800 }),
+    ],
+    indexes: [
+      { name: "UX_MfgLotPolicy_Part", columns: ["PlantId", "PartId", "EffectiveFrom"], unique: true },
+      { name: "IX_MfgLotPolicy_Rule", columns: ["PlantId", "RuleCode", "IsActive"] },
+    ],
+    foreignKeys: [{ column: "PartId", refTable: "MfgPart", refColumn: "Id" }],
+    checks: [
+      ck("CK_MfgLotPolicy_Rule", "RuleCode IN ('L4L','FOQ','EOQ','POQ')", ["RuleCode"]),
+      ck("CK_MfgLotPolicy_Qty", "FixedLotQty IS NULL OR FixedLotQty > 0", ["FixedLotQty"]),
+      ck("CK_MfgLotPolicy_Multiple", "OrderMultiple IS NULL OR OrderMultiple >= 1", ["OrderMultiple"]),
+      ck("CK_MfgLotPolicy_MinMax", "(MinOrderQty IS NULL OR MinOrderQty >= 0) AND (MaxOrderQty IS NULL OR MaxOrderQty > 0) AND (MinOrderQty IS NULL OR MaxOrderQty IS NULL OR MinOrderQty <= MaxOrderQty)", ["MinOrderQty", "MaxOrderQty"]),
+      ck("CK_MfgLotPolicy_Eoq", "(OrderingCost IS NULL OR OrderingCost >= 0) AND (HoldingCostPerUnitPerYear IS NULL OR HoldingCostPerUnitPerYear >= 0) AND (AnnualDemandQty IS NULL OR AnnualDemandQty >= 0)", ["OrderingCost", "HoldingCostPerUnitPerYear", "AnnualDemandQty"]),
+      ck("CK_MfgLotPolicy_Period", "(PeriodDays IS NULL OR PeriodDays > 0) AND (PeriodOrderQuantity IS NULL OR PeriodOrderQuantity > 0)", ["PeriodDays", "PeriodOrderQuantity"]),
+      ck("CK_MfgLotPolicy_Dates", "EffectiveTo IS NULL OR EffectiveTo >= EffectiveFrom", ["EffectiveFrom", "EffectiveTo"]),
+    ],
+  },
+
+  /* 28 — سربرگ اجرای MPS؛ مرجع نسخهٔ برنامهٔ اصلی تولید و تصویر ورودی‌های آن. */
+  {
+    name: "MfgMasterScheduleRun", module: "mfg", title: { fa: "اجرای برنامهٔ اصلی تولید", en: "Master schedule run" }, pk: "Id",
+    columns: [
+      id(), plant(), req("RunNo", "int"), req("TimeBucket", "text", { len: 8, comment: "day|week|month" }),
+      req("BucketCount", "int"), req("HorizonStart", "date"), req("HorizonEnd", "date"),
+      c("PartId", "text", { len: 60, comment: "خالی یعنی اجرای چندقطعه‌ای برای همهٔ قطعات دارای تقاضا" }),
+      req("DemandTimeFenceBuckets", "int", { default: "0" }), req("FirmPlannedTimeFenceBuckets", "int", { default: "0" }),
+      req("ConsumeForecast", "bool", { default: "1" }), req("PreviewOnly", "bool", { default: "0" }),
+      req("CalculatedAt", "datetime"), req("CalculatedBy", "text", { len: 60 }),
+      req("ModelVersion", "text", { len: 40, default: "'mfg-planning-v1'" }),
+      req("PartCount", "int", { default: "0" }), req("LineCount", "int", { default: "0" }),
+      req("TotalPlannedOrderQty", "decimal", { precision: 18, scale: 4, default: "0" }),
+      c("SummaryJson", "json"),
+      /* ۱۱.۱ — تأیید دستی MPS پیش از اجرای MRP. اجرای پیش‌نمایش قابل تأیید نیست
+       * و آن قید در لایهٔ API اعمال می‌شود، نه اینجا. */
+      req("Status", "text", { len: 16, default: "'draft'", comment: "draft|approved" }),
+      c("ApprovedBy", "text", { len: 60 }), c("ApprovedAt", "datetime"), c("NoteFa", "text", { len: 800 }),
+    ],
+    indexes: [
+      { name: "UX_MfgMpsRun_No", columns: ["PlantId", "RunNo"], unique: true },
+      { name: "IX_MfgMpsRun_Created", columns: ["PlantId", "CalculatedAt"] },
+    ],
+    checks: [
+      ck("CK_MfgMpsRun_RunNo", "RunNo > 0", ["RunNo"]),
+      ck("CK_MfgMpsRun_Bucket", "TimeBucket IN ('day','week','month') AND BucketCount > 0", ["TimeBucket", "BucketCount"]),
+      ck("CK_MfgMpsRun_Horizon", "HorizonEnd > HorizonStart", ["HorizonStart", "HorizonEnd"]),
+      ck("CK_MfgMpsRun_Fence", "DemandTimeFenceBuckets >= 0 AND FirmPlannedTimeFenceBuckets >= DemandTimeFenceBuckets", ["DemandTimeFenceBuckets", "FirmPlannedTimeFenceBuckets"]),
+      ck("CK_MfgMpsRun_Counts", "PartCount >= 0 AND LineCount >= 0 AND TotalPlannedOrderQty >= 0", ["PartCount", "LineCount", "TotalPlannedOrderQty"]),
+      ck("CK_MfgMpsRun_Status", "Status IN ('draft','approved')", ["Status"]),
+      ck("CK_MfgMpsRun_Approval", "ApprovedAt IS NULL OR ApprovedBy IS NOT NULL", ["ApprovedAt", "ApprovedBy"]),
+    ],
+  },
+
+  /* 29 — ردیف تقاضای زمان‌مند (سفارش فروش، پیش‌بینی، قرارداد، دستی).
+   * مصرف پیش‌بینی با سفارش فروش در زمان اجرای MPS محاسبه و در ConsumedQuantity ثبت می‌شود. */
+  {
+    name: "MfgDemandForecast", module: "mfg", title: { fa: "تقاضا و پیش‌بینی فروش", en: "Demand and sales forecast" }, pk: "Id",
+    columns: [
+      id(), plant(), req("PartId", "text", { len: 60 }),
+      req("DemandType", "text", { len: 16, comment: "sales-order|forecast|contract|manual" }),
+      code("DemandRef"), c("CustomerRef", "text", { len: 80, comment: "کلید نرم مشتری؛ جدول مشتری در مخزن فعلی نیست" }),
+      c("CustomerNameSnapshot", "text", { len: 240 }), req("RequiredAt", "date"), qty("Quantity"), req("Uom", "text", { len: 16 }),
+      pct("ConfidencePct", true), status("draft|confirmed|cancelled", "'draft'"),
+      qty("ConsumedQuantity", true), c("MpsRunId", "text", { len: 60 }), c("NoteFa", "text", { len: 800 }),
+    ],
+    indexes: [
+      { name: "UX_MfgDemand_Ref", columns: ["PlantId", "DemandType", "DemandRef", "RequiredAt"], unique: true },
+      { name: "IX_MfgDemand_PartDate", columns: ["PlantId", "PartId", "RequiredAt", "Status"] },
+    ],
+    foreignKeys: [
+      { column: "PartId", refTable: "MfgPart", refColumn: "Id" },
+      { column: "MpsRunId", refTable: "MfgMasterScheduleRun", refColumn: "Id" },
+    ],
+    checks: [
+      ck("CK_MfgDemand_Type", "DemandType IN ('sales-order','forecast','contract','manual')", ["DemandType"]),
+      ck("CK_MfgDemand_Qty", "Quantity > 0", ["Quantity"]),
+      ck("CK_MfgDemand_Status", "Status IN ('draft','confirmed','cancelled')", ["Status"]),
+      ck("CK_MfgDemand_Confidence", "ConfidencePct IS NULL OR (ConfidencePct >= 0 AND ConfidencePct <= 100)", ["ConfidencePct"]),
+      ck("CK_MfgDemand_Consumed", "ConsumedQuantity IS NULL OR (ConsumedQuantity >= 0 AND ConsumedQuantity <= Quantity)", ["ConsumedQuantity", "Quantity"]),
+    ],
+  },
+
+  /* 30 — ردیف زمان‌مند MPS؛ یک ردیف به ازای هر قطعه در هر سطل زمانی. */
+  {
+    name: "MfgMasterScheduleLine", module: "mfg", title: { fa: "ردیف برنامهٔ اصلی تولید", en: "Master schedule line" }, pk: "Id",
+    columns: [
+      id(), plant(), req("MpsRunId", "text", { len: 60 }), req("PartId", "text", { len: 60 }),
+      req("BucketIndex", "int"), req("BucketStart", "date"), req("BucketEnd", "date"),
+      req("ForecastQty", "decimal", { precision: 18, scale: 4, default: "0" }),
+      req("SalesOrderQty", "decimal", { precision: 18, scale: 4, default: "0" }),
+      req("ContractQty", "decimal", { precision: 18, scale: 4, default: "0" }),
+      req("ManualQty", "decimal", { precision: 18, scale: 4, default: "0" }),
+      req("ConsumedForecastQty", "decimal", { precision: 18, scale: 4, default: "0" }),
+      req("GrossRequirementQty", "decimal", { precision: 18, scale: 4, default: "0" }),
+      req("ScheduledReceiptQty", "decimal", { precision: 18, scale: 4, default: "0" }),
+      req("ProjectedOnHandBefore", "decimal", { precision: 18, scale: 4, default: "0" }),
+      req("NetRequirementQty", "decimal", { precision: 18, scale: 4, default: "0" }),
+      req("PlannedOrderReceiptQty", "decimal", { precision: 18, scale: 4, default: "0" }),
+      req("PlannedOrderReleaseQty", "decimal", { precision: 18, scale: 4, default: "0" }),
+      c("PlannedOrderReleaseAt", "date"), req("ProjectedOnHandAfter", "decimal", { precision: 18, scale: 4, default: "0" }),
+      req("LotSizingRule", "text", { len: 8, comment: "L4L|FOQ|EOQ|POQ" }), c("LotSizingPolicyId", "text", { len: 60 }),
+      req("InsideDemandTimeFence", "bool", { default: "0" }), req("IsFirm", "bool", { default: "0" }),
+      c("AppliedConstraints", "text", { len: 300 }), c("DemandRefsJson", "json"),
+    ],
+    indexes: [
+      { name: "UX_MfgMpsLine_Bucket", columns: ["MpsRunId", "PartId", "BucketIndex"], unique: true },
+      { name: "IX_MfgMpsLine_PartDate", columns: ["PlantId", "PartId", "BucketStart"] },
+    ],
+    foreignKeys: [
+      { column: "MpsRunId", refTable: "MfgMasterScheduleRun", refColumn: "Id" },
+      { column: "PartId", refTable: "MfgPart", refColumn: "Id" },
+      { column: "LotSizingPolicyId", refTable: "MfgLotSizingPolicy", refColumn: "Id" },
+    ],
+    checks: [
+      ck("CK_MfgMpsLine_Bucket", "BucketIndex >= 0 AND BucketEnd > BucketStart", ["BucketIndex", "BucketStart", "BucketEnd"]),
+      ck("CK_MfgMpsLine_Rule", "LotSizingRule IN ('L4L','FOQ','EOQ','POQ')", ["LotSizingRule"]),
+      ck("CK_MfgMpsLine_Qty", "ForecastQty >= 0 AND SalesOrderQty >= 0 AND ContractQty >= 0 AND ManualQty >= 0 AND ConsumedForecastQty >= 0 AND GrossRequirementQty >= 0 AND ScheduledReceiptQty >= 0 AND NetRequirementQty >= 0 AND PlannedOrderReceiptQty >= 0 AND PlannedOrderReleaseQty >= 0", ["ForecastQty", "SalesOrderQty", "GrossRequirementQty", "PlannedOrderReceiptQty"]),
+    ],
+  },
+
+  /* 31 — نتیجهٔ بررسی ATP؛ تاریخچهٔ تعهد تحویل به مشتری برای پاسخ‌گویی و ممیزی. */
+  {
+    name: "MfgAtpCheck", module: "mfg", title: { fa: "بررسی قابلیت تعهد تحویل", en: "Available-to-promise check" }, pk: "Id",
+    columns: [
+      id(), plant(), req("PartId", "text", { len: 60 }), req("RequestedQty", "decimal", { precision: 18, scale: 4 }),
+      req("RequestedAt", "date"), req("Mode", "text", { len: 12, comment: "discrete|cumulative" }),
+      req("Result", "text", { len: 12, comment: "available|delayed|unavailable" }),
+      req("PromisedQty", "decimal", { precision: 18, scale: 4, default: "0" }),
+      req("ShortageQty", "decimal", { precision: 18, scale: 4, default: "0" }),
+      c("PromisedAt", "date"), req("DelayBuckets", "int", { default: "0" }),
+      c("SourceBucketStart", "date"), req("OpeningAvailableQty", "decimal", { precision: 18, scale: 4, default: "0" }),
+      req("IncludeSafetyStock", "bool", { default: "1" }), req("LeadTimeDays", "int", { default: "0" }),
+      req("BucketCount", "int"), req("CheckedAt", "datetime"), req("CheckedBy", "text", { len: 60 }),
+      req("ModelVersion", "text", { len: 40, default: "'mfg-planning-v1'" }),
+      c("CustomerRef", "text", { len: 80 }), c("MessageFa", "text", { len: 400 }), c("DetailJson", "json"),
+    ],
+    indexes: [
+      { name: "IX_MfgAtpCheck_Part", columns: ["PlantId", "PartId", "CheckedAt"] },
+      { name: "IX_MfgAtpCheck_Result", columns: ["PlantId", "Result", "RequestedAt"] },
+    ],
+    foreignKeys: [{ column: "PartId", refTable: "MfgPart", refColumn: "Id" }],
+    checks: [
+      ck("CK_MfgAtpCheck_Qty", "RequestedQty > 0 AND PromisedQty >= 0 AND ShortageQty >= 0 AND OpeningAvailableQty >= 0", ["RequestedQty", "PromisedQty", "ShortageQty", "OpeningAvailableQty"]),
+      ck("CK_MfgAtpCheck_Mode", "Mode IN ('discrete','cumulative')", ["Mode"]),
+      ck("CK_MfgAtpCheck_Result", "Result IN ('available','delayed','unavailable')", ["Result"]),
+      ck("CK_MfgAtpCheck_Promise", "Result <> 'available' OR PromisedAt IS NOT NULL", ["Result", "PromisedAt"]),
+      ck("CK_MfgAtpCheck_Delay", "DelayBuckets >= 0 AND BucketCount >= 0 AND LeadTimeDays >= 0", ["DelayBuckets", "BucketCount", "LeadTimeDays"]),
+    ],
+  },
+
+  /* 32 — لات تقسیم‌شدهٔ عملیات؛ تقسیم لات سفارش به زیرلات‌های قابل اعزام. */
+  {
+    name: "MfgOperationSplitLot", module: "mfg", title: { fa: "لات تقسیم‌شدهٔ عملیات", en: "Operation split lot" }, pk: "Id",
+    columns: [
+      id(), plant(), req("ProductionOrderOperationId", "text", { len: 60 }), req("SplitNo", "int"),
+      req("Quantity", "decimal", { precision: 18, scale: 4 }),
+      req("CumulativeQuantity", "decimal", { precision: 18, scale: 4 }),
+      req("IsTransferBatch", "bool", { default: "0" }), status("planned|in-progress|completed|cancelled", "'planned'"),
+      c("StartedAt", "datetime"), c("CompletedAt", "datetime"), c("NoteFa", "text", { len: 400 }),
+    ],
+    indexes: [
+      { name: "UX_MfgSplitLot_No", columns: ["ProductionOrderOperationId", "SplitNo"], unique: true },
+      { name: "IX_MfgSplitLot_Status", columns: ["PlantId", "Status", "SplitNo"] },
+    ],
+    foreignKeys: [{ column: "ProductionOrderOperationId", refTable: "MfgProductionOrderOperation", refColumn: "Id" }],
+    checks: [
+      ck("CK_MfgSplitLot_No", "SplitNo > 0", ["SplitNo"]),
+      ck("CK_MfgSplitLot_Qty", "Quantity > 0 AND CumulativeQuantity >= Quantity", ["Quantity", "CumulativeQuantity"]),
+      ck("CK_MfgSplitLot_Status", "Status IN ('planned','in-progress','completed','cancelled')", ["Status"]),
+      ck("CK_MfgSplitLot_Times", "CompletedAt IS NULL OR (StartedAt IS NOT NULL AND CompletedAt >= StartedAt)", ["StartedAt", "CompletedAt"]),
+    ],
+  },
+
+  /* 33 — نسخهٔ تولید (بخش ۱۱.۹): یک محصول می‌تواند چند ترکیب BOM+Routing داشته
+     باشد؛ مثلاً خط A با نسخهٔ ۱ و خط B با نسخهٔ ۲. */
+  {
+    name: "MfgProductionVersion", module: "mfg", title: { fa: "نسخهٔ تولید", en: "Production version" }, pk: "Id",
+    columns: [
+      id(), plant(), req("PartId", "text", { len: 60 }), code("VersionCode"),
+      req("BomRevision", "text", { len: 32 }), req("RoutingRevision", "text", { len: 32 }),
+      c("WorkCenterId", "text", { len: 60, comment: "خط/مرکز کاری مجاز برای این نسخه؛ تهی یعنی هر خطی" }),
+      c("Priority", "int", { comment: "کوچک‌تر یعنی اولویت بالاتر" }),
+      req("IsActive", "bool", { default: "1" }), req("IsDefault", "bool", { default: "0" }),
+      c("EffectiveFrom", "date"), c("EffectiveTo", "date"), c("NoteFa", "text", { len: 800 }),
+    ],
+    indexes: [
+      { name: "UX_MfgProdVersion_Code", columns: ["PlantId", "PartId", "VersionCode"], unique: true },
+      { name: "IX_MfgProdVersion_Part", columns: ["PlantId", "PartId", "IsActive", "IsDefault"] },
+    ],
+    foreignKeys: [
+      { column: "PartId", refTable: "MfgPart", refColumn: "Id" },
+      { column: "WorkCenterId", refTable: "MfgWorkCenter", refColumn: "Id" },
+    ],
+    checks: [
+      ck("CK_MfgProdVersion_Priority", "Priority IS NULL OR Priority >= 0", ["Priority"]),
+      ck("CK_MfgProdVersion_Dates", "EffectiveTo IS NULL OR EffectiveFrom IS NULL OR EffectiveTo >= EffectiveFrom", ["EffectiveFrom", "EffectiveTo"]),
+    ],
+  },
+
+  /* 34 — سفارش برنامه‌ریزی‌شده (بخش ۱۱.۳): خروجی MRP یک پیشنهاد است نه تعهد.
+     برنامه‌ریز بازبینی/ویرایش می‌کند، تأیید می‌کند و سپس به سفارش تولید تبدیل
+     می‌شود. تا وقتی ConvertedProductionOrderId تهی است هیچ کاری روی کف کارگاه
+     ایجاد نشده است. */
+  {
+    name: "MfgPlannedOrder", module: "mfg", title: { fa: "سفارش برنامه‌ریزی‌شده", en: "Planned order" }, pk: "Id",
+    columns: [
+      id(), plant(), req("PlannedOrderNo", "text", { len: 60 }),
+      req("PartId", "text", { len: 60 }),
+      c("ProductionVersionId", "text", { len: 60 }),
+      req("Source", "text", { len: 8, comment: "mrp|mps" }),
+      c("MrpRunNo", "int"), c("MpsRunId", "text", { len: 60 }),
+      req("Quantity", "decimal", { precision: 18, scale: 4 }),
+      c("OriginalQuantity", "decimal", { precision: 18, scale: 4, comment: "مقدار پیشنهادی موتور، پیش از ویرایش برنامه‌ریز" }),
+      req("Uom", "text", { len: 16 }),
+      req("LowLevelCode", "int", { default: "0" }),
+      req("CumulativeLeadTimeDays", "int", { default: "0" }),
+      req("PlannedReleaseAt", "datetime"), req("PlannedDueAt", "datetime"),
+      c("BucketIndex", "int"),
+      req("LotSizingRule", "text", { len: 8, comment: "L4L|FOQ|EOQ|POQ" }),
+      req("Status", "text", { len: 16, default: "'proposed'" }),
+      c("ReviewedBy", "text", { len: 60 }), c("ReviewedAt", "datetime"),
+      c("ConvertedProductionOrderId", "text", { len: 60 }), c("ConvertedAt", "datetime"),
+      c("RejectReasonFa", "text", { len: 400 }), c("NoteFa", "text", { len: 800 }),
+    ],
+    indexes: [
+      { name: "UX_MfgPlannedOrder_No", columns: ["PlantId", "PlannedOrderNo"], unique: true },
+      { name: "IX_MfgPlannedOrder_Part", columns: ["PlantId", "PartId", "Status", "PlannedDueAt"] },
+      { name: "IX_MfgPlannedOrder_Release", columns: ["PlantId", "Status", "PlannedReleaseAt"] },
+    ],
+    foreignKeys: [
+      { column: "PartId", refTable: "MfgPart", refColumn: "Id" },
+      { column: "ProductionVersionId", refTable: "MfgProductionVersion", refColumn: "Id" },
+      { column: "ConvertedProductionOrderId", refTable: "MfgProductionOrder", refColumn: "Id" },
+    ],
+    checks: [
+      ck("CK_MfgPlannedOrder_Source", "Source IN ('mrp','mps')", ["Source"]),
+      ck("CK_MfgPlannedOrder_Rule", "LotSizingRule IN ('L4L','FOQ','EOQ','POQ')", ["LotSizingRule"]),
+      ck("CK_MfgPlannedOrder_Status", "Status IN ('proposed','approved','converted','rejected','cancelled')", ["Status"]),
+      ck("CK_MfgPlannedOrder_Qty", "Quantity > 0 AND (OriginalQuantity IS NULL OR OriginalQuantity > 0)", ["Quantity", "OriginalQuantity"]),
+      ck("CK_MfgPlannedOrder_Dates", "PlannedReleaseAt <= PlannedDueAt", ["PlannedReleaseAt", "PlannedDueAt"]),
+      ck("CK_MfgPlannedOrder_Level", "LowLevelCode >= 0 AND CumulativeLeadTimeDays >= 0", ["LowLevelCode", "CumulativeLeadTimeDays"]),
+    ],
+  },
+
+  /* 35 — Pegging پایدار (بخش ۱۱.۶): هر نیاز مواد به سفارشی که آن را ایجاد کرده
+     گره می‌خورد تا ردیابی چندسطحی از مادهٔ خام تا محصول نهایی بدون باز محاسبهٔ
+     گراف BOM ممکن باشد. */
+  {
+    name: "MfgRequirementPegging", module: "mfg", title: { fa: "ردیابی نیاز (Pegging)", en: "Requirement pegging" }, pk: "Id",
+    columns: [
+      id(), plant(),
+      req("ComponentPartId", "text", { len: 60 }),
+      c("ComponentSupplyRef", "text", { len: 60, comment: "سفارش برنامه‌ریزی‌شده/تولید/موجودی که این جزء را تأمین می‌کند" }),
+      req("ParentPartId", "text", { len: 60 }),
+      c("ParentSupplyRef", "text", { len: 60 }),
+      c("MaterialRequirementId", "text", { len: 60 }),
+      c("ProductionOrderId", "text", { len: 60 }),
+      c("PlannedOrderId", "text", { len: 60 }),
+      req("PeggedQuantity", "decimal", { precision: 18, scale: 4 }),
+      req("QuantityPer", "decimal", { precision: 18, scale: 4, default: "1" }),
+      req("LevelFromRoot", "int", { default: "0" }),
+      req("IsMultiLevel", "bool", { default: "0" }),
+      c("RootPartId", "text", { len: 60 }), c("RootSupplyRef", "text", { len: 60 }),
+    ],
+    indexes: [
+      { name: "IX_MfgPegging_Component", columns: ["PlantId", "ComponentPartId", "ParentPartId"] },
+      { name: "IX_MfgPegging_Root", columns: ["PlantId", "RootPartId", "RootSupplyRef"] },
+      { name: "IX_MfgPegging_Order", columns: ["PlantId", "ProductionOrderId"] },
+    ],
+    foreignKeys: [
+      { column: "ComponentPartId", refTable: "MfgPart", refColumn: "Id" },
+      { column: "ParentPartId", refTable: "MfgPart", refColumn: "Id" },
+      { column: "ProductionOrderId", refTable: "MfgProductionOrder", refColumn: "Id" },
+      { column: "PlannedOrderId", refTable: "MfgPlannedOrder", refColumn: "Id" },
+    ],
+    checks: [
+      ck("CK_MfgPegging_Qty", "PeggedQuantity >= 0 AND QuantityPer > 0", ["PeggedQuantity", "QuantityPer"]),
+      ck("CK_MfgPegging_Level", "LevelFromRoot >= 0", ["LevelFromRoot"]),
+    ],
+  },
+
+  /* 36 — رجیستری و تنظیمات کارخانه. تا پیش از این PlantId فقط یک ستون متنی آزاد بود
+     که با هلپر plant() به همهٔ جدول‌ها تزریق می‌شد و هیچ موجودیتی پشتش نبود؛ scoping هم
+     از آرایهٔ plantIds روی کاربر انجام می‌شد. این جدول آن شناسه را صاحب‌دار می‌کند تا
+     IndustryType و در نتیجه نگاشت قابلیت‌های هر صنعت جایی برای نشستن داشته باشد.
+
+     تعمدی بدون کلید خارجی از ۳۵ جدول دیگر ساخته شده (تصمیم: افزودنی و بدون تغییر شکننده).
+     یعنی PlantId در جدول‌های موجود آزاد می‌ماند و یکپارچگی ارجاعی تضمین نمی‌شود؛ در عوض
+     هیچ مسیر، آزمون یا دادهٔ موجودی نمی‌شکند. این معامله صریحاً پذیرفته شده است. */
+  {
+    name: "MfgPlant", module: "mfg", title: { fa: "کارخانه و نوع صنعت", en: "Plant and industry type" }, pk: "Id",
+    columns: [
+      id(), plant(), code("PlantCode"),
+      req("NameFa", "text", { len: 240 }), c("NameEn", "text", { len: 240 }),
+      req("IndustryType", "text", { len: 24, comment: "discrete|process|food|pharma|automotive|metal" }),
+      req("IsActive", "bool", { default: "1" }),
+      c("NoteFa", "text", { len: 1000 }),
+    ],
+    indexes: [
+      { name: "UX_MfgPlant_PlantId", columns: ["PlantId"], unique: true },
+      { name: "UX_MfgPlant_PlantCode", columns: ["PlantId", "PlantCode"], unique: true },
+      { name: "IX_MfgPlant_Industry", columns: ["IndustryType", "IsActive"] },
+    ],
+    checks: [
+      ck(
+        "CK_MfgPlant_Industry",
+        "IndustryType IN ('discrete','process','food','pharma','automotive','metal','drilling_energy')",
+        ["IndustryType"],
+      ),
     ],
   },
 ];

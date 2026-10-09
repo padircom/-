@@ -17,12 +17,23 @@ const MFG_NAMES = [
   "MfgMaterial", "MfgMaterialRequirement", "MfgMaterialConsumption", "MfgInventoryLevel",
   "MfgCostCenter", "MfgOperationCost", "MfgOrderCost", "MfgProductionAlert", "MfgDispatchingRule", "MfgScheduleRun",
 ];
+/* فاز ۵ — MPS، اندازه‌گذاری لات، ATP و تقسیم لات */
+const MFG_PHASE5_NAMES = [
+  "MfgLotSizingPolicy", "MfgMasterScheduleRun", "MfgDemandForecast",
+  "MfgMasterScheduleLine", "MfgAtpCheck", "MfgOperationSplitLot",
+];
+/* فاز ۵ بخش ۱۱ — سفارش برنامه‌ریزی‌شده، نسخهٔ تولید و Pegging پایدار */
+const MFG_PHASE5B_NAMES = ["MfgProductionVersion", "MfgPlannedOrder", "MfgRequirementPegging"];
+/* رجیستری کارخانه و نوع صنعت؛ عمداً بدون کلید خارجی تا افزودنی بماند. */
+const MFG_PLANT_NAMES = ["MfgPlant"];
+const MFG_ALL_NAMES = [...MFG_NAMES, ...MFG_PHASE5_NAMES, ...MFG_PHASE5B_NAMES, ...MFG_PLANT_NAMES];
 const MFG_V1_NAMES = MFG_NAMES.filter((name) => name !== "MfgScheduleRun");
 
-test("اسکیمای تولید شامل ۲۶ جدول مستقل است", () => {
+test("اسکیمای تولید شامل ۳۶ جدول مستقل است", () => {
   const tables = tablesOfModule("mfg");
-  assert.equal(tables.length, 26);
-  assert.deepEqual(new Set(tables.map((table) => table.name)), new Set(MFG_NAMES));
+  /* ۳۶ = ۳۵ پیشین + MfgPlant (رجیستری کارخانه و نوع صنعت). */
+  assert.equal(tables.length, 36);
+  assert.deepEqual(new Set(tables.map((table) => table.name)), new Set(MFG_ALL_NAMES));
   assert.deepEqual(validateSchema(), []);
 });
 
@@ -54,6 +65,9 @@ test("مهاجرت 0046 همهٔ جدول‌ها، ایندکس‌ها، کلی�
   assert.ok(migration);
   for (const name of MFG_V1_NAMES) assert.ok(migration.statements.some((sql) => sql.includes(`[dbo].[${name}]`)), name);
   assert.ok(!migration.statements.some((sql) => sql.includes("[dbo].[MfgScheduleRun]")));
+  for (const name of MFG_PHASE5_NAMES) assert.ok(!migration.statements.some((sql) => sql.includes(`[dbo].[${name}]`)), `${name} نباید در 0046 باشد`);
+  assert.ok(!migration.statements.some((sql) => sql.includes("SplitLotCount")));
+  assert.ok(!migration.statements.some((sql) => sql.includes("OverlapPct")));
   assert.ok(!migration.statements.some((sql) => sql.includes("DispatchWeight")));
   assert.ok(!migration.statements.some((sql) => sql.includes("BreakStartMinuteOfDay")));
   assert.ok(migration.statements.some((sql) => sql.includes("CHECK (")));
@@ -117,4 +131,49 @@ test("مهاجرت 0050 هزینهٔ planned/scrap را افزایشی اضاف�
   for (const column of operationColumns) assert.ok(!frozenOperationDdl.includes(column), `${column} leaked into frozen MfgOperationCost DDL`);
   for (const column of orderColumns) assert.ok(!frozenOrderDdl.includes(column), `${column} leaked into frozen MfgOrderCost DDL`);
   assert.ok(!frozenOperationDdl.includes("CostElement IN ('material','machine','labor','overhead','scrap')"));
+});
+
+test("مهاجرت 0051 جدول‌های فاز ۵ و ستون‌های تقسیم/هم‌پوشانی را افزایشی می‌سازد", () => {
+  const migration = MIGRATIONS.find((item) => item.version === "0051");
+  assert.ok(migration);
+  assert.equal(migration.name, "manufacturing_mps_lotsizing_atp_overlap");
+  for (const name of MFG_PHASE5_NAMES) {
+    assert.ok(migration.statements.some((sql) => sql.includes(`[dbo].[${name}]`)), `${name} در 0051 ساخته نشده`);
+    assert.ok(tableDef(name), `${name} در اسکیما نیست`);
+  }
+  for (const tableName of ["MfgRoutingOperation", "MfgProductionOrderOperation"]) {
+    for (const column of ["SplitLotCount", "OverlapPct"]) {
+      assert.ok(
+        migration.statements.some((sql) => sql.includes(`dbo.${tableName}`) && sql.includes(column) && sql.includes("IS NULL")),
+        `${tableName}.${column} افزایشی اضافه نشده`,
+      );
+      assert.equal(tableDef(tableName).columns.find((item) => item.name === column)?.nullable, true);
+    }
+  }
+  assert.ok(migration.statements.some((sql) => sql.includes("CK_MfgOrderOp_Split")));
+  assert.ok(migration.statements.some((sql) => sql.includes("CK_MfgRoutingOp_Split")));
+  /* قید هم‌پوشانی بازنویسی می‌شود تا OverlapPct هم پذیرفته شود. */
+  assert.ok(migration.statements.some((sql) => sql.includes("DROP CONSTRAINT CK_MfgOrderOp_Overlap")));
+  assert.ok(migration.statements.some((sql) => sql.includes("OverlapPct IS NOT NULL AND OverlapPct > 0 AND OverlapPct < 100")));
+
+  const frozen = MIGRATIONS.find((item) => item.version === "0046");
+  const frozenOrderOpDdl = frozen.statements.find((sql) => sql.includes("CREATE TABLE [dbo].[MfgProductionOrderOperation]")) ?? "";
+  const frozenRoutingOpDdl = frozen.statements.find((sql) => sql.includes("CREATE TABLE [dbo].[MfgRoutingOperation]")) ?? "";
+  for (const ddl of [frozenOrderOpDdl, frozenRoutingOpDdl]) {
+    assert.ok(ddl.length > 0);
+    assert.ok(!ddl.includes("SplitLotCount"), "SplitLotCount به 0046 نشسته");
+    assert.ok(!ddl.includes("OverlapPct"), "OverlapPct به 0046 نشسته");
+  }
+});
+
+test("DDL فاز ۵ قیدهای دامنه‌ای MPS، لات و ATP را دارد", () => {
+  const ddl = generateDdl("mssql", tablesOfModule("mfg"));
+  assert.match(ddl, /CREATE TABLE \[dbo\]\.\[MfgMasterScheduleLine\]/);
+  assert.match(ddl, /CREATE TABLE \[dbo\]\.\[MfgAtpCheck\]/);
+  assert.match(ddl, /LotSizingRule IN \('L4L','FOQ','EOQ','POQ'\)/);
+  assert.match(ddl, /DemandType IN \('sales-order','forecast','contract','manual'\)/);
+  assert.match(ddl, /Result IN \('available','delayed','unavailable'\)/);
+  assert.match(ddl, /Mode IN \('discrete','cumulative'\)/);
+  assert.match(ddl, /UX_MfgMpsLine_Bucket/);
+  assert.match(ddl, /UX_MfgSplitLot_No/);
 });
