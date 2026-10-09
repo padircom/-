@@ -160,7 +160,8 @@ async function seedBase(repo) {
 /* ═══════════════════════ ثبت مسیرها و مجوزها ═══════════════════════ */
 
 test("MFG-P5 REST: هر ۲۱ مسیر فاز ۵ اعلام و ثبت شده‌اند", () => {
-  assert.equal(MANUFACTURING_IMPLEMENTED_ROUTES.length, 102);
+  /* ۱۰۵ = ۹۹ پیشین + ۳ مسیر تنظیمات کارخانه/نوع صنعت. */
+  assert.equal(MANUFACTURING_IMPLEMENTED_ROUTES.length, 105);
   for (const declared of [
     `GET ${DEMANDS}`, `POST ${DEMANDS}`, `PATCH ${DEMAND}`, `DELETE ${DEMAND}`, `GET ${DEMAND_PHASED}`,
     `GET ${LOT_POLICIES}`, `POST ${LOT_POLICIES}`, `PATCH ${LOT_POLICY}`, `POST ${LOT_EVALUATE}`,

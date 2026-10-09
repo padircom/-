@@ -26,6 +26,10 @@ import {
   resolvePeriodOrderQuantity,
   resolveTransferBatchQty,
   validateLotSizingPolicy,
+  capabilitiesForIndustry,
+  INDUSTRY_CATALOG,
+  INDUSTRY_TYPES,
+  isIndustryType,
 } from "./mfgPlanLogic.js";
 
 const API_VERSION = "mfg-api-v1";
@@ -186,6 +190,10 @@ export const MANUFACTURING_IMPLEMENTED_ROUTES = Object.freeze([
   `GET ${ROOT}/mrp/lead-time-offset`,
   `GET ${ROOT}/mrp/pegging`,
   `GET ${ROOT}/conformance/isa95`,
+  /* تنظیمات کارخانه و نوع صنعت (۳ مسیر) */
+  `GET ${ROOT}/settings`,
+  `PATCH ${ROOT}/settings`,
+  `GET ${ROOT}/capabilities`,
   /* فاز ۵ — قابلیت تعهد تحویل ATP (۳ مسیر) */
   `POST ${ROOT}/atp/checks`,
   `GET ${ROOT}/atp/checks`,
@@ -10287,6 +10295,125 @@ export function registerManufacturingRoutes(app, { repo, subjects, evaluate } = 
         averageCoveragePct: roundTo3(rows.reduce((sum, row) => sum + row.coveragePct, 0) / rows.length),
         functions: rows,
       },
+    };
+  }));
+
+  /* ═══════════════ تنظیمات کارخانه و نوع صنعت ═══════════════
+   * تا این نقطه PlantId یک ستون متنی آزاد بود و هیچ موجودیتی پشتش نبود؛ scoping هم
+   * از آرایهٔ plantIds روی کاربر انجام می‌شد. این سه مسیر آن شناسه را صاحب‌دار
+   * می‌کنند تا IndustryType جایی برای نشستن داشته باشد.
+   *
+   * سه تصمیم که عمداً این‌طور است:
+   *
+   * ۱) Id برابر خود plantId گرفته می‌شود (نه یک کلید جانشین). چون PlantId در ۳۵
+   *    جدول دیگر یک رشتهٔ آزاد است، این تنها راهی است که بدون backfill و بدون FK
+   *    ردیف تنظیمات به شناسهٔ در حال استفاده گره بخورد.
+   *
+   * ۲) PATCH یک upsert است. چون تصمیم بر «حداقلی» بودن بود (یک GET و یک PATCH، بدون
+   *    POST)، ساخت رکورد هم باید از همان PATCH انجام شود. If-Match فقط وقتی لازم
+   *    است که رکورد از قبل وجود داشته باشد؛ برای ساخت، چیزی برای تعارض نیست.
+   *
+   * ۳) نگاشت قابلیت فقط توصیفی است و هیچ رفتاری را گیت نمی‌کند. اگر روزی خواسته شد
+   *    مسیری بر اساس صنعت بسته شود، باید جدا و با آزمون خودش پیاده شود. */
+  const PLANT_SETTINGS_FIELDS = Object.freeze(["PlantCode", "NameFa", "NameEn", "IndustryType", "IsActive", "NoteFa"]);
+
+  const loadPlantSettings = async (r, plantId) => {
+    const rows = await r.list("MfgPlant", { where: [{ column: "PlantId", op: "eq", value: plantId }], orderBy: [{ column: "Id", dir: "asc" }] });
+    return rows.filter((row) => row.PlantId === plantId)[0] ?? null;
+  };
+
+  /* پاسخ یک‌شکل برای GET: ردیف پایگاه‌داده به‌علاوهٔ نگاشت قابلیت همان صنعت.
+   * این‌طور کلاینت با یک فراخوانی هم پیکربندی را دارد و هم آنچه آن صنعت فعال می‌کند. */
+  const plantSettingsView = (row, capabilities) => ({
+    plant: {
+      plantId: row.PlantId,
+      plantCode: row.PlantCode,
+      nameFa: row.NameFa,
+      nameEn: row.NameEn ?? null,
+      industryType: row.IndustryType,
+      isActive: row.IsActive,
+      noteFa: row.NoteFa ?? null,
+      rowVersion: row.RowVersion,
+      updatedAt: row.UpdatedAt ?? null,
+      updatedBy: row.UpdatedBy ?? null,
+    },
+    capabilities,
+  });
+
+  app.get(`${ROOT}/settings`, route("mfg.plant.view", async ({ repo: r, req, plantId }) => {
+    assertOnlyQueryKeys(req.query ?? {}, new Set([]));
+    const row = await loadPlantSettings(r, plantId);
+    /* رکورد نبود = این کارخانه هنوز پیکربندی نشده. ۴۰۴ صادقانه‌تر از برگرداندن
+     * یک پیش‌فرض ساختگی است، چونIndustryType یک تصمیم واقعی است نه حدس. */
+    if (!row) throw notFound();
+    return plantSettingsView(row, runPlanning(() => capabilitiesForIndustry(row.IndustryType)));
+  }));
+
+  app.get(`${ROOT}/capabilities`, route("mfg.plant.view", async ({ repo: r, req, plantId }) => {
+    const q = req.query ?? {};
+    /* allowPreview اجازه می‌دهد صنعت دلخواه بدون ذخیره ارزیابی شود؛ برای پیش‌نمایش
+     * UI پیش از commit کردن تغییر نوع صنعت. بدون آن، کاربر باید اول ذخیره کند تا
+     * ببیند چه چیزی عوض می‌شود. */
+    assertOnlyQueryKeys(q, new Set(["industryType"]));
+    const row = await loadPlantSettings(r, plantId);
+    const preview = text(q.industryType, "industryType", { max: 24 });
+    if (preview !== null && !isIndustryType(preview)) {
+      throw bad("industryType", `«industryType» باید یکی از ${INDUSTRY_TYPES.join("، ")} باشد`);
+    }
+    if (!row && !preview) throw notFound();
+    const industryType = preview ?? row.IndustryType;
+    return {
+      source: preview ? "query-preview" : "plant-settings",
+      persistedIndustryType: row?.IndustryType ?? null,
+      ...runPlanning(() => capabilitiesForIndustry(industryType)),
+      industries: INDUSTRY_CATALOG.map((entry) => ({
+        code: entry.code, titleFa: entry.titleFa, titleEn: entry.titleEn, characteristicFa: entry.characteristicFa,
+      })),
+    };
+  }));
+
+  app.patch(`${ROOT}/settings`, route("mfg.plant.edit", async ({ repo: r, req, plantId, subject }) => {
+    const body = req.body ?? {};
+    assertOnlyKeys(body, new Set(PLANT_SETTINGS_FIELDS));
+    const existing = await loadPlantSettings(r, plantId);
+
+    /* IndustryType هستهٔ این ویژگی است: اگر رکورد تازه ساخته می‌شود الزامی است،
+     * وگرنه مقدار قبلی نگه داشته می‌شود. در هر دو حالت باید در فهرست مجاز باشد. */
+    const industryType = text(body.IndustryType, "IndustryType", { max: 24 }) ?? existing?.IndustryType ?? null;
+    if (!industryType) throw bad("IndustryType", `«IndustryType» الزامی است و باید یکی از ${INDUSTRY_TYPES.join("، ")} باشد`);
+    if (!isIndustryType(industryType)) {
+      throw bad("IndustryType", `«IndustryType» باید یکی از ${INDUSTRY_TYPES.join("، ")} باشد؛ مقدار داده‌شده «${industryType}»`);
+    }
+    const nameFa = text(body.NameFa, "NameFa", { max: 240 }) ?? existing?.NameFa ?? null;
+    if (!nameFa) throw bad("NameFa", "«NameFa» الزامی است");
+
+    const patch = {
+      PlantId: plantId,
+      PlantCode: text(body.PlantCode, "PlantCode", { max: 60 }) ?? existing?.PlantCode ?? plantId,
+      NameFa: nameFa,
+      NameEn: body.NameEn === undefined ? (existing?.NameEn ?? null) : text(body.NameEn, "NameEn", { max: 240 }),
+      IndustryType: industryType,
+      IsActive: body.IsActive === undefined ? (existing?.IsActive ?? true) : bool(body.IsActive, "IsActive", true),
+      NoteFa: body.NoteFa === undefined ? (existing?.NoteFa ?? null) : text(body.NoteFa, "NoteFa", { max: 1000 }),
+    };
+
+    let row;
+    if (!existing) {
+      /* ساخت از راه PATCH: چیزی برای تعارض نیست، پس If-Match خواسته نمی‌شود. */
+      row = await r.create("MfgPlant", { Id: plantId, ...patch });
+    } else {
+      const expectedVersion = rowVersionFrom(req);
+      if (existing.RowVersion !== expectedVersion) {
+        throw conflict("MFG_ROW_VERSION_CONFLICT", "تنظیمات کارخانه از زمان خواندن تغییر کرده است؛ تازه‌خوانی کنید");
+      }
+      const result = await r.patch("MfgPlant", existing.Id, patch, subject.id, expectedVersion);
+      if (!result.ok) throw conflict("MFG_ROW_VERSION_CONFLICT", "تنظیمات کارخانه از زمان خواندن تغییر کرده است؛ تازه‌خوانی کنید");
+      row = await r.get("MfgPlant", existing.Id);
+    }
+    await writeAudit(r, req, "MFG_PLANT_SETTINGS_UPDATED", "MfgPlant", row.Id, "mfg.plant.edit");
+    return {
+      created: !existing,
+      ...plantSettingsView(row, runPlanning(() => capabilitiesForIndustry(row.IndustryType))),
     };
   }));
 }

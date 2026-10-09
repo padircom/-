@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 import { indexDdl, tableDdl, tablesOfModule, validateSchema } from "../server/sqlLogic.js";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const EXPECTED_MFG_TABLES = 35;
+const EXPECTED_MFG_TABLES = 36;
 const tables = tablesOfModule("mfg");
 if (tables.length !== EXPECTED_MFG_TABLES) {
   throw new Error(`اسکیما MFG باید دقیقاً ${EXPECTED_MFG_TABLES} جدول داشته باشد؛ تعداد فعلی: ${tables.length}`);

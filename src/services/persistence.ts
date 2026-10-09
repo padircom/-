@@ -5455,6 +5455,7 @@ const MANUFACTURING_PHASE5B_TABLES = new Set([
 function manufacturingTablesFor0046(): TableDef[] {
   return MANUFACTURING_TABLES
     .filter((table) => table.name !== "MfgScheduleRun"
+      && table.name !== "MfgPlant"
       && !MANUFACTURING_PHASE5_TABLES.has(table.name)
       && !MANUFACTURING_PHASE5B_TABLES.has(table.name))
     .map((table) => {
@@ -6259,6 +6260,25 @@ export const MIGRATIONS: Migration[] = [
       `IF EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_MfgMpsRun_Approval' AND parent_object_id = OBJECT_ID(N'dbo.MfgMasterScheduleRun')) ALTER TABLE dbo.MfgMasterScheduleRun DROP CONSTRAINT CK_MfgMpsRun_Approval;`,
       `IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_MfgMpsRun_Approval' AND parent_object_id = OBJECT_ID(N'dbo.MfgMasterScheduleRun')) ALTER TABLE dbo.MfgMasterScheduleRun WITH CHECK ADD CONSTRAINT CK_MfgMpsRun_Approval CHECK (ApprovedAt IS NULL OR ApprovedBy IS NOT NULL);`,
     ],
+  },
+
+  /* رجیستری کارخانه و نوع صنعت. تا این مهاجرت، PlantId در ۳۵ جدول تولید یک ستون
+   * متنی آزاد بود و هیچ موجودیتی پشتش نبود؛ این جدول آن شناسه را صاحب‌دار می‌کند.
+   *
+   * تعمدی بدون کلید خارجی از جدول‌های موجود ساخته شده (تصمیم: افزودنی و بدون تغییر
+   * شکننده). یعنی PlantId در جدول‌های دیگر آزاد می‌ماند و یکپارچگی ارجاعی تضمین
+   * نمی‌شود؛ در عوض هیچ مسیر، آزمون یا دادهٔ موجودی نمی‌شکند و backfill لازم نیست.
+   * اگر روزی FK خواسته شد، باید با backfill و اصلاح مسیرها جدا انجام شود. */
+  {
+    version: "0055", name: "manufacturing_plant_registry_industry",
+    statements: (() => {
+      const table = MANUFACTURING_TABLES.find((entry) => entry.name === "MfgPlant");
+      if (!table) throw new Error("جدول MfgPlant در MANUFACTURING_TABLES تعریف نشده است");
+      return [
+        tableDdl(table, "mssql"),
+        ...(table.indexes ?? []).map((index) => indexDdl(table, index, "mssql")),
+      ];
+    })(),
   },
 ];
 

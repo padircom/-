@@ -1847,3 +1847,211 @@ export function resolveProductionVersion(input: {
   );
   return ranked[0] ?? null;
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   نوع صنعت و نگاشت قابلیت‌ها
+   ──────────────────────────────────────────────────────────────────────────
+   IndustryType روی MfgPlant می‌نشیند و این نگاشت می‌گوید هر صنعت کدام ویژگی‌ها را
+   باید فعال ببیند.
+
+   دو نکتهٔ طراحی که عمداً این‌طور است:
+
+   ۱) این تابع فقط «توصیف» می‌کند؛ هیچ رفتاری را گیت نمی‌کند. هیچ مسیری بر اساس
+      خروجی آن فعال یا غیرفعال نمی‌شود (تصمیم صریح: نگاشت قابلیت، نه gate). UI و
+      کلاینت مصرف‌کننده‌اند و اگر روزی gate خواستند، باید جدا و با آزمون خودش بیاید.
+
+   ۲) پرچم `implemented` صادقانه می‌گوید این قابلیت در همین مخزن ساخته شده یا نه.
+      بدون آن، فهرست قابلیتی که وجود ندارد را به‌عنوان فعال جا می‌زد — همان اشتباهی
+      که پیش‌تر در شمارش مسیرهای انطباق بود و اصلاح شد. هر capability که
+      implemented=false دارد، یعنی «برای این صنعت مرتبط است ولی هنوز پیاده نشده».
+   ══════════════════════════════════════════════════════════════════════════ */
+
+export type IndustryType = "discrete" | "process" | "food" | "pharma" | "automotive" | "metal";
+
+export const INDUSTRY_TYPES: readonly IndustryType[] = [
+  "discrete", "process", "food", "pharma", "automotive", "metal",
+] as const;
+
+export interface IndustryDescriptor {
+  code: IndustryType;
+  titleFa: string;
+  titleEn: string;
+  /** چه چیزی این صنعت را از بقیه جدا می‌کند؛ در UI به‌عنوان توضیح نشان داده می‌شود. */
+  characteristicFa: string;
+}
+
+export const INDUSTRY_CATALOG: readonly IndustryDescriptor[] = [
+  { code: "discrete", titleFa: "گسسته (مونتاژ)", titleEn: "Discrete / assembly",
+    characteristicFa: "محصول از اجزای شمارشی با BOM و مسیر ساخت گسسته ساخته می‌شود." },
+  { code: "process", titleFa: "فرایندی (شیمیایی)", titleEn: "Process / chemical",
+    characteristicFa: "خروجی پیوسته یا دسته‌ای با فرمولاسیون؛ اندازهٔ دسته با ظرفیت ظرف محدود می‌شود." },
+  { code: "food", titleFa: "غذایی", titleEn: "Food and beverage",
+    characteristicFa: "ردیابی دسته، تاریخ انقضا و HACP الزامی است." },
+  { code: "pharma", titleFa: "دارویی (GMP)", titleEn: "Pharmaceutical / GMP",
+    characteristicFa: "اعتبارسنجی GMP، ردیابی کامل دسته و مستندسازی تغییرات الزامی است." },
+  { code: "automotive", titleFa: "خودروسازی", titleEn: "Automotive",
+    characteristicFa: "الزامات IATF 16949 و PPAP با توالی‌چینی JIT/JIS." },
+  { code: "metal", titleFa: "فلزات و ریخته‌گری", titleEn: "Metals and casting",
+    characteristicFa: "عملیات حرارتی، ایمنی فرایند و ردیابی ذوب/کویل." },
+];
+
+export function isIndustryType(value: unknown): value is IndustryType {
+  return typeof value === "string" && (INDUSTRY_TYPES as readonly string[]).includes(value);
+}
+
+/** کد قابلیت. پیشوند، ماژول owning را نشان می‌دهد. */
+export type IndustryCapabilityCode =
+  | "mps.masterSchedule"
+  | "demand.forecastConsumption"
+  | "planning.plannedOrders"
+  | "planning.lotSizing"
+  | "planning.leadTimeOffset"
+  | "planning.pegging"
+  | "planning.crp"
+  | "atp.capacityAware"
+  | "routing.productionVersions"
+  | "scheduling.splitOverlap"
+  | "quality.batchTraceability"
+  | "quality.gmpValidation"
+  | "quality.shelfLifeControl"
+  | "quality.haccp"
+  | "quality.iatf16949"
+  | "quality.ppapDocumentation"
+  | "maintenance.predictive"
+  | "safety.processSafety"
+  | "traceability.heatMeltTracking";
+
+export interface IndustryCapability {
+  code: IndustryCapabilityCode;
+  titleFa: string;
+  titleEn: string;
+  /** آیا این صنعت باید این قابلیت را فعال ببیند. */
+  enabled: boolean;
+  /** آیا در همین مخزن پیاده شده. false یعنی «مرتبط است ولی ساخته نشده». */
+  implemented: boolean;
+  /** دلیل فعال/غیرفعال بودن؛ برای بازبین انسانی، نه برای منطق برنامه. */
+  reasonFa: string;
+}
+
+interface CapabilityRule {
+  code: IndustryCapabilityCode;
+  titleFa: string;
+  titleEn: string;
+  implemented: boolean;
+  /** صنایعی که این قابلیت برایشان فعال است. */
+  enabledFor: readonly IndustryType[];
+  reasonFa: string;
+}
+
+/**
+ * فهرست قاعده‌محور قابلیت‌ها. ده مورد اول همان زیربخش‌های بخش ۱۱ و فاز ۵ است که
+ * در این مخزن واقعاً پیاده شده‌اند؛ بقیه قابلیت‌های صنعت‌محورند که هنوز ساخته نشده‌اند
+ * و صریحاً implemented=false دارند.
+ */
+const CAPABILITY_RULES: readonly CapabilityRule[] = [
+  { code: "mps.masterSchedule", titleFa: "برنامهٔ اصلی تولید (MPS)", titleEn: "Master production schedule",
+    implemented: true, enabledFor: ["discrete", "process", "food", "pharma", "automotive", "metal"],
+    reasonFa: "زیربخش ۱۱.۱ پیاده شده؛ برای همهٔ صنایع لازم است." },
+  { code: "demand.forecastConsumption", titleFa: "مصرف پیش‌بینی با سفارش قطعی", titleEn: "Forecast consumption",
+    implemented: true, enabledFor: ["discrete", "process", "food", "pharma", "automotive", "metal"],
+    reasonFa: "زیربخش ۱۱.۲ پیاده شده؛ منطق مصرف مستقل از صنعت است." },
+  { code: "planning.plannedOrders", titleFa: "سفارش برنامه‌ریزی‌شده و تبدیل", titleEn: "Planned order and conversion",
+    implemented: true, enabledFor: ["discrete", "process", "food", "pharma", "automotive", "metal"],
+    reasonFa: "زیربخش ۱۱.۳ پیاده شده." },
+  { code: "planning.lotSizing", titleFa: "سیاست اندازهٔ دسته", titleEn: "Lot sizing policy",
+    implemented: true, enabledFor: ["discrete", "process", "food", "pharma", "automotive", "metal"],
+    reasonFa: "زیربخش ۱۱.۴ پیاده شده؛ در فرایندی معمولاً FOQ/POQ و در گسسته L4L غالب است." },
+  { code: "planning.leadTimeOffset", titleFa: "آفست زمان تحویل تجمیعی", titleEn: "Cumulative lead time offset",
+    implemented: true, enabledFor: ["discrete", "process", "food", "pharma", "automotive", "metal"],
+    reasonFa: "زیربخش ۱۱.۵ پیاده شده." },
+  { code: "planning.pegging", titleFa: "ردیابی نیاز (Pegging)", titleEn: "Requirement pegging",
+    implemented: true, enabledFor: ["discrete", "process", "food", "pharma", "automotive", "metal"],
+    reasonFa: "زیربخش ۱۱.۶ پیاده شده؛ پیش‌نیاز ردیابی دسته در صنایع تنظیمی." },
+  { code: "planning.crp", titleFa: "برنامه‌ریزی ظرفیت (CRP)", titleEn: "Capacity requirements planning",
+    implemented: true, enabledFor: ["discrete", "process", "food", "pharma", "automotive", "metal"],
+    reasonFa: "زیربخش ۱۱.۷ پیاده شده." },
+  { code: "atp.capacityAware", titleFa: "ATP با سنجش ظرفیت", titleEn: "Capacity-aware ATP",
+    implemented: true, enabledFor: ["discrete", "process", "food", "pharma", "automotive", "metal"],
+    reasonFa: "زیربخش ۱۱.۸ پیاده شده." },
+  { code: "routing.productionVersions", titleFa: "نسخهٔ تولید (چند BOM/مسیر)", titleEn: "Production version",
+    implemented: true, enabledFor: ["discrete", "process", "food", "pharma", "automotive", "metal"],
+    reasonFa: "زیربخش ۱۱.۹ پیاده شده." },
+  { code: "scheduling.splitOverlap", titleFa: "تقسیم دسته و هم‌پوشانی", titleEn: "Splitting and overlapping",
+    implemented: true, enabledFor: ["discrete", "process", "automotive", "metal"],
+    reasonFa: "زیربخش ۱۱.۱۰ پیاده شده؛ در غذایی/دارویی دسته معمولاً یکپارچه و بدون تقسیم است." },
+
+  { code: "quality.batchTraceability", titleFa: "ردیابی کامل دسته", titleEn: "Full batch traceability",
+    implemented: false, enabledFor: ["food", "pharma", "process", "metal"],
+    reasonFa: "الزام تنظیمی در صنایع غذایی/دارویی/فرایندی؛ در این مخزن هنوز پیاده نشده." },
+  { code: "quality.gmpValidation", titleFa: "اعتبارسنجی GMP", titleEn: "GMP validation",
+    implemented: false, enabledFor: ["pharma", "food"],
+    reasonFa: "الزام GMP؛ مستندسازی تغییرات و اعتبارسنجی فرایند لازم است." },
+  { code: "quality.shelfLifeControl", titleFa: "کنترل تاریخ انقضا و SLED", titleEn: "Shelf life control",
+    implemented: false, enabledFor: ["food", "pharma"],
+    reasonFa: "محصول فاسدشدنی؛ کنترل SLED در موجودی و MRP لازم است." },
+  { code: "quality.haccp", titleFa: "نقاط کنترل بحرانی (HACCP)", titleEn: "HACCP critical control points",
+    implemented: false, enabledFor: ["food"],
+    reasonFa: "الزام اختصاصی صنایع غذایی." },
+  { code: "quality.iatf16949", titleFa: "انطباق IATF 16949", titleEn: "IATF 16949 conformance",
+    implemented: false, enabledFor: ["automotive"],
+    reasonFa: "استاندارد اختصاصی خودروسازی." },
+  { code: "quality.ppapDocumentation", titleFa: "مستندسازی PPAP", titleEn: "PPAP documentation",
+    implemented: false, enabledFor: ["automotive"],
+    reasonFa: "تأیید قطعهٔ تولیدی در خودروسازی الزامی است." },
+  { code: "maintenance.predictive", titleFa: "نگهداری پیش‌بینانه", titleEn: "Predictive maintenance",
+    implemented: false, enabledFor: ["process", "metal"],
+    reasonFa: "توقف در فرایند پیوسته پرهزینه است؛ پایش وضعیت توجیه اقتصادی دارد." },
+  { code: "safety.processSafety", titleFa: "ایمنی فرایند", titleEn: "Process safety management",
+    implemented: false, enabledFor: ["process", "metal"],
+    reasonFa: "مواد خطرناک و عملیات حرارتی؛ مدیریت ایمنی فرایند لازم است." },
+  { code: "traceability.heatMeltTracking", titleFa: "ردیابی ذوب و کویل", titleEn: "Heat and melt tracking",
+    implemented: false, enabledFor: ["metal"],
+    reasonFa: "ردیابی شمارهٔ ذوب در فلزات الزام کیفی است." },
+];
+
+export interface IndustryCapabilityMap {
+  industryType: IndustryType;
+  industryTitleFa: string;
+  industryTitleEn: string;
+  characteristicFa: string;
+  capabilities: IndustryCapability[];
+  totals: { capabilityCount: number; enabledCount: number; implementedCount: number; enabledAndImplementedCount: number };
+}
+
+/**
+ * نگاشت قابلیت‌ها برای یک نوع صنعت. خروجی فقط توصیفی است و رفتاری را گیت نمی‌کند.
+ *
+ * @throws ManufacturingPlanningError اگر industryType نامعتبر باشد.
+ */
+export function capabilitiesForIndustry(industryType: string): IndustryCapabilityMap {
+  if (!isIndustryType(industryType)) {
+    throw new ManufacturingPlanningError(
+      "MFG_UNKNOWN_INDUSTRY_TYPE",
+      `نوع صنعت نامعتبر «${industryType}». مقادیر مجاز: ${INDUSTRY_TYPES.join("، ")}`,
+      { value: industryType, allowed: [...INDUSTRY_TYPES] },
+    );
+  }
+  const descriptor = INDUSTRY_CATALOG.find((entry) => entry.code === industryType);
+  const capabilities: IndustryCapability[] = CAPABILITY_RULES.map((rule) => ({
+    code: rule.code,
+    titleFa: rule.titleFa,
+    titleEn: rule.titleEn,
+    enabled: rule.enabledFor.includes(industryType),
+    implemented: rule.implemented,
+    reasonFa: rule.reasonFa,
+  }));
+  const totals = {
+    capabilityCount: capabilities.length,
+    enabledCount: capabilities.filter((entry) => entry.enabled).length,
+    implementedCount: capabilities.filter((entry) => entry.implemented).length,
+    enabledAndImplementedCount: capabilities.filter((entry) => entry.enabled && entry.implemented).length,
+  };
+  return {
+    industryType,
+    industryTitleFa: descriptor?.titleFa ?? industryType,
+    industryTitleEn: descriptor?.titleEn ?? industryType,
+    characteristicFa: descriptor?.characteristicFa ?? "",
+    capabilities,
+    totals,
+  };
+}

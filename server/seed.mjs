@@ -869,6 +869,32 @@ async function seedMfgPlanning(parts, splitOrder) {
   const HORIZON = { TimeBucket: "week", BucketCount: 4, HorizonStart: HORIZON_START };
   const BUCKETS = { BucketUnit: "week", BucketCount: 4, HorizonStart: HORIZON_START };
 
+  /* پیکربندی کارخانه و نوع صنعت. گیربکس یک محصول مونتاژی است، پس «گسسته»
+   * انتخاب شده؛ با این نوع، تقسیم دسته و هم‌پوشانی فعال می‌مانند و قابلیت‌های
+   * تنظیمیِ غذایی/دارویی/خودرو فعال نمی‌شوند.
+   *
+   * PATCH اینجا یک upsert است، ولی If-Match روی رکورد موجود اجباری است. پس اول
+   * می‌خوانیم: ۴۰۴ یعنی ساخت (بدون If-Match)، وگرنه با RowVersion خوانده‌شده
+   * به‌روزرسانی می‌کنیم. بی‌این کار، اجرای دوم seed مقدار ۴۲۸ می‌گرفت و
+   * mfgStep آن را به‌جای ⏭ به‌عنوان ⛔ می‌شمرد. */
+  await mfgStep("پیکربندی کارخانه و نوع صنعت", async () => {
+    const settings = {
+      PlantCode: "PLANT-DEMO",
+      NameFa: "کارخانهٔ نمایشی مونتاژ گیربکس",
+      NameEn: "Demo Gearbox Assembly Plant",
+      IndustryType: "discrete",
+      IsActive: true,
+      NoteFa: "محصول مونتاژی با BOM چندسطحی؛ تقسیم دسته و هم‌پوشانی مجاز است.",
+    };
+    const current = await mfg("/settings", { user: MFG_ROLES.manager }).catch((err) => (err.status === 404 ? null : Promise.reject(err)));
+    return mfg("/settings", {
+      user: MFG_ROLES.manager,
+      method: "PATCH",
+      body: settings,
+      match: current?.plant?.rowVersion,
+    });
+  });
+
   /* تقاضای ترکیبی: سفارش قطعی، پیش‌بینی (با درصد اطمینان) و قرارداد.
    *
    * FC-DEMO-Q4-00 عمداً در همان سطلِ SO-DEMO-201 (هفتهٔ ۲۰۲۶-۱۰-۰۵) نشسته است تا

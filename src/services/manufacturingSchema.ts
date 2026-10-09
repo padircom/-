@@ -1002,4 +1002,35 @@ export const MANUFACTURING_TABLES: TableDef[] = [
       ck("CK_MfgPegging_Level", "LevelFromRoot >= 0", ["LevelFromRoot"]),
     ],
   },
+
+  /* 36 — رجیستری و تنظیمات کارخانه. تا پیش از این PlantId فقط یک ستون متنی آزاد بود
+     که با هلپر plant() به همهٔ جدول‌ها تزریق می‌شد و هیچ موجودیتی پشتش نبود؛ scoping هم
+     از آرایهٔ plantIds روی کاربر انجام می‌شد. این جدول آن شناسه را صاحب‌دار می‌کند تا
+     IndustryType و در نتیجه نگاشت قابلیت‌های هر صنعت جایی برای نشستن داشته باشد.
+
+     تعمدی بدون کلید خارجی از ۳۵ جدول دیگر ساخته شده (تصمیم: افزودنی و بدون تغییر شکننده).
+     یعنی PlantId در جدول‌های موجود آزاد می‌ماند و یکپارچگی ارجاعی تضمین نمی‌شود؛ در عوض
+     هیچ مسیر، آزمون یا دادهٔ موجودی نمی‌شکند. این معامله صریحاً پذیرفته شده است. */
+  {
+    name: "MfgPlant", module: "mfg", title: { fa: "کارخانه و نوع صنعت", en: "Plant and industry type" }, pk: "Id",
+    columns: [
+      id(), plant(), code("PlantCode"),
+      req("NameFa", "text", { len: 240 }), c("NameEn", "text", { len: 240 }),
+      req("IndustryType", "text", { len: 24, comment: "discrete|process|food|pharma|automotive|metal" }),
+      req("IsActive", "bool", { default: "1" }),
+      c("NoteFa", "text", { len: 1000 }),
+    ],
+    indexes: [
+      { name: "UX_MfgPlant_PlantId", columns: ["PlantId"], unique: true },
+      { name: "UX_MfgPlant_PlantCode", columns: ["PlantId", "PlantCode"], unique: true },
+      { name: "IX_MfgPlant_Industry", columns: ["IndustryType", "IsActive"] },
+    ],
+    checks: [
+      ck(
+        "CK_MfgPlant_Industry",
+        "IndustryType IN ('discrete','process','food','pharma','automotive','metal')",
+        ["IndustryType"],
+      ),
+    ],
+  },
 ];

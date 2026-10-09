@@ -591,7 +591,7 @@ test("MFG REST: شکست میان درج‌های schedule همهٔ جدول‌�
 });
 
 test("MFG REST: باززمان‌بندی فقط عملیات هدف و زنجیرهٔ وابستگی را برنامه‌ریزی می‌کند و diff و نسخهٔ جدید ثبت می‌کند", async () => {
-  assert.equal(MANUFACTURING_IMPLEMENTED_ROUTES.length, 102);
+  assert.equal(MANUFACTURING_IMPLEMENTED_ROUTES.length, 105);
   assert.ok(MANUFACTURING_IMPLEMENTED_ROUTES.includes(`GET ${PART}`));
   assert.ok(MANUFACTURING_IMPLEMENTED_ROUTES.includes(`PATCH ${PART}`));
   assert.ok(MANUFACTURING_IMPLEMENTED_ROUTES.includes(`GET ${BOM_HEADERS}`));

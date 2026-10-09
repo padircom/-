@@ -567,6 +567,10 @@ export const PERMISSION_CATALOG: PermissionDef[] = [
   P("mfg.crp.view", "mfg", "مشاهدهٔ برنامه‌ریزی نیاز ظرفیت (CRP)", "View capacity requirements planning", "internal"),
   P("mfg.mps.approve", "mfg", "تأیید دستی MPS پیش از اجرای MRP", "Approve MPS before MRP run", "confidential", true),
   P("mfg.conformance.view", "mfg", "مشاهدهٔ انطباق ISA-95 و MESA-11", "View ISA-95 / MESA-11 conformance", "internal"),
+  /* تنظیمات کارخانه و نوع صنعت. ویرایش IndustryType رفتار موجود را عوض نمی‌کند
+   * (نگاشت قابلیت فقط توصیفی است)، ولی audited است چون تصمیم سطح کارخانه است. */
+  P("mfg.plant.view", "mfg", "مشاهدهٔ تنظیمات کارخانه و قابلیت‌های صنعت", "View plant settings and industry capabilities", "internal"),
+  P("mfg.plant.edit", "mfg", "ویرایش تنظیمات کارخانه و نوع صنعت", "Maintain plant settings and industry type", "confidential", true),
 
   /* P10/AI-1..4: دستیار هوشمند. پرسش فقط‌خواندنی است، ولی چهار اقتدار جدا
    * دارد و یکی گرفته نمی‌شوند: پرسیدن (ai.assistant.ask)، دیدن بینش آماده
@@ -1138,6 +1142,8 @@ export const ROLE_CATALOG: RoleDef[] = [
       /* بخش ۱۱: نسخهٔ تولید ترکیب BOM+Routing است، پس مالکیتش با مهندسی ساخت است؛
        * اما تبدیل سفارش برنامه‌ریزی‌شده به او داده نمی‌شود (تفکیک وظایف). */
       "mfg.version.view", "mfg.version.edit", "mfg.plannedorder.view", "mfg.conformance.view",
+      /* نوع صنعت را فقط می‌بیند؛ تغییرش با مدیر تولید است. */
+      "mfg.plant.view",
     ],
   },
   {
@@ -1161,6 +1167,8 @@ export const ROLE_CATALOG: RoleDef[] = [
        * (mfg.order.create) را هم دارد. */
       "mfg.plannedorder.view", "mfg.plannedorder.edit", "mfg.plannedorder.approve", "mfg.plannedorder.convert",
       "mfg.version.view", "mfg.version.edit", "mfg.crp.view", "mfg.mps.approve", "mfg.conformance.view",
+      /* برنامه‌ریز قابلیت‌های صنعت را می‌بیند ولی پیکربندی کارخانه با او نیست. */
+      "mfg.plant.view",
     ],
   },
   {
@@ -1179,6 +1187,9 @@ export const ROLE_CATALOG: RoleDef[] = [
        * گزارش ظرفیت را دارد؛ ویرایش مستقیم مقدار لات پیشنهادی با برنامه‌ریز است. */
       "mfg.mps.approve", "mfg.plannedorder.view", "mfg.plannedorder.approve", "mfg.plannedorder.convert",
       "mfg.crp.view", "mfg.version.view", "mfg.conformance.view",
+      /* پیکربندی سطح کارخانه (از جمله نوع صنعت) یک تصمیم مدیریتی است، پس
+       * ویرایشش فقط با مدیر تولید است. */
+      "mfg.plant.view", "mfg.plant.edit",
     ],
   },
   {

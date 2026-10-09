@@ -1385,3 +1385,30 @@ IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_MfgPegging_Root' AND 
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_MfgPegging_Order' AND object_id = OBJECT_ID(N'dbo.MfgRequirementPegging'))
   CREATE INDEX [IX_MfgPegging_Order] ON [dbo].[MfgRequirementPegging] ([PlantId], [ProductionOrderId]);
 GO
+
+-- MfgPlant · کارخانه و نوع صنعت
+IF OBJECT_ID('dbo.MfgPlant', 'U') IS NULL
+CREATE TABLE [dbo].[MfgPlant] (
+  [Id] NVARCHAR(60) NOT NULL,
+  [PlantId] NVARCHAR(60) NOT NULL,
+  [PlantCode] NVARCHAR(60) NOT NULL,
+  [NameFa] NVARCHAR(240) NOT NULL,
+  [NameEn] NVARCHAR(240) NULL,
+  [IndustryType] NVARCHAR(24) NOT NULL,
+  [IsActive] BIT NOT NULL DEFAULT 1,
+  [NoteFa] NVARCHAR(1000) NULL,
+  [CreatedAt] DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
+  [CreatedBy] NVARCHAR(60) NULL,
+  [UpdatedAt] DATETIME2 NULL,
+  [UpdatedBy] NVARCHAR(60) NULL,
+  [RowVersion] INT NOT NULL DEFAULT 1,
+  CONSTRAINT [PK_MfgPlant] PRIMARY KEY ([Id]),
+  CONSTRAINT [CK_MfgPlant_Industry] CHECK (IndustryType IN ('discrete','process','food','pharma','automotive','metal'))
+);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_MfgPlant_PlantId' AND object_id = OBJECT_ID(N'dbo.MfgPlant'))
+  CREATE UNIQUE INDEX [UX_MfgPlant_PlantId] ON [dbo].[MfgPlant] ([PlantId]);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_MfgPlant_PlantCode' AND object_id = OBJECT_ID(N'dbo.MfgPlant'))
+  CREATE UNIQUE INDEX [UX_MfgPlant_PlantCode] ON [dbo].[MfgPlant] ([PlantId], [PlantCode]);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_MfgPlant_Industry' AND object_id = OBJECT_ID(N'dbo.MfgPlant'))
+  CREATE INDEX [IX_MfgPlant_Industry] ON [dbo].[MfgPlant] ([IndustryType], [IsActive]);
+GO

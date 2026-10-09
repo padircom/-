@@ -1372,6 +1372,65 @@ export interface MfgIsa95Conformance {
   };
 }
 
+export type MfgIndustryType = "discrete" | "process" | "food" | "pharma" | "automotive" | "metal";
+
+export const MFG_INDUSTRY_TYPES: readonly MfgIndustryType[] = [
+  "discrete", "process", "food", "pharma", "automotive", "metal",
+] as const;
+
+export interface MfgIndustryCapability {
+  code: string;
+  titleFa: string;
+  titleEn: string;
+  /** آیا این صنعت باید این قابلیت را فعال ببیند. */
+  enabled: boolean;
+  /** آیا در همین سامانه پیاده شده. false یعنی «مرتبط است ولی ساخته نشده». */
+  implemented: boolean;
+  reasonFa: string;
+}
+
+export interface MfgIndustryCapabilityMap {
+  industryType: MfgIndustryType;
+  industryTitleFa: string;
+  industryTitleEn: string;
+  characteristicFa: string;
+  capabilities: MfgIndustryCapability[];
+  totals: {
+    capabilityCount: number;
+    enabledCount: number;
+    implementedCount: number;
+    enabledAndImplementedCount: number;
+  };
+}
+
+export interface MfgPlantSettings {
+  plantId: string;
+  plantCode: string;
+  nameFa: string;
+  nameEn: string | null;
+  industryType: MfgIndustryType;
+  isActive: boolean;
+  noteFa: string | null;
+  /** برای PATCH بعدی باید در If-Match برگردانده شود. */
+  rowVersion: number;
+  updatedAt: string | null;
+  updatedBy: string | null;
+}
+
+export interface MfgPlantSettingsResponse {
+  plant: MfgPlantSettings;
+  capabilities: MfgIndustryCapabilityMap;
+}
+
+export interface MfgPlantSettingsPatch {
+  PlantCode?: string;
+  NameFa?: string;
+  NameEn?: string | null;
+  IndustryType?: MfgIndustryType;
+  IsActive?: boolean;
+  NoteFa?: string | null;
+}
+
 export const MfgClient = {
   /* ── ۵.۳ داده‌های پایه: قطعه و BOM (۱۴ مسیر) ── */
   listParts: (
@@ -2508,4 +2567,33 @@ export const MfgClient = {
   /* ── ۱۱.۱۱ فاز ۵: انطباق ISA-95 / MESA-11 ── */
   getIsa95Conformance: (plantId: string, userId?: string | null) =>
     mfgFetch<MfgIsa95Conformance>(plantId, "/conformance/isa95", { userId }),
+
+  /* ── تنظیمات کارخانه و نوع صنعت ── */
+  getPlantSettings: (plantId: string, userId?: string | null) =>
+    mfgFetch<MfgPlantSettingsResponse>(plantId, "/settings", { userId }),
+
+  /**
+   * به‌روزرسانی تنظیمات کارخانه. `rowVersion` فقط وقتی لازم است که رکورد از قبل
+   * وجود داشته باشد؛ در فراخوانی نخست (ساخت) `null` بدهید.
+   */
+  updatePlantSettings: (
+    plantId: string,
+    body: MfgPlantSettingsPatch,
+    rowVersion: number | null,
+    userId?: string | null,
+  ) =>
+    mfgFetch<MfgPlantSettingsResponse & { created: boolean }>(plantId, "/settings", {
+      method: "PATCH",
+      userId,
+      ifMatch: rowVersion === null ? undefined : rowVersion,
+      body,
+    }),
+
+  /** نگاشت قابلیت‌های صنعت. `industryType` برای پیش‌نمایش بدون ذخیره است. */
+  getIndustryCapabilities: (plantId: string, industryType?: string, userId?: string | null) =>
+    mfgFetch<MfgIndustryCapabilityMap>(
+      plantId,
+      `/capabilities${industryType ? `?industryType=${encodeURIComponent(industryType)}` : ""}`,
+      { userId },
+    ),
 };

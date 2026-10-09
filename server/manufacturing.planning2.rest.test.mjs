@@ -158,7 +158,8 @@ async function seedBase(repo) {
 /* ═══════════════════════ ثبت مسیرها و مجوزها ═══════════════════════ */
 
 test("۱۱: هر ۱۶ مسیر تازهٔ بخش ۱۱ اعلام و ثبت شده‌اند", () => {
-  assert.equal(MANUFACTURING_IMPLEMENTED_ROUTES.length, 102);
+  /* ۱۰۵ = ۹۹ پیشین + ۳ مسیر تنظیمات کارخانه/نوع صنعت. */
+  assert.equal(MANUFACTURING_IMPLEMENTED_ROUTES.length, 105);
   for (const declared of [
     `GET ${VERSIONS}`, `POST ${VERSIONS}`, `PATCH ${VERSION}`, `GET ${PART_VERSION}`,
     `GET ${PLANNED}`, `GET ${PLANNED_ONE}`, `PATCH ${PLANNED_ONE}`,
@@ -653,11 +654,11 @@ test("۱۱.۱۱: گزارش انطباق هر ۱۱ عملکرد MESA را با �
     assert.equal(fn.coveragePct, 100, `عملکرد ${fn.code} پوشش ناقص دارد`);
     for (const route of fn.routes) assert.equal(route.implemented, true, `مسیر ثبت‌نشده: ${route.route}`);
   }
-  assert.equal(res.body.data.isa95.level3.implementedRouteCount, 102);
+  assert.equal(res.body.data.isa95.level3.implementedRouteCount, 105);
   /* از خود اسکیما شمرده می‌شود؛ ۳۵ جدول و ۶۸ کلید خارجی، همگی درون ماژول Mfg*. */
   assert.equal(res.body.data.isa95.level4.foreignKeysToLevel4, 0, "استقلال منطقی دیتابیس حفظ شده است");
   assert.deepEqual(res.body.data.isa95.level4.foreignKeysToLevel4Detail, []);
-  assert.equal(res.body.data.isa95.level4.mfgTableCount, 35);
+  assert.equal(res.body.data.isa95.level4.mfgTableCount, 36);
   assert.equal(res.body.data.isa95.level4.mfgForeignKeyCount, 68);
 });
 

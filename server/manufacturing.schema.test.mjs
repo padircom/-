@@ -24,12 +24,15 @@ const MFG_PHASE5_NAMES = [
 ];
 /* فاز ۵ بخش ۱۱ — سفارش برنامه‌ریزی‌شده، نسخهٔ تولید و Pegging پایدار */
 const MFG_PHASE5B_NAMES = ["MfgProductionVersion", "MfgPlannedOrder", "MfgRequirementPegging"];
-const MFG_ALL_NAMES = [...MFG_NAMES, ...MFG_PHASE5_NAMES, ...MFG_PHASE5B_NAMES];
+/* رجیستری کارخانه و نوع صنعت؛ عمداً بدون کلید خارجی تا افزودنی بماند. */
+const MFG_PLANT_NAMES = ["MfgPlant"];
+const MFG_ALL_NAMES = [...MFG_NAMES, ...MFG_PHASE5_NAMES, ...MFG_PHASE5B_NAMES, ...MFG_PLANT_NAMES];
 const MFG_V1_NAMES = MFG_NAMES.filter((name) => name !== "MfgScheduleRun");
 
-test("اسکیمای تولید شامل ۳۵ جدول مستقل است", () => {
+test("اسکیمای تولید شامل ۳۶ جدول مستقل است", () => {
   const tables = tablesOfModule("mfg");
-  assert.equal(tables.length, 35);
+  /* ۳۶ = ۳۵ پیشین + MfgPlant (رجیستری کارخانه و نوع صنعت). */
+  assert.equal(tables.length, 36);
   assert.deepEqual(new Set(tables.map((table) => table.name)), new Set(MFG_ALL_NAMES));
   assert.deepEqual(validateSchema(), []);
 });

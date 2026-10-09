@@ -25,11 +25,11 @@
 | `src/services/manufacturingSchema.ts` | شش جدول فاز ۵ + سه جدول بخش ۱۱ (`MfgProductionVersion`, `MfgPlannedOrder`, `MfgRequirementPegging`) + دو ستون و دو قید CHECK روی هر دو جدول عملیات + چهار ستون تأیید MPS |
 | `src/services/persistence.ts` | مهاجرت‌های `0051` تا `0054`؛ `manufacturingTablesFor0046()` طوری فیلتر می‌کند که `0046` منجمد بماند |
 | `src/services/accessControl.ts` | نوزده مجوز `mfg.*` تازه (۱۰ فاز ۵ + ۹ بخش ۱۱) و اعطای آن‌ها به نقش‌ها؛ جمع مجوزهای `mfg.*` به **۵۶** رسید |
-| `server/manufacturingApi.js` | ۲۱ مسیر فاز ۵ + ۱۶ مسیر بخش ۱۱ (۶۵ ← ۸۶ ← **۱۰۲** مسیر قرارداد) |
+| `server/manufacturingApi.js` | ۲۱ مسیر فاز ۵ + ۱۶ مسیر بخش ۱۱ + ۳ مسیر تنظیمات کارخانه (۶۵ ← ۸۶ ← ۱۰۲ ← **۱۰۵** مسیر قرارداد) |
 | `server/manufacturingScheduler.js` | تقدم لات انتقال در پاس جلو، دنبالهٔ هم‌پوشان در پاس عقب، تقسیم قطعه‌های زمان‌بندی |
 | `src/services/manufacturingApi.ts` | انواع فاز ۵ و بخش ۱۱، و ۳۷ متد تازه روی `MfgClient` (۲۱ + ۱۶) |
 | `src/components/ManufacturingWorkspace.tsx` | تب تازهٔ `planning` با ده زیربخش (پنج فاز ۵ + پنج بخش ۱۱) |
-| `server/seed.mjs` | `seedMfgPlanning` حالا ۲۵ گام اجرایی دارد: ۱۳ گام فاز ۵ + ۱۲ گام بخش ۱۱ |
+| `server/seed.mjs` | `seedMfgPlanning` حالا ۲۶ گام اجرایی دارد: ۱ گام پیکربندی کارخانه + ۱۳ گام فاز ۵ + ۱۲ گام بخش ۱۱ |
 | `database/manufacturing-schema.sql` | بازتولیدشده با `npm run db:mfg`؛ **۳۵** جدول |
 
 ---
@@ -56,8 +56,8 @@
 
 ```
 npm test
-# tests 4638
-# pass  4638
+# tests 4655
+# pass  4655
 # fail  0
 ```
 
