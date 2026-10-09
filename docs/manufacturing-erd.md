@@ -674,8 +674,10 @@ erDiagram
   ندارد — این عمدی است نه فراموشی. اگر روزی FK خواسته شد باید با backfill جدا انجام شود.
 - `UX_MfgPlant_PlantId` یکتایی `PlantId` را تضمین می‌کند، یعنی **یک ردیف تنظیمات به ازای هر کارخانه**.
   `UX_MfgPlant_PlantCode` هم `(PlantId, PlantCode)` را یکتا نگه می‌دارد.
-- `CK_MfgPlant_Industry` فقط شش مقدار `discrete|process|food|pharma|automotive|metal` را می‌پذیرد.
-  `IndustryType` عمداً `NOT NULL` است: نوع صنعت یک حدس نیست که بتوان خالی گذاشت.
+- `CK_MfgPlant_Industry` فقط هفت مقدار `discrete|process|food|pharma|automotive|metal|drilling_energy`
+  را می‌پذیرد. صنعت هفتم (`drilling_energy` — نفت، گاز و حفاری) با مهاجرت **۰۰۵۶** به این قید اضافه شد؛
+  خودِ ۰۰۵۵ عمداً دست‌نخورده و یخ‌زده مانده تا چک‌سامش برای پایگاه‌داده‌هایی که آن را اجرا کرده‌اند
+  عوض نشود. `IndustryType` عمداً `NOT NULL` است: نوع صنعت یک حدس نیست که بتوان خالی گذاشت.
 - اینکه `IndustryType` کدام قابلیت‌ها را فعال می‌کند **قید جدول نیست**؛ نگاشت قابلیت در موتور دامنه
   (`capabilitiesForIndustry`) نگه داشته می‌شود و فقط توصیفی است — هیچ مسیری بر اساس آن بسته نمی‌شود.
 - `IsActive` نرم‌افزاری است: هیچ قیدی جلوی ثبت داده برای کارخانهٔ غیرفعال را نمی‌گیرد.

@@ -1403,7 +1403,7 @@ CREATE TABLE [dbo].[MfgPlant] (
   [UpdatedBy] NVARCHAR(60) NULL,
   [RowVersion] INT NOT NULL DEFAULT 1,
   CONSTRAINT [PK_MfgPlant] PRIMARY KEY ([Id]),
-  CONSTRAINT [CK_MfgPlant_Industry] CHECK (IndustryType IN ('discrete','process','food','pharma','automotive','metal'))
+  CONSTRAINT [CK_MfgPlant_Industry] CHECK (IndustryType IN ('discrete','process','food','pharma','automotive','metal','drilling_energy'))
 );
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_MfgPlant_PlantId' AND object_id = OBJECT_ID(N'dbo.MfgPlant'))
   CREATE UNIQUE INDEX [UX_MfgPlant_PlantId] ON [dbo].[MfgPlant] ([PlantId]);

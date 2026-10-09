@@ -1866,10 +1866,10 @@ export function resolveProductionVersion(input: {
       implemented=false دارد، یعنی «برای این صنعت مرتبط است ولی هنوز پیاده نشده».
    ══════════════════════════════════════════════════════════════════════════ */
 
-export type IndustryType = "discrete" | "process" | "food" | "pharma" | "automotive" | "metal";
+export type IndustryType = "discrete" | "process" | "food" | "pharma" | "automotive" | "metal" | "drilling_energy";
 
 export const INDUSTRY_TYPES: readonly IndustryType[] = [
-  "discrete", "process", "food", "pharma", "automotive", "metal",
+  "discrete", "process", "food", "pharma", "automotive", "metal", "drilling_energy",
 ] as const;
 
 export interface IndustryDescriptor {
@@ -1893,6 +1893,8 @@ export const INDUSTRY_CATALOG: readonly IndustryDescriptor[] = [
     characteristicFa: "الزامات IATF 16949 و PPAP با توالی‌چینی JIT/JIS." },
   { code: "metal", titleFa: "فلزات و ریخته‌گری", titleEn: "Metals and casting",
     characteristicFa: "عملیات حرارتی، ایمنی فرایند و ردیابی ذوب/کویل." },
+  { code: "drilling_energy", titleFa: "نفت، گاز و حفاری", titleEn: "Drilling and energy",
+    characteristicFa: "عملیات حفاری و تجهیز فشار بالا؛ ایمنی فرایند، مجوز کار و انطباق API الزامی است." },
 ];
 
 export function isIndustryType(value: unknown): value is IndustryType {
@@ -1919,7 +1921,10 @@ export type IndustryCapabilityCode =
   | "quality.ppapDocumentation"
   | "maintenance.predictive"
   | "safety.processSafety"
-  | "traceability.heatMeltTracking";
+  | "traceability.heatMeltTracking"
+  | "quality.apiSpecification"
+  | "hse.permitToWork"
+  | "maintenance.assetIntegrity";
 
 export interface IndustryCapability {
   code: IndustryCapabilityCode;
@@ -1950,44 +1955,44 @@ interface CapabilityRule {
  */
 const CAPABILITY_RULES: readonly CapabilityRule[] = [
   { code: "mps.masterSchedule", titleFa: "برنامهٔ اصلی تولید (MPS)", titleEn: "Master production schedule",
-    implemented: true, enabledFor: ["discrete", "process", "food", "pharma", "automotive", "metal"],
+    implemented: true, enabledFor: ["discrete", "process", "food", "pharma", "automotive", "metal", "drilling_energy"],
     reasonFa: "زیربخش ۱۱.۱ پیاده شده؛ برای همهٔ صنایع لازم است." },
   { code: "demand.forecastConsumption", titleFa: "مصرف پیش‌بینی با سفارش قطعی", titleEn: "Forecast consumption",
-    implemented: true, enabledFor: ["discrete", "process", "food", "pharma", "automotive", "metal"],
+    implemented: true, enabledFor: ["discrete", "process", "food", "pharma", "automotive", "metal", "drilling_energy"],
     reasonFa: "زیربخش ۱۱.۲ پیاده شده؛ منطق مصرف مستقل از صنعت است." },
   { code: "planning.plannedOrders", titleFa: "سفارش برنامه‌ریزی‌شده و تبدیل", titleEn: "Planned order and conversion",
-    implemented: true, enabledFor: ["discrete", "process", "food", "pharma", "automotive", "metal"],
+    implemented: true, enabledFor: ["discrete", "process", "food", "pharma", "automotive", "metal", "drilling_energy"],
     reasonFa: "زیربخش ۱۱.۳ پیاده شده." },
   { code: "planning.lotSizing", titleFa: "سیاست اندازهٔ دسته", titleEn: "Lot sizing policy",
-    implemented: true, enabledFor: ["discrete", "process", "food", "pharma", "automotive", "metal"],
+    implemented: true, enabledFor: ["discrete", "process", "food", "pharma", "automotive", "metal", "drilling_energy"],
     reasonFa: "زیربخش ۱۱.۴ پیاده شده؛ در فرایندی معمولاً FOQ/POQ و در گسسته L4L غالب است." },
   { code: "planning.leadTimeOffset", titleFa: "آفست زمان تحویل تجمیعی", titleEn: "Cumulative lead time offset",
-    implemented: true, enabledFor: ["discrete", "process", "food", "pharma", "automotive", "metal"],
+    implemented: true, enabledFor: ["discrete", "process", "food", "pharma", "automotive", "metal", "drilling_energy"],
     reasonFa: "زیربخش ۱۱.۵ پیاده شده." },
   { code: "planning.pegging", titleFa: "ردیابی نیاز (Pegging)", titleEn: "Requirement pegging",
-    implemented: true, enabledFor: ["discrete", "process", "food", "pharma", "automotive", "metal"],
+    implemented: true, enabledFor: ["discrete", "process", "food", "pharma", "automotive", "metal", "drilling_energy"],
     reasonFa: "زیربخش ۱۱.۶ پیاده شده؛ پیش‌نیاز ردیابی دسته در صنایع تنظیمی." },
   { code: "planning.crp", titleFa: "برنامه‌ریزی ظرفیت (CRP)", titleEn: "Capacity requirements planning",
-    implemented: true, enabledFor: ["discrete", "process", "food", "pharma", "automotive", "metal"],
+    implemented: true, enabledFor: ["discrete", "process", "food", "pharma", "automotive", "metal", "drilling_energy"],
     reasonFa: "زیربخش ۱۱.۷ پیاده شده." },
   { code: "atp.capacityAware", titleFa: "ATP با سنجش ظرفیت", titleEn: "Capacity-aware ATP",
-    implemented: true, enabledFor: ["discrete", "process", "food", "pharma", "automotive", "metal"],
+    implemented: true, enabledFor: ["discrete", "process", "food", "pharma", "automotive", "metal", "drilling_energy"],
     reasonFa: "زیربخش ۱۱.۸ پیاده شده." },
   { code: "routing.productionVersions", titleFa: "نسخهٔ تولید (چند BOM/مسیر)", titleEn: "Production version",
-    implemented: true, enabledFor: ["discrete", "process", "food", "pharma", "automotive", "metal"],
+    implemented: true, enabledFor: ["discrete", "process", "food", "pharma", "automotive", "metal", "drilling_energy"],
     reasonFa: "زیربخش ۱۱.۹ پیاده شده." },
   { code: "scheduling.splitOverlap", titleFa: "تقسیم دسته و هم‌پوشانی", titleEn: "Splitting and overlapping",
-    implemented: true, enabledFor: ["discrete", "process", "automotive", "metal"],
+    implemented: true, enabledFor: ["discrete", "process", "automotive", "metal", "drilling_energy"],
     reasonFa: "زیربخش ۱۱.۱۰ پیاده شده؛ در غذایی/دارویی دسته معمولاً یکپارچه و بدون تقسیم است." },
 
   { code: "quality.batchTraceability", titleFa: "ردیابی کامل دسته", titleEn: "Full batch traceability",
-    implemented: false, enabledFor: ["food", "pharma", "process", "metal"],
+    implemented: false, enabledFor: ["food", "pharma", "process", "metal", "drilling_energy"],
     reasonFa: "الزام تنظیمی در صنایع غذایی/دارویی/فرایندی؛ در این مخزن هنوز پیاده نشده." },
   { code: "quality.gmpValidation", titleFa: "اعتبارسنجی GMP", titleEn: "GMP validation",
     implemented: false, enabledFor: ["pharma", "food"],
     reasonFa: "الزام GMP؛ مستندسازی تغییرات و اعتبارسنجی فرایند لازم است." },
   { code: "quality.shelfLifeControl", titleFa: "کنترل تاریخ انقضا و SLED", titleEn: "Shelf life control",
-    implemented: false, enabledFor: ["food", "pharma"],
+    implemented: false, enabledFor: ["food", "pharma", "drilling_energy"],
     reasonFa: "محصول فاسدشدنی؛ کنترل SLED در موجودی و MRP لازم است." },
   { code: "quality.haccp", titleFa: "نقاط کنترل بحرانی (HACCP)", titleEn: "HACCP critical control points",
     implemented: false, enabledFor: ["food"],
@@ -1999,14 +2004,26 @@ const CAPABILITY_RULES: readonly CapabilityRule[] = [
     implemented: false, enabledFor: ["automotive"],
     reasonFa: "تأیید قطعهٔ تولیدی در خودروسازی الزامی است." },
   { code: "maintenance.predictive", titleFa: "نگهداری پیش‌بینانه", titleEn: "Predictive maintenance",
-    implemented: false, enabledFor: ["process", "metal"],
+    implemented: false, enabledFor: ["process", "metal", "drilling_energy"],
     reasonFa: "توقف در فرایند پیوسته پرهزینه است؛ پایش وضعیت توجیه اقتصادی دارد." },
   { code: "safety.processSafety", titleFa: "ایمنی فرایند", titleEn: "Process safety management",
-    implemented: false, enabledFor: ["process", "metal"],
+    implemented: false, enabledFor: ["process", "metal", "drilling_energy"],
     reasonFa: "مواد خطرناک و عملیات حرارتی؛ مدیریت ایمنی فرایند لازم است." },
   { code: "traceability.heatMeltTracking", titleFa: "ردیابی ذوب و کویل", titleEn: "Heat and melt tracking",
-    implemented: false, enabledFor: ["metal"],
-    reasonFa: "ردیابی شمارهٔ ذوب در فلزات الزام کیفی است." },
+    implemented: false, enabledFor: ["metal", "drilling_energy"],
+    reasonFa: "ردیابی شمارهٔ ذوب در فلزات و لوله‌های چاهی الزام کیفی است." },
+
+  /* سه قابلیت اختصاصی نفت، گاز و حفاری. هیچ‌کدام در این مخزن پیاده نشده‌اند و
+   * صریحاً implemented=false دارند تا قابلیت ساخته‌نشده به‌عنوان فعال جا زده نشود. */
+  { code: "quality.apiSpecification", titleFa: "انطباق API Spec", titleEn: "API specification conformance",
+    implemented: false, enabledFor: ["drilling_energy"],
+    reasonFa: "استانداردهای API (Q1/Q2، 5L، 7-1) در نفت و گاز الزام قراردادی و تنظیمی‌اند." },
+  { code: "hse.permitToWork", titleFa: "مجوز کار و کنترل عملیات خطرناک", titleEn: "Permit to work control",
+    implemented: false, enabledFor: ["drilling_energy"],
+    reasonFa: "عملیات حفاری و فضای بسته نیازمند مجوز کار پیش از شروع است." },
+  { code: "maintenance.assetIntegrity", titleFa: "یکپارچگی تجهیز و پایش خوردگی", titleEn: "Asset integrity and corrosion monitoring",
+    implemented: false, enabledFor: ["drilling_energy"],
+    reasonFa: "تجهیز فشار بالا و خطوط لوله نیازمند بازرسی ادواری و پایش خوردگی‌اند." },
 ];
 
 export interface IndustryCapabilityMap {

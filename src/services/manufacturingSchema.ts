@@ -1028,7 +1028,7 @@ export const MANUFACTURING_TABLES: TableDef[] = [
     checks: [
       ck(
         "CK_MfgPlant_Industry",
-        "IndustryType IN ('discrete','process','food','pharma','automotive','metal')",
+        "IndustryType IN ('discrete','process','food','pharma','automotive','metal','drilling_energy')",
         ["IndustryType"],
       ),
     ],

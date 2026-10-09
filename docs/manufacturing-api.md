@@ -829,7 +829,7 @@ releaseBucket    = receiptBucket − round(leadTimeDays / daysOfBucket)
 | `IsActive` | `bool` | پیش‌فرض `1` |
 | `NoteFa` | `text(1000)` | اختیاری |
 
-`IndustryType` یکی از شش مقدار است: `discrete` (گسسته/مونتاژ)، `process` (فرایندی/شیمیایی)، `food` (غذایی)، `pharma` (دارویی/GMP)، `automotive` (خودروسازی)، `metal` (فلزات و ریخته‌گری). مهاجرت: **۰۰۵۵** `manufacturing_plant_registry_industry`.
+`IndustryType` یکی از هفت مقدار است: `discrete` (گسسته/مونتاژ)، `process` (فرایندی/شیمیایی)، `food` (غذایی)، `pharma` (دارویی/GMP)، `automotive` (خودروسازی)، `metal` (فلزات و ریخته‌گری)، `drilling_energy` (نفت، گاز و حفاری). مهاجرت‌ها: **۰۰۵۵** `manufacturing_plant_registry_industry` (جدول) و **۰۰۵۶** `manufacturing_plant_industry_drilling_energy` (افزودن صنعت هفتم به قید `CK_MfgPlant_Industry`).
 
 ### ۵.۱۳.۴ سه مسیر
 
@@ -845,7 +845,7 @@ releaseBucket    = receiptBucket − round(leadTimeDays / daysOfBucket)
 
 ### ۵.۱۳.۵ نگاشت قابلیت
 
-۱۹ قابلیت تعریف شده است. ده مورد اول همان زیربخش‌های فاز ۵ و بخش ۱۱ است که **در همین مخزن پیاده شده‌اند**؛ نُه مورد باقی قابلیت‌های صنعت‌محورند که هنوز ساخته نشده‌اند و صریحاً `implemented: false` دارند.
+۲۲ قابلیت تعریف شده است. ده مورد اول همان زیربخش‌های فاز ۵ و بخش ۱۱ است که **در همین مخزن پیاده شده‌اند**؛ دوازده مورد باقی قابلیت‌های صنعت‌محورند که هنوز ساخته نشده‌اند و صریحاً `implemented: false` دارند.
 
 هر ورودی چهار فیلد دارد: `enabled` (آیا این صنعت باید فعال ببیند)، `implemented` (آیا واقعاً ساخته شده)، `reasonFa` (دلیل، برای بازبین انسانی) و عنوان فارسی/انگلیسی.
 
@@ -861,8 +861,11 @@ releaseBucket    = receiptBucket − round(leadTimeDays / daysOfBucket)
 | `pharma` | ۱۲ | ۱۰ | ۹ | اعتبارسنجی GMP، ردیابی دسته |
 | `automotive` | ۱۲ | ۱۰ | ۱۰ | PPAP، IATF 16949 |
 | `metal` | ۱۴ | ۱۰ | ۱۰ | ردیابی ذوب/کویل، ایمنی فرایند |
+| `drilling_energy` | ۱۸ | ۱۰ | ۱۰ | انطباق API Spec، مجوز کار، یکپارچگی تجهیز |
 
-تفاوت‌ها واقعی‌اند نه تزئینی: `quality.haccp` فقط برای غذایی فعال است، `quality.ppapDocumentation` فقط برای خودرو، `traceability.heatMeltTracking` فقط برای فلزات، و `scheduling.splitOverlap` در غذایی/دارویی **غیرفعال** است چون دسته در این صنایع یکپارچه است.
+تفاوت‌ها واقعی‌اند نه تزئینی: `quality.haccp` فقط برای غذایی فعال است، `quality.ppapDocumentation` فقط برای خودرو، و `scheduling.splitOverlap` در غذایی/دارویی **غیرفعال** است چون دسته در این صنایع یکپارچه است.
+
+سه قابلیت `quality.apiSpecification`، `hse.permitToWork` و `maintenance.assetIntegrity` **فقط** برای `drilling_energy` فعال‌اند؛ آزمون `MFG-PLANT: نفت، گاز و حفاری سه قابلیت اختصاصی…` هم فعال بودنشان برای این صنعت و هم غیرفعال بودنشان برای شش صنعت دیگر را قفل می‌کند. این صنعت هم‌زمان پروفایل صنایع پیوسته/خطرناک را هم دارد (ایمنی فرایند، نگهداری پیش‌بینانه، ردیابی ذوب، ردیابی دسته) — به همین دلیل با ۱۸ قابلیت فعال، بیشترین تعداد را دارد.
 
 ### ۵.۱۳.۶ تفکیک وظایف
 

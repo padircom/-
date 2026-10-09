@@ -180,8 +180,8 @@ test("MFG-PLANT: مجوزهای مشاهده و ویرایش با تفکیک د�
 
 /* ═══════════════════════ موتور نگاشت قابلیت ═══════════════════════ */
 
-test("MFG-PLANT: هر شش صنعت توصیف‌گر فارسی و انگلیسی دارند", () => {
-  assert.deepEqual([...INDUSTRY_TYPES], ["discrete", "process", "food", "pharma", "automotive", "metal"]);
+test("MFG-PLANT: هر هفت صنعت توصیف‌گر فارسی و انگلیسی دارند", () => {
+  assert.deepEqual([...INDUSTRY_TYPES], ["discrete", "process", "food", "pharma", "automotive", "metal", "drilling_energy"]);
   assert.equal(INDUSTRY_CATALOG.length, INDUSTRY_TYPES.length);
   for (const descriptor of INDUSTRY_CATALOG) {
     assert.ok(descriptor.titleFa.trim().length > 0, `${descriptor.code} عنوان فارسی ندارد`);
@@ -275,15 +275,59 @@ test("MFG-PLANT: قابلیت‌های صنعت‌محور واقعاً بین �
   assert.equal(pharma.has("scheduling.splitOverlap"), false, "دارویی دستهٔ یکپارچه دارد");
 });
 
+test("MFG-PLANT: نفت، گاز و حفاری سه قابلیت اختصاصی و پروفایل صنایع پیوسته را دارد", () => {
+  const drilling = enabledCodes("drilling_energy");
+
+  /* سه قابلیت که فقط برای این صنعت فعال‌اند. اگر روزی قاعده‌شان پاک شود،
+   * این صنعت عملاً به «فرایندی با نام دیگر» تقلیل می‌یابد. */
+  assert.equal(drilling.has("quality.apiSpecification"), true, "انطباق API Spec باید فعال باشد");
+  assert.equal(drilling.has("hse.permitToWork"), true, "مجوز کار باید فعال باشد");
+  assert.equal(drilling.has("maintenance.assetIntegrity"), true, "یکپارچگی تجهیز باید فعال باشد");
+
+  /* و این سه برای هیچ صنعت دیگری فعال نیستند — وگرنه «اختصاصی» معنا ندارد. */
+  for (const industry of ["discrete", "process", "food", "pharma", "automotive", "metal"]) {
+    const other = enabledCodes(industry);
+    for (const code of ["quality.apiSpecification", "hse.permitToWork", "maintenance.assetIntegrity"]) {
+      assert.equal(other.has(code), false, `${industry} نباید ${code} داشته باشد`);
+    }
+  }
+
+  /* پروفایل صنایع پیوسته/خطرناک را هم دارد. */
+  for (const code of ["safety.processSafety", "maintenance.predictive", "quality.batchTraceability", "traceability.heatMeltTracking"]) {
+    assert.equal(drilling.has(code), true, `نفت/گاز باید ${code} داشته باشد`);
+  }
+
+  /* اما الزامات غذایی/دارویی/خودرو را ندارد. */
+  for (const code of ["quality.haccp", "quality.gmpValidation", "quality.iatf16949", "quality.ppapDocumentation"]) {
+    assert.equal(drilling.has(code), false, `نفت/گاز نباید ${code} داشته باشد`);
+  }
+
+  /* سه قابلیت اختصاصی هنوز پیاده نشده‌اند و باید صریحاً همین‌طور علامت بخورند. */
+  const map = capabilitiesForIndustry("drilling_energy");
+  for (const code of ["quality.apiSpecification", "hse.permitToWork", "maintenance.assetIntegrity"]) {
+    const entry = map.capabilities.find((item) => item.code === code);
+    assert.equal(entry.implemented, false, `${code} نباید پیاده‌شده اعلام شود`);
+    assert.ok(entry.reasonFa.trim().length > 0, `${code} دلیل ندارد`);
+  }
+
+  /* عنوان و توضیح تمایز باید واقعی باشد. */
+  assert.equal(map.industryTitleFa, "نفت، گاز و حفاری");
+  assert.equal(map.industryTitleEn, "Drilling and energy");
+  assert.ok(map.characteristicFa.includes("API"), "توضیح تمایز باید به API اشاره کند");
+});
+
 test("MFG-PLANT: شمارش‌های نگاشت قابلیت با دادهٔ واقعی می‌خوانند", () => {
   /* این اعداد قفل شده‌اند تا تغییر بی‌صدا در قواعد، گزارش را واگرا نکند. */
   const expected = {
-    discrete: { capabilityCount: 19, enabledCount: 10, implementedCount: 10, enabledAndImplementedCount: 10 },
-    process: { capabilityCount: 19, enabledCount: 13, implementedCount: 10, enabledAndImplementedCount: 10 },
-    food: { capabilityCount: 19, enabledCount: 13, implementedCount: 10, enabledAndImplementedCount: 9 },
-    pharma: { capabilityCount: 19, enabledCount: 12, implementedCount: 10, enabledAndImplementedCount: 9 },
-    automotive: { capabilityCount: 19, enabledCount: 12, implementedCount: 10, enabledAndImplementedCount: 10 },
-    metal: { capabilityCount: 19, enabledCount: 14, implementedCount: 10, enabledAndImplementedCount: 10 },
+    discrete: { capabilityCount: 22, enabledCount: 10, implementedCount: 10, enabledAndImplementedCount: 10 },
+    process: { capabilityCount: 22, enabledCount: 13, implementedCount: 10, enabledAndImplementedCount: 10 },
+    food: { capabilityCount: 22, enabledCount: 13, implementedCount: 10, enabledAndImplementedCount: 9 },
+    pharma: { capabilityCount: 22, enabledCount: 12, implementedCount: 10, enabledAndImplementedCount: 9 },
+    automotive: { capabilityCount: 22, enabledCount: 12, implementedCount: 10, enabledAndImplementedCount: 10 },
+    metal: { capabilityCount: 22, enabledCount: 14, implementedCount: 10, enabledAndImplementedCount: 10 },
+    /* نفت/گاز/حفاری بیشترین قابلیت فعال را دارد: هم قابلیت‌های صنایع پیوسته
+     * (ایمنی فرایند، نگهداری پیش‌بینانه، ردیابی ذوب) و هم سه مورد اختصاصی خودش. */
+    drilling_energy: { capabilityCount: 22, enabledCount: 18, implementedCount: 10, enabledAndImplementedCount: 10 },
   };
   for (const [industry, totals] of Object.entries(expected)) {
     const map = capabilitiesForIndustry(industry);
@@ -492,7 +536,7 @@ test("MFG-PLANT: پیش‌نمایش صنعت بدون ذخیره، منبع ر�
   assert.equal(preview.body.data.totals.enabledCount, 12);
 
   /* فهرست صنایع هم برمی‌گردد تا UI بدون فراخوانی دیگر کرکره بسازد. */
-  assert.equal(preview.body.data.industries.length, 6);
+  assert.equal(preview.body.data.industries.length, 7);
 
   /* و ذخیره‌شده دست‌نخورده می‌ماند. */
   const stored = await call("GET", SETTINGS, { params: { plantId: PLANT }, headers: H(MANAGER) });

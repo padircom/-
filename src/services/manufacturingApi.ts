@@ -1372,10 +1372,11 @@ export interface MfgIsa95Conformance {
   };
 }
 
-export type MfgIndustryType = "discrete" | "process" | "food" | "pharma" | "automotive" | "metal";
+export type MfgIndustryType =
+  | "discrete" | "process" | "food" | "pharma" | "automotive" | "metal" | "drilling_energy";
 
 export const MFG_INDUSTRY_TYPES: readonly MfgIndustryType[] = [
-  "discrete", "process", "food", "pharma", "automotive", "metal",
+  "discrete", "process", "food", "pharma", "automotive", "metal", "drilling_energy",
 ] as const;
 
 export interface MfgIndustryCapability {

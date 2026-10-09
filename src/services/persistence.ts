@@ -6274,11 +6274,37 @@ export const MIGRATIONS: Migration[] = [
     statements: (() => {
       const table = MANUFACTURING_TABLES.find((entry) => entry.name === "MfgPlant");
       if (!table) throw new Error("جدول MfgPlant در MANUFACTURING_TABLES تعریف نشده است");
+      /* ۰۰۵۵ یخ‌زده است و باید همان شش صنعت اولیه را بسازد. اما این مهاجرت DDL را
+       * از MANUFACTURING_TABLES می‌سازد و آن فهرست حالا هفت صنعت دارد؛ اگر همان را
+       * بدهیم، چک‌سام ۰۰۵۵ بی‌صدا عوض می‌شود و پایگاه‌داده‌ای که ۰۰۵۵ را اجرا کرده
+       * با کد واگرا می‌شود. پس تعریف جدول را دقیقاً به شکل زمان انتشار ۰۰۵۵
+       * بازمی‌سازیم — همان کاری که manufacturingTablesFor0046 برای ۰۰۴۶ می‌کند.
+       * صنعت هفتم (drilling_energy) در مهاجرت ۰۰۵۶ اضافه می‌شود. */
+      const frozen = {
+        ...table,
+        checks: (table.checks ?? []).map((check) =>
+          check.name === "CK_MfgPlant_Industry"
+            ? {
+              ...check,
+              expression: "IndustryType IN ('discrete','process','food','pharma','automotive','metal')",
+            }
+            : check),
+      };
       return [
-        tableDdl(table, "mssql"),
-        ...(table.indexes ?? []).map((index) => indexDdl(table, index, "mssql")),
+        tableDdl(frozen, "mssql"),
+        ...(frozen.indexes ?? []).map((index) => indexDdl(frozen, index, "mssql")),
       ];
     })(),
+  },
+
+  /* صنعت هفتم: نفت، گاز و حفاری. چون CK_MfgPlant_Industry یک قید موجود است، با
+   * drop/re-add عوض می‌شود — همان الگوی CK_MfgMpsRun_Status در ۰۰۵۴. */
+  {
+    version: "0056", name: "manufacturing_plant_industry_drilling_energy",
+    statements: [
+      `IF EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_MfgPlant_Industry' AND parent_object_id = OBJECT_ID(N'dbo.MfgPlant')) ALTER TABLE dbo.MfgPlant DROP CONSTRAINT CK_MfgPlant_Industry;`,
+      `IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_MfgPlant_Industry' AND parent_object_id = OBJECT_ID(N'dbo.MfgPlant')) ALTER TABLE dbo.MfgPlant WITH CHECK ADD CONSTRAINT CK_MfgPlant_Industry CHECK (IndustryType IN ('discrete','process','food','pharma','automotive','metal','drilling_energy'));`,
+    ],
   },
 ];
 
