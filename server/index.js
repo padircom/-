@@ -9,6 +9,7 @@ import { registerDrillRoutes } from "./mcsDrillApi.js";
 import { registerMonitoringWorkspaceRoutes } from "./monitoringWorkspaceApi.js";
 import { registerEqmWorkspaceRoutes, EQM_TABLES } from "./eqmWorkspaceApi.js";
 import { registerManufacturingRoutes } from "./manufacturingApi.js";
+import { registerCmmsRoutes } from "./cmmsApi.js";
 import { authorizeData, scopeData } from "./dataAccess.js";
 import "dotenv/config";
 import express from "express";
@@ -208,7 +209,7 @@ import {
   procurementAlerts,
   poRegistry,
 } from "./engLogic.js";
-import { DEMO_SUBJECTS as ENG_RBAC_SUBJECTS, evaluate as rbacEvaluate } from "./rbacLogic.js";
+import { DEMO_SUBJECTS as ENG_RBAC_SUBJECTS, evaluate as rbacEvaluate, subjectPermissions as rbacSubjectPermissions } from "./rbacLogic.js";
 import {
   CNT_VERSION,
   CONTRACT_TYPE_FA,
@@ -869,6 +870,16 @@ registerDprTablesRoutes(app, { dataDir: path.resolve(process.cwd(), process.env.
 registerFinWorkspaceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
 /* d17/MFG: Plant-scoped API پایه؛ عملیات چندجدولی پس از Unit of Work افزوده می‌شوند. */
 registerManufacturingRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
+/* بخش ۳/CMMS: سامانهٔ نگهداری و تعمیرات و دارایی‌ها — سایت‌محور، مستقل از
+ * جداول تولید، با مجوزهای cmms.* و دامنه‌بندی بر پایهٔ SITE. */
+registerCmmsRoutes(app, {
+  repo,
+  subjects: ENG_RBAC_SUBJECTS,
+  evaluate: rbacEvaluate,
+  /* گذارهای مشروط گردش‌کار باید مجوزهای واقعی کنش‌گر را ببینند،
+   * و آن مجوزها از نقش‌های RBAC مشتق می‌شوند — نه از بدنهٔ درخواست. */
+  subjectPermissions: rbacSubjectPermissions,
+});
 registerCkmWorkspaceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
 registerScmWorkspaceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
 registerRccWorkspaceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });

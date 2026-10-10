@@ -53,13 +53,18 @@ const MES_SIDEBAR_ITEMS: Array<{ id: MfgTab; icon: string; label: Bi }> = [
   { id: "overview", icon: "📊", label: { fa: "داشبورد و OEE", en: "Dashboard & OEE" } },
 ];
 
-/* زیرماژول‌های سرگروه سوم: نگهداری و تعمیرات (CMMS) */
+/* زیرماژول‌های سرگروه سوم: نگهداری و تعمیرات (CMMS) — هم‌راستا با
+ * CMMS_SUBMODULES در CmmsWorkspaceShell تا نوار کناری و تب‌ها یکی بمانند. */
 const CMMS_SIDEBAR_ITEMS: Array<{ id: CmmsSubModuleId; icon: string; label: Bi }> = [
+  { id: "dashboard", icon: "📊", label: { fa: "داشبورد مدیریت نت", en: "Maintenance Dashboard" } },
   { id: "assets", icon: "🏷️", label: { fa: "شناسنامه تجهیزات و دارایی‌ها", en: "Equipment & Asset Registry" } },
-  { id: "pm", icon: "🗓️", label: { fa: "برنامه‌ریزی نت پیشگیرانه (PM)", en: "Preventive Maintenance (PM)" } },
-  { id: "work-orders", icon: "🛠️", label: { fa: "دستور کار تعمیرات (Work Order)", en: "Maintenance Work Orders" } },
-  { id: "spares", icon: "⚙️", label: { fa: "قطعات یدکی و ابزارها", en: "Spare Parts & Tooling" } },
-  { id: "analytics", icon: "📉", label: { fa: "شاخص‌ها و تحلیل نت (MTBF / MTTR)", en: "MTBF / MTTR Analytics" } },
+  { id: "families", icon: "🧬", label: { fa: "خانوادهٔ تجهیز (PMworks)", en: "Equipment Family (PMworks)" } },
+  { id: "pm", icon: "🗓️", label: { fa: "برنامه‌ریزی نت پیشگیرانه", en: "Preventive Maintenance Planning" } },
+  { id: "work-orders", icon: "🛠️", label: { fa: "درخواست‌کار و دستورکار", en: "Work Requests & Orders" } },
+  { id: "spares", icon: "⚙️", label: { fa: "انبار قطعات یدکی", en: "MRO Spare Parts" } },
+  { id: "condition", icon: "🌡️", label: { fa: "پایش وضعیت و هشدارها", en: "Condition Monitoring & Alerts" } },
+  { id: "analytics", icon: "📈", label: { fa: "قابلیت اطمینان و هزینهٔ چرخهٔ عمر", en: "Reliability & LCC Analytics" } },
+  { id: "ai", icon: "🤖", label: { fa: "هوش مصنوعی نت", en: "Maintenance AI" } },
 ];
 
 /* زیرماژول‌های سرگروه چهارم: زنجیره تأمین، بازرگانی و مالی (SCM & Finance) */

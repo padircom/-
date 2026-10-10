@@ -67,9 +67,13 @@ test("P10: کلید مجوزها با قالب domain.resource.action می‌خ�
     "ai.export.run": "confidential",
   });
   /* شمار نقش‌ها در کاتالوگ مرکزی نگه داشته می‌شود؛ این آزمون پیش‌تر روی ۲۱
-   * مانده بود در حالی که کاتالوگ ۲۸ نقش دارد (همان عددی که rbac.test.mjs
-   * بررسی می‌کند). */
-  assert.equal(ROLE_CATALOG.length, 28);
+   * مانده بود در حالی که کاتالوگ ۲۸ نقش داشت (همان عددی که rbac.test.mjs
+   * بررسی می‌کند). با افزودن هفت نقش بخش ۳ (نگهداری و تعمیرات) شمار به ۳۵
+   * رسید: maintenance_manager, maintenance_planner, reliability_engineer,
+   * maintenance_engineer, maintenance_technician, maintenance_storekeeper,
+   * condition_monitoring_analyst. همان الگویی که برای هفت نقش تولیدی (mfg)
+   * به کار رفت. */
+  assert.equal(ROLE_CATALOG.length, 35);
 });
 
 /* ══════════════════ منابع و ابزارها ══════════════════ */

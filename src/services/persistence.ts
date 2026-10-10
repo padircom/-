@@ -13,6 +13,7 @@
  */
 
 import { MANUFACTURING_TABLES } from "./manufacturingSchema";
+import { CMMS_TABLES } from "./cmmsSchema";
 
 export const PERSISTENCE_VERSION = "sql-v1";
 
@@ -5329,6 +5330,10 @@ export const SCHEMA: TableDef[] = [
 
   /* MFG operation-based manufacturing schema — جدا از جداول PEX/WBS. */
   ...MANUFACTURING_TABLES,
+
+  /* CMMS/EAM/APM — بخش ۳ سازمان. کاملاً مستقل از جداول تولید و مالی؛
+   * هیچ کلید خارجی از این بلوک به جدول بیرونی وجود ندارد. */
+  ...CMMS_TABLES,
 ];
 
 
@@ -6305,6 +6310,28 @@ export const MIGRATIONS: Migration[] = [
       `IF EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_MfgPlant_Industry' AND parent_object_id = OBJECT_ID(N'dbo.MfgPlant')) ALTER TABLE dbo.MfgPlant DROP CONSTRAINT CK_MfgPlant_Industry;`,
       `IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_MfgPlant_Industry' AND parent_object_id = OBJECT_ID(N'dbo.MfgPlant')) ALTER TABLE dbo.MfgPlant WITH CHECK ADD CONSTRAINT CK_MfgPlant_Industry CHECK (IndustryType IN ('discrete','process','food','pharma','automotive','metal','drilling_energy'));`,
     ],
+  },
+
+  /* بخش ۳ — سامانهٔ نگهداری و تعمیرات و دارایی‌ها (CMMS / EAM / APM).
+   *
+   * ۶۵ جدول تازه با پیشوند Cmms و module = "cmms". هیچ جدول یا ستون موجودی
+   * تغییر نمی‌کند، پس این مهاجرت کاملاً افزودنی است.
+   *
+   * ترتیب ساخت اهمیت دارد: کلیدهای خارجی درون CREATE TABLE می‌آیند، پس جدول
+   * والد باید پیش از فرزند ساخته شود. CMMS_TABLES از ابتدا با همین ترتیب
+   * چیده شده و اینجا هم بر اساس همان ترتیب پیمایش می‌شود تا وابسته به
+   * مرتب‌سازی تصادفی نشود.
+   *
+   * استقلال ارجاعی: هیچ FK از این بلوک به جداول Mfg/Fin/Hrm/Scm وجود ندارد.
+   * یکپارچگی بین‌بخشی با ستون‌های متنی آزاد (MfgWorkCenterId، ScmWarehouseId،
+   * CostCenterRef، UserId) و در لایهٔ دامنه انجام می‌شود — همان معامله‌ای که
+   * برای MfgPlant در ۰۰۵۵ صریحاً پذیرفته شد. */
+  {
+    version: "0057", name: "cmms_asset_maintenance_foundation",
+    statements: CMMS_TABLES.flatMap((table) => [
+      tableDdl(table, "mssql"),
+      ...(table.indexes ?? []).map((index) => indexDdl(table, index, "mssql")),
+    ]),
   },
 ];
 

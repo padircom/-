@@ -582,6 +582,109 @@ export const PERMISSION_CATALOG: PermissionDef[] = [
   P("ai.insight.view", "core", "مشاهدهٔ بینش‌های آمادهٔ پروژه", "View ready project insights", "internal"),
   P("ai.history.view", "core", "مشاهدهٔ تاریخچهٔ پرسش و پاسخ", "View AI interaction history", "confidential"),
   P("ai.export.run", "core", "خروجی جدول/سند از پاسخ دستیار", "Export AI answer table/document", "confidential", true),
+
+  /* ── بخش ۳: نگهداری و تعمیرات و دارایی‌ها (CMMS / EAM / APM) ──────────────
+   * دامنهٔ این مجوزها `siteId` است نه `projectId`؛ یک دارایی فیزیکی عمری
+   * ده‌ساله دارد و نباید دسترسی به آن با چرخهٔ قرارداد/پروژه عوض شود.
+   * تفکیک اقتدارها عمداً ریز است: «دیدن دستورکار»، «آزادسازی» و «بستن» سه
+   * مسئولیت متفاوت‌اند و در محیط عملیاتی باید جدا گیت شوند. */
+  /* دارایی و شناسنامه */
+  P("cmms.asset.view", "cmms", "مشاهدهٔ شناسنامهٔ تجهیزات و دارایی‌ها", "View asset registry", "internal"),
+  P("cmms.asset.edit", "cmms", "ثبت و ویرایش تجهیز", "Create and edit assets", "confidential", true),
+  P("cmms.asset.commission", "cmms", "راه‌اندازی و تحویل‌گرفن تجهیز", "Commission asset", "confidential", true),
+  P("cmms.asset.retire", "cmms", "از رده خارج‌کردن و اسقاط دارایی", "Retire or dispose asset", "restricted", true),
+  P("cmms.location.view", "cmms", "مشاهدهٔ ساختار مکان و جانمایی", "View location hierarchy", "internal"),
+  P("cmms.location.edit", "cmms", "مدیریت ساختار مکان و مختصات جغرافیایی", "Manage location hierarchy", "confidential", true),
+  P("cmms.meter.view", "cmms", "مشاهدهٔ کنتورهای کارکرد", "View operating meters", "internal"),
+  P("cmms.meter.read", "cmms", "ثبت قرائت کنتور کارکرد", "Post meter reading", "internal", true),
+  P("cmms.barcode.view", "cmms", "مشاهدهٔ بارکد و QR تجهیز", "View asset barcodes", "internal"),
+  P("cmms.barcode.print", "cmms", "چاپ و صدور برچسب بارکد", "Print asset barcode label", "confidential", true),
+  P("cmms.document.view", "cmms", "مشاهدهٔ آرشیو فنی اسناد", "View technical archive", "internal"),
+  P("cmms.document.edit", "cmms", "بارگذاری و ویرایش اسناد فنی", "Upload and edit technical documents", "confidential", true),
+
+  /* خانوادهٔ تجهیز — ساختار ۱۳گانهٔ PMworks */
+  P("cmms.family.view", "cmms", "مشاهدهٔ الگو و خانوادهٔ تجهیزات", "View equipment families", "internal"),
+  P("cmms.family.edit", "cmms", "تعریف و ویرایش خانوادهٔ تجهیز", "Maintain equipment family", "confidential", true),
+  P("cmms.family.approve", "cmms", "تصویب نسخهٔ خانوادهٔ تجهیز", "Approve equipment family revision", "restricted", true),
+  P("cmms.family.bulkchange", "cmms", "اعمال تغییر همگانی روی اعضای خانواده", "Apply family-wide bulk change", "restricted", true),
+  P("cmms.customfield.edit", "cmms", "مدیریت فیلدهای پویای خانواده", "Manage family dynamic fields", "confidential", true),
+
+  /* مهندسی قابلیت اطمینان و استانداردها */
+  P("cmms.failuremode.view", "cmms", "مشاهدهٔ حالات خرابی استاندارد (ISO 14224)", "View standard failure modes", "internal"),
+  P("cmms.failuremode.edit", "cmms", "تعریف و ویرایش حالت خرابی خانواده", "Maintain family failure modes", "confidential", true),
+  P("cmms.failure.report", "cmms", "ثبت رخداد خرابی با کد ISO 14224", "Report failure event", "internal", true),
+  P("cmms.downtime.report", "cmms", "ثبت توقف تجهیز", "Report asset downtime", "internal", true),
+  P("cmms.fmea.view", "cmms", "مشاهدهٔ تحلیل FMEA/FMECA (IEC 60812)", "View FMEA/FMECA analysis", "internal"),
+  P("cmms.fmea.edit", "cmms", "تدوین و ویرایش تحلیل FMEA", "Maintain FMEA analysis", "confidential", true),
+  P("cmms.fmea.approve", "cmms", "تصویب تحلیل FMEA/FMECA", "Approve FMEA/FMECA analysis", "restricted", true),
+  P("cmms.rcm.view", "cmms", "مشاهدهٔ تحلیل RCM (IEC 60300-3-11)", "View RCM analysis", "internal"),
+  P("cmms.rcm.edit", "cmms", "تدوین و ویرایش تحلیل RCM", "Maintain RCM analysis", "confidential", true),
+  P("cmms.rcm.approve", "cmms", "تصویب تحلیل RCM و برنامهٔ نت", "Approve RCM analysis and plan", "restricted", true),
+  P("cmms.rca.view", "cmms", "مشاهدهٔ پرونده‌های تحلیل ریشه‌ای", "View RCA cases", "internal"),
+  P("cmms.rca.edit", "cmms", "تدوین تحلیل ریشه‌ای (5-Why / Fishbone)", "Maintain RCA case", "confidential", true),
+  P("cmms.rca.close", "cmms", "بستن و تأیید اثربخشی تحلیل ریشه‌ای", "Close and verify RCA case", "restricted", true),
+  P("cmms.reliability.view", "cmms", "مشاهدهٔ شاخص‌های قابلیت اطمینان (MTBF/MTTR)", "View reliability indicators", "internal"),
+  P("cmms.oee.view", "cmms", "مشاهدهٔ اثربخشی کلی تجهیزات (OEE)", "View OEE snapshots", "internal"),
+
+  /* پایش وضعیت (ISO 17359) */
+  P("cmms.condition.view", "cmms", "مشاهدهٔ داده‌های پایش وضعیت", "View condition monitoring data", "internal"),
+  P("cmms.condition.record", "cmms", "ثبت قرائت پایش وضعیت", "Post condition reading", "internal", true),
+  P("cmms.condition.threshold", "cmms", "تنظیم آستانه‌های پایش وضعیت", "Maintain condition thresholds", "confidential", true),
+
+  /* درخواست‌کار و دستورکار */
+  P("cmms.request.view", "cmms", "مشاهدهٔ درخواست‌های کار نت", "View work requests", "internal"),
+  P("cmms.request.create", "cmms", "ثبت درخواست کار نت", "Create work request", "internal", true),
+  P("cmms.request.review", "cmms", "بررسی و تصویب درخواست کار", "Review and approve work request", "confidential", true),
+  P("cmms.request.reject", "cmms", "رد درخواست کار", "Reject work request", "confidential", true),
+  P("cmms.wo.view", "cmms", "مشاهدهٔ دستورکارهای نت", "View maintenance work orders", "internal"),
+  P("cmms.wo.create", "cmms", "ایجاد دستورکار نت", "Create maintenance work order", "confidential", true),
+  P("cmms.wo.plan", "cmms", "برنامه‌ریزی دستورکار (منابع و برآورد)", "Plan work order", "confidential", true),
+  P("cmms.wo.schedule", "cmms", "زمان‌بندی دستورکار در تقویم", "Schedule work order", "confidential", true),
+  P("cmms.wo.release", "cmms", "آزادسازی دستورکار برای اجرا", "Release work order", "restricted", true),
+  P("cmms.wo.execute", "cmms", "اجرای دستورکار و ثبت پیشرفت", "Execute work order", "internal", true),
+  P("cmms.wo.complete", "cmms", "اعلام اتمام دستورکار", "Complete work order", "confidential", true),
+  P("cmms.wo.close", "cmms", "بستن دستورکار و قطعی‌کردن هزینه", "Close work order and finalize cost", "restricted", true),
+  P("cmms.wo.cancel", "cmms", "لغو دستورکار", "Cancel work order", "restricted", true),
+  P("cmms.labor.report", "cmms", "ثبت نفرساعت و کارکرد تکنسین", "Report labor hours", "internal", true),
+  P("cmms.workflow.view", "cmms", "مشاهدهٔ تعریف و مسیر گردش‌کار", "View workflow definitions", "internal"),
+  P("cmms.workflow.edit", "cmms", "تعریف و ویرایش گردش‌کار", "Maintain workflow definitions", "restricted", true),
+
+  /* برنامه‌ریزی نت */
+  P("cmms.pm.view", "cmms", "مشاهدهٔ برنامه‌های نگهداشت پیشگیرانه", "View PM schedules", "internal"),
+  P("cmms.pm.edit", "cmms", "تعریف و ویرایش برنامهٔ PM", "Maintain PM schedule", "confidential", true),
+  P("cmms.strategy.approve", "cmms", "تصویب استراتژی نگهداشت", "Approve maintenance strategy", "restricted", true),
+
+  /* قطعات یدکی و انبار نت */
+  P("cmms.spare.view", "cmms", "مشاهدهٔ قطعات یدکی MRO و موجودی", "View MRO spare parts", "internal"),
+  P("cmms.spare.edit", "cmms", "ثبت و ویرایش قطعهٔ یدکی", "Maintain spare part master", "confidential", true),
+  P("cmms.spare.issue", "cmms", "صدور قطعه از انبار نت", "Issue spare part", "confidential", true),
+  P("cmms.spare.receive", "cmms", "رسید قطعه به انبار نت", "Receive spare part", "confidential", true),
+
+  /* منابع انسانی، پیمانکار و ابزار */
+  P("cmms.technician.view", "cmms", "مشاهدهٔ تکنسین‌ها و مهارت‌ها", "View technicians and skills", "internal"),
+  P("cmms.technician.edit", "cmms", "مدیریت تکنسین‌ها و مهارت‌ها", "Manage technicians and skills", "confidential", true),
+  P("cmms.crew.view", "cmms", "مشاهدهٔ گروه‌های کاری و تقویم شیفت", "View crews and shift calendar", "internal"),
+  P("cmms.crew.edit", "cmms", "مدیریت گروه‌های کاری و تقویم شیفت", "Manage crews and shift calendar", "confidential", true),
+  P("cmms.vendor.view", "cmms", "مشاهدهٔ تأمین‌کنندگان و پیمانکاران نت", "View maintenance vendors", "internal"),
+  P("cmms.vendor.edit", "cmms", "مدیریت تأمین‌کنندگان و پیمانکاران نت", "Manage maintenance vendors", "confidential", true),
+
+  /* هزینه، شاخص و هشدار */
+  P("cmms.cost.view", "cmms", "مشاهدهٔ هزینه‌های نت", "View maintenance costs", "confidential"),
+  P("cmms.cost.post", "cmms", "ثبت هزینهٔ نت روی دستورکار", "Post maintenance cost", "confidential", true),
+  P("cmms.lcc.view", "cmms", "مشاهدهٔ هزینهٔ چرخهٔ عمر دارایی (LCC)", "View life cycle cost", "confidential"),
+  P("cmms.lcc.edit", "cmms", "تحلیل و ثبت سناریوی LCC", "Maintain LCC scenarios", "confidential", true),
+  P("cmms.kpi.view", "cmms", "مشاهدهٔ شاخص‌های عملکرد نت (EN 15341)", "View maintenance KPIs", "internal"),
+  P("cmms.kpi.edit", "cmms", "تنظیم هدف و آستانهٔ شاخص‌ها", "Maintain KPI targets", "confidential", true),
+  P("cmms.dashboard.view", "cmms", "مشاهدهٔ داشبورد مدیریتی نت", "View maintenance dashboard", "internal"),
+  P("cmms.alert.view", "cmms", "مشاهدهٔ هشدارهای نت", "View maintenance alerts", "internal"),
+  P("cmms.alert.ack", "cmms", "رسیدگی و تأیید هشدار نت", "Acknowledge maintenance alert", "confidential", true),
+
+  /* لایهٔ هوش مصنوعی — «دیدن پیشنهاد»، «اجرای موتور» و «اعمال پیشنهاد»
+   * سه اقتدار جدا هستند. اعمال پیشنهاد AI یک تصمیم انسانی است و عمداً
+   * از اجرای موتور جدا گیت شده تا هیچ پیشنهاد خودکار بی‌تأیید اجرا نشود. */
+  P("cmms.ai.view", "cmms", "مشاهدهٔ پیشنهادهای هوش مصنوعی نت", "View CMMS AI recommendations", "internal"),
+  P("cmms.ai.run", "cmms", "اجرای موتورهای تحلیلی نت", "Run CMMS AI engines", "confidential", true),
+  P("cmms.ai.apply", "cmms", "اعمال پیشنهاد هوش مصنوعی روی دادهٔ واقعی", "Apply AI recommendation", "restricted", true),
 ];
 
 export const PERMISSION_CODES: string[] = PERMISSION_CATALOG.map((p) => p.code);
@@ -1241,6 +1344,159 @@ export const ROLE_CATALOG: RoleDef[] = [
     grants: ["mfg.order.view", "mfg.cost.view", "mfg.cost.reconcile", "mfg.dashboard.view",
       /* فاز ۵: حسابدار صنعتی برنامهٔ اصلی را برای تعهدات مالی می‌بیند. */
       "mfg.mps.view", "mfg.atp.view"],
+  },
+  /* ── نقش‌های بخش ۳: نگهداری و تعمیرات ────────────────────────────────────
+   * این نقش‌ها عمداً از نقش‌های تولید (mfg) جدا هستند: تفکیک «برنامه‌ریز
+   * تولید» و «برنامه‌ریز نت» یک الزام سازمانی است، نه یک ترجیح پیاده‌سازی.
+   * دسترسی هر نقش در زمان ارزیابی به `plantIds`/`siteId` کاربر هم محدود
+   * می‌شود، همان‌طور که برای نقش‌های تولید انجام شد. */
+  {
+    code: "maintenance_manager",
+    title: { fa: "مدیر نگهداری و تعمیرات", en: "Maintenance Manager" },
+    inherits: ["viewer"],
+    clearance: "restricted",
+    party: "contractor",
+    grants: [
+      "cmms.asset.view", "cmms.asset.edit", "cmms.asset.commission", "cmms.asset.retire",
+      "cmms.location.view", "cmms.location.edit", "cmms.meter.view", "cmms.barcode.view",
+      "cmms.document.view", "cmms.document.edit",
+      "cmms.family.view", "cmms.family.edit", "cmms.family.approve", "cmms.family.bulkchange",
+      "cmms.customfield.edit",
+      "cmms.failuremode.view", "cmms.failuremode.edit", "cmms.failure.report", "cmms.downtime.report",
+      "cmms.fmea.view", "cmms.fmea.approve", "cmms.rcm.view", "cmms.rcm.approve",
+      "cmms.rca.view", "cmms.rca.close", "cmms.reliability.view", "cmms.oee.view",
+      "cmms.condition.view", "cmms.condition.threshold",
+      "cmms.request.view", "cmms.request.review", "cmms.request.reject",
+      "cmms.wo.view", "cmms.wo.release", "cmms.wo.close", "cmms.wo.cancel",
+      "cmms.workflow.view", "cmms.workflow.edit",
+      "cmms.pm.view", "cmms.strategy.approve",
+      "cmms.spare.view", "cmms.technician.view", "cmms.technician.edit",
+      "cmms.crew.view", "cmms.crew.edit", "cmms.vendor.view", "cmms.vendor.edit",
+      "cmms.cost.view", "cmms.cost.post", "cmms.lcc.view", "cmms.lcc.edit",
+      "cmms.kpi.view", "cmms.kpi.edit", "cmms.dashboard.view",
+      "cmms.alert.view", "cmms.alert.ack",
+      "cmms.ai.view", "cmms.ai.run", "cmms.ai.apply",
+      /* تدوین FMEA/RCM با مهندس قابلیت اطمینان است، نه مدیر؛ مدیر تصویب می‌کند.
+       * این تفکیک دقیقاً همان چیزی است که در ممیزی ISO 55001 پرسیده می‌شود. */
+    ],
+  },
+  {
+    code: "maintenance_planner",
+    title: { fa: "برنامه‌ریز نگهداری و تعمیرات", en: "Maintenance Planner" },
+    inherits: ["viewer"],
+    clearance: "confidential",
+    party: "contractor",
+    grants: [
+      "cmms.asset.view", "cmms.location.view", "cmms.meter.view", "cmms.meter.read",
+      "cmms.document.view", "cmms.family.view", "cmms.failuremode.view",
+      /* چاپ برچسب بارکد با برنامه‌ریز است چون او مالک یکپارچگی شناسنامهٔ تجهیز است. */
+      "cmms.barcode.print",
+      "cmms.request.view", "cmms.request.create", "cmms.request.review",
+      "cmms.wo.view", "cmms.wo.create", "cmms.wo.plan", "cmms.wo.schedule",
+      "cmms.workflow.view", "cmms.pm.view", "cmms.pm.edit",
+      "cmms.spare.view", "cmms.technician.view", "cmms.crew.view", "cmms.vendor.view",
+      "cmms.reliability.view", "cmms.oee.view", "cmms.kpi.view", "cmms.dashboard.view",
+      "cmms.alert.view", "cmms.alert.ack", "cmms.condition.view",
+      "cmms.cost.view", "cmms.lcc.view", "cmms.fmea.view", "cmms.rcm.view", "cmms.rca.view",
+      "cmms.ai.view", "cmms.ai.run",
+      /* آزادسازی و بستن دستورکار با برنامه‌ریز نیست: او برنامه می‌سازد،
+       * مدیر نت آزادسازی و قطعی‌کردن هزینه را انجام می‌دهد. */
+    ],
+  },
+  {
+    code: "reliability_engineer",
+    title: { fa: "مهندس قابلیت اطمینان", en: "Reliability Engineer" },
+    inherits: ["viewer"],
+    clearance: "restricted",
+    party: "contractor",
+    grants: [
+      "cmms.asset.view", "cmms.family.view", "cmms.family.edit", "cmms.customfield.edit",
+      "cmms.failuremode.view", "cmms.failuremode.edit", "cmms.failure.report", "cmms.downtime.report",
+      "cmms.fmea.view", "cmms.fmea.edit", "cmms.rcm.view", "cmms.rcm.edit",
+      "cmms.rca.view", "cmms.rca.edit", "cmms.rca.close",
+      "cmms.reliability.view", "cmms.oee.view", "cmms.condition.view", "cmms.condition.threshold",
+      "cmms.condition.record", "cmms.pm.view", "cmms.pm.edit", "cmms.spare.view",
+      "cmms.wo.view", "cmms.request.view", "cmms.cost.view", "cmms.lcc.view", "cmms.lcc.edit",
+      "cmms.kpi.view", "cmms.kpi.edit", "cmms.dashboard.view", "cmms.alert.view",
+      "cmms.document.view", "cmms.document.edit", "cmms.meter.view", "cmms.meter.read",
+      "cmms.ai.view", "cmms.ai.run", "cmms.ai.apply",
+      /* تصویب FMEA/RCM با مدیر نت است نه تدوین‌کننده — تفکیک وظیفه. */
+    ],
+  },
+  {
+    code: "maintenance_engineer",
+    title: { fa: "مهندس نگهداری و تعمیرات", en: "Maintenance Engineer" },
+    inherits: ["viewer"],
+    clearance: "confidential",
+    party: "contractor",
+    grants: [
+      "cmms.asset.view", "cmms.asset.edit", "cmms.location.view",
+      "cmms.meter.view", "cmms.meter.read", "cmms.barcode.view", "cmms.document.view", "cmms.document.edit",
+      "cmms.family.view", "cmms.family.edit", "cmms.customfield.edit",
+      "cmms.failuremode.view", "cmms.failuremode.edit", "cmms.failure.report", "cmms.downtime.report",
+      "cmms.fmea.view", "cmms.fmea.edit", "cmms.rcm.view", "cmms.rcm.edit",
+      "cmms.rca.view", "cmms.rca.edit",
+      "cmms.request.view", "cmms.request.create",
+      "cmms.wo.view", "cmms.wo.create", "cmms.wo.plan",
+      /* اتمام فنی کار با مهندس نت است، اما بستن و قطعی‌کردن هزینه با مدیر.
+       * این دو یک اقتدار نیستند و عمداً جدا گیت شده‌اند. */
+      "cmms.wo.complete",
+      "cmms.pm.view", "cmms.pm.edit", "cmms.spare.view", "cmms.spare.edit",
+      "cmms.technician.view", "cmms.crew.view", "cmms.vendor.view",
+      "cmms.condition.view", "cmms.condition.record", "cmms.condition.threshold",
+      "cmms.reliability.view", "cmms.oee.view", "cmms.kpi.view", "cmms.dashboard.view",
+      "cmms.alert.view", "cmms.alert.ack", "cmms.cost.view", "cmms.lcc.view",
+      "cmms.ai.view", "cmms.ai.run", "cmms.workflow.view",
+    ],
+  },
+  {
+    code: "maintenance_technician",
+    title: { fa: "تکنسین نگهداری و تعمیرات", en: "Maintenance Technician" },
+    inherits: [],
+    clearance: "internal",
+    party: "contractor",
+    grants: [
+      /* تکنسین اجرا می‌کند و گزارش می‌دهد؛ نه برنامه می‌ریزد، نه آزادسازی
+       * می‌کند، نه هزینه را قطعی می‌کند. دسترسی‌های او عمداً حداقلی است. */
+      "cmms.asset.view", "cmms.location.view", "cmms.document.view",
+      "cmms.family.view", "cmms.failuremode.view", "cmms.barcode.view",
+      "cmms.request.view", "cmms.request.create",
+      "cmms.wo.view", "cmms.wo.execute",
+      "cmms.labor.report", "cmms.failure.report", "cmms.downtime.report",
+      "cmms.meter.view", "cmms.meter.read",
+      "cmms.condition.view", "cmms.condition.record",
+      "cmms.spare.view", "cmms.alert.view", "cmms.ai.view",
+    ],
+  },
+  {
+    code: "maintenance_storekeeper",
+    title: { fa: "انباردار قطعات نت", en: "Maintenance Storekeeper" },
+    inherits: ["viewer"],
+    clearance: "confidential",
+    party: "contractor",
+    grants: [
+      "cmms.asset.view", "cmms.wo.view", "cmms.spare.view", "cmms.spare.edit",
+      "cmms.spare.issue", "cmms.spare.receive",
+      "cmms.vendor.view", "cmms.alert.view", "cmms.alert.ack", "cmms.cost.view",
+      "cmms.ai.view", "cmms.dashboard.view",
+    ],
+  },
+  {
+    code: "condition_monitoring_analyst",
+    title: { fa: "تحلیل‌گر پایش وضعیت", en: "Condition Monitoring Analyst" },
+    inherits: ["viewer"],
+    clearance: "confidential",
+    party: "contractor",
+    grants: [
+      "cmms.asset.view", "cmms.family.view", "cmms.location.view", "cmms.document.view",
+      "cmms.condition.view", "cmms.condition.record", "cmms.condition.threshold",
+      "cmms.meter.view", "cmms.meter.read",
+      "cmms.failuremode.view", "cmms.failure.report",
+      "cmms.reliability.view", "cmms.oee.view", "cmms.dashboard.view",
+      "cmms.alert.view", "cmms.alert.ack", "cmms.pm.view", "cmms.request.create",
+      "cmms.request.view", "cmms.wo.view", "cmms.rca.view", "cmms.rca.edit",
+      "cmms.ai.view", "cmms.ai.run", "cmms.kpi.view", "cmms.fmea.view", "cmms.rcm.view",
+    ],
   },
   {
     code: "admin",
@@ -2173,6 +2429,17 @@ export const DEMO_SUBJECTS: Subject[] = [
   { id: "u-mfg-operator", displayName: "اپراتور تولید (آزمایشی)", roles: ["production_operator"], projectIds: ["*"], plantIds: ["PLANT-DEMO"], active: true, party: "contractor" },
   { id: "u-mfg-material", displayName: "برنامه‌ریز مواد (آزمایشی)", roles: ["material_planner"], projectIds: ["*"], plantIds: ["PLANT-DEMO"], active: true, party: "contractor" },
   { id: "u-mfg-cost", displayName: "حسابدار صنعتی (آزمایشی)", roles: ["industrial_accountant"], projectIds: ["*"], plantIds: ["PLANT-DEMO"], active: true, party: "contractor" },
+
+  /* بخش ۳ — کاربران آزمایشی نت. `plantIds` اینجا همان «دامنهٔ سایت
+   * بهره‌برداری» است (توضیحش در سرآییند server/cmmsApi.js آمده). دامنهٔ
+   * SITE-DEMO عمداً از PLANT-DEMO جداست تا دامنه‌بندی سایت واقعاً آزموده شود. */
+  { id: "u-cmms-manager", displayName: "مدیر نت (آزمایشی)", roles: ["maintenance_manager"], projectIds: ["*"], plantIds: ["SITE-DEMO"], active: true, party: "contractor" },
+  { id: "u-cmms-planner", displayName: "برنامه‌ریز نت (آزمایشی)", roles: ["maintenance_planner"], projectIds: ["*"], plantIds: ["SITE-DEMO"], active: true, party: "contractor" },
+  { id: "u-cmms-reliability", displayName: "مهندس قابلیت اطمینان (آزمایشی)", roles: ["reliability_engineer"], projectIds: ["*"], plantIds: ["SITE-DEMO"], active: true, party: "contractor" },
+  { id: "u-cmms-engineer", displayName: "مهندس نت (آزمایشی)", roles: ["maintenance_engineer"], projectIds: ["*"], plantIds: ["SITE-DEMO"], active: true, party: "contractor" },
+  { id: "u-cmms-tech", displayName: "تکنسین نت (آزمایشی)", roles: ["maintenance_technician"], projectIds: ["*"], plantIds: ["SITE-DEMO"], active: true, party: "contractor" },
+  { id: "u-cmms-store", displayName: "انباردار نت (آزمایشی)", roles: ["maintenance_storekeeper"], projectIds: ["*"], plantIds: ["SITE-DEMO"], active: true, party: "contractor" },
+  { id: "u-cmms-cbm", displayName: "تحلیل‌گر پایش وضعیت (آزمایشی)", roles: ["condition_monitoring_analyst"], projectIds: ["*"], plantIds: ["SITE-DEMO"], active: true, party: "contractor" },
 ];
 
 export const DEMO_DELEGATIONS: Delegation[] = [

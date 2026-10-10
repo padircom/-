@@ -81,5 +81,11 @@ server/aiAssistantLogic.js
 
 # Generated DPR supporting-tables engine (بازتولید: npm run build:dprt)
 server/dprTablesLogic.js
+
+# Generated بخش ۳ CMMS — موتور استانداردها و موتورهای AI
+# (بازتولید: npm run build:cmms / npm run build:cmmsai)
+server/cmmsLogic.js
+server/cmmsAiLogic.js
+
 # پیوست‌های DPR/CPMS زمان اجرا — داده است، نه کد
 server/storage/cpm-dpr/
