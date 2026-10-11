@@ -1390,3 +1390,1133 @@ export function sortByPriority<T>(items: T[], scoreOf: (item: T) => number, tieB
     return tieBreaker ? tieBreaker(left, right) : 0;
   });
 }
+
+/* ═══════════════════════ ۱۴. چرخهٔ عمر دستورکار — توقف / ادامه ═══════════════════════ */
+
+/**
+ * ماشین وضعیت دستورکار نت.
+ *
+ * پیش از این، گذارها درون `server/cmmsApi.js` پراکنده بودند و هر مسیر فهرست
+ * «وضعیت‌های مجاز» خودش را داشت. حالا یک منبع حقیقت وجود دارد تا فرانت‌اند
+ * (برای فعال/غیرفعال‌کردن دکمه) و بک‌اند (برای اعتبارسنجی) از یک جدول
+ * بخوانند. `hold` و `resume` پیش‌تر هیچ مسیر REST نداشتند و وضعیت `on-hold`
+ * فقط با `start` ترک می‌شد؛ اکنون هر دو گذار صریح و آزمون‌پذیرند.
+ */
+export const CMMS_WORK_ORDER_STATUSES = [
+  "draft", "planned", "scheduled", "released", "in-progress",
+  "on-hold", "completed", "closed", "cancelled",
+] as const;
+
+export type CmmsWorkOrderStatus = (typeof CMMS_WORK_ORDER_STATUSES)[number];
+
+export const CMMS_WORK_ORDER_ACTIONS = [
+  "release", "start", "hold", "resume", "complete", "close", "cancel",
+] as const;
+
+export type CmmsWorkOrderAction = (typeof CMMS_WORK_ORDER_ACTIONS)[number];
+
+export type WorkOrderTransitionRule = {
+  /** وضعیت‌هایی که گذار از آن‌ها مجاز است. */
+  from: readonly CmmsWorkOrderStatus[];
+  /** وضعیت مقصد — برای `resume` مقدار پیش‌فرض است، چون وضعیت واقعی از رکورد توقف می‌آید. */
+  to: CmmsWorkOrderStatus;
+  /** آیا این گذار وضعیت پیشین را بازمی‌گرداند؟ */
+  restoresPreviousStatus?: boolean;
+  /** آیا گذار نیازمند علت مستند است؟ */
+  requiresReason?: boolean;
+};
+
+export const CMMS_WORK_ORDER_TRANSITIONS: Readonly<Record<CmmsWorkOrderAction, WorkOrderTransitionRule>> = Object.freeze({
+  release: { from: ["draft", "planned", "scheduled"], to: "released" },
+  start: { from: ["released", "on-hold"], to: "in-progress" },
+  /* توقف از «در حال اجرا» و همچنین از مراحل پیش از اجرا مجاز است: توقف
+   * «انتظار مجوز کار» یا «انتظار قطعه» پیش از شروع کار هم رخ می‌دهد. */
+  hold: { from: ["planned", "scheduled", "released", "in-progress"], to: "on-hold", requiresReason: true },
+  resume: { from: ["on-hold"], to: "in-progress", restoresPreviousStatus: true },
+  complete: { from: ["in-progress"], to: "completed" },
+  close: { from: ["completed"], to: "closed" },
+  cancel: { from: ["draft", "planned", "scheduled", "released", "on-hold"], to: "cancelled" },
+});
+
+export const CMMS_HOLD_CATEGORIES = [
+  "material", "labor", "permit", "schedule", "safety", "machine", "process", "other",
+] as const;
+
+export type CmmsHoldCategory = (typeof CMMS_HOLD_CATEGORIES)[number];
+
+/** نوع توقف در واژگان IEC 60050-192: توقف برنامه‌ریزی‌شده در برابر ناخواسته. */
+export const CMMS_HOLD_DOWNTIME_TYPES = ["planned", "unplanned"] as const;
+export type CmmsHoldDowntimeType = (typeof CMMS_HOLD_DOWNTIME_TYPES)[number];
+
+export type CmmsHoldReasonDef = {
+  code: string;
+  fa: string;
+  en: string;
+  category: CmmsHoldCategory;
+  /** نگاشت به `DowntimeType` در MES؛ مبنای محاسبهٔ مؤلفهٔ Availability در OEE. */
+  downtimeType: CmmsHoldDowntimeType;
+  /** آیا شرح آزاد الزامی است؟ */
+  requiresNote: boolean;
+};
+
+/**
+ * کاتالوگ علل توقف. این فهرست بسته است تا گزارش «چرا دستورکارها می‌خوابند»
+ * قابل تجمیع باشد؛ شرح آزاد مکمل است نه جایگزین.
+ */
+export const CMMS_HOLD_REASONS: readonly CmmsHoldReasonDef[] = Object.freeze([
+  { code: "waiting-parts", fa: "انتظار قطعهٔ یدکی", en: "Waiting for spare part", category: "material", downtimeType: "unplanned", requiresNote: false },
+  { code: "waiting-tools", fa: "انتظار ابزار یا تجهیز ویژه", en: "Waiting for special tools", category: "material", downtimeType: "unplanned", requiresNote: false },
+  { code: "waiting-vendor", fa: "انتظار پیمانکار / سرویس‌کار", en: "Waiting for vendor", category: "labor", downtimeType: "unplanned", requiresNote: false },
+  { code: "waiting-crew", fa: "انتظار گروه کاری یا نفر", en: "Waiting for crew", category: "labor", downtimeType: "unplanned", requiresNote: false },
+  { code: "waiting-permit", fa: "انتظار مجوز کار (PTW)", en: "Waiting for work permit", category: "permit", downtimeType: "planned", requiresNote: false },
+  { code: "waiting-production-window", fa: "انتظار پنجرهٔ توقف تولید", en: "Waiting for production window", category: "schedule", downtimeType: "planned", requiresNote: false },
+  { code: "waiting-shutdown", fa: "انتظار توقف اساسی (Shutdown)", en: "Waiting for shutdown", category: "schedule", downtimeType: "planned", requiresNote: false },
+  { code: "machine-breakdown", fa: "خرابی تجهیز", en: "Machine breakdown", category: "machine", downtimeType: "unplanned", requiresNote: false },
+  { code: "process-hold", fa: "توقف فرآیندی / کیفیت", en: "Process or quality hold", category: "process", downtimeType: "planned", requiresNote: false },
+  { code: "unsafe-condition", fa: "شرایط ناایمن", en: "Unsafe condition", category: "safety", downtimeType: "unplanned", requiresNote: true },
+  { code: "weather", fa: "شرایط جوی", en: "Weather condition", category: "other", downtimeType: "unplanned", requiresNote: false },
+  { code: "other", fa: "سایر (شرح الزامی)", en: "Other (note required)", category: "other", downtimeType: "unplanned", requiresNote: true },
+]);
+
+export function holdReasonByCode(code: unknown): CmmsHoldReasonDef | null {
+  if (typeof code !== "string") return null;
+  return CMMS_HOLD_REASONS.find((item) => item.code === code.trim().toLowerCase()) ?? null;
+}
+
+export type OpenHoldLike = {
+  HoldStatus?: string | null;
+  PreviousStatus?: string | null;
+  HoldReasonCode?: string | null;
+} | null;
+
+export type WorkOrderTransitionPlan = {
+  action: CmmsWorkOrderAction;
+  from: string;
+  to: CmmsWorkOrderStatus | null;
+  allowed: boolean;
+  code: string | null;
+  messageFa: string | null;
+  allowedFrom: readonly CmmsWorkOrderStatus[];
+  /** فقط برای `resume`: وضعیت پیش از توقف که باید بازگردد. */
+  previousStatus?: CmmsWorkOrderStatus | null;
+};
+
+const isWorkOrderStatus = (value: unknown): value is CmmsWorkOrderStatus =>
+  typeof value === "string" && (CMMS_WORK_ORDER_STATUSES as readonly string[]).includes(value);
+
+/**
+ * برنامه‌ریزی یک گذار روی دستورکار.
+ *
+ * این تابع هیچ I/O ندارد و «تصمیم» را از «اجرا» جدا می‌کند؛ لایهٔ HTTP بعد از
+ * گرفتن مجوز، فقط نتیجه را در تراکنش می‌نویسد. برای `resume` وضعیت مقصد از
+ * رکورد توقف باز خوانده می‌شود، چون بازگرداندن دستورکار به وضعیت پیش از توقف
+ * یک الزام عملیاتی است نه یک جزئیات پیاده‌سازی.
+ */
+export function planWorkOrderTransition(input: {
+  action: CmmsWorkOrderAction;
+  currentStatus: string;
+  openHold?: OpenHoldLike;
+  now?: Date | string;
+}): WorkOrderTransitionPlan {
+  const rule = CMMS_WORK_ORDER_TRANSITIONS[input.action];
+  const base: WorkOrderTransitionPlan = {
+    action: input.action,
+    from: input.currentStatus,
+    to: rule?.to ?? null,
+    allowed: false,
+    code: null,
+    messageFa: null,
+    allowedFrom: rule?.from ?? [],
+  };
+  if (!rule) {
+    return { ...base, code: "CMMS_WO_UNKNOWN_ACTION", messageFa: `اقدام «${input.action}» شناخته‌شده نیست` };
+  }
+  const openHold = input.openHold ?? null;
+
+  if (input.action === "hold") {
+    if (openHold && openHold.HoldStatus === "open") {
+      return { ...base, code: "CMMS_HOLD_ALREADY_OPEN", messageFa: "این دستورکار از قبل متوقف است؛ ابتدا آن را ادامه دهید" };
+    }
+  }
+  if (input.action === "resume") {
+    if (!openHold || openHold.HoldStatus !== "open") {
+      return { ...base, code: "CMMS_HOLD_NOT_OPEN", messageFa: "دستورکار در وضعیت توقف نیست" };
+    }
+    const previous = openHold.PreviousStatus;
+    if (!isWorkOrderStatus(previous) || ["completed", "closed", "cancelled", "on-hold"].includes(previous)) {
+      return {
+        ...base,
+        code: "CMMS_HOLD_PREVIOUS_STATUS_INVALID",
+        messageFa: `وضعیت پیش از توقف («${String(previous)}») برای بازگشت معتبر نیست`,
+      };
+    }
+    if (!rule.from.includes(input.currentStatus as CmmsWorkOrderStatus)) {
+      return {
+        ...base,
+        code: "CMMS_WO_STATE",
+        messageFa: `دستورکار در وضعیت «${input.currentStatus}» قابل «${input.action}» نیست`,
+      };
+    }
+    return { ...base, to: previous, allowed: true, previousStatus: previous };
+  }
+
+  if (!rule.from.includes(input.currentStatus as CmmsWorkOrderStatus)) {
+    return {
+      ...base,
+      code: "CMMS_WO_STATE",
+      messageFa: `دستورکار در وضعیت «${input.currentStatus}» قابل «${input.action}» نیست`,
+    };
+  }
+  return { ...base, allowed: true };
+}
+
+/**
+ * اعتبارسنجی درخواست توقف. شرح برای علل `requiresNote` اجباری است و زمان
+ * بازگشت پیش‌بینی‌شده نباید در گذشته باشد — وگرنه «توقف با بازگشت گذشته»
+ * ثبت می‌شود و در محاسبهٔ Availability بی‌معنا می‌شود.
+ */
+export function validateHoldRequest(input: {
+  reasonCode: unknown;
+  reasonFa?: string | null;
+  noteFa?: string | null;
+  expectedResumeAt?: string | Date | null;
+  now?: Date | string;
+}): string[] {
+  const issues: string[] = [];
+  const reason = holdReasonByCode(input.reasonCode);
+  if (!reason) {
+    issues.push("HoldReasonCode باید یکی از علل کاتالوگ باشد");
+    return issues;
+  }
+  const narrative = String(input.noteFa ?? input.reasonFa ?? "").trim();
+  if (reason.requiresNote && narrative.length < 5) {
+    issues.push(`برای علت «${reason.fa}» ثبت شرح حداقل ۵ نویسه‌ای الزامی است`);
+  }
+  if (input.expectedResumeAt) {
+    const expected = input.expectedResumeAt instanceof Date ? input.expectedResumeAt : new Date(input.expectedResumeAt);
+    if (Number.isNaN(expected.getTime())) {
+      issues.push("ExpectedResumeAt تاریخ معتبر نیست");
+    } else {
+      const now = input.now instanceof Date ? input.now : input.now ? new Date(input.now) : new Date();
+      if (!Number.isNaN(now.getTime()) && expected.getTime() < now.getTime()) {
+        issues.push("زمان بازگشت پیش‌بینی‌شده در گذشته است");
+      }
+    }
+  }
+  return issues;
+}
+
+/** مدت توقف بر حسب دقیقه — تا سطح دقیقه گرد می‌شود چون SLA نت دقیقه‌ای است. */
+export function computeHoldMinutes(heldAt: string | Date, resumedAt: string | Date): number | null {
+  const start = heldAt instanceof Date ? heldAt : new Date(heldAt);
+  const end = resumedAt instanceof Date ? resumedAt : new Date(resumedAt);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return null;
+  if (end.getTime() < start.getTime()) return null;
+  return Math.round((end.getTime() - start.getTime()) / 60_000);
+}
+
+export type HoldHistorySummary = {
+  count: number;
+  openHold: boolean;
+  totalMinutes: number;
+  downtimeMinutes: number;
+  meanMinutes: number;
+  longestMinutes: number;
+  byCategory: Array<{ category: CmmsHoldCategory | "unknown"; minutes: number; count: number }>;
+  topReasonCode: string | null;
+  interpretationFa: string;
+};
+
+/**
+ * تجمیع تاریخچهٔ توقف یک دستورکار — ورودی مستقیم گزارش «علل رایج توقف» و
+ * «زمان از دست رفتهٔ نت». ورودی ناقص باعث استثنا نمی‌شود؛ ردیف ناشناخته
+ * در دستهٔ `unknown` می‌افتد تا آمار بی‌صدا کوچک نشود.
+ */
+export function summarizeHoldHistory(holds: Array<Record<string, unknown>>, now: Date | string = new Date()): HoldHistorySummary {
+  const rows = Array.isArray(holds) ? holds : [];
+  const at = now instanceof Date ? now : new Date(now);
+  let totalMinutes = 0;
+  let downtimeMinutes = 0;
+  let longest = 0;
+  let openHold = false;
+  const byCategory = new Map<string, { minutes: number; count: number }>();
+  const byReason = new Map<string, number>();
+
+  for (const row of rows) {
+    const reason = holdReasonByCode(row.HoldReasonCode);
+    const category = (row.HoldCategory as string | undefined) ?? reason?.category ?? "unknown";
+    const status = String(row.HoldStatus ?? "");
+    let minutes: number | null = null;
+    if (status === "open") {
+      openHold = true;
+      minutes = computeHoldMinutes(String(row.HeldAt ?? ""), at);
+    } else if (row.ResumedAt) {
+      minutes = computeHoldMinutes(String(row.HeldAt ?? ""), String(row.ResumedAt));
+    }
+    const safeMinutes = minutes ?? 0;
+    totalMinutes += safeMinutes;
+    if ((reason?.downtimeType ?? "unplanned") === "unplanned") downtimeMinutes += safeMinutes;
+    longest = Math.max(longest, safeMinutes);
+    const bucket = byCategory.get(category) ?? { minutes: 0, count: 0 };
+    byCategory.set(category, { minutes: bucket.minutes + safeMinutes, count: bucket.count + 1 });
+    if (reason) byReason.set(reason.code, (byReason.get(reason.code) ?? 0) + 1);
+  }
+
+  const topReasonCode = [...byReason.entries()].sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))[0]?.[0] ?? null;
+  const round = (value: number) => Math.round(value * 100) / 100;
+  return {
+    count: rows.length,
+    openHold,
+    totalMinutes: round(totalMinutes),
+    downtimeMinutes: round(downtimeMinutes),
+    meanMinutes: rows.length ? round(totalMinutes / rows.length) : 0,
+    longestMinutes: round(longest),
+    byCategory: [...byCategory.entries()]
+      .map(([category, value]) => ({ category: category as CmmsHoldCategory | "unknown", minutes: round(value.minutes), count: value.count }))
+      .sort((left, right) => right.minutes - left.minutes),
+    topReasonCode,
+    interpretationFa: rows.length === 0
+      ? "این دستورکار تا کنون متوقف نشده است."
+      : `${rows.length} نوبت توقف با مجموع ${round(totalMinutes)} دقیقه؛${openHold ? " یک توقف همچنان باز است" : " همهٔ توقف‌ها بسته شده‌اند"}.`,
+  };
+}
+
+/* ═══════════════════════ ۱۵. RCFA — ۵ چرا، استخوان‌ماهی، پارتو و CAPA ═══════════════════════ */
+
+/**
+ * تحلیل ریشه‌ای خرابی (RCFA) روی سه ستون بنا شده است:
+ *   ۱) زنجیرهٔ ۵ چرا  — تفکر علّی خطی و مستند.
+ *   ۲) نمودار استخوان‌ماهی (Ishikawa) — جست‌وجوی علل در ۶ شاخهٔ M.
+ *   ۳) پارتو — جداکردن «چند علت حیاتی» از «بسیاری علل کم‌اثر».
+ *
+ * بر پایهٔ آن‌ها، اقدام اصلاحی و پیشگیرانه (CAPA) با مالک، سررسید و تأیید
+ * اثربخشی ثبت می‌شود. هیچ‌کدام از توابع این بخش I/O ندارند؛ همان‌ها در
+ * فرانت‌اند برای پیش‌نمایش و در سرور برای اعتبارسنجی اجرا می‌شوند.
+ */
+export const RCFA_METHODS = ["five-why", "fishbone", "combined"] as const;
+export type RcfaMethod = (typeof RCFA_METHODS)[number];
+
+export const RCFA_CASE_STATUSES = ["open", "in-progress", "closed", "verified"] as const;
+export type RcfaCaseStatus = (typeof RCFA_CASE_STATUSES)[number];
+
+/** ۶M استاندارد نمودار ایشیکاوا. */
+export const FISHBONE_CATEGORIES = ["man", "machine", "method", "material", "measurement", "environment"] as const;
+export type FishboneCategory = (typeof FISHBONE_CATEGORIES)[number];
+
+export const FISHBONE_CATEGORY_LABELS: Readonly<Record<FishboneCategory, { fa: string; en: string }>> = Object.freeze({
+  man: { fa: "نیروی انسانی", en: "Man" },
+  machine: { fa: "ماشین و تجهیز", en: "Machine" },
+  method: { fa: "روش و رویه", en: "Method" },
+  material: { fa: "مواد و قطعه", en: "Material" },
+  measurement: { fa: "اندازه‌گیری و پایش", en: "Measurement" },
+  environment: { fa: "محیط و شرایط کار", en: "Environment" },
+});
+
+/** سقف عمق زنجیرهٔ چرا؛ «۵ چرا» حداقل است نه سقف. */
+export const RCFA_MAX_WHY_DEPTH = 7;
+/** کمتر از سه سطح، زنجیرهٔ علّی محسوب نمی‌شود. */
+export const RCFA_MIN_WHY_DEPTH = 3;
+
+export const CAPA_ACTION_TYPES = ["containment", "corrective", "preventive", "detection", "systemic"] as const;
+export type CapaActionType = (typeof CAPA_ACTION_TYPES)[number];
+
+export const CAPA_ACTION_TYPE_LABELS: Readonly<Record<CapaActionType, { fa: string; en: string }>> = Object.freeze({
+  containment: { fa: "کنترل موقت (Containment)", en: "Containment" },
+  corrective: { fa: "اقدام اصلاحی", en: "Corrective" },
+  preventive: { fa: "اقدام پیشگیرانه", en: "Preventive" },
+  detection: { fa: "بهبود شناسایی / پایش", en: "Detection improvement" },
+  systemic: { fa: "اصلاح سیستمی", en: "Systemic" },
+});
+
+export const CAPA_STATUSES = ["draft", "assigned", "in-progress", "implemented", "verified", "closed", "cancelled"] as const;
+export type CapaStatus = (typeof CAPA_STATUSES)[number];
+
+export const CAPA_VERIFICATION_RESULTS = ["effective", "partially-effective", "ineffective"] as const;
+export type CapaVerificationResult = (typeof CAPA_VERIFICATION_RESULTS)[number];
+
+/** سررسید CAPA بر پایهٔ اولویت — SLA داخلی نت: اولویت ۱ فوری، اولویت ۵ بلندمدت. */
+export const CAPA_PRIORITY_SLA_DAYS: Readonly<Record<number, number>> = Object.freeze({ 1: 3, 2: 7, 3: 14, 4: 30, 5: 60 });
+
+export function capaDueDate(priority: number, from: Date | string = new Date()): string {
+  const days = CAPA_PRIORITY_SLA_DAYS[priority] ?? CAPA_PRIORITY_SLA_DAYS[3];
+  const base = from instanceof Date ? from : new Date(from);
+  const at = Number.isNaN(base.getTime()) ? new Date() : base;
+  return new Date(at.getTime() + days * 86_400_000).toISOString().slice(0, 10);
+}
+
+export type WhyEntryLike = {
+  Sequence: number;
+  StatementFa: string;
+  EvidencePath?: string | null;
+  IsRootCause?: boolean | null;
+};
+
+/** پرسش سطح بعدی از سطح پیشین ساخته می‌شود — همان‌طور که در جلسهٔ RCFA پرسیده می‌شود. */
+export function buildWhyQuestion(previousStatementFa: string | null | undefined, level: number): string {
+  const level$ = Number.isFinite(level) && level > 1 ? Math.trunc(level) : 2;
+  const previous = String(previousStatementFa ?? "").trim();
+  if (!previous) return `چرا سطح ${level$}: ریشهٔ رویداد چه بود؟`;
+  return `چرا «${previous}» رخ داد؟`;
+}
+
+/** سطح بعدی زنجیره؛ زنجیره همیشه یک‌پارچه و بدون شکاف ساخته می‌شود. */
+export function nextWhyLevel(entries: WhyEntryLike[]): number {
+  const levels = (Array.isArray(entries) ? entries : [])
+    .map((item) => Number(item.Sequence))
+    .filter((value) => Number.isFinite(value) && value > 0);
+  return levels.length ? Math.max(...levels) + 1 : 1;
+}
+
+export type WhyChainEvaluation = {
+  depth: number;
+  levels: number[];
+  rootCauseLevel: number | null;
+  rootCauseCount: number;
+  evidencedCount: number;
+  evidencedRatio: number;
+  terminated: boolean;
+  reachedRecommendedDepth: boolean;
+  missingLevels: number[];
+  issues: string[];
+  summaryFa: string;
+};
+
+/**
+ * ارزیابی زنجیرهٔ ۵ چرا.
+ *
+ * سه چیز سنجیده می‌شود که در ممیزی پرسیده می‌شود: پیوستگی سطح‌ها، مستندبودن
+ * ریشه، و اینکه زنجیره به عمق معنادار رسیده باشد. زنجیرهٔ دو سطحی با ادعای
+ * ریشه، «علت‌شناسی ظاهری» است و اینجا هشدار می‌گیرد.
+ */
+export function evaluateFiveWhyChain(entries: WhyEntryLike[]): WhyChainEvaluation {
+  const rows = (Array.isArray(entries) ? entries : []).slice().sort((left, right) => Number(left.Sequence) - Number(right.Sequence));
+  const issues: string[] = [];
+  const levels = rows.map((row) => Number(row.Sequence));
+  const depth = levels.length ? Math.max(...levels) : 0;
+  const uniqueLevels = new Set(levels);
+  if (uniqueLevels.size !== levels.length) issues.push("سطح تکراری در زنجیرهٔ چرا وجود دارد");
+
+  const missingLevels: number[] = [];
+  for (let level = 1; level <= depth; level += 1) {
+    if (!uniqueLevels.has(level)) missingLevels.push(level);
+  }
+  if (missingLevels.length) issues.push(`شکاف در زنجیرهٔ چرا: سطح ${missingLevels.join(", ")} ثبت نشده است`);
+
+  const empty = rows.filter((row) => !String(row.StatementFa ?? "").trim());
+  if (empty.length) issues.push(`${empty.length} سطح بدون شرح علت است`);
+
+  const rootRows = rows.filter((row) => row.IsRootCause === true);
+  const rootCauseCount = rootRows.length;
+  if (rootCauseCount > 1) issues.push("بیش از یک ریشه در یک زنجیرهٔ ۵ چرا اعلام شده است");
+  const rootCauseLevel = rootCauseCount === 1 ? Number(rootRows[0].Sequence) : null;
+
+  const evidencedCount = rows.filter((row) => String(row.EvidencePath ?? "").trim().length > 0).length;
+  const evidencedRatio = depth ? Math.round((evidencedCount / depth) * 1000) / 1000 : 0;
+  if (rootCauseCount === 1 && !String(rootRows[0].EvidencePath ?? "").trim()) {
+    issues.push("ریشهٔ اعلام‌شده مدرک مستند ندارد");
+  }
+  if (depth > 0 && depth < RCFA_MIN_WHY_DEPTH) {
+    issues.push(`زنجیره تا سطح ${depth} رفته است؛ کمتر از ${RCFA_MIN_WHY_DEPTH} سطح برای رسیدن به ریشه کافی نیست`);
+  }
+  if (depth > RCFA_MAX_WHY_DEPTH) {
+    issues.push(`زنجیره از سقف ${RCFA_MAX_WHY_DEPTH} سطح گذشته است`);
+  }
+
+  const reachedRecommendedDepth = depth >= RCFA_MIN_WHY_DEPTH;
+  const terminated = rootCauseCount === 1 && (rootCauseLevel ?? 0) >= RCFA_MIN_WHY_DEPTH;
+  const summaryFa = depth === 0
+    ? "زنجیرهٔ ۵ چرا هنوز آغاز نشده است."
+    : terminated
+      ? `ریشه در سطح ${rootCauseLevel} با ${evidencedCount} مدرک مستند شناسایی شده است.`
+      : `زنجیره در سطح ${depth} باز است؛ ریشهٔ مستند و تأییدشده‌ای ثبت نشده است.`;
+
+  return {
+    depth, levels, rootCauseLevel, rootCauseCount, evidencedCount, evidencedRatio,
+    terminated, reachedRecommendedDepth, missingLevels, issues, summaryFa,
+  };
+}
+
+/** اعتبارسنجی یک سطح تازه از ۵ چرا پیش از نوشتن در پایگاه‌داده. */
+export function validateWhyEntry(input: {
+  statementFa: unknown;
+  sequence?: number | null;
+  evidencePath?: string | null;
+  isRootCause?: boolean | null;
+  existing?: WhyEntryLike[];
+}): string[] {
+  const issues: string[] = [];
+  const statement = String(input.statementFa ?? "").trim();
+  if (statement.length < 5) issues.push("شرح علت باید دست‌کم ۵ نویسه باشد");
+  if (statement.length > 1200) issues.push("شرح علت نمی‌تواند بیشتر از ۱۲۰۰ نویسه باشد");
+  const existing = Array.isArray(input.existing) ? input.existing : [];
+  const expected = nextWhyLevel(existing);
+  if (input.sequence != null && Number(input.sequence) !== expected) {
+    issues.push(`سطح بعدی زنجیره ${expected} است، نه ${Number(input.sequence)}`);
+  }
+  if (expected > RCFA_MAX_WHY_DEPTH) issues.push(`عمق زنجیره از سقف ${RCFA_MAX_WHY_DEPTH} می‌گذرد`);
+  if (input.isRootCause === true && !String(input.evidencePath ?? "").trim()) {
+    issues.push("اعلام ریشه بدون مدرک مستند پذیرفته نمی‌شود");
+  }
+  if (input.isRootCause === true && existing.some((row) => row.IsRootCause === true)) {
+    issues.push("برای این پرونده از قبل ریشه‌ای ثبت شده است؛ نخست آن را اصلاح کنید");
+  }
+  const previous = existing.slice().sort((left, right) => Number(left.Sequence) - Number(right.Sequence)).pop();
+  if (previous && String(previous.StatementFa ?? "").trim() === statement) {
+    issues.push("این پاسخ با سطح پیشین یکسان است؛ زنجیره پیش نمی‌رود");
+  }
+  return issues;
+}
+
+export type ParetoInputItem = { key: string; labelFa: string; value: number; impactScore?: number | null };
+export type ParetoRow = {
+  rank: number;
+  key: string;
+  labelFa: string;
+  value: number;
+  sharePct: number;
+  cumulativePct: number;
+  classification: "vital-few" | "trivial-many";
+};
+export type ParetoAnalysis = {
+  mode: "count" | "weighted";
+  threshold: number;
+  total: number;
+  itemCount: number;
+  rows: ParetoRow[];
+  vitalFew: ParetoRow[];
+  vitalFewSharePct: number;
+  interpretationFa: string;
+  issues: string[];
+};
+
+/**
+ * تحلیل پارتو (قاعدهٔ ۸۰/۲۰).
+ *
+ * `mode = "count"` فراوانی وقوع را می‌شمارد و `mode = "weighted"` فراوانی را
+ * در شدت اثر ضرب می‌کند. تفاوت مهم است: یک علت کم‌تکرار ولی با اثر
+ * ایمنی بالا باید در فهرست حیاتی بماند، وگرنه تحلیل پارتو آن را حذف می‌کند.
+ */
+export function computeParetoAnalysis(
+  items: ParetoInputItem[],
+  options: { threshold?: number; mode?: "count" | "weighted" } = {},
+): ParetoAnalysis {
+  const threshold = typeof options.threshold === "number" && options.threshold > 0 && options.threshold < 1 ? options.threshold : 0.8;
+  const mode = options.mode === "weighted" ? "weighted" : "count";
+  const issues: string[] = [];
+  const normalized = (Array.isArray(items) ? items : [])
+    .map((item) => {
+      const value = Number(item.value);
+      const impact = item.impactScore == null ? null : Number(item.impactScore);
+      const weight = mode === "weighted" ? Math.max(0, value) * Math.max(0, impact ?? 1) : Math.max(0, value);
+      return { key: String(item.key ?? ""), labelFa: String(item.labelFa ?? item.key ?? ""), value: Number.isFinite(value) ? Math.max(0, value) : 0, impactScore: impact, weight: Number.isFinite(weight) ? weight : 0 };
+    })
+    .filter((item) => item.key.length > 0);
+  if (normalized.some((item) => item.value <= 0)) issues.push("ردیف‌های با فراوانی صفر در تحلیل پارتو معنایی ندارند");
+
+  const total = normalized.reduce((sum, item) => sum + item.weight, 0);
+  const sorted = normalized.slice().sort((left, right) => right.weight - left.weight || left.key.localeCompare(right.key));
+  let cumulative = 0;
+  const rows: ParetoRow[] = sorted.map((item, index) => {
+    const share = total > 0 ? (item.weight / total) * 100 : 0;
+    cumulative += share;
+    const sharePct = Math.round(share * 100) / 100;
+    const cumulativePct = Math.min(100, Math.round(cumulative * 100) / 100);
+    return {
+      rank: index + 1,
+      key: item.key,
+      labelFa: item.labelFa,
+      value: item.value,
+      sharePct,
+      cumulativePct,
+      classification: cumulativePct <= threshold * 100 + 1e-9 ? "vital-few" : "trivial-many",
+    };
+  });
+  const boundary = rows.filter((row) => row.classification === "vital-few").length;
+  const ties = rows.length > boundary && boundary > 0 && rows[boundary].value === rows[boundary - 1].value;
+  if (ties) issues.push("دو علت هم‌ارزش روی مرز ۸۰٪ افتاده‌اند؛ مرز را دستی بازبینی کنید");
+
+  const vitalFew = rows.filter((row) => row.classification === "vital-few");
+  const vitalFewSharePct = rows.length ? rows[Math.max(0, vitalFew.length - 1)].cumulativePct : 0;
+  const interpretationFa = rows.length === 0
+    ? "داده‌ای برای تحلیل پارتو وجود ندارد."
+    : `${vitalFew.length} علت از ${rows.length} علت، ${vitalFewSharePct}٪ اثر تجمعی را می‌سازند؛ تمرکز CAPA باید روی همین‌ها باشد.`;
+
+  return { mode, threshold, total: Math.round(total * 100) / 100, itemCount: rows.length, rows, vitalFew, vitalFewSharePct, interpretationFa, issues };
+}
+
+export type FishboneCauseLike = {
+  Id?: string | null;
+  Category?: string | null;
+  StatementFa: string;
+  ParentCauseId?: string | null;
+  OccurrenceCount?: number | null;
+  ImpactScore?: number | null;
+  IsRootCause?: boolean | null;
+};
+export type FishboneSummary = {
+  total: number;
+  byCategory: Array<{ category: FishboneCategory; labelFa: string; count: number; rootCauseCount: number; occurrenceCount: number; sharePct: number }>;
+  coveredCategories: FishboneCategory[];
+  missingCategories: FishboneCategory[];
+  coveragePct: number;
+  maxDepth: number;
+  orphanCauseIds: string[];
+  dominantBranch: { category: FishboneCategory; count: number } | null;
+  issues: string[];
+  interpretationFa: string;
+};
+
+/**
+ * تجمیع نمودار استخوان‌ماهی.
+ *
+ * جدا از شمارش، دو نقص ساختاری را پیدا می‌کند که به‌راحتی از چشم می‌افتند:
+ * شاخهٔ بی‌گزارش (پوشش ناقص ۶M) و علت یتیم (شاخه‌ای که والدش وجود ندارد).
+ */
+export function summarizeFishbone(causes: FishboneCauseLike[]): FishboneSummary {
+  const rows = (Array.isArray(causes) ? causes : []).filter((cause) => String(cause.StatementFa ?? "").trim().length > 0);
+  const byId = new Map(rows.filter((row) => row.Id).map((row) => [String(row.Id), row]));
+  const buckets = new Map<FishboneCategory, { count: number; rootCauseCount: number; occurrenceCount: number }>();
+  const issues: string[] = [];
+  const orphanCauseIds: string[] = [];
+  let maxDepth = 0;
+
+  const depthOf = (cause: FishboneCauseLike, guard = 0): number => {
+    const parentId = cause.ParentCauseId ? String(cause.ParentCauseId) : null;
+    if (!parentId) return 1;
+    if (guard > rows.length) return guard;
+    const parent = byId.get(parentId);
+    if (!parent) return 1;
+    return 1 + depthOf(parent, guard + 1);
+  };
+
+  for (const cause of rows) {
+    const category = (FISHBONE_CATEGORIES as readonly string[]).includes(String(cause.Category))
+      ? (cause.Category as FishboneCategory)
+      : null;
+    if (!category) {
+      issues.push("علتی بدون شاخهٔ معتبر ۶M ثبت شده است");
+      continue;
+    }
+    const previous = buckets.get(category) ?? { count: 0, rootCauseCount: 0, occurrenceCount: 0 };
+    const occurrence = Number(cause.OccurrenceCount);
+    buckets.set(category, {
+      count: previous.count + 1,
+      rootCauseCount: previous.rootCauseCount + (cause.IsRootCause === true ? 1 : 0),
+      occurrenceCount: previous.occurrenceCount + (Number.isFinite(occurrence) && occurrence > 0 ? occurrence : 0),
+    });
+    if (cause.ParentCauseId && !byId.has(String(cause.ParentCauseId))) orphanCauseIds.push(String(cause.Id ?? cause.StatementFa));
+    maxDepth = Math.max(maxDepth, depthOf(cause));
+  }
+
+  const total = [...buckets.values()].reduce((sum, value) => sum + value.count, 0);
+  const byCategory = FISHBONE_CATEGORIES.map((category) => {
+    const value = buckets.get(category) ?? { count: 0, rootCauseCount: 0, occurrenceCount: 0 };
+    return {
+      category,
+      labelFa: FISHBONE_CATEGORY_LABELS[category].fa,
+      count: value.count,
+      rootCauseCount: value.rootCauseCount,
+      occurrenceCount: value.occurrenceCount,
+      sharePct: total ? Math.round((value.count / total) * 10000) / 100 : 0,
+    };
+  });
+  const coveredCategories = byCategory.filter((row) => row.count > 0).map((row) => row.category);
+  const missingCategories = byCategory.filter((row) => row.count === 0).map((row) => row.category);
+  if (missingCategories.length) issues.push(`شاخه‌های بی‌گزارش: ${missingCategories.map((category) => FISHBONE_CATEGORY_LABELS[category].fa).join("، ")}`);
+  if (orphanCauseIds.length) issues.push(`${orphanCauseIds.length} علت به والد ناموجود ارجاع می‌دهد`);
+  const dominant = [...byCategory].sort((left, right) => right.count - left.count)[0] ?? null;
+
+  return {
+    total,
+    byCategory,
+    coveredCategories,
+    missingCategories,
+    coveragePct: Math.round((coveredCategories.length / FISHBONE_CATEGORIES.length) * 10000) / 100,
+    maxDepth,
+    orphanCauseIds,
+    dominantBranch: dominant && dominant.count > 0 ? { category: dominant.category, count: dominant.count } : null,
+    issues,
+    interpretationFa: total === 0
+      ? "نمودار استخوان‌ماهی خالی است."
+      : `شاخهٔ غالب «${dominant ? FISHBONE_CATEGORY_LABELS[dominant.category].fa : "—"}» با ${dominant?.count ?? 0} علت؛ پوشش ${coveredCategories.length} از ۶ شاخه.`,
+  };
+}
+
+export type RcfaReadinessInput = {
+  status: string;
+  rootCauseFa?: string | null;
+  method?: string | null;
+  whys?: WhyEntryLike[];
+  causes?: FishboneCauseLike[];
+  capas?: Array<{ ActionType?: string | null; Status?: string | null; VerificationResult?: string | null; DueOn?: string | null }>;
+  now?: Date | string;
+};
+export type RcfaReadiness = {
+  ready: boolean;
+  targetStatus: "closed" | "verified" | null;
+  blockers: string[];
+  warnings: string[];
+  overdueCapaCount: number;
+  score: number;
+};
+
+const capaIsClosed = (status: string | null | undefined): boolean => status === "closed" || status === "verified";
+const capaIsDone = (status: string | null | undefined): boolean => status === "implemented" || capaIsClosed(status);
+
+/**
+ * آمادگی پروندهٔ RCFA برای بستن یا تأیید.
+ *
+ * قاعده‌ها عمداً سخت‌گیرند: پرونده‌ای که ریشهٔ مستند یا CAPA اجراشده ندارد
+ * «بسته» نمی‌شود. بستن بی‌شاهد، همان تحلیل تشریفاتی است که در حادثهٔ بعدی
+ * دوباره سر باز می‌کند.
+ */
+export function evaluateRcfaReadiness(input: RcfaReadinessInput): RcfaReadiness {
+  const status = String(input.status ?? "open");
+  const whys = Array.isArray(input.whys) ? input.whys : [];
+  const causes = Array.isArray(input.causes) ? input.causes : [];
+  const capas = Array.isArray(input.capas) ? input.capas : [];
+  const blockers: string[] = [];
+  const warnings: string[] = [];
+  const now = input.now instanceof Date ? input.now : input.now ? new Date(String(input.now)) : new Date();
+
+  const documentedRootFromWhys = whys.some((row) => row.IsRootCause === true && String(row.EvidencePath ?? "").trim().length > 0);
+  const documentedRootFromCauses = causes.some((row) => row.IsRootCause === true);
+  const rootCauseFa = String(input.rootCauseFa ?? "").trim();
+  if (!rootCauseFa) blockers.push("ریشهٔ تأییدشده (RootCauseFa) ثبت نشده است");
+  if (whys.length > 0 && !documentedRootFromWhys && !documentedRootFromCauses) {
+    blockers.push("هیچ سطحی از زنجیرهٔ ۵ چرا به‌عنوان ریشهٔ مستند علامت‌گذاری نشده است");
+  }
+  if (whys.length === 0 && causes.length === 0) blockers.push("هیچ تحلیل علّی (۵ چرا یا استخوان‌ماهی) ثبت نشده است");
+  if (whys.length > 0) {
+    const chain = evaluateFiveWhyChain(whys);
+    for (const issue of chain.issues) if (chain.depth > 0) blockers.push(issue);
+  }
+  if (causes.length > 0) {
+    const fishbone = summarizeFishbone(causes);
+    if (!fishbone.byCategory.some((row) => row.rootCauseCount > 0)) {
+      blockers.push("در نمودار استخوان‌ماهی هیچ علتی به‌عنوان ریشه علامت‌گذاری نشده است");
+    }
+    for (const issue of fishbone.issues) warnings.push(issue);
+  }
+
+  const effectiveCapas = capas.filter((capa) => capa.Status !== "cancelled");
+  if (effectiveCapas.length === 0) {
+    blockers.push("هیچ اقدام اصلاحی/پیشگیرانه‌ای (CAPA) ثبت نشده است");
+  }
+  const openCapas = effectiveCapas.filter((capa) => !capaIsDone(capa.Status));
+  const unverified = effectiveCapas.filter((capa) => capaIsDone(capa.Status) && !capa.VerificationResult);
+  const hasPreventive = effectiveCapas.some((capa) => capa.ActionType === "preventive" || capa.ActionType === "systemic");
+  if (effectiveCapas.length > 0 && !hasPreventive) {
+    warnings.push("هیچ اقدام پیشگیرانه/سیستمی ثبت نشده است؛ خطر تکرار باقی می‌ماند");
+  }
+  const verificationEffective = effectiveCapas.length > 0
+    && effectiveCapas.every((capa) => capaIsClosed(capa.Status) && (capa.VerificationResult === "effective" || capa.VerificationResult === "partially-effective"));
+  const overdueCapaCount = effectiveCapas.filter((capa) => {
+    if (capaIsDone(capa.Status) || !capa.DueOn) return false;
+    const due = new Date(`${String(capa.DueOn).slice(0, 10)}T23:59:59Z`);
+    return Number.isFinite(due.getTime()) && Number.isFinite(now.getTime()) && due.getTime() < now.getTime();
+  }).length;
+  if (overdueCapaCount > 0) warnings.push(`${overdueCapaCount} اقدام از سررسید گذشته است`);
+
+  if (status === "verified") {
+    blockers.push("پرونده قبلاً تأیید شده است");
+    return { ready: false, targetStatus: null, blockers, warnings, overdueCapaCount, score: 1 };
+  }
+
+  const closeBlockers = [...blockers];
+  if (openCapas.length > 0) closeBlockers.push(`${openCapas.length} اقدام هنوز به مرحلهٔ اجرا نرسیده است`);
+  if (unverified.length > 0) closeBlockers.push(`${unverified.length} اقدام اجرا شده اما تأیید اثربخشی ندارد`);
+
+  const readyToClose = closeBlockers.length === 0;
+  const readyToVerify = readyToClose && status === "closed" && verificationEffective && effectiveCapas.every((capa) => capaIsClosed(capa.Status));
+
+  const targetStatus: "closed" | "verified" | null = readyToVerify ? "verified" : readyToClose && status !== "closed" ? "closed" : null;
+  const score = Math.round(
+    Math.max(0, Math.min(1,
+      (rootCauseFa ? 0.35 : 0)
+      + (documentedRootFromWhys || documentedRootFromCauses ? 0.2 : 0)
+      + (effectiveCapas.length > 0 ? 0.2 : 0)
+      + (openCapas.length === 0 ? 0.15 : 0)
+      + (verificationEffective ? 0.1 : 0),
+    )) * 100,
+  ) / 100;
+
+  return { ready: targetStatus !== null, targetStatus, blockers: closeBlockers, warnings, overdueCapaCount, score };
+}
+
+/* ═══════════════════════ ۱۶. یکپارچگی بین‌بخشی — رویداد و بلوکه‌سازی نرم ظرفیت ═══════════════════════ */
+
+/**
+ * قرارداد یکپارچگی CMMS ↔ MES.
+ *
+ * تصمیم معماری: هیچ کلید خارجی به جداول `Mfg*` وجود ندارد. ارتباط از دو راه
+ * انجام می‌شود که هر دو استقلال اسکیما را حفظ می‌کنند:
+ *   ۱) ارجاع نرم متنی (`CmmsAsset.MfgWorkCenterId`).
+ *   ۲) رویداد بیرونی در صف خروجی (`CmmsIntegrationEvent`) و تحویل با
+ *      HTTP/REST به سامانهٔ مقصد.
+ *
+ * این ماژول تعریف رویداد، کلید تکرارناپذیری، محاسبهٔ پنجرهٔ ظرفیت و ضریب
+ * دسترس‌پذیری را به‌صورت تابع خالص فراهم می‌کند تا هر دو سمت قرارداد از
+ * یک منبع حقیقت بخوانند.
+ */
+export const CMMS_INTEGRATION_CONTRACT = "cmms-mes-v1";
+
+export const CMMS_INTEGRATION_EVENT_TYPES = [
+  "downtime.started",
+  "downtime.finished",
+  "downtime.reported",
+  "capacity.block.requested",
+  "capacity.block.released",
+] as const;
+export type CmmsIntegrationEventType = (typeof CMMS_INTEGRATION_EVENT_TYPES)[number];
+
+export const CMMS_INTEGRATION_TARGETS = ["mes"] as const;
+export type CmmsIntegrationTarget = (typeof CMMS_INTEGRATION_TARGETS)[number];
+
+export const CMMS_INTEGRATION_EVENT_STATUSES = ["pending", "published", "acknowledged", "failed", "cancelled"] as const;
+export type CmmsIntegrationEventStatus = (typeof CMMS_INTEGRATION_EVENT_STATUSES)[number];
+
+export const CMMS_CAPACITY_BLOCK_SOURCES = ["pm-schedule", "work-order", "shutdown", "manual"] as const;
+export type CmmsCapacityBlockSource = (typeof CMMS_CAPACITY_BLOCK_SOURCES)[number];
+
+export const CMMS_CAPACITY_BLOCK_STATUSES = ["requested", "active", "released", "rejected", "cancelled"] as const;
+export type CmmsCapacityBlockStatus = (typeof CMMS_CAPACITY_BLOCK_STATUSES)[number];
+
+/** مجوز لازم در سمت مقصد برای هر نوع رویداد — نگاشت صریح، نه استنباط ضمنی. */
+export const CMMS_MES_EVENT_PERMISSIONS: Readonly<Record<CmmsIntegrationEventType, string>> = Object.freeze({
+  "downtime.started": "mfg.downtime.report",
+  "downtime.finished": "mfg.downtime.report",
+  "downtime.reported": "mfg.downtime.report",
+  "capacity.block.requested": "mfg.calendar.edit",
+  "capacity.block.released": "mfg.calendar.edit",
+});
+
+export function isTerminalIntegrationStatus(status: unknown): boolean {
+  return status === "acknowledged" || status === "cancelled";
+}
+
+/**
+ * کلید تکرارناپذیری: «همین رویداد، از همین منبع، در همین نسخه».
+ *
+ * تحویل در شبکهٔ ناپایدار حداقل یک‌بار است؛ بدون این کلید یک توقف واحد
+ * چند بار در MES ثبت می‌شود و مؤلفهٔ Availability بی‌دلیل افت می‌کند.
+ */
+export function buildIdempotencyKey(input: {
+  siteId: string;
+  eventType: string;
+  sourceTable: string;
+  sourceId: string;
+  revision?: number | string | null;
+}): string {
+  const parts = [input.siteId, input.eventType, input.sourceTable, input.sourceId, input.revision ?? "1"];
+  return parts.map((part) => String(part).trim().replace(/\s+/g, "_")).join(":");
+}
+
+export type DowntimeEventPayload = {
+  contract: string;
+  sourceSystem: "cmms";
+  siteId: string;
+  assetRef: string;
+  assetTag: string | null;
+  workCenterRef: string;
+  productionImpact: string;
+  downtimeType: CmmsHoldDowntimeType;
+  reasonCode: string | null;
+  reasonFa: string | null;
+  startedAt: string;
+  finishedAt: string | null;
+  durationMinutes: number | null;
+  workOrderRef: string | null;
+  failureRef: string | null;
+  sourceRef: string;
+};
+
+export type DowntimeEventDraft = {
+  eventType: CmmsIntegrationEventType;
+  targetSystem: CmmsIntegrationTarget;
+  targetRef: string;
+  payload: DowntimeEventPayload;
+  idempotencyKey: string;
+  occurredAt: string;
+};
+
+/**
+ * ساخت رویداد توقف از دادهٔ CMMS.
+ *
+ * اگر تجهیز به مرکز کاری MES گره نخورده باشد، `null` برمی‌گردد: رویداد
+ * بی‌مقصد ساخته نمی‌شود. این انتخاب صریح است تا صف خروجی با رویدادهای
+ * غیرقابل‌تحویل پر نشود.
+ */
+export function buildDowntimeEvent(input: {
+  eventType: CmmsIntegrationEventType;
+  siteId: string;
+  asset: { Id: string; AssetTag?: string | null; MfgWorkCenterId?: string | null };
+  sourceTable: string;
+  sourceId: string;
+  revision?: number | string | null;
+  startedAt: string;
+  finishedAt?: string | null;
+  durationMinutes?: number | null;
+  downtimeType: CmmsHoldDowntimeType;
+  reasonCode?: string | null;
+  reasonFa?: string | null;
+  productionImpact?: string | null;
+  workOrderRef?: string | null;
+  failureRef?: string | null;
+  plantRef?: string | null;
+}): DowntimeEventDraft | null {
+  const workCenterRef = String(input.asset?.MfgWorkCenterId ?? "").trim();
+  if (!workCenterRef) return null;
+  const finishedAt = input.finishedAt ?? null;
+  const computedMinutes = input.durationMinutes != null
+    ? Math.max(0, Math.round(Number(input.durationMinutes)))
+    : finishedAt
+      ? computeHoldMinutes(input.startedAt, finishedAt)
+      : null;
+  const payload: DowntimeEventPayload = {
+    contract: CMMS_INTEGRATION_CONTRACT,
+    sourceSystem: "cmms",
+    siteId: input.siteId,
+    assetRef: input.asset.Id,
+    assetTag: input.asset.AssetTag ?? null,
+    workCenterRef,
+    plantRef: input.plantRef ?? null,
+    productionImpact: input.productionImpact ?? "none",
+    downtimeType: input.downtimeType,
+    reasonCode: input.reasonCode ?? null,
+    reasonFa: input.reasonFa ?? null,
+    startedAt: input.startedAt,
+    finishedAt,
+    durationMinutes: computedMinutes,
+    workOrderRef: input.workOrderRef ?? null,
+    failureRef: input.failureRef ?? null,
+    sourceRef: `${input.sourceTable}:${input.sourceId}`,
+  } as DowntimeEventPayload;
+  return {
+    eventType: input.eventType,
+    targetSystem: "mes",
+    targetRef: workCenterRef,
+    payload,
+    idempotencyKey: buildIdempotencyKey({
+      siteId: input.siteId,
+      eventType: input.eventType,
+      sourceTable: input.sourceTable,
+      sourceId: input.sourceId,
+      revision: input.revision ?? 1,
+    }),
+    occurredAt: input.startedAt,
+  };
+}
+
+export type CapacityBlockLike = {
+  Id: string;
+  SiteId: string;
+  PlantRef?: string | null;
+  WorkCenterRef: string;
+  SourceType: string;
+  SourceRef?: string | null;
+  WindowStart: string;
+  WindowEnd: string;
+  ReservedMinutes?: number | null;
+  ReasonFa?: string | null;
+  RowVersion?: number | null;
+};
+
+export type CapacityBlockEventDraft = {
+  eventType: CmmsIntegrationEventType;
+  targetSystem: CmmsIntegrationTarget;
+  targetRef: string;
+  payload: Record<string, unknown>;
+  idempotencyKey: string;
+  occurredAt: string;
+};
+
+/** ساخت رویداد رزرو/آزادسازی ظرفیت برای موتور زمان‌بندی MES. */
+export function buildCapacityBlockEvent(
+  block: CapacityBlockLike,
+  action: "requested" | "released",
+  options: { occurredAt?: string; revision?: number | string | null; contract?: string } = {},
+): CapacityBlockEventDraft {
+  const eventType: CmmsIntegrationEventType = action === "released" ? "capacity.block.released" : "capacity.block.requested";
+  return {
+    eventType,
+    targetSystem: "mes",
+    targetRef: String(block.WorkCenterRef ?? "").trim(),
+    payload: {
+      contract: options.contract ?? CMMS_INTEGRATION_CONTRACT,
+      sourceSystem: "cmms",
+      siteId: block.SiteId,
+      blockRef: block.Id,
+      plantRef: block.PlantRef ?? null,
+      workCenterRef: block.WorkCenterRef,
+      sourceType: block.SourceType,
+      sourceRef: block.SourceRef ?? null,
+      windowStart: block.WindowStart,
+      windowEnd: block.WindowEnd,
+      reservedMinutes: block.ReservedMinutes ?? null,
+      reasonFa: block.ReasonFa ?? null,
+      action,
+    },
+    idempotencyKey: buildIdempotencyKey({
+      siteId: block.SiteId,
+      eventType,
+      sourceTable: "CmmsCapacityBlock",
+      sourceId: block.Id,
+      revision: options.revision ?? block.RowVersion ?? 1,
+    }),
+    occurredAt: options.occurredAt ?? new Date().toISOString(),
+  };
+}
+
+/** دقیقه‌های رزروشده در یک پنجرهٔ زمانی؛ پایان باید بعد از شروع باشد. */
+export function reservedMinutesBetween(windowStart: string | Date, windowEnd: string | Date): number | null {
+  const start = windowStart instanceof Date ? windowStart : new Date(String(windowStart));
+  const end = windowEnd instanceof Date ? windowEnd : new Date(String(windowEnd));
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return null;
+  if (end.getTime() <= start.getTime()) return null;
+  return Math.round((end.getTime() - start.getTime()) / 60_000);
+}
+
+export type CapacityBlockConflict = {
+  blockRef: string;
+  workCenterRef: string;
+  overlapMinutes: number;
+  windowStart: string;
+  windowEnd: string;
+};
+
+/**
+ * تشخیص هم‌پوشانی بلوک‌های ظرفیت.
+ *
+ * دو بلوک روی یک مرکز کاری به‌خودی‌خود غلط نیست (مثلاً دو دستورکار پشت‌سرهم
+ * که هم‌پوشانی جزئی دارند) اما باید دیده شود؛ پس هم‌پوشانی «هشدار» است و
+ * فقط هم‌پوشانی کامل روی همان منبع «تعارض» تلقی می‌شود.
+ */
+export function detectCapacityBlockConflicts(
+  existing: CapacityBlockLike[],
+  candidate: Pick<CapacityBlockLike, "Id" | "WorkCenterRef" | "WindowStart" | "WindowEnd">,
+): { conflicts: CapacityBlockConflict[]; overlapMinutes: number; exactDuplicate: boolean; issues: string[] } {
+  const conflicts: CapacityBlockConflict[] = [];
+  const issues: string[] = [];
+  const start = new Date(String(candidate.WindowStart));
+  const end = new Date(String(candidate.WindowEnd));
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end.getTime() <= start.getTime()) {
+    return { conflicts, overlapMinutes: 0, exactDuplicate: false, issues: ["پنجرهٔ بلوک ظرفیت نامعتبر است"] };
+  }
+  let overlapMinutes = 0;
+  let exactDuplicate = false;
+  for (const row of Array.isArray(existing) ? existing : []) {
+    if (row.Id === candidate.Id) continue;
+    if (String(row.WorkCenterRef) !== String(candidate.WorkCenterRef)) continue;
+    const rowStart = new Date(String(row.WindowStart));
+    const rowEnd = new Date(String(row.WindowEnd));
+    if (Number.isNaN(rowStart.getTime()) || Number.isNaN(rowEnd.getTime())) continue;
+    const overlapStart = Math.max(start.getTime(), rowStart.getTime());
+    const overlapEnd = Math.min(end.getTime(), rowEnd.getTime());
+    if (overlapEnd <= overlapStart) continue;
+    const minutes = Math.round((overlapEnd - overlapStart) / 60_000);
+    overlapMinutes += minutes;
+    if (rowStart.getTime() === start.getTime() && rowEnd.getTime() === end.getTime()) exactDuplicate = true;
+    conflicts.push({
+      blockRef: row.Id,
+      workCenterRef: String(row.WorkCenterRef),
+      overlapMinutes: minutes,
+      windowStart: String(row.WindowStart),
+      windowEnd: String(row.WindowEnd),
+    });
+  }
+  if (exactDuplicate) issues.push("بلوکی با همین پنجره روی همین مرکز کاری از قبل وجود دارد");
+  else if (conflicts.length) issues.push(`${conflicts.length} بلوک هم‌پوشان روی همین مرکز کاری وجود دارد`);
+  return { conflicts, overlapMinutes, exactDuplicate, issues };
+}
+
+export type AvailabilityProjection = {
+  calendarMinutes: number;
+  plannedDowntimeMinutes: number;
+  unplannedDowntimeMinutes: number;
+  plannedProductionMinutes: number;
+  operatingMinutes: number;
+  availabilityValue: number | null;
+  availabilityPct: number | null;
+  interpretationFa: string;
+};
+
+/**
+ * بازتاب توقف ثبت‌شده در CMMS روی مؤلفهٔ Availability شاخص OEE.
+ *
+ * همان تعریف MES: زمان تولید برنامه‌ریزی‌شده = زمان تقویم − توقف برنامه‌ریزی‌شده،
+ * زمان کارکرد = زمان تولید برنامه‌ریزی‌شده − توقف ناخواسته.
+ */
+export function projectAvailability(input: {
+  calendarMinutes: number;
+  plannedDowntimeMinutes?: number | null;
+  unplannedDowntimeMinutes?: number | null;
+}): AvailabilityProjection {
+  const round3 = (value: number) => Math.round(value * 1000) / 1000;
+  const calendarMinutes = Math.max(0, Number(input.calendarMinutes) || 0);
+  const planned = Math.max(0, Number(input.plannedDowntimeMinutes ?? 0) || 0);
+  const unplanned = Math.max(0, Number(input.unplannedDowntimeMinutes ?? 0) || 0);
+  const plannedProductionMinutes = round3(Math.max(0, calendarMinutes - planned));
+  const operatingMinutes = round3(Math.max(0, plannedProductionMinutes - unplanned));
+  const availabilityValue = plannedProductionMinutes > 0 ? round3(operatingMinutes / plannedProductionMinutes) : null;
+  const availabilityPct = availabilityValue === null ? null : round3(availabilityValue * 100);
+  return {
+    calendarMinutes: round3(calendarMinutes),
+    plannedDowntimeMinutes: round3(planned),
+    unplannedDowntimeMinutes: round3(unplanned),
+    plannedProductionMinutes,
+    operatingMinutes,
+    availabilityValue,
+    availabilityPct,
+    interpretationFa: availabilityPct === null
+      ? "زمان تولید برنامه‌ریزی‌شده‌ای وجود ندارد؛ دسترس‌پذیری قابل محاسبه نیست."
+      : `دسترس‌پذیری ${availabilityPct}٪ پس از کسر ${round3(planned + unplanned)} دقیقه توقف.`,
+  };
+}
+
+export type OutboxSummary = {
+  total: number;
+  byStatus: Record<string, number>;
+  pending: number;
+  failed: number;
+  acknowledged: number;
+  oldestPendingAt: string | null;
+  retryable: number;
+  interpretationFa: string;
+};
+
+/** خلاصهٔ صف خروجی برای داشبورد یکپارچگی. */
+export function summarizeOutbox(events: Array<Record<string, unknown>>, now: Date | string = new Date()): OutboxSummary {
+  const rows = Array.isArray(events) ? events : [];
+  const byStatus: Record<string, number> = {};
+  let oldestPending: number | null = null;
+  let pending = 0;
+  let failed = 0;
+  let acknowledged = 0;
+  const nowMs = (now instanceof Date ? now : new Date(now)).getTime();
+  for (const row of rows) {
+    const status = String(row.Status ?? "unknown");
+    byStatus[status] = (byStatus[status] ?? 0) + 1;
+    if (status === "pending" || status === "published") {
+      pending += 1;
+      const at = Date.parse(String(row.OccurredAt ?? row.CreatedAt ?? ""));
+      if (Number.isFinite(at) && (oldestPending === null || at < oldestPending)) oldestPending = at;
+    }
+    if (status === "failed") failed += 1;
+    if (status === "acknowledged") acknowledged += 1;
+  }
+  const oldestPendingAt = oldestPending === null ? null : new Date(oldestPending).toISOString();
+  const ageMinutes = oldestPending !== null && Number.isFinite(nowMs) ? Math.round((nowMs - oldestPending) / 60_000) : null;
+  return {
+    total: rows.length,
+    byStatus,
+    pending,
+    failed,
+    acknowledged,
+    oldestPendingAt,
+    retryable: pending + failed,
+    interpretationFa: rows.length === 0
+      ? "صف خروجی یکپارچگی خالی است."
+      : `${rows.length} رویداد؛ ${acknowledged} تحویل‌شده، ${pending} در انتظار، ${failed} ناموفق${ageMinutes != null && pending > 0 ? `، قدیمی‌ترین در انتظار ${ageMinutes} دقیقه` : ""}.`,
+  };
+}

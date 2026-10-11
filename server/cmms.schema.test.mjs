@@ -35,7 +35,8 @@ const PMWORKS_TABLES = {
   "۱۳-تغییر همگانی": "CmmsFamilyBulkChange",
 };
 
-const EXPECTED_NAMES = [
+/* ۶۵ جدول پایه — بلوک مهاجرت ۰۰۵۷. این فهرست در آزمون اسکیما یخ‌زده است. */
+const FOUNDATION_NAMES = [
   /* الف) سایت و مکان */
   "CmmsSite", "CmmsLocation",
   /* ب) خانوادهٔ تجهیز */
@@ -69,9 +70,17 @@ const EXPECTED_NAMES = [
   "CmmsAiRun", "CmmsAiRecommendation",
 ];
 
-test("اسکیمای CMMS شامل ۶۵ جدول مستقل است", () => {
+/* ۵ جدول تکمیلی — بلوک مهاجرت ۰۰۵۸: توقف/ادامهٔ دستورکار، RCFA تعاملی
+ * (علت و CAPA) و یکپارچگی بین‌بخشی (صف رویداد و بلوکهٔ نرم ظرفیت). */
+const EXTENSION_NAMES = [
+  "CmmsIntegrationEvent", "CmmsWorkOrderHold", "CmmsRcfaCause", "CmmsRcfaCapa", "CmmsCapacityBlock",
+];
+
+const EXPECTED_NAMES = [...FOUNDATION_NAMES, ...EXTENSION_NAMES];
+
+test("اسکیمای CMMS شامل ۷۰ جدول مستقل است", () => {
   const tables = tablesOfModule("cmms");
-  assert.equal(tables.length, 65);
+  assert.equal(tables.length, 70);
   assert.deepEqual(new Set(tables.map((table) => table.name)), new Set(EXPECTED_NAMES));
   /* اسکیمای کل سامانه بدون ایراد ساختاری می‌ماند — این یعنی الحاق CMMS
    * چیزی در بقیهٔ ماژول‌ها را نشکسته است. */
@@ -200,10 +209,17 @@ test("مهاجرت 0057 همهٔ جدول‌های CMMS را می‌سازد و 
   const migration = MIGRATIONS.find((item) => item.version === "0057");
   assert.ok(migration, "مهاجرت 0057 وجود ندارد");
   assert.equal(migration.name, "cmms_asset_maintenance_foundation");
-  for (const name of EXPECTED_NAMES) {
+  for (const name of FOUNDATION_NAMES) {
     assert.ok(
       migration.statements.some((sql) => sql.includes(`[dbo].[${name}]`)),
       `مهاجرت 0057 جدول ${name} را نمی‌سازد`,
+    );
+  }
+  /* جدول‌های تکمیلی نباید در مهاجرت پایه ظاهر شوند؛ بلوک ۰۰۵۸ جای آن‌هاست. */
+  for (const name of EXTENSION_NAMES) {
+    assert.ok(
+      !migration.statements.some((sql) => sql.includes(`[dbo].[${name}]`)),
+      `جدول تکمیلی ${name} در مهاجرت پایه 0057 آمده است`,
     );
   }
   /* افزودنی بودن: مهاجرت نباید هیچ DROP یا ALTER روی جدول داشته باشد. */
@@ -223,7 +239,7 @@ test("ترتیب مهاجرت 0057 وابستگی کلید خارجی را رع�
     const match = sql.match(/CREATE TABLE \[dbo\]\.\[(\w+)\]/);
     if (match) createdOrder.push(match[1]);
   }
-  assert.equal(createdOrder.length, EXPECTED_NAMES.length);
+  assert.equal(createdOrder.length, FOUNDATION_NAMES.length);
   for (const tableName of createdOrder) {
     const table = tableDef(tableName);
     const position = createdOrder.indexOf(tableName);
@@ -238,16 +254,81 @@ test("ترتیب مهاجرت 0057 وابستگی کلید خارجی را رع�
   }
 });
 
-test("مهاجرت‌های پیشین CMMS را دست نزده‌اند", () => {
+test("هیچ مهاجرتی جز ۰۰۵۷ و ۰۰۵۸ جدول CMMS را دست نمی‌زند", () => {
+  /* قاعدهٔ افزودنی‌بودن: هر تغییر اسکیمای CMMS در مهاجرت تازه می‌آید، ولی
+   * فقط همین دو مهاجرت حق اشاره به جدول‌های Cmms* را دارند — یک مهاجرت
+   * بی‌ربط که جدول نت را ALTER کند یعنی استقلال ماژول شکسته است. */
+  const allowed = new Set(["0057", "0058"]);
   for (const migration of MIGRATIONS) {
-    if (migration.version === "0057") continue;
+    if (allowed.has(migration.version)) continue;
     for (const sql of migration.statements) {
       assert.ok(
         !/\[dbo\]\.\[Cmms\w+\]/.test(sql),
-        `مهاجرت ${migration.version} به جدول CMMS اشاره می‌کند — CMMS باید فقط در 0057 باشد`,
+        `مهاجرت ${migration.version} به جدول CMMS اشاره می‌کند — CMMS باید فقط در 0057/0058 باشد`,
       );
     }
   }
+});
+
+test("مهاجرت 0058 جدول‌های تکمیلی را می‌سازد و افزودنی است", () => {
+  const migration = MIGRATIONS.find((item) => item.version === "0058");
+  assert.ok(migration, "مهاجرت 0058 وجود ندارد");
+  assert.equal(migration.name, "cmms_hold_rcfa_and_cross_module_integration");
+  for (const name of EXTENSION_NAMES) {
+    assert.ok(
+      migration.statements.some((sql) => sql.includes(`[dbo].[${name}]`)),
+      `مهاجرت 0058 جدول ${name} را نمی‌سازد`,
+    );
+  }
+  for (const sql of migration.statements) {
+    assert.ok(!/^\s*DROP\b/i.test(sql), "مهاجرت 0058 نباید DROP داشته باشد");
+    assert.ok(!/ALTER\s+TABLE/i.test(sql), "مهاجرت 0058 نباید ALTER TABLE داشته باشد");
+  }
+});
+
+test("ترتیب مهاجرت 0058 وابستگی کلید خارجی را رعایت می‌کند", () => {
+  const migration = MIGRATIONS.find((item) => item.version === "0058");
+  const createdOrder = [];
+  for (const sql of migration.statements) {
+    const match = sql.match(/CREATE TABLE \[dbo\]\.\[(\w+)\]/);
+    if (match) createdOrder.push(match[1]);
+  }
+  assert.equal(createdOrder.length, EXTENSION_NAMES.length);
+  /* والد می‌تواند در مهاجرت پایه ساخته شده باشد (مثل CmmsWorkOrder)؛ فقط
+   * وابستگی درون همین بلوک باید ترتیب داشته باشد. */
+  const migrationIndexOf = new Map();
+  for (const item of MIGRATIONS) {
+    for (const sql of item.statements) {
+      const match = sql.match(/CREATE TABLE \[dbo\]\.\[(\w+)\]/);
+      if (match) migrationIndexOf.set(match[1], item.version);
+    }
+  }
+  for (const tableName of createdOrder) {
+    const table = tableDef(tableName);
+    const position = createdOrder.indexOf(tableName);
+    for (const foreignKey of table.foreignKeys ?? []) {
+      assert.ok(migrationIndexOf.has(foreignKey.refTable), `${foreignKey.refTable} اصلاً ساخته نمی‌شود`);
+      if (migrationIndexOf.get(foreignKey.refTable) !== "0058") continue;
+      const parentPosition = createdOrder.indexOf(foreignKey.refTable);
+      assert.ok(parentPosition <= position, `${tableName} پیش از والدش ${foreignKey.refTable} ساخته می‌شود`);
+    }
+  }
+});
+
+test("جدول‌های یکپارچگی بین‌بخشی هیچ کلید خارجی بیرونی ندارند", () => {
+  /* تصمیم معماری: ارتباط CMMS و MES فقط با ارجاع نرم و رویداد است. این آزمون
+   * مستقل از آزمون کلی استقلال، مرز بین دو ماژول را صریح قفل می‌کند. */
+  for (const name of ["CmmsIntegrationEvent", "CmmsCapacityBlock"]) {
+    const table = tableDef(name);
+    for (const foreignKey of table.foreignKeys ?? []) {
+      assert.ok(foreignKey.refTable.startsWith("Cmms"), `${name} کلید خارجی بیرونی دارد: ${foreignKey.refTable}`);
+    }
+    for (const column of allColumns(table)) {
+      assert.ok(!/^(Mfg|Fin|Hrm|Scm|Project)/.test(column.name), `${name}.${column.name} نام جدول بیرونی دارد`);
+    }
+  }
+  const hold = tableDef("CmmsWorkOrderHold");
+  assert.ok(hold.columns.some((column) => column.name === "WorkCenterRef"), "CmmsWorkOrderHold ارجاع نرم مرکز کاری ندارد");
 });
 
 test("DDL کل سامانه برای هر دو گویش بدون خطا تولید می‌شود", () => {
@@ -268,7 +349,7 @@ test("DDL کل سامانه برای هر دو گویش بدون خطا تولی
 test("ایندکس‌های یکتای CMMS روی ستون‌های nullable فیلتر شده‌اند", () => {
   /* ایندکس یکتا روی ستون nullable در SQL Server فقط یک NULL می‌پذیرد.
    * بدون فیلتر جزئی، ساخت ایندکس روی دادهٔ موجود شکست می‌خورد. */
-  const migration = MIGRATIONS.find((item) => item.version === "0057");
-  const filtered = migration.statements.filter((sql) => /^\s*CREATE UNIQUE INDEX/.test(sql) && sql.includes("IS NOT NULL"));
+  const statements = ["0057", "0058"].flatMap((version) => MIGRATIONS.find((item) => item.version === version).statements);
+  const filtered = statements.filter((sql) => /^\s*CREATE UNIQUE INDEX/.test(sql) && sql.includes("IS NOT NULL"));
   assert.ok(filtered.length > 0, "هیچ ایندکس یکتای فیلترشده‌ای تولید نشده است");
 });

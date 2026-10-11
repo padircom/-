@@ -10,6 +10,7 @@ import { registerMonitoringWorkspaceRoutes } from "./monitoringWorkspaceApi.js";
 import { registerEqmWorkspaceRoutes, EQM_TABLES } from "./eqmWorkspaceApi.js";
 import { registerManufacturingRoutes } from "./manufacturingApi.js";
 import { registerCmmsRoutes } from "./cmmsApi.js";
+import { applyCmmsIntegrationEvent, registerMesCmmsBridgeRoutes } from "./cmmsMesBridge.js";
 import { authorizeData, scopeData } from "./dataAccess.js";
 import "dotenv/config";
 import express from "express";
@@ -870,6 +871,28 @@ registerDprTablesRoutes(app, { dataDir: path.resolve(process.cwd(), process.env.
 registerFinWorkspaceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
 /* d17/MFG: Plant-scoped API پایه؛ عملیات چندجدولی پس از Unit of Work افزوده می‌شوند. */
 registerManufacturingRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
+/* بخش ۳/CMMS ↔ d17/MES: پل یکپارچگی. هیچ کلید خارجی بین دو اسکیما نیست؛
+ * CMMS رویداد را در صف خروجی می‌گذارد و این پل، قرارداد `cmms-mes-v1` را
+ * روی ردیف‌های خودِ MES اِعمال می‌کند (مسیر REST برای استقرار جداشده). */
+registerMesCmmsBridgeRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
+
+/* حمل‌ونقل درون‌فرآیندی: تحویل رویداد CMMS به MES بدون ترافیک شبکه، ولی
+ * دقیقاً روی همان قرارداد REST. نبودِ پاسخ موفق یعنی خطای دسته‌بندی‌شده در
+ * ستون‌های خطای صف خروجی — هیچ «موفق»ی بی‌شاهد ثبت نمی‌شود. */
+const cmmsMesTransport = {
+  async deliver(event) {
+    try {
+      return await applyCmmsIntegrationEvent({ repo, event, actor: "svc-cmms-mes" });
+    } catch (err) {
+      return {
+        ok: false,
+        code: typeof err?.code === "string" && err.code ? err.code : "E-MES-BRIDGE",
+        messageFa: err?.messageFa ?? err?.message ?? "خطای پل یکپارچگی MES",
+      };
+    }
+  },
+};
+
 /* بخش ۳/CMMS: سامانهٔ نگهداری و تعمیرات و دارایی‌ها — سایت‌محور، مستقل از
  * جداول تولید، با مجوزهای cmms.* و دامنه‌بندی بر پایهٔ SITE. */
 registerCmmsRoutes(app, {
@@ -879,6 +902,7 @@ registerCmmsRoutes(app, {
   /* گذارهای مشروط گردش‌کار باید مجوزهای واقعی کنش‌گر را ببینند،
    * و آن مجوزها از نقش‌های RBAC مشتق می‌شوند — نه از بدنهٔ درخواست. */
   subjectPermissions: rbacSubjectPermissions,
+  integrationTransport: cmmsMesTransport,
 });
 registerCkmWorkspaceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
 registerScmWorkspaceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });

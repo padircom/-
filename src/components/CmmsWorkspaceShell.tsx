@@ -1,5 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { Lang } from "../data/framework";
+import CmmsRcfaPanel from "./CmmsRcfaPanel";
+import CmmsIntegrationPanel from "./CmmsIntegrationPanel";
 import {
   canCmmsAccess,
   CmmsClient,
@@ -21,6 +23,8 @@ export type CmmsSubModuleId =
   | "spares"
   | "condition"
   | "analytics"
+  | "rcfa"
+  | "integration"
   | "ai";
 
 export const CMMS_SUBMODULES: Array<{
@@ -80,6 +84,18 @@ export const CMMS_SUBMODULES: Array<{
     descFa: "MTBF/MTTR/دسترس‌پذیری، OEE، شاخص‌های IEEE 1366 و NPV چرخهٔ عمر.",
     descEn: "MTBF/MTTR/availability, OEE, IEEE 1366 indices and life-cycle NPV.",
     viewPermission: "cmms.reliability.view",
+  },
+  {
+    id: "rcfa", icon: "🧩", fa: "تحلیل ریشه‌ای (RCFA)", en: "Root Cause Analysis (RCFA)",
+    descFa: "۵ چرا و استخوان‌ماهی ۶M با پارتو وزنی، و CAPA با ارجاع به مالک یا تبدیل به دستورکار.",
+    descEn: "5-Why and 6M fishbone with weighted Pareto, plus CAPA referred to an owner or a new work order.",
+    viewPermission: "cmms.rca.view",
+  },
+  {
+    id: "integration", icon: "🔗", fa: "یکپارچگی با تولید (MES)", en: "Cross-module Integration (MES)",
+    descFa: "صف رویداد توقف/ظرفیت و رزرو نرم ظرفیت مراکز کاری — بدون کلید خارجی بین دو ماژول.",
+    descEn: "Downtime/capacity event outbox and soft work-center reservations — no foreign key across modules.",
+    viewPermission: "cmms.integration.view",
   },
   {
     id: "ai", icon: "🤖", fa: "هوش مصنوعی نت", en: "Maintenance AI",
@@ -146,6 +162,95 @@ function ErrorBox({ message, code, onRetry, fa }: { message: string; code?: stri
           {fa ? "تلاش دوباره" : "Retry"}
         </button>
       )}
+    </div>
+  );
+}
+
+/**
+ * کنش‌های توقف/ادامهٔ دستورکار.
+ *
+ * علت توقف از کاتالوگ سرور می‌آید (`allowed` در خطای ۴۰۰)، ولی برای تجربهٔ
+ * بهتر فرم، فهرست کوتاه رایج را نشان می‌دهد؛ هر مقدار دیگری سرور رد می‌کند.
+ */
+function WorkOrderHoldActions({ siteId, userId, lang, row, onDone }: {
+  siteId: string;
+  userId: string;
+  lang: Lang;
+  row: { Id: string; Status: string };
+  onDone: () => void;
+}) {
+  const fa = lang === "fa";
+  const tr = (faText: string, enText: string) => (fa ? faText : enText);
+  const canHold = canCmmsAccess(userId, "cmms.wo.hold", siteId);
+  const canResume = canCmmsAccess(userId, "cmms.wo.resume", siteId);
+  const [reason, setReason] = useState("waiting-parts");
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const holdable = ["planned", "scheduled", "released", "in-progress"].includes(row.Status);
+
+  const run = async (work: () => Promise<unknown>) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await work();
+      setNote("");
+      onDone();
+    } catch (err) {
+      setError(err instanceof CmmsRequestError ? err.message : err instanceof Error ? err.message : "خطا");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (row.Status === "on-hold" && canResume) {
+    return (
+      <div className="flex items-center gap-1.5" dir={fa ? "rtl" : "ltr"}>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => run(() => CmmsClient.resumeWorkOrder(siteId, userId, row.Id, {}))}
+          className="rounded-lg border b-line-soft px-2 py-0.5 text-[11px] tx2 hover:tx1 disabled:opacity-40"
+        >
+          {busy ? "…" : tr("ادامه", "Resume")}
+        </button>
+        {error && <span className="text-[10px] text-rose-300">{error}</span>}
+      </div>
+    );
+  }
+
+  if (!holdable || !canHold) return <span className="tx3 text-[10px]">—</span>;
+
+  return (
+    <div className="flex flex-wrap items-center gap-1.5" dir={fa ? "rtl" : "ltr"}>
+      <select
+        value={reason}
+        onChange={(event) => setReason(event.target.value)}
+        className="rounded-lg border b-line-soft bg-black/25 px-1.5 py-0.5 text-[11px] tx1"
+        dir="ltr"
+      >
+        {["waiting-parts", "waiting-crew", "waiting-permit", "waiting-production-window", "machine-breakdown", "unsafe-condition", "other"].map((code) => (
+          <option key={code} value={code}>{code}</option>
+        ))}
+      </select>
+      {(["unsafe-condition", "other"] as string[]).includes(reason) && (
+        <input
+          value={note}
+          onChange={(event) => setNote(event.target.value)}
+          placeholder={tr("شرح الزامی", "note required")}
+          className="w-28 rounded-lg border b-line-soft bg-black/25 px-1.5 py-0.5 text-[11px] tx1"
+        />
+      )}
+      <button
+        type="button"
+        disabled={busy}
+        onClick={() => run(() => CmmsClient.holdWorkOrder(siteId, userId, row.Id, { HoldReasonCode: reason, NoteFa: note || null }))}
+        className="rounded-lg border b-line-soft px-2 py-0.5 text-[11px] tx2 hover:tx1 disabled:opacity-40"
+      >
+        {busy ? "…" : tr("توقف", "Hold")}
+      </button>
+      {error && <span className="text-[10px] text-rose-300">{error}</span>}
     </div>
   );
 }
@@ -348,11 +453,24 @@ export default function CmmsWorkspaceShell({ lang, activeSub, onSelectSub, onBac
               { key: "WorkOrderType", header: tr("نوع", "Type") },
               { key: "Status", header: tr("وضعیت", "Status") },
               { key: "Priority", header: tr("اولویت", "Priority"), align: "center" },
+              {
+                key: "actions",
+                header: tr("توقف / ادامه", "Hold / resume"),
+                render: (row) => (
+                  <WorkOrderHoldActions siteId={siteId} userId={userId} lang={lang} row={row} onDone={workOrders.reload} />
+                ),
+              },
             ]}
             rows={workOrders.state.data.workOrders}
           />
         );
       }
+
+      case "rcfa":
+        return <CmmsRcfaPanel siteId={siteId} userId={userId} lang={lang} />;
+
+      case "integration":
+        return <CmmsIntegrationPanel siteId={siteId} userId={userId} lang={lang} />;
 
       case "spares": {
         if (spares.state.kind === "loading") return <Loading fa={fa} />;
@@ -450,8 +568,8 @@ export default function CmmsWorkspaceShell({ lang, activeSub, onSelectSub, onBac
             </div>
             <p className="tx3 text-xs mt-0.5">
               {tr(
-                "بخش سوم سازمان · ISO 55000/14224/60812/60300 · ۱۰۵ مسیر REST زیر /api/cmms",
-                "Organizational Pillar #3 · ISO 55000/14224/60812/60300 · 105 REST routes under /api/cmms",
+                "بخش سوم سازمان · ISO 55000/14224/60812/60300 · ۱۲۱ مسیر REST زیر /api/cmms",
+                "Organizational Pillar #3 · ISO 55000/14224/60812/60300 · 121 REST routes under /api/cmms",
               )}
             </p>
           </div>
@@ -567,7 +685,7 @@ function DataTable<T extends Record<string, any>>({
   fa, columns, rows, emptyText,
 }: {
   fa: boolean;
-  columns: Array<{ key: string; header: string; mono?: boolean; align?: "center" | "right" }>;
+  columns: Array<{ key: string; header: string; mono?: boolean; align?: "center" | "right"; render?: (row: T) => ReactNode }>;
   rows: T[];
   emptyText: string;
 }) {
@@ -594,6 +712,13 @@ function DataTable<T extends Record<string, any>>({
             <tr key={String(row.Id ?? index)} className="border-t b-line-soft">
               {columns.map((column) => {
                 const value = row[column.key];
+                if (column.render) {
+                  return (
+                    <td key={column.key} className="px-3 py-1.5 tx2 whitespace-nowrap" dir="ltr">
+                      {column.render(row)}
+                    </td>
+                  );
+                }
                 return (
                   <td
                     key={column.key}

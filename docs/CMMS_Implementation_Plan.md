@@ -1,9 +1,10 @@
 # بخش ۳ — سامانهٔ مدیریت نگهداری و تعمیرات و دارایی‌ها (CMMS / EAM / APM)
 
 **نقشهٔ راه اجرایی و ثبت وضعیت پیاده‌سازی**
-تاریخ تنظیم: ۲۰۲۶-۱۰-۰۹ · مخزن: `padircom/-` · شاخه: `arena/bbd1daab-repo`
+تاریخ تنظیم: ۲۰۲۶-۱۰-۰۹ · آخرین به‌روزرسانی: ۲۰۲۶-۱۰-۱۱ · مخزن: `padircom/-` · شاخه: `arena/3967ddf6-repo`
 مبنای سبز پیش از شروع: `npm test` → **۴۶۵۶ تست، ۰ خطا**
-وضعیت کنونی: `npm test` → **۴۸۱۱ تست، ۰ خطا** (۱۵۵ تست اختصاصی CMMS؛ `tsc --noEmit` پاک)
+وضعیت کنونی: `npm test` → **۴۸۴۵ تست، ۰ خطا** (۱۷۸ تست CMMS + ۱۱ تست پل CMMS↔MES؛ `tsc --noEmit` پاک)
+**سه قلم باقی‌ماندهٔ فاز ۲/۳/۴ در ۲۰۲۶-۱۰-۱۱ تکمیل شد** — بخش ۸.
 
 ---
 
@@ -49,8 +50,11 @@ CMMS همان سه‌لایه را بازتولید می‌کند تا نگهد�
 `condition-readings` و `condition-thresholds`، `alerts` با `acknowledge / resolve`،
 و `POST /assets/:assetId/barcodes`.
 
-**باقی‌مانده:** `hold / resume` روی دستورکار (ماشین وضعیت دامنه آن را می‌شناسد اما مسیر
-REST ندارد)، کارتابل کاربر (Workbench) و لایهٔ PWA/موبایل اپراتور، و اتصال واقعی
+**انجام شد (۲۰۲۶-۱۰-۱۱):** `hold / resume` روی دستورکار — مسیرهای
+`POST /work-orders/:id/hold`، `POST /work-orders/:id/resume` و `GET /work-orders/:id/holds`
+با کاتالوگ بستهٔ علل، ردیف توقف باز، بازگشت به وضعیت پیش از توقف و انتشار رویداد برای MES.
+
+**باقی‌مانده:** کارتابل کاربر (Workbench) و لایهٔ PWA/موبایل اپراتور، و اتصال واقعی
 اسکنر بارکد به‌عنوان ورودی (الان فقط ثبت بارکد روی تجهیز وجود دارد).
 
 **خروجی:** `POST /work-orders/:id/{release,start,complete,close}` و REST منابع کار
@@ -65,9 +69,12 @@ REST ندارد)، کارتابل کاربر (Workbench) و لایهٔ PWA/مو�
 `optimizePmInterval` و برآورد Weibull در `POST /ai/pm-optimization`، و
 `computeAssetCriticality` با وزن‌های .35/.30/.15/.15/.05.
 
-**باقی‌مانده:** RCFA تعاملی به‌عنوان ماژول مستقل (5-Why / Fishbone با اتصال به اقدام
-اصلاحی) مسیر REST اختصاصی ندارد؛ امروز از طریق `POST /ai/failure-analysis` پوشش
-داده می‌شود. تولید خودکار `CmmsMaintenancePlan` از خروجی RCM هم دستی است.
+**انجام شد (۲۰۲۶-۱۰-۱۱):** RCFA تعاملی — `GET /rca-cases`، `GET /rca-cases/:id`
+(زنجیرهٔ ۵ چرا + استخوان‌ماهی ۶M + پارتو وزنی + ارزیابی آمادگی)، `POST /rca-cases/:id/causes`،
+چرخهٔ کامل CAPA (`capas`، `implement`، `verify`، `refer` به مالک یا تبدیل به دستورکار، `close`).
+جدول‌های `CmmsRcfaCause` و `CmmsRcfaCapa` در مهاجرت `0058` افزوده شدند.
+
+**باقی‌مانده:** تولید خودکار `CmmsMaintenancePlan` از خروجی RCM هنوز دستی است.
 
 ### فاز ۴ — یکپارچگی بین‌بخشی (⏳ انجام نشد — عمداً)
 - CMMS ↔ MES: تبادل پنجرهٔ PM با تقویم تولید و توقف ماشین
@@ -75,10 +82,22 @@ REST ندارد)، کارتابل کاربر (Workbench) و لایهٔ PWA/مو�
 - CMMS ↔ IIoT: خوراک دادهٔ CBM از سنسورها و تولید آلارم بلادرنگ
 - CMMS ↔ Finance: انتقال هزینهٔ نت به مراکز هزینه
 
-**وضعیت:** عمداً پیاده‌سازی نشد. الزام «استقلال منطقی دیتابیس» با یکپارچگی فیزیکی
-در تضاد است؛ امروز فقط **ارجاع نرم** داریم: `CmmsAsset.MfgWorkCenterId`،
+**انجام شد (۲۰۲۶-۱۰-۱۱) — CMMS ↔ MES:** با حفظ کامل استقلال دیتابیس، فقط رویدادمحور:
+- **صف خروجی رویداد** (`CmmsIntegrationEvent`): توقف دستورکار و رزرو/آزادسازی ظرفیت به‌صورت
+  رویدادهای قرارداد `cmms-mes-v1` ثبت می‌شوند؛ هر رویداد `IdempotencyKey` دارد و
+  `POST /integration/events/:id/dispatch` تحویل را با تلاش و خطای دسته‌بندی‌شده ثبت می‌کند.
+- **بلوکهٔ نرم ظرفیت** (`CmmsCapacityBlock`): هنگام آزادسازی دستورکار دارای پنجرهٔ زمانی و
+  ارجاع نرم به مرکز کاری، ظرفیت MES رزرو می‌شود و با اتمام/لغو آزاد می‌گردد.
+- **پل سمت مقصد** (`server/cmmsMesBridge.js`): رویدادها را روی ردیف‌های خودِ MES اعمال
+  می‌کند — توقف‌ها در `MfgDowntimeLog` (ناخواسته/برنامه‌ریزی‌شده، مبنای OEE Availability)
+  و رزرو PM به‌صورت توقف برنامه‌ریزی‌شده‌ای که موتور زمان‌بندی از ظرفیت کم می‌کند.
+- در استقرار تک‌فرآیندی، `server/index.js` پل را به‌صورت درون‌فرآیندی تزریق می‌کند و
+  `POST /api/mfg/integration/cmms/events` مسیر REST همان قرارداد برای استقرار جداست.
+
+**باقی‌مانده در فاز ۴:** CMMS ↔ SCM (تأمین قطعات)، CMMS ↔ IIoT و CMMS ↔ Finance.
+ارجاع‌های نرم همچنان بدون FK هستند: `CmmsAsset.MfgWorkCenterId`،
 `CmmsAsset.ScmWarehouseId`، `CmmsSparePart.ScmWarehouseId` و
-`CmmsWorkOrderCost.CostCenterRef` — همگی `text` بدون FK.
+`CmmsWorkOrderCost.CostCenterRef`.
 
 
 ### فاز ۵ — هوش و بهینه‌سازی (✅ موتورهای AI انجام شد؛ گزارش‌ساز باقی است)
@@ -144,8 +163,11 @@ REST ندارد)، کارتابل کاربر (Workbench) و لایهٔ PWA/مو�
 |------|-------|
 | `src/services/persistence.ts` | import `CMMS_TABLES`، الحاق به `SCHEMA`، افزودن مهاجرت `0057` |
 | `src/services/accessControl.ts` | افزودن ۴۸ مجوز `cmms.*` و ۷ نقش نگهداری |
-| `src/services/cmmsApi.ts` | **جدید** — کلاینت `CmmsClient` (۷۰ متد روی ۱۰۵ مسیر)، `CmmsRequestError`، کاربران نمونه و پیش‌نمایش RBAC سمت کلاینت |
-| `src/components/CmmsWorkspaceShell.tsx` | تبدیل پوستهٔ خالی به فضای کاری متصل به API (۹ زیرماژول) |
+| `src/services/cmmsApi.ts` | **جدید** — کلاینت `CmmsClient` (۷۳ متد روی ۱۲۱ مسیر)، `CmmsRequestError`، کاربران نمونه و پیش‌نمایش RBAC سمت کلاینت |
+| `src/components/CmmsWorkspaceShell.tsx` | فضای کاری متصل به API (۱۱ زیرماژول؛ توقف/ادامه در تب دستورکار) |
+| `src/components/CmmsRcfaPanel.tsx` | **جدید** — پنل تعاملی ۵ چرا/استخوان‌ماهی/پارتو و چرخهٔ CAPA |
+| `src/components/CmmsIntegrationPanel.tsx` | **جدید** — صف رویداد و بلوکهٔ نرم ظرفیت |
+| `server/cmmsMesBridge.js` | **جدید** — پل CMMS→MES (سمت مقصد، بدون FK) + مسیرهای `/api/mfg/integration/cmms/*` |
 | `src/components/RightSidebar.tsx` | بازتعریف آیتم‌های سایدبار CMMS هم‌راستا با زیرماژول‌های جدید |
 | `src/App.tsx` | فقط انتقال `activeSub` (امضا بدون تغییر) |
 | `package.json` | افزودن `build:cmms`, `build:cmmsai` و الحاق به زنجیرهٔ `test` |
@@ -163,11 +185,24 @@ REST ندارد)، کارتابل کاربر (Workbench) و لایهٔ PWA/مو�
 | `server/cmms.schema.test.mjs` | شمار جدول‌ها، استقلال FK، ستون‌های حسابرسی، مهاجرت ۰۰۵۷ |
 | `server/cmms.domain.test.mjs` | ISO 14224، FMEA/RPN، RCM، CBM، IEEE 1366، OEE، قابلیت اطمینان، LCC، PM، گردش‌کار |
 | `server/cmms.ai.test.mjs` | هر ۵ ماژول AI + قطعیت و توضیح‌پذیری |
-| `server/cmms.rest.test.mjs` | ۴۸ تست: ۱۰۵ مسیر REST، RBAC (۴۰۱/۴۰۳)، اعتبارسنجی (۴۰۰)، تکراری (۴۰۹)، قواعد تجاری (۴۲۲) |
+| `server/cmms.rest.test.mjs` | ۶۸ تست: ۱۲۱ مسیر REST، RBAC (۴۰۱/۴۰۳)، اعتبارسنجی (۴۰۰)، تکراری (۴۰۹)، قواعد تجاری (۴۲۲)، توقف/ادامه، RCFA/CAPA و یکپارچگی |
+| `server/cmms.mesBridge.test.mjs` | **جدید** — ۱۱ تست: اِعمال قرارداد `cmms-mes-v1`، تکرارناپذیری، ترجمهٔ بلوکه به توقف برنامه‌ریزی‌شده، RBAC سمت MES |
 
 ---
 
-## ۷. ریسک پذیرفته‌شده و صریح
+## ۷. تکمیل سه قلم باقی‌مانده (۲۰۲۶-۱۰-۱۱)
+
+| قلم | خروجی |
+|-----|-------|
+| توقف/ادامهٔ دستورکار | ۳ مسیر REST + `cmms.wo.hold` / `cmms.wo.resume` (سطوح داخلی، حسابرسی‌شده) + ردیف `CmmsWorkOrderHold` + رویداد توقف |
+| RCFA تعاملی و CAPA | ۸ مسیر REST + `CmmsRcfaCause` / `CmmsRcfaCapa` در مهاجرت `0058` + پنل تعاملی در فضای کاری |
+| یکپارچگی CMMS ↔ MES | `CmmsIntegrationEvent` + `CmmsCapacityBlock` + پل سمت MES + مسیرهای `/api/mfg/integration/cmms/*` — بدون هیچ کلید خارجی تازه |
+
+شمارنده‌های به‌روزشده: مجوزها ۳۷۲ → **۳۸۰** (۸ مجوز تازهٔ `cmms.wo.hold/resume`,
+`cmms.capa.*`, `cmms.integration.*`, `cmms.capacity.*`)، جدول‌ها ۶۵ → **۷۰**،
+مسیرها ۱۰۵ → **۱۲۱**، تست‌ها ۴۸۱۱ → **۴۸۴۵** (همه سبز).
+
+## ۸. ریسک پذیرفته‌شده و صریح
 
 **تنها خطوط تست موجود که تغییر کرد** دو شمارندهٔ ثبتی است، نه رفتار:
 
