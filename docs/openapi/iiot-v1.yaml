@@ -1,0 +1,1518 @@
+openapi: 3.0.3
+info:
+  title: PMIS IIoT & Drilling DAS API
+  version: 1.0.0
+  description: |
+    API سامانهٔ پایش میدانی، اینترنت اشیاء و تله‌متری حفاری (بخش ۵ سازمان).
+    دامنهٔ کلید **دکل** است (`rigId`) و مجوزها با `plantId = rigId` ارزیابی
+    می‌شوند؛ کاربر بیرون دامنه ۴۰۳ می‌گیرد.
+
+    ## Auth
+    هویت با هدر `x-user-id` (سوژهٔ آزمایشی/نشست) و مجوز `iiot.*` از ماتریس
+    RBAC. نقش‌ها: `iiot_engineer` (پیکربندی و پذیرش)، `drilling_supervisor`
+    (تأیید/رفع/ارسال و راستی‌آزمایی NPT)، `field_iot_technician` (بافر و
+    کالیبراسیون و پایش وضعیت).
+
+    ## Concurrency
+    ویرایش‌ها هدر `If-Match: <RowVersion>` می‌پذیرند؛ تعارض ۴۰۹ +
+    `IIOT_CONCURRENCY_CONFLICT`.
+
+    ## Envelope
+    موفق: `{ ok: true, data: …, meta: { traceId, version, tsDriver } }` ·
+    خطا: `{ ok: false, error: { code, message, traceId, issues? } }`.
+
+    ## Pagination
+    `offset` (پیش‌فرض ۰) و `limit` (پیش‌فرض ۱۰۰، حداکثر ۱۰۰۰) روی
+    فهرست‌های رکوردی؛ سری زمانی `limit` حداکثر ۵۰۰۰ و `downsample` حداکثر
+    ۱۲۰ نقطه می‌دهد.
+
+    ## Rate limiting
+    مسیرهای سازنده/پذیرش سنگین (نمونهٔ تله‌متری، آزمون قاعده) در استقرار
+    پشت محدودکنندهٔ نرخ مشترک قرار می‌گیرند؛ پاسخ ۴۲۹ با `Retry-After`.
+  contact: { name: Arena IIoT }
+servers:
+  - url: http://localhost:4000/api/iiot
+    description: Local
+security:
+  - userHeader: []
+
+tags:
+  - name: Rigs
+  - name: Streams
+  - name: Channels
+  - name: Telemetry
+  - name: Rules
+  - name: Alerts
+  - name: Gateways
+  - name: Buffer
+  - name: Sensors
+  - name: Condition
+  - name: Downtime
+  - name: NPT
+  - name: Integration
+  - name: Dashboard
+
+paths:
+  /rigs:
+    get:
+      tags: [Rigs]
+      summary: فهرست دکل‌های در دامنهٔ کاربر
+      parameters: [{ $ref: '#/components/parameters/Lang' }]
+      responses:
+        '200': { description: Rigs, content: { application/json: { schema: { $ref: '#/components/schemas/RigsEnvelope' } } } }
+        '401': { $ref: '#/components/responses/E401' }
+        '403': { $ref: '#/components/responses/E403' }
+        '500': { $ref: '#/components/responses/E500' }
+    post:
+      tags: [Rigs]
+      summary: ثبت دکل (iiot.rig.edit)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RigInput' }
+            example: { RigId: RIG-DEMO, RigNo: RIG-91, NameFa: دکل ۹۱ آزادگان جنوبی, RigType: land, Status: drilling, CmmsSiteRef: SITE-DEMO, PmisProjectRef: c1-p1, MesWorkCenterRef: WC-DRILL-01 }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/RigEnvelope' } } } }
+        '400': { $ref: '#/components/responses/E400' }
+        '401': { $ref: '#/components/responses/E401' }
+        '403': { $ref: '#/components/responses/E403' }
+        '409': { $ref: '#/components/responses/E409' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /rigs/{rigId}:
+    parameters: [{ $ref: '#/components/parameters/RigId' }]
+    get:
+      tags: [Rigs]
+      summary: یک دکل + شمارش رکوردها
+      responses:
+        '200': { description: Rig, content: { application/json: { schema: { $ref: '#/components/schemas/OkEnvelope' } } } }
+        '401': { $ref: '#/components/responses/E401' }
+        '403': { $ref: '#/components/responses/E403' }
+        '404': { $ref: '#/components/responses/E404' }
+        '500': { $ref: '#/components/responses/E500' }
+    patch:
+      tags: [Rigs]
+      summary: ویرایش دکل (If-Match)
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RigPatch' }
+      responses:
+        '200': { description: Updated, content: { application/json: { schema: { $ref: '#/components/schemas/RigEnvelope' } } } }
+        '400': { $ref: '#/components/responses/E400' }
+        '401': { $ref: '#/components/responses/E401' }
+        '403': { $ref: '#/components/responses/E403' }
+        '404': { $ref: '#/components/responses/E404' }
+        '409': { $ref: '#/components/responses/E409' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /rigs/{rigId}/streams:
+    parameters: [{ $ref: '#/components/parameters/RigId' }]
+    get:
+      tags: [Streams]
+      summary: فهرست جریان‌های تله‌متری
+      responses:
+        '200': { description: Streams, content: { application/json: { schema: { $ref: '#/components/schemas/OkEnvelope' } } } }
+        '401': { $ref: '#/components/responses/E401' }
+        '403': { $ref: '#/components/responses/E403' }
+        '500': { $ref: '#/components/responses/E500' }
+    post:
+      tags: [Streams]
+      summary: تعریف جریان (iiot.stream.edit)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StreamInput' }
+            example: { StreamCode: MUDLOG-01, NameFa: جریان مادلاگر, SourceSystem: mudlogger, TransportProtocol: mqtt, SampleRateHz: 1, BatchSize: 100 }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/OkEnvelope' } } } }
+        '400': { $ref: '#/components/responses/E400' }
+        '401': { $ref: '#/components/responses/E401' }
+        '403': { $ref: '#/components/responses/E403' }
+        '409': { $ref: '#/components/responses/E409' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /rigs/{rigId}/streams/{streamId}:
+    parameters: [{ $ref: '#/components/parameters/RigId' }, { $ref: '#/components/parameters/StreamId' }]
+    patch:
+      tags: [Streams]
+      summary: ویرایش جریان (If-Match)
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, properties: { NameFa: { type: string }, ConnectionState: { type: string, enum: [online, degraded, offline] }, IsActive: { type: boolean }, NoteFa: { type: string }, RowVersion: { type: integer } } }
+      responses:
+        '200': { description: Updated, content: { application/json: { schema: { $ref: '#/components/schemas/OkEnvelope' } } } }
+        '400': { $ref: '#/components/responses/E400' }
+        '401': { $ref: '#/components/responses/E401' }
+        '403': { $ref: '#/components/responses/E403' }
+        '404': { $ref: '#/components/responses/E404' }
+        '409': { $ref: '#/components/responses/E409' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /rigs/{rigId}/channels:
+    parameters: [{ $ref: '#/components/parameters/RigId' }]
+    get:
+      tags: [Channels]
+      summary: فهرست کانال‌های سیگنال (DAS)
+      parameters: [{ $ref: '#/components/parameters/SignalType' }, { $ref: '#/components/parameters/Critical' }]
+      responses:
+        '200': { description: Channels, content: { application/json: { schema: { $ref: '#/components/schemas/OkEnvelope' } } } }
+        '401': { $ref: '#/components/responses/E401' }
+        '403': { $ref: '#/components/responses/E403' }
+        '500': { $ref: '#/components/responses/E500' }
+    post:
+      tags: [Channels]
+      summary: تعریف کانال (iiot.channel.edit)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ChannelInput' }
+            example: { ChannelCode: CH-WOB, NameFa: وزن روی مته, SignalType: wob, Unit: klbf, DisplayMin: 0, DisplayMax: 60, FilterMethod: sma, FilterWindowSeconds: 10, IsCritical: false }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/OkEnvelope' } } } }
+        '400': { $ref: '#/components/responses/E400' }
+        '401': { $ref: '#/components/responses/E401' }
+        '403': { $ref: '#/components/responses/E403' }
+        '409': { $ref: '#/components/responses/E409' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /rigs/{rigId}/channels/{channelId}:
+    parameters: [{ $ref: '#/components/parameters/RigId' }, { $ref: '#/components/parameters/ChannelId' }]
+    get:
+      tags: [Channels]
+      summary: کانال + آستانه‌ها + فیلترها + تجمیع‌ها (حداکثر ۱۲۰ سطل)
+      responses:
+        '200': { description: Channel details, content: { application/json: { schema: { $ref: '#/components/schemas/OkEnvelope' } } } }
+        '401': { $ref: '#/components/responses/E401' }
+        '403': { $ref: '#/components/responses/E403' }
+        '404': { $ref: '#/components/responses/E404' }
+        '500': { $ref: '#/components/responses/E500' }
+    patch:
+      tags: [Channels]
+      summary: ویرایش کانال (If-Match)
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, properties: { NameFa: { type: string }, Unit: { type: string }, DisplayMin: { type: number }, DisplayMax: { type: number }, FilterMethod: { type: string, enum: [none, sma, ema, median] }, FilterWindowSeconds: { type: integer }, DeadbandPct: { type: number }, IsCritical: { type: boolean }, IsActive: { type: boolean }, NoteFa: { type: string }, RowVersion: { type: integer } } }
+      responses:
+        '200': { description: Updated, content: { application/json: { schema: { $ref: '#/components/schemas/OkEnvelope' } } } }
+        '400': { $ref: '#/components/responses/E400' }
+        '401': { $ref: '#/components/responses/E401' }
+        '403': { $ref: '#/components/responses/E403' }
+        '404': { $ref: '#/components/responses/E404' }
+        '409': { $ref: '#/components/responses/E409' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /rigs/{rigId}/telemetry:
+    parameters: [{ $ref: '#/components/parameters/RigId' }]
+    post:
+      tags: [Telemetry]
+      summary: پذیرش نمونهٔ تله‌متری (iiot.telemetry.ingest)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/IngestInput' }
+            example: { samples: [{ channelCode: CH-WOB, at: '2026-03-10T06:00:00Z', value: 22.5, quality: good, source: simulated }] }
+      responses:
+        '200': { description: Ingest result, content: { application/json: { schema: { $ref: '#/components/schemas/IngestEnvelope' } } } }
+        '400': { $ref: '#/components/responses/E400' }
+        '401': { $ref: '#/components/responses/E401' }
+        '403': { $ref: '#/components/responses/E403' }
+        '422': { $ref: '#/components/responses/E422' }
+        '500': { $ref: '#/components/responses/E500' }
+    get:
+      tags: [Telemetry]
+      summary: خواندن سری زمانی (نمودار خام/فیلترشده)
+      parameters:
+        - { $ref: '#/components/parameters/ChannelIdQuery' }
+        - { $ref: '#/components/parameters/ChannelCodeQuery' }
+        - { $ref: '#/components/parameters/From' }
+        - { $ref: '#/components/parameters/To' }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 5000, default: 500 } }
+        - { name: bucketSeconds, in: query, schema: { type: integer, minimum: 1 } }
+        - { name: downsample, in: query, schema: { type: boolean, default: false }, description: جفت min/max هر سطل، حداکثر ۱۲۰ نقطه }
+      responses:
+        '200': { description: TelemetryResponse, content: { application/json: { schema: { $ref: '#/components/schemas/TelemetryEnvelope' } } } }
+        '400': { $ref: '#/components/responses/E400' }
+        '401': { $ref: '#/components/responses/E401' }
+        '403': { $ref: '#/components/responses/E403' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /rigs/{rigId}/telemetry/latest:
+    parameters: [{ $ref: '#/components/parameters/RigId' }]
+    get:
+      tags: [Telemetry]
+      summary: مقدار آخر هر کانال + رنگ وضعیت + asOf
+      responses:
+        '200': { description: Latest, content: { application/json: { schema: { $ref: '#/components/schemas/LatestEnvelope' } } } }
+        '401': { $ref: '#/components/responses/E401' }
+        '403': { $ref: '#/components/responses/E403' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /rigs/{rigId}/telemetry/rollups:
+    parameters: [{ $ref: '#/components/parameters/RigId' }]
+    post:
+      tags: [Telemetry]
+      summary: بازمحاسبهٔ تجمیع سطل‌زمانی (idempotent)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [channelId], properties: { channelId: { type: string }, from: { type: string, format: date-time }, to: { type: string, format: date-time }, bucketSeconds: { type: integer, minimum: 1, default: 60 } } }
+      responses:
+        '200': { description: Rollups, content: { application/json: { schema: { $ref: '#/components/schemas/RollupsEnvelope' } } } }
+        '400': { $ref: '#/components/responses/E400' }
+        '401': { $ref: '#/components/responses/E401' }
+        '403': { $ref: '#/components/responses/E403' }
+        '404': { $ref: '#/components/responses/E404' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /rigs/{rigId}/filter-rules:
+    parameters: [{ $ref: '#/components/parameters/RigId' }]
+    get:
+      tags: [Rules]
+      summary: فهرست قواعد فیلترینگ
+      responses:
+        '200': { description: FilterRules, content: { application/json: { schema: { $ref: '#/components/schemas/OkEnvelope' } } } }
+        '401': { $ref: '#/components/responses/E401' }
+        '403': { $ref: '#/components/responses/E403' }
+        '500': { $ref: '#/components/responses/E500' }
+    post:
+      tags: [Rules]
+      summary: تعریف قاعدهٔ فیلتر (iiot.filter.edit)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/FilterRuleInput' }
+            example: { RuleCode: FR-DRILL, NameFa: فیلتر پیش‌فرض حفاری, AppliesToSignals: wob,rpm,torque, FilterMethod: sma, WindowSeconds: 10, MinSamples: 5, DeadbandPct: 0.5 }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/OkEnvelope' } } } }
+        '400': { $ref: '#/components/responses/E400' }
+        '401': { $ref: '#/components/responses/E401' }
+        '403': { $ref: '#/components/responses/E403' }
+        '409': { $ref: '#/components/responses/E409' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /rigs/{rigId}/filter-rules/{ruleId}:
+    parameters: [{ $ref: '#/components/parameters/RigId' }, { $ref: '#/components/parameters/RuleId' }]
+    patch:
+      tags: [Rules]
+      summary: ویرایش قاعدهٔ فیلتر (If-Match)
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, properties: { NameFa: { type: string }, WindowSeconds: { type: integer }, EmaAlpha: { type: number }, MinSamples: { type: integer }, DeadbandPct: { type: number }, IsActive: { type: boolean }, RowVersion: { type: integer } } }
+      responses:
+        '200': { description: Updated, content: { application/json: { schema: { $ref: '#/components/schemas/OkEnvelope' } } } }
+        '400': { $ref: '#/components/responses/E400' }
+        '401': { $ref: '#/components/responses/E401' }
+        '403': { $ref: '#/components/responses/E403' }
+        '404': { $ref: '#/components/responses/E404' }
+        '409': { $ref: '#/components/responses/E409' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /rigs/{rigId}/threshold-rules:
+    parameters: [{ $ref: '#/components/parameters/RigId' }]
+    get:
+      tags: [Rules]
+      summary: فهرست قواعد آستانه/ناهنجاری
+      responses:
+        '200': { description: ThresholdRules, content: { application/json: { schema: { $ref: '#/components/schemas/OkEnvelope' } } } }
+        '401': { $ref: '#/components/responses/E401' }
+        '403': { $ref: '#/components/responses/E403' }
+        '500': { $ref: '#/components/responses/E500' }
+    post:
+      tags: [Rules]
+      summary: تعریف قاعدهٔ آستانه (iiot.threshold.edit)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ThresholdRuleInput' }
+            example: { RuleCode: TR-TEMP-HH, ChannelId: ch-0001, NameFa: دمای بحرانی, Level: critical, DetectKind: threshold, Comparison: gt, ThresholdValue: 120, DurationSeconds: 30, MinSamples: 10, HysteresisPct: 5, CooldownSeconds: 600, AutoDispatch: true, DispatchTargets: cmms,mes,pmis, NptCode: equipment }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/OkEnvelope' } } } }
+        '400': { $ref: '#/components/responses/E400' }
+        '401': { $ref: '#/components/responses/E401' }
+        '403': { $ref: '#/components/responses/E403' }
+        '409': { $ref: '#/components/responses/E409' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /rigs/{rigId}/threshold-rules/{ruleId}:
+    parameters: [{ $ref: '#/components/parameters/RigId' }, { $ref: '#/components/parameters/RuleId' }]
+    patch:
+      tags: [Rules]
+      summary: ویرایش قاعده (bump نسخه)
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, properties: { NameFa: { type: string }, Level: { type: string, enum: [warning, critical] }, ThresholdValue: { type: number }, DurationSeconds: { type: integer }, HysteresisPct: { type: number }, CooldownSeconds: { type: integer }, AutoDispatch: { type: boolean }, DispatchTargets: { type: string }, IsActive: { type: boolean }, NoteFa: { type: string }, RowVersion: { type: integer } } }
+      responses:
+        '200': { description: Updated, content: { application/json: { schema: { $ref: '#/components/schemas/OkEnvelope' } } } }
+        '400': { $ref: '#/components/responses/E400' }
+        '401': { $ref: '#/components/responses/E401' }
+        '403': { $ref: '#/components/responses/E403' }
+        '404': { $ref: '#/components/responses/E404' }
+        '409': { $ref: '#/components/responses/E409' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /rigs/{rigId}/threshold-rules/{ruleId}/test:
+    parameters: [{ $ref: '#/components/parameters/RigId' }, { $ref: '#/components/parameters/RuleId' }]
+    post:
+      tags: [Rules]
+      summary: آزمون خشک قاعده روی پنجرهٔ گذشته (iiot.threshold.view)
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, properties: { lookbackSeconds: { type: integer, minimum: 5, maximum: 7200, default: 600 }, dryRun: { type: boolean, default: true } } }
+      responses:
+        '200': { description: 'RuleTestResponse (wouldAlert, verdict, metrics؛ هیچ هشداری ساخته نمی‌شود)', content: { application/json: { schema: { $ref: '#/components/schemas/OkEnvelope' } } } }
+        '400': { $ref: '#/components/responses/E400' }
+        '401': { $ref: '#/components/responses/E401' }
+        '403': { $ref: '#/components/responses/E403' }
+        '404': { $ref: '#/components/responses/E404' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /rigs/{rigId}/alerts:
+    parameters: [{ $ref: '#/components/parameters/RigId' }]
+    get:
+      tags: [Alerts]
+      summary: فهرست هشدارها
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [active, acknowledged, resolved, suppressed, false-positive] } }
+        - { name: level, in: query, schema: { type: string, enum: [warning, critical] } }
+        - { name: limit, in: query, schema: { type: integer, default: 100, maximum: 1000 } }
+        - { name: offset, in: query, schema: { type: integer, default: 0 } }
+      responses:
+        '200': { description: Alerts, content: { application/json: { schema: { $ref: '#/components/schemas/AlertsEnvelope' } } } }
+        '400': { $ref: '#/components/responses/E400' }
+        '401': { $ref: '#/components/responses/E401' }
+        '403': { $ref: '#/components/responses/E403' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /rigs/{rigId}/alerts/{alertId}/acknowledge:
+    parameters: [{ $ref: '#/components/parameters/RigId' }, { $ref: '#/components/parameters/AlertId' }]
+    post:
+      tags: [Alerts]
+      summary: تأیید دریافت هشدار (iiot.alert.ack · فعال یا تأییدشده)
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, properties: { NoteFa: { type: string, maxLength: 1000 }, RowVersion: { type: integer } } }
+      responses:
+        '200': { description: Alert, content: { application/json: { schema: { $ref: '#/components/schemas/AlertEnvelope' } } } }
+        '400': { $ref: '#/components/responses/E400' }
+        '401': { $ref: '#/components/responses/E401' }
+        '403': { $ref: '#/components/responses/E403' }
+        '404': { $ref: '#/components/responses/E404' }
+        '409': { $ref: '#/components/responses/E409' }
+        '422': { $ref: '#/components/responses/E422' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /rigs/{rigId}/alerts/{alertId}/resolve:
+    parameters: [{ $ref: '#/components/parameters/RigId' }, { $ref: '#/components/parameters/AlertId' }]
+    post:
+      tags: [Alerts]
+      summary: رفع هشدار با یادداشت (iiot.alert.resolve)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [ResolutionNoteFa], properties: { ResolutionNoteFa: { type: string, maxLength: 1000 }, RowVersion: { type: integer } } }
+      responses:
+        '200': { description: Alert, content: { application/json: { schema: { $ref: '#/components/schemas/AlertEnvelope' } } } }
+        '400': { $ref: '#/components/responses/E400' }
+        '401': { $ref: '#/components/responses/E401' }
+        '403': { $ref: '#/components/responses/E403' }
+        '404': { $ref: '#/components/responses/E404' }
+        '409': { $ref: '#/components/responses/E409' }
+        '422': { $ref: '#/components/responses/E422' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /rigs/{rigId}/alerts/{alertId}/false-positive:
+    parameters: [{ $ref: '#/components/parameters/RigId' }, { $ref: '#/components/parameters/AlertId' }]
+    post:
+      tags: [Alerts]
+      summary: منفی‌جعلی + برگرداندن توقف زائد (iiot.alert.resolve)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [SuppressedReasonFa], properties: { SuppressedReasonFa: { type: string, maxLength: 600 }, RowVersion: { type: integer } } }
+      responses:
+        '200': { description: 'Alert + revertedDowntime', content: { application/json: { schema: { $ref: '#/components/schemas/OkEnvelope' } } } }
+        '400': { $ref: '#/components/responses/E400' }
+        '401': { $ref: '#/components/responses/E401' }
+        '403': { $ref: '#/components/responses/E403' }
+        '404': { $ref: '#/components/responses/E404' }
+        '409': { $ref: '#/components/responses/E409' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /rigs/{rigId}/alerts/{alertId}/dispatch:
+    parameters: [{ $ref: '#/components/parameters/RigId' }, { $ref: '#/components/parameters/AlertId' }]
+    post:
+      tags: [Alerts]
+      summary: ارسال هشدار به CMMS/MES/PMIS (iiot.alert.dispatch)
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, properties: { targets: { type: string, description: 'cmms,mes,pmis — پیش‌فرض از قاعده' } } }
+      responses:
+        '200': { description: DispatchResponse, content: { application/json: { schema: { $ref: '#/components/schemas/OkEnvelope' } } } }
+        '400': { $ref: '#/components/responses/E400' }
+        '401': { $ref: '#/components/responses/E401' }
+        '403': { $ref: '#/components/responses/E403' }
+        '404': { $ref: '#/components/responses/E404' }
+        '422': { $ref: '#/components/responses/E422' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /rigs/{rigId}/gateways:
+    parameters: [{ $ref: '#/components/parameters/RigId' }]
+    get:
+      tags: [Gateways]
+      summary: فهرست گیت‌وی‌های لبه + پرشدگی بافر
+      responses:
+        '200': { description: Gateways, content: { application/json: { schema: { $ref: '#/components/schemas/OkEnvelope' } } } }
+        '401': { $ref: '#/components/responses/E401' }
+        '403': { $ref: '#/components/responses/E403' }
+        '500': { $ref: '#/components/responses/E500' }
+    post:
+      tags: [Gateways]
+      summary: ثبت گیت‌وی (iiot.gateway.edit)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GatewayInput' }
+            example: { GatewayCode: GW-01, NameFa: گیت‌وی لبهٔ دکل ۹۱, Protocol: mqtt, SyncMode: store-forward, BufferCapacity: 10000, MaxBatchSize: 500, MaxAttempts: 3 }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/OkEnvelope' } } } }
+        '400': { $ref: '#/components/responses/E400' }
+        '401': { $ref: '#/components/responses/E401' }
+        '403': { $ref: '#/components/responses/E403' }
+        '409': { $ref: '#/components/responses/E409' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /rigs/{rigId}/gateways/{gatewayId}:
+    parameters: [{ $ref: '#/components/parameters/RigId' }, { $ref: '#/components/parameters/GatewayId' }]
+    patch:
+      tags: [Gateways]
+      summary: ویرایش گیت‌وی (If-Match)
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, properties: { NameFa: { type: string }, ConnectionState: { type: string, enum: [online, degraded, offline] }, BufferCapacity: { type: integer }, MaxBatchSize: { type: integer }, MaxAttempts: { type: integer }, IsActive: { type: boolean }, NoteFa: { type: string }, RowVersion: { type: integer } } }
+      responses:
+        '200': { description: Updated, content: { application/json: { schema: { $ref: '#/components/schemas/OkEnvelope' } } } }
+        '400': { $ref: '#/components/responses/E400' }
+        '401': { $ref: '#/components/responses/E401' }
+        '403': { $ref: '#/components/responses/E403' }
+        '404': { $ref: '#/components/responses/E404' }
+        '409': { $ref: '#/components/responses/E409' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /rigs/{rigId}/gateways/{gatewayId}/heartbeat:
+    parameters: [{ $ref: '#/components/parameters/RigId' }, { $ref: '#/components/parameters/GatewayId' }]
+    post:
+      tags: [Gateways]
+      summary: ضربان گیت‌وی (iiot.telemetry.ingest)
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, properties: { connectionState: { type: string, enum: [online, degraded, offline] }, bufferUsed: { type: integer }, firmwareVersion: { type: string }, RowVersion: { type: integer } } }
+      responses:
+        '200': { description: 'HeartbeatResponse (fillPct)', content: { application/json: { schema: { $ref: '#/components/schemas/OkEnvelope' } } } }
+        '400': { $ref: '#/components/responses/E400' }
+        '401': { $ref: '#/components/responses/E401' }
+        '403': { $ref: '#/components/responses/E403' }
+        '404': { $ref: '#/components/responses/E404' }
+        '422': { $ref: '#/components/responses/E422' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /rigs/{rigId}/gateways/{gatewayId}/buffer:
+    parameters: [{ $ref: '#/components/parameters/RigId' }, { $ref: '#/components/parameters/GatewayId' }]
+    get:
+      tags: [Buffer]
+      summary: فهرست دسته‌های بافر (بدون PayloadJson)
+      responses:
+        '200': { description: 'Buffer: { buffer[], total, readyToSync, counts }', content: { application/json: { schema: { $ref: '#/components/schemas/BufferEnvelope' } } } }
+        '401': { $ref: '#/components/responses/E401' }
+        '403': { $ref: '#/components/responses/E403' }
+        '404': { $ref: '#/components/responses/E404' }
+        '500': { $ref: '#/components/responses/E500' }
+    post:
+      tags: [Buffer]
+      summary: بارگذاری دستهٔ بافرشده (iiot.telemetry.ingest · idempotent روی BatchNo)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [batchNo], properties: { batchNo: { type: string }, capturedAt: { type: string, format: date-time }, checksum: { type: string }, connectivityState: { type: string }, rebuildBatchNo: { type: string }, samples: { type: array, items: { $ref: '#/components/schemas/SampleInput' } } } }
+      responses:
+        '202': { description: 'BufferPostResponse (duplicated/status/ingest)', content: { application/json: { schema: { $ref: '#/components/schemas/OkEnvelope' } } } }
+        '400': { $ref: '#/components/responses/E400' }
+        '401': { $ref: '#/components/responses/E401' }
+        '403': { $ref: '#/components/responses/E403' }
+        '409': { $ref: '#/components/responses/E409' }
+        '422': { $ref: '#/components/responses/E422' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /rigs/{rigId}/gateways/{gatewayId}/buffer/{bufferId}/sync:
+    parameters: [{ $ref: '#/components/parameters/RigId' }, { $ref: '#/components/parameters/GatewayId' }, { $ref: '#/components/parameters/BufferId' }]
+    post:
+      tags: [Buffer]
+      summary: همگام‌سازی دستهٔ بافر (iiot.buffer.sync · فقط تکنسین میدان)
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, properties: { delivered: { type: boolean }, ackRef: { type: string }, errorCode: { type: string }, errorFa: { type: string }, RowVersion: { type: integer } } }
+      responses:
+        '200': { description: 'Buffer + transition{status, attempts, code} — Attempts=MaxAttempts ⇒ dead-letter', content: { application/json: { schema: { $ref: '#/components/schemas/OkEnvelope' } } } }
+        '400': { $ref: '#/components/responses/E400' }
+        '401': { $ref: '#/components/responses/E401' }
+        '403': { $ref: '#/components/responses/E403' }
+        '404': { $ref: '#/components/responses/E404' }
+        '409': { $ref: '#/components/responses/E409' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /rigs/{rigId}/sensors:
+    parameters: [{ $ref: '#/components/parameters/RigId' }]
+    get:
+      tags: [Sensors]
+      summary: شناسنامهٔ سنسورها + شمارش وضعیت + هشدار کالیبراسیون
+      responses:
+        '200': { description: 'Sensors: { sensors[], total, counts{active,faulty,calibrationDue} }', content: { application/json: { schema: { $ref: '#/components/schemas/OkEnvelope' } } } }
+        '401': { $ref: '#/components/responses/E401' }
+        '403': { $ref: '#/components/responses/E403' }
+        '500': { $ref: '#/components/responses/E500' }
+    post:
+      tags: [Sensors]
+      summary: ثبت سنسور (iiot.sensor.edit)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SensorInput' }
+            example: { SensorTag: TAG-001, NameFa: سنسور ارتعاش شلف, SensorType: vibration, Unit: mm/s, RangeMin: 0, RangeMax: 30, Status: active, CalibrationIntervalDays: 365 }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/OkEnvelope' } } } }
+        '400': { $ref: '#/components/responses/E400' }
+        '401': { $ref: '#/components/responses/E401' }
+        '403': { $ref: '#/components/responses/E403' }
+        '409': { $ref: '#/components/responses/E409' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /rigs/{rigId}/sensors/{sensorId}:
+    parameters: [{ $ref: '#/components/parameters/RigId' }, { $ref: '#/components/parameters/SensorId' }]
+    patch:
+      tags: [Sensors]
+      summary: ویرایش سنسور (If-Match)
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, properties: { NameFa: { type: string }, Status: { type: string, enum: [active, faulty, calibration-due, removed] }, Unit: { type: string }, CalibrationIntervalDays: { type: integer }, NoteFa: { type: string }, RowVersion: { type: integer } } }
+      responses:
+        '200': { description: Updated, content: { application/json: { schema: { $ref: '#/components/schemas/OkEnvelope' } } } }
+        '400': { $ref: '#/components/responses/E400' }
+        '401': { $ref: '#/components/responses/E401' }
+        '403': { $ref: '#/components/responses/E403' }
+        '404': { $ref: '#/components/responses/E404' }
+        '409': { $ref: '#/components/responses/E409' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /rigs/{rigId}/sensors/{sensorId}/calibration:
+    parameters: [{ $ref: '#/components/parameters/RigId' }, { $ref: '#/components/parameters/SensorId' }]
+    post:
+      tags: [Sensors]
+      summary: ثبت کالیبراسیون (iiot.sensor.calibrate)
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, properties: { calibratedAt: { type: string, format: date-time }, CertificateNo: { type: string }, ResultFa: { type: string }, RowVersion: { type: integer } } }
+      responses:
+        '200': { description: 'Sensor + nextCalibrationDue', content: { application/json: { schema: { $ref: '#/components/schemas/OkEnvelope' } } } }
+        '400': { $ref: '#/components/responses/E400' }
+        '401': { $ref: '#/components/responses/E401' }
+        '403': { $ref: '#/components/responses/E403' }
+        '404': { $ref: '#/components/responses/E404' }
+        '409': { $ref: '#/components/responses/E409' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /rigs/{rigId}/condition-snapshots:
+    parameters: [{ $ref: '#/components/parameters/RigId' }]
+    get:
+      tags: [Condition]
+      summary: فهرست عکس‌های پایش وضعیت (CBM)
+      responses:
+        '200': { description: 'Snapshots + unreported', content: { application/json: { schema: { $ref: '#/components/schemas/OkEnvelope' } } } }
+        '401': { $ref: '#/components/responses/E401' }
+        '403': { $ref: '#/components/responses/E403' }
+        '500': { $ref: '#/components/responses/E500' }
+    post:
+      tags: [Condition]
+      summary: ثبت قرائت وضعیت (iiot.condition.record)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ConditionInput' }
+            example: { CmmsAssetRef: ASSET-1, SensorTag: TAG-001, ReadingType: vibration, Value: 4.2, Uom: mm/s, Zone: A, HealthIndex: 82, TrendDirection: stable }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/OkEnvelope' } } } }
+        '400': { $ref: '#/components/responses/E400' }
+        '401': { $ref: '#/components/responses/E401' }
+        '403': { $ref: '#/components/responses/E403' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /rigs/{rigId}/downtime:
+    parameters: [{ $ref: '#/components/parameters/RigId' }]
+    get:
+      tags: [Downtime]
+      summary: فهرست توقف‌ها
+      parameters:
+        - { name: category, in: query, schema: { type: string, enum: [equipment, mud, directional, wellbore, weather, power, logistics, cementing, waiting-on-decision, other] } }
+        - { name: isNpt, in: query, schema: { type: boolean } }
+        - { name: open, in: query, schema: { type: boolean } }
+        - { name: from, in: query, schema: { type: string, format: date-time } }
+        - { name: to, in: query, schema: { type: string, format: date-time } }
+        - { name: limit, in: query, schema: { type: integer, default: 100, maximum: 1000 } }
+        - { name: offset, in: query, schema: { type: integer, default: 0 } }
+      responses:
+        '200': { description: 'Downtime: { downtime[], total, openCount }', content: { application/json: { schema: { $ref: '#/components/schemas/DowntimeEnvelope' } } } }
+        '400': { $ref: '#/components/responses/E400' }
+        '401': { $ref: '#/components/responses/E401' }
+        '403': { $ref: '#/components/responses/E403' }
+        '500': { $ref: '#/components/responses/E500' }
+    post:
+      tags: [Downtime]
+      summary: ثبت توقف (iiot.downtime.report · مرجع‌های دکل ارث می‌رسد)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DowntimeInput' }
+            example: { Category: equipment, CauseFa: خرابی پمپ گل, StartedAt: '2026-03-10T06:00:00Z', IsNpt: true, DowntimeType: non-productive, ResponsibilityFa: پیمانکار }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/OkEnvelope' } } } }
+        '400': { $ref: '#/components/responses/E400' }
+        '401': { $ref: '#/components/responses/E401' }
+        '403': { $ref: '#/components/responses/E403' }
+        '422': { $ref: '#/components/responses/E422' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /rigs/{rigId}/downtime/{downtimeId}/close:
+    parameters: [{ $ref: '#/components/parameters/RigId' }, { $ref: '#/components/parameters/DowntimeId' }]
+    post:
+      tags: [Downtime]
+      summary: بستن توقف (iiot.downtime.report)
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, properties: { EndedAt: { type: string, format: date-time }, CauseFa: { type: string }, Category: { type: string }, NoteFa: { type: string }, RowVersion: { type: integer } } }
+      responses:
+        '200': { description: Closed, content: { application/json: { schema: { $ref: '#/components/schemas/OkEnvelope' } } } }
+        '400': { $ref: '#/components/responses/E400' }
+        '401': { $ref: '#/components/responses/E401' }
+        '403': { $ref: '#/components/responses/E403' }
+        '404': { $ref: '#/components/responses/E404' }
+        '409': { $ref: '#/components/responses/E409' }
+        '422': { $ref: '#/components/responses/E422' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /rigs/{rigId}/downtime/{downtimeId}/verify:
+    parameters: [{ $ref: '#/components/parameters/RigId' }, { $ref: '#/components/parameters/DowntimeId' }]
+    post:
+      tags: [Downtime]
+      summary: راستی‌آزمایی و رسمی‌کردن NPT (iiot.downtime.verify)
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, properties: { NoteFa: { type: string }, dispatch: { type: boolean, description: 'ارسال به MES/PMIS (پیش‌فرض قاعده)' }, RowVersion: { type: integer } } }
+      responses:
+        '200': { description: 'Downtime + dispatched[] → mes+pmis', content: { application/json: { schema: { $ref: '#/components/schemas/OkEnvelope' } } } }
+        '400': { $ref: '#/components/responses/E400' }
+        '401': { $ref: '#/components/responses/E401' }
+        '403': { $ref: '#/components/responses/E403' }
+        '404': { $ref: '#/components/responses/E404' }
+        '409': { $ref: '#/components/responses/E409' }
+        '422': { $ref: '#/components/responses/E422' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /rigs/{rigId}/npt/summary:
+    parameters: [{ $ref: '#/components/parameters/RigId' }]
+    get:
+      tags: [NPT]
+      summary: جمع‌بندی NPT + نامزدهای ادعا
+      responses:
+        '200': { description: NptSummary, content: { application/json: { schema: { $ref: '#/components/schemas/NptEnvelope' } } } }
+        '401': { $ref: '#/components/responses/E401' }
+        '403': { $ref: '#/components/responses/E403' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /rigs/{rigId}/integration/events:
+    parameters: [{ $ref: '#/components/parameters/RigId' }]
+    get:
+      tags: [Integration]
+      summary: صف رویداد بین‌بخشی
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [pending, dispatched, failed, dead-letter] } }
+        - { name: targetSystem, in: query, schema: { type: string, enum: [cmms, mes, pmis] } }
+      responses:
+        '200': { description: 'Events + counts{...} + transportConfigured', content: { application/json: { schema: { $ref: '#/components/schemas/EventsEnvelope' } } } }
+        '400': { $ref: '#/components/responses/E400' }
+        '401': { $ref: '#/components/responses/E401' }
+        '403': { $ref: '#/components/responses/E403' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /rigs/{rigId}/integration/events/{eventId}/dispatch:
+    parameters: [{ $ref: '#/components/parameters/RigId' }, { $ref: '#/components/parameters/EventId' }]
+    post:
+      tags: [Integration]
+      summary: ارسال رویداد به مقصد (iiot.integration.dispatch)
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, properties: {} }
+      responses:
+        '200': { description: 'Event (delivered/duplicated) — تحویل‌شده: 422 IIOT_EVENT_DELIVERED · شکست: IIOT_DELIVERY_FAILED', content: { application/json: { schema: { $ref: '#/components/schemas/OkEnvelope' } } } }
+        '400': { $ref: '#/components/responses/E400' }
+        '401': { $ref: '#/components/responses/E401' }
+        '403': { $ref: '#/components/responses/E403' }
+        '404': { $ref: '#/components/responses/E404' }
+        '422': { $ref: '#/components/responses/E422' }
+        '500': { $ref: '#/components/responses/E500' }
+
+  /rigs/{rigId}/dashboard:
+    parameters: [{ $ref: '#/components/parameters/RigId' }]
+    get:
+      tags: [Dashboard]
+      summary: داشبورد زندهٔ دکل (گیج‌ها، صف، NPT، وضعیت سری زمانی)
+      responses:
+        '200': { description: Dashboard, content: { application/json: { schema: { $ref: '#/components/schemas/DashboardEnvelope' } } } }
+        '401': { $ref: '#/components/responses/E401' }
+        '403': { $ref: '#/components/responses/E403' }
+        '404': { $ref: '#/components/responses/E404' }
+        '500': { $ref: '#/components/responses/E500' }
+
+components:
+  securitySchemes:
+    userHeader:
+      type: apiKey
+      in: header
+      name: x-user-id
+      description: شناسهٔ کاربر نشست؛ مجوز `iiot.*` با `plantId = rigId` ارزیابی می‌شود.
+  parameters:
+    Lang:
+      name: Accept-Language
+      in: header
+      schema: { type: string, enum: [fa, en], default: fa }
+    RigId:
+      name: rigId
+      in: path
+      required: true
+      schema: { type: string, maxLength: 60 }
+    StreamId:
+      name: streamId
+      in: path
+      required: true
+      schema: { type: string, maxLength: 60 }
+    ChannelId:
+      name: channelId
+      in: path
+      required: true
+      schema: { type: string, maxLength: 60 }
+    ChannelIdQuery:
+      name: channelId
+      in: query
+      schema: { type: string, maxLength: 60 }
+    ChannelCodeQuery:
+      name: channelCode
+      in: query
+      schema: { type: string, maxLength: 60 }
+    RuleId:
+      name: ruleId
+      in: path
+      required: true
+      schema: { type: string, maxLength: 60 }
+    AlertId:
+      name: alertId
+      in: path
+      required: true
+      schema: { type: string, maxLength: 60 }
+    GatewayId:
+      name: gatewayId
+      in: path
+      required: true
+      schema: { type: string, maxLength: 60 }
+    BufferId:
+      name: bufferId
+      in: path
+      required: true
+      schema: { type: string, maxLength: 60 }
+    SensorId:
+      name: sensorId
+      in: path
+      required: true
+      schema: { type: string, maxLength: 60 }
+    DowntimeId:
+      name: downtimeId
+      in: path
+      required: true
+      schema: { type: string, maxLength: 60 }
+    EventId:
+      name: eventId
+      in: path
+      required: true
+      schema: { type: string, maxLength: 60 }
+    From:
+      name: from
+      in: query
+      schema: { type: string, format: date-time }
+    To:
+      name: to
+      in: query
+      schema: { type: string, format: date-time }
+    SignalType:
+      name: signalType
+      in: query
+      schema: { type: string, enum: [wob, rpm, torque, mud-pump-pressure, flow-rate, temperature, vibration, rop, depth, standpipe-pressure, hookload, gas] }
+    Critical:
+      name: critical
+      in: query
+      schema: { type: boolean }
+  responses:
+    E400:
+      description: اعتبارسنجی ورودی (IIOT_VALIDATION_FAILED / IIOT_BAD_RIG_ID)
+      content: { application/json: { schema: { $ref: '#/components/schemas/Err' } } }
+    E401:
+      description: نبود هویت (IIOT_AUTH_REQUIRED)
+      content: { application/json: { schema: { $ref: '#/components/schemas/Err' } } }
+    E403:
+      description: نبود مجوز (IIOT_FORBIDDEN) یا خارج از دامنهٔ دکل (IIOT_RIG_SCOPE_DENIED)
+      content: { application/json: { schema: { $ref: '#/components/schemas/Err' } } }
+    E404:
+      description: رکورد در دکل جاری نیست (IIOT_NOT_FOUND)
+      content: { application/json: { schema: { $ref: '#/components/schemas/Err' } } }
+    E409:
+      description: تعارض/تکراری (IIOT_DUPLICATE / IIOT_CONCURRENCY_CONFLICT / IIOT_ALERT_STATE / IIOT_DOWNTIME_*)
+      content: { application/json: { schema: { $ref: '#/components/schemas/Err' } } }
+    E422:
+      description: قاعدهٔ کسب‌وکار (IIOT_NO_CHANNELS / IIOT_NO_VALID_SAMPLES / IIOT_GATEWAY_OVERFLOW / IIOT_EVENT_DELIVERED / IIOT_DELIVERY_FAILED)
+      content: { application/json: { schema: { $ref: '#/components/schemas/Err' } } }
+    E429:
+      description: محدودیت نرخ
+      headers:
+        Retry-After: { schema: { type: integer }, example: 30 }
+      content: { application/json: { schema: { $ref: '#/components/schemas/Err' } } }
+    E500:
+      description: خطای داخلی (IIOT_INTERNAL_ERROR / IIOT_PERSISTENCE_UNAVAILABLE)
+      content: { application/json: { schema: { $ref: '#/components/schemas/Err' } } }
+  schemas:
+    Err:
+      type: object
+      properties:
+        ok: { type: boolean, enum: [false] }
+        error:
+          type: object
+          properties:
+            code: { type: string }
+            message: { type: string }
+            traceId: { type: string }
+            issues: { type: array, items: { type: object } }
+    Meta:
+      type: object
+      properties:
+        traceId: { type: string }
+        version: { type: string, example: iiot-api-v1 }
+        tsDriver: { type: string, nullable: true, example: file }
+    OkEnvelope:
+      type: object
+      properties:
+        ok: { type: boolean, enum: [true] }
+        data: { type: object }
+        meta: { $ref: '#/components/schemas/Meta' }
+    RigsEnvelope:
+      type: object
+      properties:
+        ok: { type: boolean, enum: [true] }
+        data:
+          type: object
+          properties:
+            rigs: { type: array, items: { $ref: '#/components/schemas/Rig' } }
+            total: { type: integer }
+        meta: { $ref: '#/components/schemas/Meta' }
+    RigEnvelope:
+      type: object
+      properties:
+        ok: { type: boolean, enum: [true] }
+        data: { $ref: '#/components/schemas/Rig' }
+        meta: { $ref: '#/components/schemas/Meta' }
+    Rig:
+      type: object
+      properties:
+        Id: { type: string }
+        RigId: { type: string }
+        RigNo: { type: string }
+        NameFa: { type: string }
+        NameEn: { type: string, nullable: true }
+        RigType: { type: string, enum: [land, jackup, semi-submersible, platform, workover, coiled-tubing] }
+        Status: { type: string, enum: [mobilizing, drilling, tripping, cementing, completion, workover, stacked, demobilized] }
+        CmmsSiteRef: { type: string, nullable: true }
+        PmisProjectRef: { type: string, nullable: true }
+        MesWorkCenterRef: { type: string, nullable: true }
+        FieldName: { type: string, nullable: true }
+        WellName: { type: string, nullable: true }
+        CurrentDepthM: { type: number, nullable: true }
+        TargetDepthM: { type: number, nullable: true }
+        NominalSampleRateHz: { type: integer, minimum: 1 }
+        IsActive: { type: boolean }
+        RowVersion: { type: integer }
+        NoteFa: { type: string, nullable: true }
+    RigInput:
+      type: object
+      required: [RigId, RigNo, NameFa, RigType]
+      properties:
+        RigId: { type: string, maxLength: 60 }
+        RigNo: { type: string, maxLength: 60 }
+        NameFa: { type: string, maxLength: 240 }
+        NameEn: { type: string, maxLength: 240 }
+        RigType: { type: string, enum: [land, jackup, semi-submersible, platform, workover, coiled-tubing] }
+        Status: { type: string }
+        OwnerFa: { type: string }
+        DrillingContractorFa: { type: string }
+        CmmsSiteRef: { type: string }
+        PmisProjectRef: { type: string }
+        MesWorkCenterRef: { type: string }
+        FieldName: { type: string }
+        WellName: { type: string }
+        SpudDate: { type: string, format: date }
+        TargetDepthM: { type: number }
+        CurrentDepthM: { type: number }
+        Latitude: { type: number }
+        Longitude: { type: number }
+        TimeZoneId: { type: string }
+        NominalSampleRateHz: { type: integer, minimum: 1 }
+        IsActive: { type: boolean }
+        NoteFa: { type: string, maxLength: 1000 }
+    RigPatch:
+      type: object
+      properties:
+        RigNo: { type: string }
+        NameFa: { type: string }
+        NameEn: { type: string }
+        Status: { type: string }
+        CurrentDepthM: { type: number }
+        CmmsSiteRef: { type: string }
+        PmisProjectRef: { type: string }
+        MesWorkCenterRef: { type: string }
+        IsActive: { type: boolean }
+        NoteFa: { type: string }
+        RowVersion: { type: integer }
+    StreamInput:
+      type: object
+      required: [StreamCode, NameFa, SourceSystem, TransportProtocol]
+      properties:
+        StreamCode: { type: string, maxLength: 60 }
+        NameFa: { type: string, maxLength: 240 }
+        SourceSystem: { type: string, enum: [witsml, mudlogger, plc, scada, edge, manual] }
+        GatewayId: { type: string, nullable: true }
+        TransportProtocol: { type: string, enum: [mqtt, opc-ua, modbus, witsml, http] }
+        SampleRateHz: { type: integer, minimum: 1, default: 1 }
+        BatchSize: { type: integer, default: 100 }
+        ConnectionState: { type: string, enum: [online, degraded, offline] }
+        IsActive: { type: boolean, default: true }
+        WitsmlMnemonicMap: { type: object }
+        NoteFa: { type: string, maxLength: 1000 }
+    ChannelInput:
+      type: object
+      required: [ChannelCode, NameFa, SignalType, Unit]
+      properties:
+        ChannelCode: { type: string, maxLength: 60 }
+        StreamId: { type: string, nullable: true }
+        NameFa: { type: string, maxLength: 240 }
+        NameEn: { type: string, maxLength: 240 }
+        SignalType: { type: string, enum: [wob, rpm, torque, mud-pump-pressure, flow-rate, temperature, vibration, rop, depth, standpipe-pressure, hookload, gas] }
+        Unit: { type: string, maxLength: 24 }
+        NominalMin: { type: number }
+        NominalMax: { type: number }
+        NominalValue: { type: number }
+        DisplayMin: { type: number }
+        DisplayMax: { type: number }
+        SampleRateHz: { type: integer, minimum: 1 }
+        FilterMethod: { type: string, enum: [none, sma, ema, median] }
+        FilterWindowSeconds: { type: integer, minimum: 1 }
+        DeadbandPct: { type: number, minimum: 0 }
+        SensorTag: { type: string }
+        WitsmlMnemonic: { type: string }
+        IsCritical: { type: boolean }
+        IsActive: { type: boolean }
+        InstalledLocationFa: { type: string }
+        NextCalibrationDue: { type: string, format: date }
+        NoteFa: { type: string }
+    SampleInput:
+      type: object
+      required: [channelCode, value]
+      properties:
+        channelCode: { type: string, maxLength: 60 }
+        value: { type: number }
+        at: { type: string, format: date-time }
+        quality: { type: string, enum: [good, suspect, bad, stale], default: good }
+        source: { type: string, enum: [live, buffer, replay, simulated, manual], default: live }
+    IngestInput:
+      type: object
+      required: [samples]
+      properties:
+        samples: { type: array, maxItems: 5000, items: { $ref: '#/components/schemas/SampleInput' } }
+    IngestEnvelope:
+      type: object
+      properties:
+        ok: { type: boolean, enum: [true] }
+        data:
+          type: object
+          properties:
+            rigId: { type: string }
+            accepted: { type: integer }
+            rejected:
+              type: array
+              items:
+                type: object
+                properties:
+                  index: { type: integer }
+                  channelCode: { type: string }
+                  code: { type: string, example: E-IIOT-UNKNOWN-CHANNEL }
+                  messageFa: { type: string }
+            unknownChannels: { type: array, items: { type: string } }
+            channels: { type: integer }
+            rollups: { type: integer }
+            timeSeries: { type: object, nullable: true, properties: { ok: { type: boolean }, accepted: { type: integer }, driver: { type: string, nullable: true } } }
+            alerts:
+              type: object
+              properties:
+                created: { type: array, items: { $ref: '#/components/schemas/Alert' } }
+                resolved: { type: array, items: { $ref: '#/components/schemas/Alert' } }
+                suppressed: { type: array, items: { type: object } }
+                dispatched: { type: array, items: { type: object } }
+            tsDriver: { type: string, nullable: true }
+        meta: { $ref: '#/components/schemas/Meta' }
+    TelemetryPoint:
+      type: object
+      properties:
+        at: { type: string, format: date-time }
+        value: { type: number, nullable: true }
+        filtered: { type: number, nullable: true, description: چند نمونهٔ اول پس از گرم‌شدن فیلتر null است }
+        quality: { type: string, nullable: true }
+        channelCode: { type: string, nullable: true }
+        signalType: { type: string, nullable: true }
+    TelemetryEnvelope:
+      type: object
+      properties:
+        ok: { type: boolean, enum: [true] }
+        data:
+          type: object
+          properties:
+            channel: { type: object, nullable: true }
+            points: { type: array, items: { $ref: '#/components/schemas/TelemetryPoint' } }
+            buckets: { type: array, items: { type: object } }
+            total: { type: integer }
+            from: { type: string, format: date-time }
+            to: { type: string, format: date-time }
+            tsDriver: { type: string, nullable: true }
+        meta: { $ref: '#/components/schemas/Meta' }
+    LatestEnvelope:
+      type: object
+      properties:
+        ok: { type: boolean, enum: [true] }
+        data:
+          type: object
+          properties:
+            channels:
+              type: array
+              items:
+                type: object
+                properties:
+                  channelId: { type: string }
+                  channelCode: { type: string }
+                  nameFa: { type: string }
+                  unit: { type: string }
+                  value: { type: number, nullable: true }
+                  at: { type: string, nullable: true }
+                  status: { type: string, enum: [normal, warning, critical] }
+            counts: { type: object, additionalProperties: { type: integer } }
+            asOf: { type: string, format: date-time }
+        meta: { $ref: '#/components/schemas/Meta' }
+    RollupsEnvelope:
+      type: object
+      properties:
+        ok: { type: boolean, enum: [true] }
+        data:
+          type: object
+          properties:
+            samples: { type: integer }
+            bucketSeconds: { type: integer }
+            buckets:
+              type: array
+              items:
+                type: object
+                properties:
+                  bucketStart: { type: string, format: date-time }
+                  sampleCount: { type: integer }
+                  minValue: { type: number, nullable: true }
+                  maxValue: { type: number, nullable: true }
+                  avgValue: { type: number, nullable: true }
+                  stdDev: { type: number, nullable: true }
+                  qualityPct: { type: number, nullable: true }
+        meta: { $ref: '#/components/schemas/Meta' }
+    FilterRuleInput:
+      type: object
+      required: [RuleCode, NameFa, AppliesToSignals, FilterMethod, WindowSeconds]
+      properties:
+        RuleCode: { type: string, maxLength: 60 }
+        NameFa: { type: string, maxLength: 240 }
+        AppliesToSignals: { type: string, description: فهرست جدا‌شده با کاما }
+        FilterMethod: { type: string, enum: [none, sma, ema, median] }
+        WindowSeconds: { type: integer, minimum: 1 }
+        EmaAlpha: { type: number, exclusiveMinimum: 0, maximum: 1 }
+        MinSamples: { type: integer, minimum: 1 }
+        DeadbandPct: { type: number, minimum: 0 }
+        SpikeZThreshold: { type: number }
+        FlatlineSeconds: { type: integer }
+        IsDefault: { type: boolean }
+        IsActive: { type: boolean }
+        EffectiveFrom: { type: string, format: date-time }
+        NoteFa: { type: string, maxLength: 1000 }
+    ThresholdRuleInput:
+      type: object
+      required: [RuleCode, ChannelId, NameFa, Level, DetectKind, Comparison]
+      properties:
+        RuleCode: { type: string, maxLength: 60 }
+        ChannelId: { type: string }
+        NameFa: { type: string, maxLength: 240 }
+        Level: { type: string, enum: [warning, critical] }
+        DetectKind: { type: string, enum: [threshold, rate-of-change, stick-slip, pump-drop, flatline, spike] }
+        Comparison: { type: string, enum: [gt, gte, lt, lte, band-out, rate] }
+        ThresholdValue: { type: number }
+        SecondaryValue: { type: number, description: لبهٔ دوم برای band-out }
+        DurationSeconds: { type: integer, minimum: 0 }
+        MinSamples: { type: integer, minimum: 1 }
+        HysteresisPct: { type: number }
+        CooldownSeconds: { type: integer, minimum: 0 }
+        TorqueCvThreshold: { type: number }
+        RpmSwingPctThreshold: { type: number }
+        PressureDropPctThreshold: { type: number }
+        AutoDispatch: { type: boolean }
+        DispatchTargets: { type: string, description: 'cmms,mes,pmis — با AutoDispatch الزامی' }
+        CmmsPriority: { type: integer }
+        CmmsSiteRef: { type: string }
+        CmmsAssetRef: { type: string }
+        MesWorkCenterRef: { type: string }
+        MesPlantRef: { type: string }
+        PmisProjectRef: { type: string }
+        NptCode: { type: string }
+        EscalationNoteFa: { type: string }
+        IsActive: { type: boolean }
+        EffectiveFrom: { type: string, format: date-time }
+        NoteFa: { type: string, maxLength: 1000 }
+    Alert:
+      type: object
+      properties:
+        Id: { type: string }
+        RigId: { type: string }
+        ChannelId: { type: string, nullable: true }
+        RuleId: { type: string, nullable: true }
+        AlertCode: { type: string }
+        DetectionKind: { type: string }
+        Level: { type: string, enum: [warning, critical] }
+        TitleFa: { type: string }
+        MessageFa: { type: string, nullable: true }
+        DetectedAt: { type: string, format: date-time }
+        TriggerValue: { type: number, nullable: true }
+        FilteredValue: { type: number, nullable: true }
+        DeviationPct: { type: number, nullable: true }
+        Status: { type: string, enum: [active, acknowledged, resolved, suppressed, false-positive] }
+        AcknowledgedAt: { type: string, nullable: true }
+        AcknowledgedById: { type: string, nullable: true }
+        ResolvedAt: { type: string, nullable: true }
+        ResolvedById: { type: string, nullable: true, description: svc-iiot-auto برای بستن خودکار }
+        ResolutionNoteFa: { type: string, nullable: true }
+        SuppressedReasonFa: { type: string, nullable: true }
+        DispatchStatus: { type: string, enum: [none, pending, partial, dispatched, failed] }
+        CmmsWorkOrderRef: { type: string, nullable: true }
+        MesDowntimeRef: { type: string, nullable: true }
+        PmisEventRef: { type: string, nullable: true }
+        RowVersion: { type: integer }
+    AlertsEnvelope:
+      type: object
+      properties:
+        ok: { type: boolean, enum: [true] }
+        data:
+          type: object
+          properties:
+            alerts: { type: array, items: { $ref: '#/components/schemas/Alert' } }
+            total: { type: integer }
+            counts: { type: object, additionalProperties: { type: integer } }
+        meta: { $ref: '#/components/schemas/Meta' }
+    AlertEnvelope:
+      type: object
+      properties:
+        ok: { type: boolean, enum: [true] }
+        data: { $ref: '#/components/schemas/Alert' }
+        meta: { $ref: '#/components/schemas/Meta' }
+    GatewayInput:
+      type: object
+      required: [GatewayCode, NameFa, Protocol]
+      properties:
+        GatewayCode: { type: string, maxLength: 60 }
+        NameFa: { type: string, maxLength: 240 }
+        Protocol: { type: string, enum: [mqtt, opc-ua, modbus, witsml, http] }
+        FirmwareVersion: { type: string }
+        IpAddress: { type: string }
+        LocationFa: { type: string }
+        SyncMode: { type: string, enum: [realtime, store-forward, batch] }
+        BufferCapacity: { type: integer, minimum: 1 }
+        MaxBatchSize: { type: integer, minimum: 1 }
+        MaxAttempts: { type: integer, minimum: 1 }
+        HeartbeatIntervalSeconds: { type: integer }
+        AuthMode: { type: string }
+        InstalledAt: { type: string, format: date-time }
+        IsActive: { type: boolean }
+        NoteFa: { type: string }
+    BufferEnvelope:
+      type: object
+      properties:
+        ok: { type: boolean, enum: [true] }
+        data:
+          type: object
+          properties:
+            buffer: { type: array, items: { $ref: '#/components/schemas/BufferRow' } }
+            total: { type: integer }
+            readyToSync: { type: integer }
+            counts: { type: object, additionalProperties: { type: integer } }
+        meta: { $ref: '#/components/schemas/Meta' }
+    BufferRow:
+      type: object
+      properties:
+        Id: { type: string }
+        GatewayId: { type: string }
+        BatchNo: { type: string }
+        Status: { type: string, enum: [buffered, sending, sent, failed, dead-letter] }
+        SampleCount: { type: integer, nullable: true }
+        Checksum: { type: string, nullable: true }
+        CapturedAt: { type: string, nullable: true }
+        FromAt: { type: string, nullable: true }
+        ToAt: { type: string, nullable: true }
+        Attempts: { type: integer, nullable: true }
+        MaxAttempts: { type: integer, nullable: true }
+        SentAt: { type: string, nullable: true }
+        ErrorCode: { type: string, nullable: true }
+        ErrorFa: { type: string, nullable: true }
+        RowVersion: { type: integer }
+    SensorInput:
+      type: object
+      required: [SensorTag, NameFa, SensorType]
+      properties:
+        SensorTag: { type: string, maxLength: 60 }
+        NameFa: { type: string, maxLength: 240 }
+        SensorType: { type: string }
+        Manufacturer: { type: string }
+        ModelNo: { type: string }
+        SerialNo: { type: string }
+        RangeMin: { type: number }
+        RangeMax: { type: number }
+        Unit: { type: string }
+        AccuracyPct: { type: number }
+        LocationFa: { type: string }
+        GatewayId: { type: string }
+        InstalledAt: { type: string, format: date-time }
+        LastCalibratedAt: { type: string, format: date-time }
+        CalibrationIntervalDays: { type: integer }
+        Status: { type: string, enum: [active, faulty, calibration-due, removed] }
+        NoteFa: { type: string }
+    ConditionInput:
+      type: object
+      required: [ReadingType, Value, Uom]
+      properties:
+        CmmsAssetRef: { type: string }
+        SensorTag: { type: string }
+        ReadingType: { type: string, enum: [vibration, temperature, humidity, pressure, current, gas, flow] }
+        Value: { type: number }
+        Uom: { type: string, maxLength: 24 }
+        Zone: { type: string, enum: [A, B, C, D] }
+        MeasuredAt: { type: string, format: date-time }
+        HealthIndex: { type: number, minimum: 0, maximum: 100 }
+        TrendDirection: { type: string, enum: [rising, falling, stable] }
+        RateOfChange: { type: number }
+        Source: { type: string, enum: [iiot, manual, scada, portable] }
+        NoteFa: { type: string }
+    DowntimeInput:
+      type: object
+      required: [Category, CauseFa, StartedAt]
+      properties:
+        Category: { type: string, enum: [equipment, mud, directional, wellbore, weather, power, logistics, cementing, waiting-on-decision, other] }
+        CauseFa: { type: string, maxLength: 1000 }
+        EffectFa: { type: string }
+        StartedAt: { type: string, format: date-time }
+        EndedAt: { type: string, format: date-time }
+        IsNpt: { type: boolean }
+        DowntimeType: { type: string, enum: [productive, non-productive, planned] }
+        NptCode: { type: string }
+        ResponsibilityFa: { type: string }
+        ShiftName: { type: string }
+        RecoverableMinutes: { type: number }
+        AlertId: { type: string }
+        CmmsSiteRef: { type: string }
+        MesWorkCenterRef: { type: string }
+        PmisProjectRef: { type: string }
+        NoteFa: { type: string }
+    DowntimeEnvelope:
+      type: object
+      properties:
+        ok: { type: boolean, enum: [true] }
+        data:
+          type: object
+          properties:
+            downtime: { type: array, items: { $ref: '#/components/schemas/Downtime' } }
+            total: { type: integer }
+            openCount: { type: integer }
+        meta: { $ref: '#/components/schemas/Meta' }
+    Downtime:
+      type: object
+      properties:
+        Id: { type: string }
+        RigId: { type: string }
+        DowntimeCode: { type: string }
+        Category: { type: string }
+        DowntimeType: { type: string, enum: [productive, non-productive, planned] }
+        NptCode: { type: string, nullable: true }
+        CauseFa: { type: string }
+        StartedAt: { type: string, format: date-time }
+        EndedAt: { type: string, nullable: true }
+        DurationMinutes: { type: number, nullable: true }
+        IsNpt: { type: boolean }
+        ResponsibilityFa: { type: string, nullable: true }
+        AlertId: { type: string, nullable: true }
+        DetectedBy: { type: string, enum: [auto, manual] }
+        VerifiedById: { type: string, nullable: true }
+        VerifiedAt: { type: string, nullable: true }
+        ReportedToMes: { type: boolean }
+        ReportedToPmis: { type: boolean }
+        MesDowntimeRef: { type: string, nullable: true }
+        PmisEventRef: { type: string, nullable: true }
+        PmisClaimRef: { type: string, nullable: true }
+        RowVersion: { type: integer }
+    NptEnvelope:
+      type: object
+      properties:
+        ok: { type: boolean, enum: [true] }
+        data:
+          type: object
+          properties:
+            rigId: { type: string }
+            totalMinutes: { type: number }
+            productiveMinutes: { type: number }
+            nptMinutes: { type: number }
+            plannedMinutes: { type: number }
+            nptPct: { type: number }
+            byCategory: { type: array, items: { type: object } }
+            openCount: { type: integer }
+            claimThresholdMinutes: { type: integer, example: 240 }
+            claimCandidates:
+              type: array
+              items:
+                type: object
+                properties:
+                  downtimeId: { type: string }
+                  code: { type: string }
+                  minutes: { type: number }
+                  category: { type: string }
+                  responsibilityFa: { type: string, nullable: true }
+                  pmisClaimRef: { type: string, nullable: true }
+            modelVersion: { type: string, example: iiot-v1 }
+            asOf: { type: string, format: date-time }
+        meta: { $ref: '#/components/schemas/Meta' }
+    EventsEnvelope:
+      type: object
+      properties:
+        ok: { type: boolean, enum: [true] }
+        data:
+          type: object
+          properties:
+            events: { type: array, items: { $ref: '#/components/schemas/IntegrationEvent' } }
+            total: { type: integer }
+            counts: { type: object, additionalProperties: { type: integer } }
+            transportConfigured: { type: boolean }
+        meta: { $ref: '#/components/schemas/Meta' }
+    IntegrationEvent:
+      type: object
+      properties:
+        Id: { type: string }
+        RigId: { type: string }
+        EventType: { type: string, enum: [alert.critical, alert.resolved, downtime.npt, downtime.closed, condition.reading] }
+        TargetSystem: { type: string, enum: [cmms, mes, pmis] }
+        TargetRef: { type: string, nullable: true }
+        Contract: { type: string, enum: [iiot-cmms-v1, iiot-mes-v1, iiot-pmis-v1] }
+        IdempotencyKey: { type: string }
+        Status: { type: string, enum: [pending, dispatched, failed, dead-letter] }
+        Attempts: { type: integer }
+        MaxAttempts: { type: integer }
+        OccurredAt: { type: string, format: date-time }
+        DeliveredAt: { type: string, nullable: true }
+        AckRef: { type: string, nullable: true }
+        ErrorCode: { type: string, nullable: true }
+        ErrorFa: { type: string, nullable: true }
+        PayloadJson: { type: object, description: بدنهٔ قرارداد }
+    DashboardEnvelope:
+      type: object
+      properties:
+        ok: { type: boolean, enum: [true] }
+        data:
+          type: object
+          properties:
+            rig: { $ref: '#/components/schemas/Rig' }
+            asOf: { type: string, format: date-time }
+            gauges: { type: array, items: { $ref: '#/components/schemas/Gauge' } }
+            statusCounts: { type: object, additionalProperties: { type: integer } }
+            activeAlerts: { type: array, items: { $ref: '#/components/schemas/Alert' } }
+            alertCounts: { type: object, additionalProperties: { type: integer } }
+            gateways: { type: array, items: { type: object } }
+            storeAndForward:
+              type: object
+              properties:
+                pendingBatches: { type: integer }
+                deadLetterBatches: { type: integer }
+                oldestBufferAt: { type: string, nullable: true }
+                connectivityOnline: { type: boolean }
+            npt: { type: object, nullable: true }
+            integration:
+              type: object
+              properties:
+                pending: { type: integer }
+                dispatched: { type: integer }
+                failed: { type: integer }
+                transportConfigured: { type: boolean }
+            tsDriver: { type: string, nullable: true }
+            modelVersion: { type: string, example: iiot-v1 }
+            requestId: { type: string }
+        meta: { $ref: '#/components/schemas/Meta' }
+    Gauge:
+      type: object
+      properties:
+        channelId: { type: string }
+        channelCode: { type: string }
+        nameFa: { type: string }
+        signalType: { type: string }
+        unit: { type: string }
+        value: { type: number, nullable: true }
+        at: { type: string, nullable: true }
+        stale: { type: boolean, description: سن داده بیش از ۳۰۰ ثانیه }
+        isCritical: { type: boolean }
+        displayMin: { type: number, nullable: true }
+        displayMax: { type: number, nullable: true }
+        nominalValue: { type: number, nullable: true }
+        status: { type: string, enum: [normal, warning, critical] }
+        thresholds: { type: array, items: { type: object, properties: { level: { type: string }, value: { type: number, nullable: true }, kind: { type: string, nullable: true } } } }
