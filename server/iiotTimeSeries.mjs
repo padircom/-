@@ -56,7 +56,11 @@ export function normalizePoint(point) {
   if (!point || typeof point !== "object") throw new TimeSeriesError("E-IIOT-TS-POINT", "نقطهٔ تله‌متری نامعتبر است");
   const rigId = String(point.rigId ?? "").trim();
   const channelCode = String(point.channelCode ?? "").trim();
-  const atMs = Date.parse(point.at ?? "");
+  /* `at` (رشتهٔ ISO) شکل اصلی است؛ `atMs` برای فراخوان‌هایی است که زمان را
+   * پیش‌تر محاسبه کرده‌اند (بازپخش/رول‌آپ). */
+  const atMs = point.at === undefined || point.at === null || point.at === ""
+    ? (typeof point.atMs === "number" && Number.isFinite(point.atMs) ? point.atMs : Number.NaN)
+    : Date.parse(point.at);
   const value = toNum(point.value);
   if (!rigId) throw new TimeSeriesError("E-IIOT-TS-RIG", "شناسهٔ دکل در نقطهٔ تله‌متری الزامی است");
   if (!channelCode) throw new TimeSeriesError("E-IIOT-TS-CHANNEL", "کد کانال در نقطهٔ تله‌متری الزامی است");
@@ -74,9 +78,11 @@ export function normalizePoint(point) {
   };
 }
 
-/* فرار Line Protocol: فاصله، کاما و = در تگ/فیلد باید escape شوند. */
-const escapeTag = (v) => String(v).replace(/([,= ])/g, "\\$1");
-const escapeKey = (v) => String(v).replace(/([, ])/g, "\\$1");
+/* فرار Line Protocol: فاصله، کاما و = در تگ/فیلد باید escape شوند — و پیش از
+ * همه خودِ backslash. وگرنه یک `\\` در انتهای مقدار، جداکنندهٔ بعدی را
+ * می‌بلعد و ساختار پروتکل می‌شکند (پیدا شده توسط CodeQL). */
+const escapeTag = (v) => String(v).replace(/\\/g, "\\\\").replace(/([,= ])/g, "\\$1");
+const escapeKey = (v) => String(v).replace(/\\/g, "\\\\").replace(/([, ])/g, "\\$1");
 
 /**
  * ساخت InfluxDB Line Protocol.
@@ -86,7 +92,9 @@ const escapeKey = (v) => String(v).replace(/([, ])/g, "\\$1");
 export function influxLineProtocol(points, { measurement = DEFAULT_MEASUREMENT, tagKeys = DEFAULT_TAG_KEYS } = {}) {
   const rows = [];
   for (const raw of points) {
-    const p = raw.atMs !== undefined ? raw : normalizePoint(raw);
+    /* «پیش‌تر یکسان‌شده» یعنی هم زمان محاسبه‌شده دارد و هم کیفیت؛ وگرنه
+     * از یکسان‌سازی می‌گذرد و `quality="undefined"` روی سیم می‌نویسد. */
+    const p = (raw.atMs !== undefined && raw.quality !== undefined) ? raw : normalizePoint(raw);
     const tags = tagKeys
       .filter((k) => p[k] !== undefined && p[k] !== null && String(p[k]).length > 0)
       .map((k) => `${escapeKey(k)}=${escapeTag(p[k])}`)
@@ -164,7 +172,9 @@ export class MemoryTimeSeriesStore {
     const list = Array.isArray(points) ? points : [points];
     let accepted = 0;
     for (const raw of list) {
-      const p = raw.atMs !== undefined ? raw : normalizePoint(raw);
+      /* «پیش‌تر یکسان‌شده» یعنی هم زمان محاسبه‌شده دارد و هم کیفیت؛ وگرنه
+     * از یکسان‌سازی می‌گذرد و `quality="undefined"` روی سیم می‌نویسد. */
+    const p = (raw.atMs !== undefined && raw.quality !== undefined) ? raw : normalizePoint(raw);
       if (!this.series.has(p.rigId)) this.series.set(p.rigId, new Map());
       const byChannel = this.series.get(p.rigId);
       if (!byChannel.has(p.channelCode)) byChannel.set(p.channelCode, []);

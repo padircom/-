@@ -496,3 +496,27 @@ test("انتخاب درایور: influx بی‌آدرس/بی‌توکن، خطا
     assert.equal(err.code, "E-IIOT-TS-CONFIG");
   }
 });
+
+/* ═══════════════════ فرار Line Protocol ═══════════════════ */
+
+test("Line Protocol: backslash و جداکننده‌ها در تگ فرار می‌شوند", () => {
+  const line = influxLineProtocol([{
+    rigId: "RIG\\X,9", channelCode: "CH TEMP", signalType: "wob", value: 42, at: "2026-03-10T06:00:00.000Z",
+  }]);
+  /* بخش تگ‌ها: تا پیش از مجموعهٔ فیلد. بریدن با `split(" ")` غلط است چون
+   * فاصلهٔ فرار‌شده در مقدار تگ هم فاصله است. */
+  const head = line.slice(0, line.indexOf(" value="));
+  /* backslash دوبرابر و کاما/فاصله با \ جدا می‌شوند — وگرنه ساختار پروتکل می‌شکند. */
+  assert.ok(head.includes("rigId=RIG\\\\X\\,9"), head);
+  assert.ok(head.includes("channelCode=CH\\ TEMP"), head);
+});
+
+test("Line Protocol: نقطهٔ با atMs و بدون کیفیت، «undefined» روی سیم نمی‌نویسد", () => {
+  const line = influxLineProtocol([{
+    rigId: "RIG-1", channelCode: "CH-1", signalType: "rpm", value: 7, atMs: Date.parse("2026-03-10T06:00:00.000Z"),
+  }]);
+  assert.ok(!line.includes("undefined"), line);
+  assert.ok(line.includes('quality="good"'), line);
+  assert.ok(line.includes('source="live"'), line);
+  assert.ok(line.endsWith(String(Date.parse("2026-03-10T06:00:00.000Z"))), line);
+});

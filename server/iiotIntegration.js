@@ -417,7 +417,9 @@ async function applyToPmis(repo, { payload, key, occurredAt, actor }) {
 
 /* ═══════════════════════ نقطهٔ ورود یکپارچه ═══════════════════════ */
 
-const HANDLERS = { cmms: applyToCmms, mes: applyToMes, pmis: applyToPmis };
+/* فهرست بستهٔ مقصدها — فراخوانی از راه سوئیچ با مقدار ثابت انجام می‌شود، نه
+ * ایندکس پویا با رشتهٔ ورودی (CodeQL: js/unvalidated-dynamic-method-call). */
+const IIOT_BRIDGE_TARGETS = Object.freeze(["cmms", "mes", "pmis"]);
 
 /**
  * اِعمال یک رویداد IIoT روی سامانهٔ مقصد.
@@ -432,7 +434,7 @@ export async function applyIiotIntegrationEvent({ repo, event, actor = "svc-iiot
   const normalized = normalizeIiotInboundEvent(event);
   const payload = payloadOf(normalized);
   const target = String(normalized.TargetSystem ?? "").trim().toLowerCase();
-  if (!HANDLERS[target]) {
+  if (!IIOT_BRIDGE_TARGETS.includes(target)) {
     throw new IiotBridgeError("E-IIOT-BRIDGE-TARGET", `سامانهٔ مقصد ناشناخته: ${normalized.TargetSystem || "(خالی)"}`);
   }
   if (!normalized.EventType || !IIOT_BRIDGE_EVENT_TYPES.includes(normalized.EventType)) {
@@ -441,13 +443,20 @@ export async function applyIiotIntegrationEvent({ repo, event, actor = "svc-iiot
   const key = String(normalized.IdempotencyKey ?? "").trim();
   if (!key) throw new IiotBridgeError("E-IIOT-BRIDGE-KEY", "رویداد بدون کلید تکرارناپذیر پذیرفته نمی‌شود");
 
-  const handler = HANDLERS[target];
-  return handler(store, {
+  const context = {
     payload: { ...payload, eventTypeSuffix: normalized.EventType === "downtime.npt" ? "npt" : normalized.EventType.split(".").pop() },
     key,
     occurredAt: asIso(normalized.OccurredAt) ?? new Date().toISOString(),
     actor,
-  });
+  };
+  switch (target) {
+    case "cmms": return applyToCmms(store, context);
+    case "mes": return applyToMes(store, context);
+    case "pmis": return applyToPmis(store, context);
+    default:
+      /* از نظر منطقی نرسیدنی — فهرست بالا همین سه مقدار را پذیرفته است. */
+      throw new IiotBridgeError("E-IIOT-BRIDGE-TARGET", `سامانهٔ مقصد ناشناخته: ${target}`);
+  }
 }
 
 /* ═══════════════════════ مسیرهای REST پل ═══════════════════════ */
