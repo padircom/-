@@ -35,7 +35,6 @@ export const MES_CMMS_BRIDGE_MODEL = "cmms-mes-bridge-v1";
 
 /** کد دلیل رزرو ظرفیت در MfgDowntimeLog — همین پیشوند، بلوکه‌های CMMS را جدا می‌کند. */
 export const MES_CAPACITY_BLOCK_REASON = "CMMS-PM-BLOCK";
-const MES_CAPACITY_BLOCK_PREFIX = "CMMS-";
 const MINUTE_MS = 60_000;
 
 class MesBridgeError extends Error {
@@ -52,6 +51,35 @@ const asIso = (value) => {
   const at = new Date(value);
   return Number.isNaN(at.getTime()) ? null : at.toISOString();
 };
+
+/**
+ * یکسان‌سازی دو شکلی که یک رویداد به این پل می‌رسد:
+ *
+ *   • «سطر ذخیره‌شده» — همان چیزی که در `CmmsIntegrationEvent` نشسته و یک
+ *     فراخوان بیرونی با REST می‌فرستد (`EventType`/`IdempotencyKey`/`PayloadJson`).
+ *   • «پاکت حمل‌ونقل» — همان چیزی که قرارداد `deliver()` در CMMS می‌دهد
+ *     (`eventType`/`idempotencyKey`/`payload`/`eventId`).
+ *
+ * بدون این یکسان‌سازی، هر رویدادی که از حمل‌ونقل درون‌فرآیندی بیاید با
+ * «قرارداد ناشناخته» رد می‌شود — باگی که فقط در اجرای واقعی سرور دیده می‌شود.
+ */
+function normalizeInboundEvent(event) {
+  if (!event || typeof event !== "object") return {};
+  const payload = event.PayloadJson && typeof event.PayloadJson === "object"
+    ? event.PayloadJson
+    : event.payload && typeof event.payload === "object" ? event.payload : {};
+  return {
+    Id: event.Id ?? event.eventId ?? null,
+    EventType: event.EventType ?? event.eventType ?? "",
+    TargetSystem: event.TargetSystem ?? event.targetSystem ?? "mes",
+    TargetRef: event.TargetRef ?? event.targetRef ?? null,
+    Contract: event.Contract ?? event.contract ?? payload.contract ?? null,
+    IdempotencyKey: event.IdempotencyKey ?? event.idempotencyKey ?? "",
+    CorrelationId: event.CorrelationId ?? event.correlationId ?? null,
+    OccurredAt: event.OccurredAt ?? event.occurredAt ?? null,
+    PayloadJson: payload,
+  };
+}
 
 const payloadOf = (event) => (event?.PayloadJson && typeof event.PayloadJson === "object" ? event.PayloadJson : {});
 
@@ -91,7 +119,10 @@ async function findExistingByKey(repo, plantId, workCenterId, reasonCode, idempo
 async function createDowntimeRow(repo, { plantId, workCenterId, startedAt, finishedAt, downtimeType, reasonCode, noteFa, actor }) {
   const startMs = new Date(startedAt).getTime();
   const endMs = finishedAt ? new Date(finishedAt).getTime() : null;
-  const durationMinutes = endMs === null ? null : Math.max(0, Math.round((endMs - startMs) / MINUTE_MS));
+  /* `DurationMinutes` در MES اجباری است و مقدار ۰ با `FinishedAt = null` یعنی
+   * «توقف همچنان باز است» — همان قراردادی که `downtimeIntervalsForWindow` در
+   * زمان‌بندی MES به آن تکیه می‌کند. نوشتن `null` ردیف را از اعتبارسنجی می‌انداخت. */
+  const durationMinutes = endMs === null ? 0 : Math.max(0, Math.round((endMs - startMs) / MINUTE_MS));
   return repo.create("MfgDowntimeLog", {
     PlantId: plantId, WorkCenterId: workCenterId,
     ProductionOrderOperationId: null, ExecutionId: null, ResourceId: null,
@@ -109,8 +140,23 @@ async function createDowntimeRow(repo, { plantId, workCenterId, startedAt, finis
  * ورودی `event` همان چیزی است که CMMS در صف خروجی ساخته و تحویل داده است:
  * `{ IdempotencyKey, EventType, TargetRef, PayloadJson, ... }`.
  */
+/**
+ * مخزن را از دو شکلی که در فراخوانی‌ها دیده می‌شود حل می‌کند: خودِ repository،
+ * یا تابعی که دیرتر آن را می‌سازد. `server/index.js` شکل تابعی را می‌دهد تا
+ * وابستگی حلقه‌ای نسازد؛ نادیده‌گرفتن این شکل یعنی «repo.get is not a function»
+ * در اولین تحویل واقعی.
+ */
+async function resolveRepo(repo) {
+  const resolved = typeof repo === "function" ? await repo() : repo;
+  if (!resolved || typeof resolved.list !== "function") {
+    throw new MesBridgeError("E-MES-REPO-MISSING", "مخزن دادهٔ MES در دسترس نیست");
+  }
+  return resolved;
+}
+
 export async function applyCmmsIntegrationEvent({ repo, event, actor = "cmms-bridge", now = new Date() } = {}) {
-  if (!repo) throw new MesBridgeError("E-MES-REPO-MISSING", "مخزن دادهٔ MES در دسترس نیست");
+  repo = await resolveRepo(repo);
+  event = normalizeInboundEvent(event);
   const payload = payloadOf(event);
   const contract = String(payload.contract ?? event?.Contract ?? "");
   if (contract !== CMMS_INTEGRATION_CONTRACT) {
@@ -262,6 +308,7 @@ export async function applyCmmsIntegrationEvent({ repo, event, actor = "cmms-bri
       workCenterId: workCenter.Id, plantId,
       from: projectionWindow.from, to: projectionWindow.to,
       nominalMinutesPerDay: workCenter.NominalCapacityMinutesPerDay,
+      now: nowIso,
     });
     return {
       ok: true,
@@ -289,7 +336,8 @@ export async function applyCmmsIntegrationEvent({ repo, event, actor = "cmms-bri
  * تقویم از ظرفیت اسمی روزانه × طول پنجره تخمین زده می‌شود؛ همین تقریب،
  * مبنای نمایش CMMS است و ادعای دقتِ تقویم شیفتی ندارد.
  */
-export async function projectWorkCenterAvailability(repo, { workCenterId, plantId, from, to, nominalMinutesPerDay = 480 }) {
+export async function projectWorkCenterAvailability(repo, { workCenterId, plantId, from, to, nominalMinutesPerDay = 480, now } = {}) {
+  repo = await resolveRepo(repo);
   const fromMs = new Date(from).getTime();
   const toMs = new Date(to).getTime();
   if (!Number.isFinite(fromMs) || !Number.isFinite(toMs) || toMs <= fromMs) {
@@ -304,11 +352,18 @@ export async function projectWorkCenterAvailability(repo, { workCenterId, plantI
   });
   let plannedMs = 0;
   let unplannedMs = 0;
+  /* «حالا» تزریق‌شدنی است تا نتیجه به ساعت دیوار وابسته نباشد. */
+  const nowMs = now instanceof Date ? now.getTime() : now ? new Date(now).getTime() : Date.now();
   for (const row of rows) {
     const start = new Date(row.StartedAt).getTime();
     const finished = row.FinishedAt == null ? null : new Date(row.FinishedAt).getTime();
     const duration = Number(row.DurationMinutes);
-    const end = Number.isFinite(finished) ? finished : Number.isFinite(duration) && duration > 0 ? start + duration * MINUTE_MS : start;
+    /* همان قرارداد زمان‌بندی MES: توقف بسته تا پایانش، توقف باز تا «حالا» و
+     * حداکثر تا لبهٔ پنجره. اگر توقف باز «صفر دقیقه» شمرده می‌شد، افت
+     * دسترس‌پذیری درست دیده نمی‌شد. */
+    const end = Number.isFinite(finished)
+      ? finished
+      : Number.isFinite(duration) && duration > 0 ? start + duration * MINUTE_MS : Math.min(nowMs, toMs);
     const clipStart = Math.max(fromMs, start);
     const clipEnd = Math.min(toMs, end);
     if (clipEnd <= clipStart) continue;
@@ -345,7 +400,7 @@ export function registerMesCmmsBridgeRoutes(app, { repo, subjects, evaluate } = 
   }
   if (!Array.isArray(subjects) || typeof evaluate !== "function") throw new TypeError("MES RBAC dependencies are required");
 
-  const getRepo = async () => (typeof repo === "function" ? repo() : repo);
+  const getRepo = () => resolveRepo(repo);
   const fail = (req, res, err) => {
     if (err instanceof MesBridgeError) {
       return res.status(422).json({ ok: false, error: { code: err.code, message: err.messageFa, ...err.extra, traceId: req.requestId } });
@@ -444,7 +499,9 @@ export function registerMesCmmsBridgeRoutes(app, { repo, subjects, evaluate } = 
         orderBy: [{ column: "StartedAt", dir: "asc" }],
         limit: 200,
       });
-      const blocks = rows.filter((row) => String(row.ReasonCode ?? "").startsWith(MES_CAPACITY_BLOCK_PREFIX));
+      /* فقط رزروهای ظرفیت؛ ردیف‌های توقف CMMS با کد دیگری ثبت می‌شوند و
+       * نباید در فهرست رزروها دیده شوند. */
+      const blocks = rows.filter((row) => String(row.ReasonCode ?? "") === MES_CAPACITY_BLOCK_REASON);
       return res.status(200).json({
         ok: true,
         data: {

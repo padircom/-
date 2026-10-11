@@ -11,7 +11,7 @@
  */
 import test from "node:test";
 import assert from "node:assert/strict";
-import { applyCmmsIntegrationEvent, registerMesCmmsBridgeRoutes } from "./cmmsMesBridge.js";
+import { applyCmmsIntegrationEvent, projectWorkCenterAvailability, registerMesCmmsBridgeRoutes } from "./cmmsMesBridge.js";
 import { DEMO_SUBJECTS, evaluate } from "./rbacLogic.js";
 
 const WC = { Id: "WC-100", PlantId: "PLANT-DEMO", Code: "CNC-01", NominalCapacityMinutesPerDay: 480 };
@@ -150,6 +150,11 @@ test("توقف started باز می‌ماند و finished همان ردیف را
   let logs = await repo.list("MfgDowntimeLog", []);
   assert.equal(logs.length, 1);
   assert.equal(logs[0].FinishedAt, null);
+  /* توقف باز با `DurationMinutes = 0` ثبت می‌شود چون ستون در MES اجباری است و
+   * صفر یعنی «هنوز باز»؛ تصویر دسترس‌پذیری تا «حالا» محاسبه می‌شود. */
+  assert.equal(logs[0].DurationMinutes, 0);
+  assert.equal(started.availability.unplannedDowntimeMinutes, 60);
+  assert.equal(started.availability.availabilityPct, 87.5);
 
   const finished = await applyCmmsIntegrationEvent({
     repo,
@@ -300,6 +305,16 @@ test("سرپرست سالن رویداد توقف را می‌پذیرد و MES 
   assert.equal(employee.statusCode >= 400, true);
 });
 
+test("ردیف‌های توقف در فهرست رزروهای ظرفیت دیده نمی‌شوند", async () => {
+  const { call } = makeApi();
+  await call("POST", "/api/mfg/integration/cmms/events", { userId: "u-mfg-supervisor", body: downtimeEvent() });
+  const blocks = await call("GET", "/api/mfg/integration/cmms/capacity-blocks", { userId: "u-mfg-eng", query: { workCenterId: "WC-100" } });
+  assert.equal(blocks.statusCode, 200);
+  /* یک توقف ثبت شد ولی هیچ رزروی وجود ندارد؛ فهرست رزرو نباید توقف‌ها را
+   * «ظرفیت رزروشده» جا بزند. */
+  assert.equal(blocks.body.data.total, 0);
+});
+
 test("مهندس ساخت رویداد بلوکهٔ ظرفیت را می‌پذیرد و فهرست رزروها را می‌بیند", async () => {
   const { call } = makeApi();
   const posted = await call("POST", "/api/mfg/integration/cmms/events", { userId: "u-mfg-eng", body: capacityEvent({ action: "requested" }) });
@@ -311,6 +326,7 @@ test("مهندس ساخت رویداد بلوکهٔ ظرفیت را می‌پذ�
   assert.equal(blocks.body.data.total, 1);
   assert.equal(blocks.body.data.blocks[0].ReservedMinutes, 240);
   assert.equal(blocks.body.data.blocks[0].IsOpen, false);
+  assert.equal(blocks.body.data.blocks[0].NoteFa.includes("CMMS block"), true);
 
   const availability = await call("GET", "/api/mfg/integration/cmms/availability", {
     userId: "u-mfg-eng",
@@ -324,6 +340,59 @@ test("مهندس ساخت رویداد بلوکهٔ ظرفیت را می‌پذ�
   /* GET با شناسهٔ نامعتبر ۴۰۰ می‌گیرد. */
   const badQuery = await call("GET", "/api/mfg/integration/cmms/capacity-blocks", { userId: "u-mfg-eng", query: { workCenterId: "" } });
   assert.equal(badQuery.statusCode, 400);
+});
+
+test("پاکت حمل‌ونقل درون‌فرآیندی (قرارداد deliver) هم همان‌طور اِعمال می‌شود", async () => {
+  const repo = makeRepo();
+  /* این دقیقاً همان شیئی است که CMMS به `transport.deliver()` می‌دهد:
+   * کلیدهای camelCase و `payload` جای `PayloadJson`. بدون یکسان‌سازی، رویداد
+   * با «قرارداد ناشناخته» رد می‌شد — باگی که فقط در اجرای واقعی سرور دیده شد. */
+  const envelope = {
+    eventId: "CmmsIntegrationEvent-1",
+    eventType: "downtime.started",
+    targetSystem: "mes",
+    targetRef: "WC-100",
+    contract: "cmms-mes-v1",
+    idempotencyKey: "SITE-DEMO:downtime.started:CmmsWorkOrderHold:H-9:1",
+    correlationId: "H-9",
+    occurredAt: "2026-10-11T08:00:00.000Z",
+    payload: {
+      contract: "cmms-mes-v1", sourceSystem: "cmms", siteId: "SITE-DEMO",
+      assetRef: "ASSET-1", assetTag: "P-101", workCenterRef: "WC-100",
+      productionImpact: "line-stop", downtimeType: "unplanned",
+      reasonCode: "machine-breakdown", reasonFa: "خرابی یاتاقان",
+      startedAt: "2026-10-11T08:00:00.000Z", finishedAt: null, durationMinutes: null,
+      workOrderRef: "WO-5", failureRef: null, sourceRef: "CmmsWorkOrderHold:H-9",
+    },
+  };
+  const result = await applyCmmsIntegrationEvent({ repo, event: envelope, now: "2026-10-11T09:00:00.000Z" });
+  assert.equal(result.ok, true);
+  assert.equal(result.workCenterId, "WC-100");
+  assert.equal(result.applied.open, true);
+  const logs = await repo.list("MfgDowntimeLog", []);
+  assert.equal(logs.length, 1);
+  assert.equal(logs[0].FinishedAt, null);
+  /* و تحویل دوباره با همان پاکت، ردیف تکراری نمی‌سازد. */
+  await applyCmmsIntegrationEvent({ repo, event: envelope, now: "2026-10-11T09:05:00.000Z" });
+  assert.equal((await repo.list("MfgDowntimeLog", [])).length, 1);
+});
+
+test("مخزن تابعی (همان چیزی که server/index.js تزریق می‌کند) هم پذیرفته می‌شود", async () => {
+  const repo = makeRepo();
+  /* سرور واقعی `repo` را به‌صورت تابع می‌دهد؛ پیش از این اصلاح، اولین تحویل با
+   * «repo.get is not a function» شکست می‌خورد — در تست‌ها دیده نمی‌شد. */
+  const result = await applyCmmsIntegrationEvent({ repo: () => repo, event: downtimeEvent() });
+  assert.equal(result.ok, true);
+  assert.equal((await repo.list("MfgDowntimeLog", [])).length, 1);
+  const availability = await projectWorkCenterAvailability(() => repo, {
+    workCenterId: "WC-100", plantId: "PLANT-DEMO",
+    from: "2026-10-11T00:00:00.000Z", to: "2026-10-12T00:00:00.000Z",
+  });
+  assert.equal(availability.unplannedDowntimeMinutes, 120);
+  await assert.rejects(
+    () => applyCmmsIntegrationEvent({ repo: () => null, event: downtimeEvent() }),
+    (error) => error.code === "E-MES-REPO-MISSING",
+  );
 });
 
 test("ثبت مسیرها مخزن تابعی (قرارداد server/index.js) را می‌پذیرد و ورودی ناقص را رد می‌کند", () => {
