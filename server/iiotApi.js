@@ -1342,10 +1342,14 @@ export function registerIiotRoutes(app, {
 
     let points = [];
     let buckets = [];
+    /* آیا سری از موتور سری زمانی آمده؟ موتور، مقدار خام را نگه می‌دارد و
+     * فیلترشده را همراه ندارد؛ مسیر SQL پاییندست هر دو را دارد. */
+    let fromTimeSeries = false;
     if (ts && channel) {
       const res = await ts.query({ rigId, channelCode: channel.ChannelCode, from, to, limit, bucketSeconds });
       points = res.points ?? [];
       buckets = res.buckets ?? [];
+      fromTimeSeries = true;
       /* اگر درایور سطل‌بندی را انجام نداد (یا پیاده‌سازی سبک‌تری بود)،
        * نمودار خالی نمی‌ماند: سطل‌ها از همان نقطه‌ها ساخته می‌شوند. */
       if (bucketSeconds && buckets.length === 0 && points.length) {
@@ -1370,6 +1374,34 @@ export function registerIiotRoutes(app, {
       if (bucketSeconds) {
         buckets = rollupSamples(points.map((p) => ({ at: p.at, value: p.value, quality: p.quality })), bucketSeconds);
       }
+    }
+
+    /* نمودار داشبورد «خام در برابر فیلترشده» است. موتور سری زمانی فقط مقدار
+     * خام را نگه می‌دارد (منبع حقیقت تاریخچهٔ پرفرکانس)، ولی خروجی فیلترِ
+     * همان لحظه در `IotTelemetrySample.FilteredValue` نشسته است. پس وقتی سری
+     * از موتور سری زمانی آمده و فیلترش را همراه ندارد، همان پنجره را از لایهٔ
+     * رابطه‌ای می‌خوانیم و به نقطه‌ها می‌چسبانیم — بی‌این کار، اثر پنجرهٔ
+     * هموارسازی روی صفحهٔ پرسنل شیفت نامرئی می‌ماند. */
+    if (fromTimeSeries && channel && points.length && points.some((p) => p.filtered === undefined || p.filtered === null)) {
+      const rows = await r.list("IotTelemetrySample", {
+        where: [
+          { column: "RigId", op: "eq", value: rigId },
+          { column: "ChannelId", op: "eq", value: channel.Id },
+          { column: "SampledAt", op: "gte", value: from },
+          { column: "SampledAt", op: "lte", value: to },
+        ],
+        orderBy: [{ column: "SampledAt", dir: "asc" }],
+        limit: 5000,
+      });
+      const filteredByAt = new Map(rows.map((row) => [
+        row.SampledAt,
+        row.FilteredValue === null || row.FilteredValue === undefined ? null : Number(row.FilteredValue),
+      ]));
+      points = points.map((p) => (
+        p.filtered === undefined || p.filtered === null
+          ? { ...p, filtered: filteredByAt.get(p.at) ?? null }
+          : p
+      ));
     }
 
     const downsample = bool(req.query.downsample, "downsample", false);

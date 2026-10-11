@@ -172,108 +172,191 @@ export interface IiotRow {
   [key: string]: unknown;
 }
 
+/** دکل حفاری — ریشهٔ دامنهٔ IIoT (نام‌ها همان ستون‌های جدول `IotDrillingRig`). */
 export interface IiotDrillingRig extends IiotRow {
   RigId: string;
   RigNo: string;
-  RigNameFa: string;
-  FieldNameFa?: string | null;
-  WellNameFa?: string | null;
+  NameFa: string;
+  NameEn?: string | null;
   RigType?: string | null;
   Status: string;
-  TimeZone?: string | null;
+  FieldName?: string | null;
+  WellName?: string | null;
   CmmsSiteRef?: string | null;
   MesWorkCenterRef?: string | null;
   PmisProjectRef?: string | null;
-  ModelVersion: string;
+  TimeZoneId?: string | null;
+  NominalSampleRateHz?: number | null;
+  CurrentDepthM?: number | null;
+  TargetDepthM?: number | null;
+  IsActive?: boolean | null;
 }
 
 export interface IiotEdgeGateway extends IiotRow {
   GatewayCode: string;
   NameFa: string;
   Protocol?: string | null;
-  Status: string;
-  ConnectivityState?: string | null;
-  LastHeartbeatAt?: string | null;
-  FirmwareVersion?: string | null;
+  SyncMode?: string | null;
   BufferCapacity?: number | null;
   BufferUsed?: number | null;
+  MaxBatchSize?: number | null;
+  MaxAttempts?: number | null;
+  ConnectionState?: string | null;
+  LastHeartbeatAt?: string | null;
+  LastSyncAt?: string | null;
+  FirmwareVersion?: string | null;
+  IsActive?: boolean | null;
+}
+
+/** خلاصهٔ گیت‌وی در پاسخ `/dashboard` (شکل تخت، نه ردیف کامل). */
+export interface IiotGatewaySummary {
+  id: string;
+  code: string;
+  nameFa: string;
+  connectionState: string | null;
+  bufferUsed: number;
+  bufferCapacity: number;
+  fillPct: number;
+  lastHeartbeatAt: string | null;
+  lastSyncAt: string | null;
 }
 
 export interface IiotSensorNode extends IiotRow {
   SensorTag: string;
   NameFa: string;
-  SignalType?: string | null;
+  SensorType?: string | null;
+  Manufacturer?: string | null;
+  ModelNo?: string | null;
+  SerialNo?: string | null;
+  Unit?: string | null;
+  RangeMin?: number | null;
+  RangeMax?: number | null;
+  LocationFa?: string | null;
   GatewayId?: string | null;
-  ChannelId?: string | null;
-  Status: string;
-  LastCalibratedOn?: string | null;
+  InstalledAt?: string | null;
+  LastCalibratedAt?: string | null;
   NextCalibrationDue?: string | null;
+  CalibrationIntervalDays?: number | null;
+  Status: string;
+  /** محاسبهٔ سرور در `GET /sensors`: تاریخ کالیبراسیون گذشته است. */
+  calibrationOverdue?: boolean;
 }
 
 export interface IiotDrillingRigStream extends IiotRow {
   StreamCode: string;
   NameFa: string;
   SourceSystem?: string | null;
+  GatewayId?: string | null;
+  TransportProtocol?: string | null;
   SampleRateHz?: number | null;
-  Status: string;
+  BatchSize?: number | null;
+  ConnectionState?: string | null;
+  LastSampleAt?: string | null;
+  QualityPct?: number | null;
+  IsActive?: boolean | null;
 }
 
 export interface IotDasChannel extends IiotRow {
   ChannelCode: string;
   NameFa: string;
+  NameEn?: string | null;
   SignalType: IiotSignalType;
   StreamId?: string | null;
-  Uom?: string | null;
-  Status: string;
+  Unit: string;
+  NominalMin?: number | null;
+  NominalMax?: number | null;
+  NominalValue?: number | null;
+  DisplayMin?: number | null;
+  DisplayMax?: number | null;
   SampleRateHz?: number | null;
+  FilterMethod?: string | null;
+  FilterWindowSeconds?: number | null;
+  DeadbandPct?: number | null;
+  SensorTag?: string | null;
+  WitsmlMnemonic?: string | null;
+  IsCritical?: boolean | null;
+  IsActive?: boolean | null;
+  InstalledLocationFa?: string | null;
+  NextCalibrationDue?: string | null;
+  LastValueAt?: string | null;
+  LastValue?: number | null;
+  LastQuality?: string | null;
+  /** افزودهٔ `GET /channels` — رنگ وضعیت از آستانه‌های سرور ساخته می‌شود. */
+  thresholds?: Array<{ level: string; value: number | null; kind?: string | null }>;
+  status?: string;
 }
 
 export interface IiotSignalFilterRule extends IiotRow {
   RuleCode: string;
-  FilterType: string;
+  NameFa: string;
+  AppliesToSignals?: string | null;
+  FilterMethod: string;
   WindowSeconds?: number | null;
-  Alpha?: number | null;
+  EmaAlpha?: number | null;
   MinSamples?: number | null;
-  Status: string;
+  DeadbandPct?: number | null;
+  SpikeZThreshold?: number | null;
+  FlatlineSeconds?: number | null;
+  IsDefault?: boolean | null;
+  Version?: number | null;
+  IsActive?: boolean | null;
 }
 
 export interface IiotThresholdRule extends IiotRow {
   RuleCode: string;
   NameFa: string;
   ChannelId: string;
-  HighWarning?: number | null;
-  HighCritical?: number | null;
-  LowWarning?: number | null;
-  LowCritical?: number | null;
-  SustainedSeconds?: number | null;
-  CooldownSeconds?: number | null;
-  HysteresisPct?: number | null;
+  Level: "warning" | "critical";
   DetectKind?: string | null;
-  FilterRuleId?: string | null;
-  DispatchTargets?: string | null;
+  Comparison?: string | null;
+  ThresholdValue?: number | null;
+  SecondaryValue?: number | null;
+  DurationSeconds?: number | null;
+  MinSamples?: number | null;
+  HysteresisPct?: number | null;
+  CooldownSeconds?: number | null;
+  TorqueCvThreshold?: number | null;
+  RpmSwingPctThreshold?: number | null;
+  PressureDropPctThreshold?: number | null;
   AutoDispatch?: boolean | null;
-  Status: string;
+  DispatchTargets?: string | null;
+  CmmsSiteRef?: string | null;
+  MesWorkCenterRef?: string | null;
+  PmisProjectRef?: string | null;
+  NptCode?: string | null;
+  Version?: number | null;
+  IsActive?: boolean | null;
 }
+
+export type IiotAlertStatus = "active" | "acknowledged" | "resolved" | "suppressed" | "false-positive";
 
 export interface IiotTelemetryAlert extends IiotRow {
   AlertCode: string;
   ChannelId: string;
   RuleId?: string | null;
+  DetectionKind?: string | null;
   Level: "warning" | "critical";
-  Status: "open" | "acknowledged" | "resolved" | "false-positive";
+  TitleFa?: string | null;
+  MessageFa?: string | null;
+  Status: IiotAlertStatus;
   DetectedAt: string;
-  Value?: number | null;
-  ThresholdValue?: number | null;
-  BreachSamples?: number | null;
-  SustainedSeconds?: number | null;
-  DetectKind?: string | null;
-  ReasonCode?: string | null;
+  TriggeredAt?: string | null;
+  ResolvedAt?: string | null;
+  TriggerValue?: number | null;
+  FilteredValue?: number | null;
+  BaselineValue?: number | null;
+  DeviationPct?: number | null;
+  SampleCount?: number | null;
+  DurationSeconds?: number | null;
   DispatchStatus?: string | null;
   CmmsWorkOrderRef?: string | null;
   MesDowntimeRef?: string | null;
   PmisEventRef?: string | null;
+  AcknowledgedAt?: string | null;
   AcknowledgedById?: string | null;
-  ResolvedAt?: string | null;
+  ResolutionNoteFa?: string | null;
+  /** افزودهٔ `GET /alerts` — کانال هشدار با واحد و نام. */
+  channel?: { code: string; nameFa: string; signalType: string; unit: string } | null;
 }
 
 export interface IiotRigDowntime extends IiotRow {
@@ -287,65 +370,104 @@ export interface IiotRigDowntime extends IiotRow {
   EndedAt?: string | null;
   DurationMinutes?: number | null;
   IsNpt?: boolean | null;
+  RecoverableMinutes?: number | null;
   ResponsibilityFa?: string | null;
   DetectedBy?: string | null;
   VerifiedById?: string | null;
+  VerifiedAt?: string | null;
   ReportedToMes?: boolean | null;
   ReportedToPmis?: boolean | null;
   AlertId?: string | null;
+  PmisClaimRef?: string | null;
 }
 
 export interface IiotIntegrationEvent extends IiotRow {
   EventType: string;
   TargetSystem: string;
+  Contract?: string | null;
   Status: "pending" | "dispatched" | "failed" | "dead-letter";
   IdempotencyKey: string;
-  Contract?: string | null;
+  SourceTable?: string | null;
+  SourceId?: string | null;
   Attempts?: number | null;
+  MaxAttempts?: number | null;
+  DeliveredAt?: string | null;
   ErrorCode?: string | null;
   ErrorFa?: string | null;
-  DispatchedAt?: string | null;
   OccurredAt?: string | null;
   PayloadJson?: Record<string, unknown> | null;
 }
 
 export interface IiotConditionSnapshot extends IiotRow {
-  SnapshotCode?: string | null;
-  AssetRef?: string | null;
-  RecordedAt?: string | null;
+  CmmsAssetRef?: string | null;
+  SensorTag?: string | null;
+  ReadingType: string;
+  Value: number;
+  Uom: string;
+  Zone?: string | null;
+  MeasuredAt?: string | null;
+  MeasuredOn?: string | null;
+  HealthIndex?: number | null;
+  TrendDirection?: string | null;
+  Source?: string | null;
   ReportedToCmms?: boolean | null;
 }
 
 export interface IiotGatewayBuffer extends IiotRow {
+  GatewayId: string;
   BatchNo: string;
-  Status: "buffered" | "sent" | "failed" | "dead-letter";
+  Status: "buffered" | "sending" | "sent" | "failed" | "dead-letter";
   SampleCount?: number | null;
   Checksum?: string | null;
   CapturedAt?: string | null;
-  SyncedAt?: string | null;
+  FromAt?: string | null;
+  ToAt?: string | null;
+  Attempts?: number | null;
+  MaxAttempts?: number | null;
+  SentAt?: string | null;
+  ErrorCode?: string | null;
   ErrorFa?: string | null;
 }
 
 /* ═══════════════════════ پاسخ‌های ترکیبی ═══════════════════════ */
 
+/** نقطهٔ سری خام — همان شکل `points` در `GET /telemetry`. */
 export interface IiotTelemetryPoint {
-  t: string;
-  v: number | null;
-  filtered: number | null;
+  at: string;
+  value: number | null;
+  /** مقدار فیلترشده؛ سرور در مسیر SQL یا با غنی‌سازی می‌دهد. */
+  filtered?: number | null;
   quality?: string | null;
+  channelCode?: string | null;
+  signalType?: string | null;
+}
+
+/** نقطهٔ کوچک‌شده برای نمودار (`downsample=true`) — جفت min/max هر پیمانه. */
+export interface IiotChartBucket {
+  at: string;
+  min: number;
+  max: number;
+  avg: number;
+  count: number;
 }
 
 export interface IiotRollupBucket {
-  t: string;
-  min: number | null;
-  max: number | null;
-  avg: number | null;
-  last: number | null;
-  n: number;
+  bucketStart: string;
+  bucketSeconds: number;
+  sampleCount: number;
+  badCount?: number;
+  minValue: number | null;
+  maxValue: number | null;
+  avgValue: number | null;
+  stdDev?: number | null;
+  firstValue?: number | null;
+  lastValue?: number | null;
+  qualityPct?: number | null;
 }
 
 export interface IiotTelemetryResponse {
-  channel: IotDasChannel | null;
+  /** خلاصهٔ کانال انتخاب‌شده، یا `null` وقتی کل دکل خوانده شود. */
+  channel: { id: string; code: string; signalType: string; unit: string } | null;
   points: IiotTelemetryPoint[];
   buckets: IiotRollupBucket[];
   total: number;
@@ -354,15 +476,24 @@ export interface IiotTelemetryResponse {
   tsDriver: string | null;
 }
 
+/** یک ردیف `GET /telemetry/latest` — شکل تخت، نه کانال تودرتو. */
+export interface IiotLatestChannel {
+  channelId: string;
+  channelCode: string;
+  nameFa: string;
+  signalType: string;
+  unit: string;
+  value: number | null;
+  at: string | null;
+  quality?: string | null;
+  isCritical?: boolean;
+  displayMin?: number | null;
+  displayMax?: number | null;
+  status: "normal" | "warning" | "critical";
+}
+
 export interface IiotLatestResponse {
-  channels: Array<{
-    channel: IotDasChannel;
-    last: IiotTelemetryPoint | null;
-    filtered: number | null;
-    status: "ok" | "warning" | "critical" | "no-data";
-    statusColor: string;
-    alert?: IiotTelemetryAlert | null;
-  }>;
+  channels: IiotLatestChannel[];
   counts: Record<string, number>;
   asOf: string;
 }
@@ -370,25 +501,26 @@ export interface IiotLatestResponse {
 export interface IiotIngestResponse {
   rigId: string;
   accepted: number;
-  rejected: Array<{ index: number; reason: string; field?: string }>;
+  rejected: Array<{ index: number; channelCode?: string; code?: string; messageFa?: string; reason?: string }>;
   unknownChannels: string[];
   channels: number;
-  filterStats: Array<{ channelCode: string; signalType: string; points: number; noiseReductionPct: number | null }>;
-  timeSeries: { written: number; driver: string | null };
+  filterStats: Array<{ channelCode: string; samples: number; [key: string]: unknown }>;
+  timeSeries: { ok?: boolean; accepted?: number; driver?: string | null; error?: unknown } | null;
   rollups: number;
-  alerts: { created: IiotTelemetryAlert[]; resolved: IiotTelemetryAlert[]; suppressed: number; dispatched: number };
+  alerts: { created: IiotTelemetryAlert[]; resolved: IiotTelemetryAlert[]; suppressed: unknown[]; dispatched: unknown[] };
   at: string;
   tsDriver: string | null;
 }
 
 export interface IiotBufferPostResponse {
   duplicated: boolean;
+  retried?: boolean;
   bufferId: string;
   batchNo: string;
   status: IiotGatewayBuffer["Status"];
-  checksum: string;
+  checksum?: string;
+  accepted?: number;
   ingest?: IiotIngestResponse | null;
-  retried?: number;
 }
 
 export interface IiotDispatchResponse {
@@ -401,10 +533,11 @@ export interface IiotDispatchResponse {
 export interface IiotNptSummary {
   rigId: string;
   totalMinutes: number;
+  productiveMinutes?: number;
   nptMinutes: number;
   plannedMinutes: number;
   nptPct: number;
-  byCategory: Array<{ category: string; minutes: number; nptCode: string | null; responsibilityFa: string | null }>;
+  byCategory: Array<{ category: string; nptCode: string | null; minutes: number; count?: number; responsibilityFa: string | null }>;
   openCount: number;
   modelVersion: string;
   claimThresholdMinutes: number;
@@ -415,24 +548,33 @@ export interface IiotNptSummary {
   asOf: string;
 }
 
+/** یک گیج داشبورد — خروجی تختِ `GET /dashboard`. */
+export interface IiotDashboardGauge {
+  channelId: string;
+  channelCode: string;
+  nameFa: string;
+  signalType: IiotSignalType;
+  unit: string;
+  value: number | null;
+  at: string | null;
+  /** کهنگی داده: حسگر ساکت، «سبز» نیست. */
+  stale: boolean;
+  isCritical: boolean;
+  displayMin?: number | null;
+  displayMax?: number | null;
+  nominalValue?: number | null;
+  status: "normal" | "warning" | "critical";
+  thresholds: Array<{ level: string; value: number | null; kind?: string | null }>;
+}
+
 export interface IiotDashboard {
   rig: IiotDrillingRig;
   asOf: string;
-  gauges: Array<{
-    channel: IotDasChannel;
-    last: IiotTelemetryPoint | null;
-    filtered: number | null;
-    value: number | null;
-    status: "ok" | "warning" | "critical" | "no-data";
-    statusColor: string;
-    warning?: number | null;
-    critical?: number | null;
-    alert?: IiotTelemetryAlert | null;
-  }>;
+  gauges: IiotDashboardGauge[];
   statusCounts: Record<string, number>;
   activeAlerts: IiotTelemetryAlert[];
   alertCounts: Record<string, number>;
-  gateways: IiotEdgeGateway[];
+  gateways: IiotGatewaySummary[];
   storeAndForward: {
     pendingBatches: number;
     deadLetterBatches: number;
@@ -672,7 +814,7 @@ export function iiotPatchSensor(rigId: string, sensorId: string, body: Record<st
 export function iiotCalibrateSensor(
   rigId: string,
   sensorId: string,
-  body: { calibratedOn?: string; intervalDays?: number; performedById?: string; certificateNo?: string; noteFa?: string },
+  body: { calibratedAt?: string; certificateNo?: string; resultFa?: string; RowVersion?: number },
   opts: IiotRequestOptions = {},
 ) {
   return iiotFetch<{ sensor: IiotSensorNode; nextCalibrationDue: string | null }>(
