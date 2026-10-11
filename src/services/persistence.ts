@@ -14,6 +14,7 @@
 
 import { MANUFACTURING_TABLES } from "./manufacturingSchema";
 import { CMMS_EXTENSION_TABLES, CMMS_FOUNDATION_TABLES, CMMS_TABLES } from "./cmmsSchema";
+import { IIOT_TABLES } from "./iiotSchema";
 
 export const PERSISTENCE_VERSION = "sql-v1";
 
@@ -5334,6 +5335,12 @@ export const SCHEMA: TableDef[] = [
   /* CMMS/EAM/APM — بخش ۳ سازمان. کاملاً مستقل از جداول تولید و مالی؛
    * هیچ کلید خارجی از این بلوک به جدول بیرونی وجود ندارد. */
   ...CMMS_TABLES,
+
+  /* IIoT & DAS — بخش ۵ سازمان: پایش میدانی، اینترنت اشیاء و تله‌متری حفاری.
+   * دامنهٔ این بلوک `RigId` است و هیچ کلید خارجی از آن به جدول Cmms/Mfg/d2-d4
+   * وجود ندارد؛ یکپارچگی بین‌بخشی با ارجاع نرم و صف `IotIntegrationEvent`
+   * انجام می‌شود (آزمون iiot.schema.test.mjs این قید را قفل می‌کند). */
+  ...IIOT_TABLES,
 ];
 
 
@@ -6348,6 +6355,34 @@ export const MIGRATIONS: Migration[] = [
   {
     version: "0058", name: "cmms_hold_rcfa_and_cross_module_integration",
     statements: CMMS_EXTENSION_TABLES.flatMap((table) => [
+      tableDdl(table, "mssql"),
+      ...(table.indexes ?? []).map((index) => indexDdl(table, index, "mssql")),
+    ]),
+  },
+
+  /* بخش ۵ — سامانهٔ پایش میدانی، اینترنت اشیاء صنعتی و تله‌متری حفاری
+   * (IIoT & DAS / Drilling DAS).
+   *
+   * ۱۴ جدول تازه با پیشوند Iot و module = "iiot". این مهاجرت **کاملاً
+   * افزودنی** است: فقط CREATE TABLE و CREATE INDEX دارد و هیچ ALTER یا DROP
+   * روی جدول موجود انجام نمی‌دهد.
+   *
+   * ترتیب ساخت اهمیت دارد — کلید خارجی درون CREATE TABLE می‌آید، پس جدول والد
+   * باید پیش از فرزند باشد. `IIOT_TABLES` از ابتدا با همین ترتیب چیده شده و
+   * آزمون `iiot.schema.test.mjs` همان ترتیب را قفل می‌کند.
+   *
+   * استقلال ارجاعی: هیچ FK از این بلوک به جدول Cmms/Mfg/d2-d4 ساخته نمی‌شود.
+   * پیوند با نت، تولید و کنترل پروژه از راه ارجاع نرم (CmmsAssetRef،
+   * MesWorkCenterRef، PmisProjectRef) و صف رویداد `IotIntegrationEvent`
+   * انجام می‌شود — همان معامله‌ای که برای CMMS در ۰۰۵۷/۰۰۵۸ صریحاً پذیرفته شد.
+   *
+   * نکتهٔ عملیاتی: تاریخچهٔ پرفرکانس نمونه‌ها در استقرار تولیدی به موتور سری
+   * زمانی (InfluxDB) می‌رود؛ `IotTelemetrySample` لایهٔ رابطه‌ای پرس‌وجوشونده
+   * و `IotTelemetryRollup` مبنای نمودارهاست. هر دو از یک مسیر نوشتن پر
+   * می‌شوند تا واگرا نشوند (`server/iiotTimeSeries.mjs`). */
+  {
+    version: "0059", name: "iiot_field_monitoring_das_telemetry",
+    statements: IIOT_TABLES.flatMap((table) => [
       tableDdl(table, "mssql"),
       ...(table.indexes ?? []).map((index) => indexDdl(table, index, "mssql")),
     ]),
