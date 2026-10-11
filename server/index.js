@@ -11,6 +11,10 @@ import { registerEqmWorkspaceRoutes, EQM_TABLES } from "./eqmWorkspaceApi.js";
 import { registerManufacturingRoutes } from "./manufacturingApi.js";
 import { registerCmmsRoutes } from "./cmmsApi.js";
 import { applyCmmsIntegrationEvent, registerMesCmmsBridgeRoutes } from "./cmmsMesBridge.js";
+/* بخش ۵ — پایش میدانی، اینترنت اشیاء و تله‌متری حفاری (IIoT & DAS). */
+import { registerIiotRoutes } from "./iiotApi.js";
+import { applyIiotIntegrationEvent, registerIiotBridgeRoutes } from "./iiotIntegration.js";
+import { createTimeSeriesStore } from "./iiotTimeSeries.mjs";
 import { authorizeData, scopeData } from "./dataAccess.js";
 import "dotenv/config";
 import express from "express";
@@ -904,6 +908,50 @@ registerCmmsRoutes(app, {
   subjectPermissions: rbacSubjectPermissions,
   integrationTransport: cmmsMesTransport,
 });
+
+/* بخش ۵/IIoT & DAS: سامانهٔ پایش میدانی و تله‌متری حفاری — دکل‌محور،
+ * مستقل از جداول نت/تولید/پمیس (هیچ FK بیرونی در اسکیما نیست)، با مجوزهای
+ * `iiot.*` و دامنه‌بندی بر پایهٔ RigId. */
+registerIiotBridgeRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
+
+/* حمل‌ونقل درون‌فرآیندی رویداد IIoT: تحویل به CMMS/MES/PMIS بدون ترافیک
+ * شبکه، ولی دقیقاً روی همان قرارداد REST. نبود پاسخ موفق یعنی خطای
+ * دسته‌بندی‌شده در ستون‌های خطای صف خروجی — هیچ «موفق»ی بی‌شاهد ثبت نمی‌شود. */
+const iiotIntegrationTransport = {
+  async deliver(event) {
+    try {
+      const outcome = await applyIiotIntegrationEvent({ repo, event, actor: "svc-iiot-bridge" });
+      return { ok: true, ref: outcome.ref, table: outcome.table, alreadyApplied: outcome.alreadyApplied === true };
+    } catch (err) {
+      return {
+        ok: false,
+        code: typeof err?.code === "string" && err.code ? err.code : "E-IIOT-BRIDGE",
+        messageFa: err?.messageFa ?? err?.message ?? "خطای پل یکپارچگی IIoT",
+      };
+    }
+  },
+};
+
+/* موتور سری زمانی تله‌متری: InfluxDB در تولید (با IIOT_TS_DRIVER=influx) و
+ * موتور پشتیبان فایلی در این محیط — همان الگوی درایور JSON لایهٔ ماندگاری. */
+const iiotTimeSeries = (() => {
+  try {
+    return createTimeSeriesStore({ dataDir: path.resolve(process.cwd(), process.env.DATA_DIR || "server/data") });
+  } catch (err) {
+    console.warn(`[iiot-ts] time-series store unavailable (${err.message}) — falling back to SQL-only telemetry`);
+    return null;
+  }
+})();
+
+registerIiotRoutes(app, {
+  repo,
+  subjects: ENG_RBAC_SUBJECTS,
+  evaluate: rbacEvaluate,
+  subjectPermissions: rbacSubjectPermissions,
+  timeSeries: iiotTimeSeries,
+  integrationTransport: iiotIntegrationTransport,
+});
+
 registerCkmWorkspaceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
 registerScmWorkspaceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
 registerRccWorkspaceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });

@@ -89,15 +89,24 @@ test("کاتالوگ: نسخه موتور و اندازه‌ها", () => {
      قابلیت اطمینان، هزینهٔ چرخهٔ عمر، شاخص‌ها، هشدار، گردش‌کار و پنج موتور
      هوش مصنوعی. دامنهٔ CMMS سایت‌محور است و از طریق plantIds ارزیابی می‌شود.
      تکمیل فاز ۲/۳/۴ هشت مجوز افزود: توقف/ادامهٔ دستورکار (hold/resume)،
-     ثبت و تأیید CAPA، و صف رویداد/ظرفیت یکپارچگی بین‌بخشی. */
-  assert.equal(PERMISSION_CATALOG.length, 380);
+     ثبت و تأیید CAPA، و صف رویداد/ظرفیت یکپارچگی بین‌بخشی.
+     بخش ۵ (IIoT & DAS) سی‌وسه مجوز `iiot.*` افزود: دکل، جریان، کانال،
+     تله‌متری (view/ingest)، قاعدهٔ فیلتر و آستانه، هشدار (view/ack/resolve/
+     dispatch)، گیت‌وی، بافر لبه، سنسور و کالیبراسیون، پایش وضعیت، توقف و
+     NPT، صف یکپارچگی، داشبورد و تحلیل. دامنهٔ آن دکل‌محور است و مانند CMMS
+     از طریق plantIds ارزیابی می‌شود. */
+  assert.equal(PERMISSION_CATALOG.length, 413);
   /* ۲۸ نقش پیشین + ۷ نقش نت: maintenance_manager، maintenance_planner،
      reliability_engineer، maintenance_engineer، maintenance_technician،
      maintenance_storekeeper و condition_monitoring_analyst. تفکیک وظایف
      عمداست: آزادسازی/بستن دستورکار با مدیر، اتمام با مهندس، اجرا با تکنسین؛
      و سه مجوز AI (view/run/apply) جدا از هم‌اند تا هیچ پیشنهاد هوشمندی
-     بدون نظارت انسان اعمال نشود. */
-  assert.equal(ROLE_CATALOG.length, 35);
+     بدون نظارت انسان اعمال نشود.
+     بخش ۵ سه نقش افزود: iiot_engineer (پیکربندی و پذیرش)، drilling_supervisor
+     (تأیید/رفع/ارسال هشدار و راستی‌آزمایی NPT) و field_iot_technician
+     (کار میدان و کالیبراسیون). تفکیک عمداست: کسی که آستانه را تنظیم می‌کند،
+     همان کسی نیست که هشدار را «کاذب» اعلام می‌کند. */
+  assert.equal(ROLE_CATALOG.length, 38);
 });
 
 test("کاتالوگ: کد مجوزها یکتا و با قالب domain.resource.action هستند", () => {

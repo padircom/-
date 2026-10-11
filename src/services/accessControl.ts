@@ -704,6 +704,55 @@ export const PERMISSION_CATALOG: PermissionDef[] = [
   P("cmms.ai.view", "cmms", "مشاهدهٔ پیشنهادهای هوش مصنوعی نت", "View CMMS AI recommendations", "internal"),
   P("cmms.ai.run", "cmms", "اجرای موتورهای تحلیلی نت", "Run CMMS AI engines", "confidential", true),
   P("cmms.ai.apply", "cmms", "اعمال پیشنهاد هوش مصنوعی روی دادهٔ واقعی", "Apply AI recommendation", "restricted", true),
+
+  /* ── بخش ۵: پایش میدانی، اینترنت اشیاء صنعتی و تله‌متری حفاری (IIoT & DAS) ──
+   * دامنهٔ این مجوزها `rigId` است نه `projectId`: یک دکل بین چندین چاه و
+   * قرارداد جابه‌جا می‌شود و دسترسی به دادهٔ تله‌متری‌اش نباید با چرخهٔ
+   * قرارداد عوض شود. ارزیابی از طریق `plantIds` و fail-closed است.
+   *
+   * تفکیک اقتدارها عمداً ریز است، چون سه مسئولیت متفاوت روی یک هشدار وجود
+   * دارد: «دیدن» (همه)، «تأیید/بستن» (سرپرست شیفت) و «ارسال به سامانهٔ
+   * بیرونی» (نوشتن در CMMS/MES/PMIS — تصمیم سطح عملیات). */
+  /* دکل و جریان */
+  P("iiot.rig.view", "iiot", "مشاهدهٔ دکل‌های حفاری و وضعیت عملیات", "View drilling rigs", "internal"),
+  P("iiot.rig.edit", "iiot", "ثبت و ویرایش دکل حفاری", "Create and edit drilling rig", "confidential", true),
+  P("iiot.stream.view", "iiot", "مشاهدهٔ جریان‌های تله‌متری", "View telemetry streams", "internal"),
+  P("iiot.stream.edit", "iiot", "تعریف و ویرایش جریان تله‌متری", "Maintain telemetry stream", "confidential", true),
+  P("iiot.channel.view", "iiot", "مشاهدهٔ کانال‌های سیگنال (DAS)", "View DAS signal channels", "internal"),
+  P("iiot.channel.edit", "iiot", "تعریف و ویرایش کانال سیگنال", "Maintain DAS channel", "confidential", true),
+  /* تله‌متری */
+  P("iiot.telemetry.view", "iiot", "مشاهدهٔ سری زمانی تله‌متری", "View telemetry time series", "internal"),
+  P("iiot.telemetry.ingest", "iiot", "ثبت نمونهٔ تله‌متری و بارگذاری بافر لبه", "Ingest telemetry samples", "confidential", true),
+  /* فیلترینگ و آستانه */
+  P("iiot.filter.view", "iiot", "مشاهدهٔ قاعده‌های فیلترینگ سیگنال", "View signal filter rules", "internal"),
+  P("iiot.filter.edit", "iiot", "تنظیم فیلتر و پنجرهٔ هموارسازی سیگنال", "Maintain signal filter rules", "confidential", true),
+  P("iiot.threshold.view", "iiot", "مشاهدهٔ آستانه‌های هشدار", "View threshold rules", "internal"),
+  P("iiot.threshold.edit", "iiot", "تنظیم آستانه‌های چندسطحی و قواعد تشخیص", "Maintain threshold and detection rules", "confidential", true),
+  /* هشدار */
+  P("iiot.alert.view", "iiot", "مشاهدهٔ هشدارهای تله‌متری", "View telemetry alerts", "internal"),
+  P("iiot.alert.ack", "iiot", "تأیید دریافت هشدار توسط پرسنل شیفت", "Acknowledge telemetry alert", "internal", true),
+  P("iiot.alert.resolve", "iiot", "بستن هشدار یا ثبت هشدار کاذب", "Resolve alert or mark false positive", "confidential", true),
+  P("iiot.alert.dispatch", "iiot", "ارسال دستی هشدار به CMMS/MES/PMIS", "Dispatch alert to downstream systems", "confidential", true),
+  /* گیت‌وی و Store-and-Forward */
+  P("iiot.gateway.view", "iiot", "مشاهدهٔ گیت‌وی‌های لبه و سلامت اتصال", "View edge gateways", "internal"),
+  P("iiot.gateway.edit", "iiot", "ثبت و پیکربندی گیت‌وی لبه", "Maintain edge gateway", "confidential", true),
+  P("iiot.buffer.view", "iiot", "مشاهدهٔ بافر لبه و دسته‌های در انتظار", "View store-and-forward buffer", "internal"),
+  P("iiot.buffer.sync", "iiot", "همگام‌سازی و آزادسازی بافر لبه", "Synchronize edge buffer", "confidential", true),
+  /* سنسور و پایش وضعیت */
+  P("iiot.sensor.view", "iiot", "مشاهدهٔ شناسنامهٔ سنسورها و تگ‌ها", "View sensor registry", "internal"),
+  P("iiot.sensor.edit", "iiot", "ثبت و ویرایش سنسور میدان", "Maintain field sensor", "confidential", true),
+  P("iiot.sensor.calibrate", "iiot", "ثبت کالیبراسیون سنسور", "Record sensor calibration", "confidential", true),
+  P("iiot.condition.view", "iiot", "مشاهدهٔ عکس‌های پایش وضعیت (CBM)", "View condition monitoring snapshots", "internal"),
+  P("iiot.condition.record", "iiot", "ثبت قرائت پایش وضعیت تجهیزات", "Record condition snapshot", "internal", true),
+  /* توقف، NPT و یکپارچگی */
+  P("iiot.downtime.view", "iiot", "مشاهدهٔ توقفات دکل", "View rig downtime", "internal"),
+  P("iiot.downtime.report", "iiot", "ثبت و بستن توقف دکل", "Report and close rig downtime", "internal", true),
+  P("iiot.downtime.verify", "iiot", "تأیید توقف و آزادسازی گزارش NPT", "Verify downtime and release NPT", "confidential", true),
+  P("iiot.npt.view", "iiot", "مشاهدهٔ جمع‌بندی زمان نامولّد (NPT)", "View NPT summary", "internal"),
+  P("iiot.integration.view", "iiot", "مشاهدهٔ صف رویداد یکپارچگی بین‌بخشی", "View cross-module event outbox", "internal"),
+  P("iiot.integration.dispatch", "iiot", "ارسال رویداد یکپارچگی به سامانهٔ مقصد", "Dispatch cross-module event", "confidential", true),
+  P("iiot.dashboard.view", "iiot", "مشاهدهٔ داشبورد زندهٔ پایش میدانی", "View live field monitoring dashboard", "internal"),
+  P("iiot.analytics.view", "iiot", "مشاهدهٔ تحلیل و تجمیع سری زمانی", "View telemetry analytics and rollups", "internal"),
 ];
 
 export const PERMISSION_CODES: string[] = PERMISSION_CATALOG.map((p) => p.code);
@@ -1533,6 +1582,73 @@ export const ROLE_CATALOG: RoleDef[] = [
       "cmms.alert.view", "cmms.alert.ack", "cmms.pm.view", "cmms.request.create",
       "cmms.request.view", "cmms.wo.view", "cmms.rca.view", "cmms.rca.edit",
       "cmms.ai.view", "cmms.ai.run", "cmms.kpi.view", "cmms.fmea.view", "cmms.rcm.view",
+    ],
+  },
+  /* ── بخش ۵: نقش‌های پایش میدانی و تله‌متری حفاری (IIoT & DAS) ─────────────
+   * تفکیک سه‌گانه عمداست و بازتاب ساختار واقعی دکل است:
+   *   • مهندس IIoT مالک «پیکربندی» است (کانال، فیلتر، آستانه، گیت‌وی) — ولی
+   *     تأیید/بستن هشدار و ارسال به سامانهٔ بیرونی با او نیست، وگرنه همان
+   *     کسی که آستانه را تنظیم کرده، صحت هشدارش را هم تأیید می‌کند.
+   *   • سرپرست حفاری مالک «تصمیم عملیاتی» است: تأیید/بستن هشدار، ثبت و تأیید
+   *     توقف/NPT و آزادسازی رویداد به CMMS/MES/PMIS.
+   *   • تکنسین ابزار دقیق مالک «میدان» است: سنسور، کالیبراسیون و همگام‌سازی
+   *     بافر لبه — بدون دسترسی به آستانه‌ها و بدون ارسال بین‌بخشی. */
+  {
+    code: "iiot_engineer",
+    title: { fa: "مهندس تله‌متری و IIoT", en: "IIoT & Telemetry Engineer" },
+    inherits: ["viewer"],
+    clearance: "confidential",
+    party: "contractor",
+    grants: [
+      "iiot.rig.view", "iiot.rig.edit",
+      "iiot.stream.view", "iiot.stream.edit",
+      "iiot.channel.view", "iiot.channel.edit",
+      "iiot.telemetry.view", "iiot.telemetry.ingest",
+      "iiot.filter.view", "iiot.filter.edit",
+      "iiot.threshold.view", "iiot.threshold.edit",
+      "iiot.alert.view",
+      "iiot.gateway.view", "iiot.gateway.edit",
+      "iiot.buffer.view", "iiot.buffer.sync",
+      "iiot.sensor.view", "iiot.sensor.edit",
+      "iiot.condition.view", "iiot.condition.record",
+      "iiot.downtime.view", "iiot.downtime.report",
+      "iiot.npt.view", "iiot.analytics.view",
+      "iiot.integration.view", "iiot.dashboard.view",
+    ],
+  },
+  {
+    code: "drilling_supervisor",
+    title: { fa: "سرپرست حفاری (مسئول شیفت دکل)", en: "Drilling Supervisor (Shift Owner)" },
+    inherits: ["viewer"],
+    clearance: "confidential",
+    party: "contractor",
+    grants: [
+      "iiot.rig.view", "iiot.stream.view", "iiot.channel.view",
+      "iiot.telemetry.view", "iiot.filter.view", "iiot.threshold.view",
+      "iiot.alert.view", "iiot.alert.ack", "iiot.alert.resolve", "iiot.alert.dispatch",
+      "iiot.gateway.view", "iiot.sensor.view", "iiot.condition.view",
+      "iiot.downtime.view", "iiot.downtime.report", "iiot.downtime.verify",
+      "iiot.npt.view", "iiot.analytics.view",
+      "iiot.integration.view", "iiot.integration.dispatch", "iiot.dashboard.view",
+    ],
+  },
+  {
+    code: "field_iot_technician",
+    title: { fa: "تکنسین ابزار دقیق میدان", en: "Field Instrument Technician" },
+    inherits: ["viewer"],
+    // confidential و نه internal: سه مجوز عملیاتی این نقش — پذیرش نمونه،
+    // همگام‌سازی بافر لبه و کالیبراسیون سنسور — طبقه‌بندی confidential دارند
+    // (تله‌متری لحظه‌ای حفاری دادهٔ حساس عملیاتی است). با ردهٔ internal، آن
+    // سه مجوز «داده‌شده ولی غیرقابل استفاده» می‌شدند و تکنسین میدان دقیقاً
+    // همان کاری را نمی‌توانست بکند که نقش برایش ساخته شده.
+    clearance: "confidential",
+    party: "contractor",
+    grants: [
+      "iiot.rig.view", "iiot.channel.view", "iiot.telemetry.view", "iiot.telemetry.ingest",
+      "iiot.sensor.view", "iiot.sensor.edit", "iiot.sensor.calibrate",
+      "iiot.gateway.view", "iiot.buffer.view", "iiot.buffer.sync",
+      "iiot.condition.view", "iiot.condition.record",
+      "iiot.alert.view", "iiot.downtime.view", "iiot.dashboard.view",
     ],
   },
   {
@@ -2477,6 +2593,14 @@ export const DEMO_SUBJECTS: Subject[] = [
   { id: "u-cmms-tech", displayName: "تکنسین نت (آزمایشی)", roles: ["maintenance_technician"], projectIds: ["*"], plantIds: ["SITE-DEMO"], active: true, party: "contractor" },
   { id: "u-cmms-store", displayName: "انباردار نت (آزمایشی)", roles: ["maintenance_storekeeper"], projectIds: ["*"], plantIds: ["SITE-DEMO"], active: true, party: "contractor" },
   { id: "u-cmms-cbm", displayName: "تحلیل‌گر پایش وضعیت (آزمایشی)", roles: ["condition_monitoring_analyst"], projectIds: ["*"], plantIds: ["SITE-DEMO"], active: true, party: "contractor" },
+
+  /* بخش ۵ — کاربران آزمایشی پایش میدانی و تله‌متری حفاری. اینجا `plantIds`
+   * همان «دامنهٔ دکل» است (توضیحش در سرآییند server/iiotApi.js آمده). دامنهٔ
+   * RIG-DEMO عمداً از SITE-DEMO و PLANT-DEMO جداست تا دامنه‌بندی دکل واقعاً
+   * آزموده شود و دسترسی سایت نت به دادهٔ دکل نشت نکند. */
+  { id: "u-iiot-eng", displayName: "مهندس تله‌متری (آزمایشی)", roles: ["iiot_engineer"], projectIds: ["*"], plantIds: ["RIG-DEMO"], active: true, party: "contractor" },
+  { id: "u-iiot-driller", displayName: "سرپرست حفاری شیفت (آزمایشی)", roles: ["drilling_supervisor"], projectIds: ["*"], plantIds: ["RIG-DEMO"], active: true, party: "contractor" },
+  { id: "u-iiot-tech", displayName: "تکنسین ابزار دقیق (آزمایشی)", roles: ["field_iot_technician"], projectIds: ["*"], plantIds: ["RIG-DEMO"], active: true, party: "contractor" },
 ];
 
 export const DEMO_DELEGATIONS: Delegation[] = [

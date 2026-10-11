@@ -72,8 +72,9 @@ test("P10: کلید مجوزها با قالب domain.resource.action می‌خ�
    * رسید: maintenance_manager, maintenance_planner, reliability_engineer,
    * maintenance_engineer, maintenance_technician, maintenance_storekeeper,
    * condition_monitoring_analyst. همان الگویی که برای هفت نقش تولیدی (mfg)
-   * به کار رفت. */
-  assert.equal(ROLE_CATALOG.length, 35);
+   * به کار رفت. بخش ۵ (IIoT & DAS) سه نقش دیگر افزود — iiot_engineer،
+   * drilling_supervisor و field_iot_technician — و شمار به ۳۸ رسید. */
+  assert.equal(ROLE_CATALOG.length, 38);
 });
 
 /* ══════════════════ منابع و ابزارها ══════════════════ */
