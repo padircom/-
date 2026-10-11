@@ -1160,6 +1160,34 @@ test("MFG REST: ثبت توقف، ضایعات، دوباره‌کاری و گز
   assert.equal(dtReplay.body.data.Id, dtRes.body.data.Id);
   assert.equal(repo.tables.get("MfgDowntimeLog").length, 1);
 
+  // ۱-الف. توقف باز (FinishedAt خالی): DurationMinutes باید null ذخیره شود و ارسال دستی آن رد شود
+  const openDtBase = {
+    WorkCenterId: workCenter.Id,
+    OperationId: op10.Id,
+    ExecutionId: execId,
+    ResourceId: resource.Id,
+    StartedAt: "2026-10-05T10:00:00.000Z",
+    DowntimeType: "unplanned",
+    ReasonCode: "TOOL-BREAK",
+  };
+  const openDtManual = await call("POST", DOWNTIME, {
+    params: { plantId: "PLANT-DEMO" },
+    headers: { "x-user-id": "u-mfg-operator", "idempotency-key": "dt-open-manual" },
+    body: { ...openDtBase, DurationMinutes: 30 },
+  });
+  assert.equal(openDtManual.statusCode, 400);
+  assert.equal(repo.tables.get("MfgDowntimeLog").length, 1);
+
+  const openDtRes = await call("POST", DOWNTIME, {
+    params: { plantId: "PLANT-DEMO" },
+    headers: { "x-user-id": "u-mfg-operator", "idempotency-key": "dt-open-1" },
+    body: openDtBase,
+  });
+  assert.equal(openDtRes.statusCode, 201);
+  assert.equal(openDtRes.body.data.FinishedAt, null);
+  assert.equal(openDtRes.body.data.DurationMinutes, null);
+  assert.equal(repo.tables.get("MfgDowntimeLog").length, 2);
+
   // ۲. ثبت ضایعات بخشی بدون تغییر وضعیت کل عملیات
   const scrapRes = await call("POST", SCRAP, {
     params: { plantId: "PLANT-DEMO" },
@@ -1260,7 +1288,8 @@ test("MFG REST: ثبت توقف، ضایعات، دوباره‌کاری و گز
   assert.equal(operatorVariance.body.data.Executions.length, 1);
   assert.equal(operatorVariance.body.data.ScrapRecords.length, 1);
   assert.equal(operatorVariance.body.data.ReworkRecords.length, 1);
-  assert.equal(operatorVariance.body.data.DowntimeLogs.length, 1);
+  // توقف باز (بدون FinishedAt) در گزارش لاگ دیده می‌شود اما مدت آن (null → ۰) به DowntimeMinutes اضافه نمی‌شود
+  assert.equal(operatorVariance.body.data.DowntimeLogs.length, 2);
   assert.equal(operatorVariance.body.data.Cost, null);
   assert.equal(operatorVariance.body.data.CostRedacted, true);
 
