@@ -5172,6 +5172,9 @@ export function registerManufacturingRoutes(app, { repo, subjects, evaluate } = 
   app.post(`${ROOT}/downtime`, route("mfg.downtime.report", async ({ repo: r, req, plantId, subject }) => {
     const idempotencyKey = idempotencyKeyFrom(req);
     const body = req.body ?? {};
+    if (body.DurationMinutes !== undefined) {
+      throw bad("DurationMinutes", "DurationMinutes توسط سرور محاسبه می‌شود و نباید ارسال شود (برای توقف باز مقدار آن null ذخیره می‌شود)");
+    }
     assertOnlyKeys(body, new Set([
       "WorkCenterId",
       "OperationId",
@@ -5206,6 +5209,7 @@ export function registerManufacturingRoutes(app, { repo, subjects, evaluate } = 
     const reasonCode = text(body.ReasonCode, "ReasonCode", { required: true, max: 60, pattern: CODE_RE });
     const noteFa = text(body.NoteFa, "NoteFa", { max: 800 });
 
+    // توقف باز (FinishedAt خالی): DurationMinutes عمداً null می‌ماند؛ مدت آن تا زمان بسته‌شدن محاسبه می‌شود.
     let durationMinutes = null;
     if (finishedAt !== null) {
       const startMs = Date.parse(startedAt);
