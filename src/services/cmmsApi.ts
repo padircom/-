@@ -1,7 +1,7 @@
 /**
  * کلاینت یکپارچهٔ سامانهٔ نگهداری و تعمیرات (cmms-api-v1).
  *
- * پوشش ۱۰۵ مسیر REST در `server/cmmsApi.js` با دامنهٔ سایت (`siteId`)،
+ * پوشش ۱۲۱ مسیر REST در `server/cmmsApi.js` با دامنهٔ سایت (`siteId`)،
  * هدر هویت (`x-user-id`) و قفل خوش‌بینانه (`If-Match`).
  *
  * این فایل هیچ قاعدهٔ کسب‌وکاری ندارد: هر عددی که نشان می‌دهد از سرور
@@ -374,6 +374,24 @@ export const CmmsClient = {
   closeWorkOrder: (siteId: string, userId: string | null | undefined, workOrderId: string) =>
     cmmsFetch<CmmsWorkOrder>(siteId, `/work-orders/${encodeURIComponent(workOrderId)}/close`, { method: "POST", userId, body: {} }),
 
+  /* ── توقف/ادامهٔ دستورکار (Hold / Resume) ── */
+  /* علت از کاتالوگ بستهٔ سرور می‌آید؛ کلاینت فهرست را تکرار نمی‌کند تا دو
+   * منبع حقیقت نسازد. خطای ۴۰۰ سرور، فهرست مجاز را در `error.allowed` می‌دهد. */
+  holdWorkOrder: (siteId: string, userId: string | null | undefined, workOrderId: string, body: Record<string, unknown>) =>
+    cmmsFetch<{ workOrder: CmmsWorkOrder; hold: any; integration: any }>(
+      siteId, `/work-orders/${encodeURIComponent(workOrderId)}/hold`, { method: "POST", userId, body },
+    ),
+
+  resumeWorkOrder: (siteId: string, userId: string | null | undefined, workOrderId: string, body: Record<string, unknown> = {}) =>
+    cmmsFetch<{ workOrder: CmmsWorkOrder; hold: any; integration: any }>(
+      siteId, `/work-orders/${encodeURIComponent(workOrderId)}/resume`, { method: "POST", userId, body },
+    ),
+
+  listWorkOrderHolds: (siteId: string, userId: string | null | undefined, workOrderId: string) =>
+    cmmsFetch<{ holds: any[]; total: number; summary: any }>(
+      siteId, `/work-orders/${encodeURIComponent(workOrderId)}/holds`, { userId },
+    ),
+
   addWorkOrderTask: (siteId: string, userId: string | null | undefined, workOrderId: string, body: Record<string, unknown>) =>
     cmmsFetch<CmmsWorkOrderTask>(siteId, `/work-orders/${encodeURIComponent(workOrderId)}/tasks`, { method: "POST", userId, body }),
 
@@ -460,6 +478,56 @@ export const CmmsClient = {
 
   decideRecommendation: (siteId: string, userId: string | null | undefined, recommendationId: string, body: Record<string, unknown>) =>
     cmmsFetch<any>(siteId, `/ai/recommendations/${encodeURIComponent(recommendationId)}/decide`, { method: "POST", userId, body }),
+
+  /* ── RCFA تعاملی: ۵ چرا، استخوان‌ماهی، پارتو و CAPA ── */
+  listRcaCases: (siteId: string, userId?: string | null, query?: { status?: string; method?: string; assetId?: string; from?: string; to?: string; limit?: number; offset?: number }) =>
+    cmmsFetch<{ cases: any[]; total: number; byStatus: Record<string, number> }>(siteId, "/rca-cases", { userId, query }),
+
+  createRcaCase: (siteId: string, userId: string | null | undefined, body: Record<string, unknown>) =>
+    cmmsFetch<any>(siteId, "/rca-cases", { method: "POST", userId, body }),
+
+  addRcaEntry: (siteId: string, userId: string | null | undefined, caseId: string, body: Record<string, unknown>) =>
+    cmmsFetch<any>(siteId, `/rca-cases/${encodeURIComponent(caseId)}/entries`, { method: "POST", userId, body }),
+
+  getRcaCase: (siteId: string, userId: string | null | undefined, caseId: string) =>
+    cmmsFetch<{ case: any; entries: any[]; whys: any[]; causes: any[]; capas: any[]; analysis: any; labels: any }>(
+      siteId, `/rca-cases/${encodeURIComponent(caseId)}`, { userId },
+    ),
+
+  addRcaCause: (siteId: string, userId: string | null | undefined, caseId: string, body: Record<string, unknown>) =>
+    cmmsFetch<{ cause: any; fishbone: any }>(siteId, `/rca-cases/${encodeURIComponent(caseId)}/causes`, { method: "POST", userId, body }),
+
+  createCapa: (siteId: string, userId: string | null | undefined, caseId: string, body: Record<string, unknown>) =>
+    cmmsFetch<any>(siteId, `/rca-cases/${encodeURIComponent(caseId)}/capas`, { method: "POST", userId, body }),
+
+  implementCapa: (siteId: string, userId: string | null | undefined, caseId: string, capaId: string, body: Record<string, unknown>) =>
+    cmmsFetch<any>(siteId, `/rca-cases/${encodeURIComponent(caseId)}/capas/${encodeURIComponent(capaId)}/implement`, { method: "POST", userId, body }),
+
+  verifyCapa: (siteId: string, userId: string | null | undefined, caseId: string, capaId: string, body: Record<string, unknown>) =>
+    cmmsFetch<{ capa: any; readiness: any }>(siteId, `/rca-cases/${encodeURIComponent(caseId)}/capas/${encodeURIComponent(capaId)}/verify`, { method: "POST", userId, body }),
+
+  /* ارجاع اقدام به مالک انسانی یا تبدیل آن به دستورکار جدید. */
+  referCapa: (siteId: string, userId: string | null | undefined, caseId: string, capaId: string, body: Record<string, unknown>) =>
+    cmmsFetch<{ capa: any; workOrder: CmmsWorkOrder | null }>(siteId, `/rca-cases/${encodeURIComponent(caseId)}/capas/${encodeURIComponent(capaId)}/refer`, { method: "POST", userId, body }),
+
+  closeRcaCase: (siteId: string, userId: string | null | undefined, caseId: string, body: Record<string, unknown>) =>
+    cmmsFetch<{ case: any; readiness: any }>(siteId, `/rca-cases/${encodeURIComponent(caseId)}/close`, { method: "POST", userId, body }),
+
+  /* ── یکپارچگی بین‌بخشی: صف رویداد و بلوکهٔ نرم ظرفیت ── */
+  listIntegrationEvents: (siteId: string, userId?: string | null, query?: { status?: string; eventType?: string; targetSystem?: string; sourceTable?: string; sourceId?: string; from?: string; to?: string; limit?: number; offset?: number }) =>
+    cmmsFetch<{ events: any[]; total: number; summary: any }>(siteId, "/integration/events", { userId, query }),
+
+  dispatchIntegrationEvent: (siteId: string, userId: string | null | undefined, eventId: string) =>
+    cmmsFetch<{ event: any; dispatch: any }>(siteId, `/integration/events/${encodeURIComponent(eventId)}/dispatch`, { method: "POST", userId, body: {} }),
+
+  listCapacityBlocks: (siteId: string, userId?: string | null, query?: { status?: string; sourceType?: string; sourceRef?: string; workCenterRef?: string; from?: string; to?: string; limit?: number; offset?: number }) =>
+    cmmsFetch<{ blocks: any[]; total: number; summary: any }>(siteId, "/capacity-blocks", { userId, query }),
+
+  createCapacityBlock: (siteId: string, userId: string | null | undefined, body: Record<string, unknown>) =>
+    cmmsFetch<{ block: any; conflict: any; integration: any }>(siteId, "/capacity-blocks", { method: "POST", userId, body }),
+
+  releaseCapacityBlock: (siteId: string, userId: string | null | undefined, blockId: string, body: Record<string, unknown> = {}) =>
+    cmmsFetch<{ block: any; integration: any }>(siteId, `/capacity-blocks/${encodeURIComponent(blockId)}/release`, { method: "POST", userId, body }),
 
   /* ── داشبورد ── */
   getDashboard: (siteId: string, userId?: string | null) =>

@@ -64,6 +64,8 @@ const CMMS_SIDEBAR_ITEMS: Array<{ id: CmmsSubModuleId; icon: string; label: Bi }
   { id: "spares", icon: "⚙️", label: { fa: "انبار قطعات یدکی", en: "MRO Spare Parts" } },
   { id: "condition", icon: "🌡️", label: { fa: "پایش وضعیت و هشدارها", en: "Condition Monitoring & Alerts" } },
   { id: "analytics", icon: "📈", label: { fa: "قابلیت اطمینان و هزینهٔ چرخهٔ عمر", en: "Reliability & LCC Analytics" } },
+  { id: "rcfa", icon: "🧩", label: { fa: "تحلیل ریشه‌ای (RCFA)", en: "Root Cause Analysis (RCFA)" } },
+  { id: "integration", icon: "🔗", label: { fa: "یکپارچگی با تولید (MES)", en: "Cross-module Integration (MES)" } },
   { id: "ai", icon: "🤖", label: { fa: "هوش مصنوعی نت", en: "Maintenance AI" } },
 ];
 

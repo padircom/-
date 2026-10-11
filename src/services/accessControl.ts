@@ -679,6 +679,25 @@ export const PERMISSION_CATALOG: PermissionDef[] = [
   P("cmms.alert.view", "cmms", "مشاهدهٔ هشدارهای نت", "View maintenance alerts", "internal"),
   P("cmms.alert.ack", "cmms", "رسیدگی و تأیید هشدار نت", "Acknowledge maintenance alert", "confidential", true),
 
+  /* فاز ۲ — توقف/ادامهٔ دستورکار. توقف و ادامه دو اقتدار جدا هستند: یک نفر
+   * می‌تواند کار را بخواباند (مثلاً تکنسین در انتظار قطعه) ولی بازگرداندن
+   * آن به خط تولید یک تصمیم دیگر است. */
+  P("cmms.wo.hold", "cmms", "متوقف‌کردن دستورکار با ثبت علت", "Hold work order with reason", "internal", true),
+  P("cmms.wo.resume", "cmms", "ادامهٔ دستورکار متوقف‌شده", "Resume held work order", "internal", true),
+
+  /* فاز ۳ — CAPA روی خروجی RCFA. تدوین تحلیل با مهندس قابلیت اطمینان است؛
+   * ارجاع اقدام به دستورکار جدید علاوه بر این مجوز، مجوز ساخت دستورکار
+   * (`cmms.wo.create`) را هم می‌خواهد — دو گیت، دو مسئولیت. */
+  P("cmms.capa.create", "cmms", "ثبت اقدام اصلاحی و پیشگیرانه (CAPA)", "Create corrective and preventive action", "confidential", true),
+  P("cmms.capa.verify", "cmms", "تأیید اثربخشی اقدام اصلاحی", "Verify CAPA effectiveness", "restricted", true),
+
+  /* فاز ۴ — یکپارچگی بین‌بخشی. «دیدن صف رویداد» از «فرستادن آن به سامانهٔ
+   * بیرونی» جدا گیت شده؛ ارسال به MES یک نوشتن بیرونی است و ممیزی می‌خواهد. */
+  P("cmms.integration.view", "cmms", "مشاهدهٔ صف رویداد یکپارچگی", "View integration outbox", "internal"),
+  P("cmms.integration.dispatch", "cmms", "ارسال و پیگیری رویداد یکپارچگی به سامانهٔ بیرونی", "Dispatch integration events", "confidential", true),
+  P("cmms.capacity.view", "cmms", "مشاهدهٔ بلوکه‌سازی ظرفیت مراکز کاری", "View capacity blocks", "internal"),
+  P("cmms.capacity.block", "cmms", "رزرو و آزادسازی نرم ظرفیت مرکز کاری تولید", "Block and release work-center capacity", "confidential", true),
+
   /* لایهٔ هوش مصنوعی — «دیدن پیشنهاد»، «اجرای موتور» و «اعمال پیشنهاد»
    * سه اقتدار جدا هستند. اعمال پیشنهاد AI یک تصمیم انسانی است و عمداً
    * از اجرای موتور جدا گیت شده تا هیچ پیشنهاد خودکار بی‌تأیید اجرا نشود. */
@@ -1375,6 +1394,11 @@ export const ROLE_CATALOG: RoleDef[] = [
       "cmms.cost.view", "cmms.cost.post", "cmms.lcc.view", "cmms.lcc.edit",
       "cmms.kpi.view", "cmms.kpi.edit", "cmms.dashboard.view",
       "cmms.alert.view", "cmms.alert.ack",
+      /* مدیر نت مالک توقف/ادامه و یکپارچگی با MES است؛ ارسال رویداد به
+       * سامانهٔ تولید یک تصمیم سطح سایت است. */
+      "cmms.wo.hold", "cmms.wo.resume", "cmms.capa.create", "cmms.capa.verify",
+      "cmms.integration.view", "cmms.integration.dispatch",
+      "cmms.capacity.view", "cmms.capacity.block",
       "cmms.ai.view", "cmms.ai.run", "cmms.ai.apply",
       /* تدوین FMEA/RCM با مهندس قابلیت اطمینان است، نه مدیر؛ مدیر تصویب می‌کند.
        * این تفکیک دقیقاً همان چیزی است که در ممیزی ISO 55001 پرسیده می‌شود. */
@@ -1398,6 +1422,11 @@ export const ROLE_CATALOG: RoleDef[] = [
       "cmms.reliability.view", "cmms.oee.view", "cmms.kpi.view", "cmms.dashboard.view",
       "cmms.alert.view", "cmms.alert.ack", "cmms.condition.view",
       "cmms.cost.view", "cmms.lcc.view", "cmms.fmea.view", "cmms.rcm.view", "cmms.rca.view",
+      /* برنامه‌ریز کار را متوقف می‌کند (انتظار قطعه/پنجرهٔ تولید) و ظرفیت
+       * مرکز کاری را برای PM رزرو می‌کند؛ اما ادامهٔ کار و تأیید اثربخشی
+       * CAPA با او نیست. */
+      "cmms.wo.hold", "cmms.capa.create", "cmms.integration.view",
+      "cmms.capacity.view", "cmms.capacity.block",
       "cmms.ai.view", "cmms.ai.run",
       /* آزادسازی و بستن دستورکار با برنامه‌ریز نیست: او برنامه می‌سازد،
        * مدیر نت آزادسازی و قطعی‌کردن هزینه را انجام می‌دهد. */
@@ -1419,6 +1448,9 @@ export const ROLE_CATALOG: RoleDef[] = [
       "cmms.wo.view", "cmms.request.view", "cmms.cost.view", "cmms.lcc.view", "cmms.lcc.edit",
       "cmms.kpi.view", "cmms.kpi.edit", "cmms.dashboard.view", "cmms.alert.view",
       "cmms.document.view", "cmms.document.edit", "cmms.meter.view", "cmms.meter.read",
+      /* CAPA بخشی از خروجی RCFA است و صاحبش مهندس قابلیت اطمینان است؛
+       * اثربخشی را هم او تأیید می‌کند — ولی رویداد را به MES نمی‌فرستد. */
+      "cmms.capa.create", "cmms.capa.verify", "cmms.integration.view", "cmms.capacity.view",
       "cmms.ai.view", "cmms.ai.run", "cmms.ai.apply",
       /* تصویب FMEA/RCM با مدیر نت است نه تدوین‌کننده — تفکیک وظیفه. */
     ],
@@ -1446,6 +1478,8 @@ export const ROLE_CATALOG: RoleDef[] = [
       "cmms.condition.view", "cmms.condition.record", "cmms.condition.threshold",
       "cmms.reliability.view", "cmms.oee.view", "cmms.kpi.view", "cmms.dashboard.view",
       "cmms.alert.view", "cmms.alert.ack", "cmms.cost.view", "cmms.lcc.view",
+      /* مهندس نت کار را متوقف و ادامه می‌دهد؛ رزرو ظرفیت تولید با او نیست. */
+      "cmms.wo.hold", "cmms.wo.resume", "cmms.capa.create", "cmms.integration.view", "cmms.capacity.view",
       "cmms.ai.view", "cmms.ai.run", "cmms.workflow.view",
     ],
   },
@@ -1466,6 +1500,9 @@ export const ROLE_CATALOG: RoleDef[] = [
       "cmms.meter.view", "cmms.meter.read",
       "cmms.condition.view", "cmms.condition.record",
       "cmms.spare.view", "cmms.alert.view", "cmms.ai.view",
+      /* تکنسین در صحنهٔ کار کار را می‌خواباند و ادامه می‌دهد؛ اما ارجاع
+       * CAPA، رزرو ظرفیت و ارسال رویداد به MES با او نیست. */
+      "cmms.wo.hold", "cmms.wo.resume",
     ],
   },
   {

@@ -42,8 +42,15 @@ const note = (name = "NoteFa", len = 1000) => c(name, "text", { len });
 /** نسخهٔ مدل دامنه؛ برای ردیابی تغییر الگوریتم در خروجی‌های محاسباتی. */
 const modelVersion = () => c("ModelVersion", "text", { len: 40, comment: "cmms-v1" });
 
-/** جدول‌های منطقی CMMS — همه در ماژول مستقل `cmms` ثبت می‌شوند. */
-export const CMMS_TABLES: TableDef[] = [
+/**
+ * ۶۵ جدول پایه — بلوک مهاجرت ۰۰۵۷.
+ *
+ * این فهرست **یخ‌زده** است: مهاجرت ۰۰۵۷ از همین آرایه ساخته می‌شود و آزمون
+ * `cmms.schema.test.mjs` ترتیب ساخت والد/فرزند و افزودنی‌بودن آن را قفل
+ * می‌کند. جدول‌های تازهٔ فازهای بعدی در `CMMS_EXTENSION_TABLES` و در مهاجرت
+ * ۰۰۵۸ می‌آیند تا مهاجرت پایه دست‌نخورده بماند.
+ */
+export const CMMS_FOUNDATION_TABLES: TableDef[] = [
   /* ═══════════════ الف) رجیستری سایت و مکان ═══════════════ */
 
   /* 01 — سایت/مجتمع. همان کاری برای CMMS می‌کند که MfgPlant برای تولید:
@@ -1772,6 +1779,253 @@ export const CMMS_TABLES: TableDef[] = [
     ],
   },
 ];
+
+/* ═════════════════════════════════════════════════════════════════════════
+ * فاز ۲/۳/۴ بخش ۳ — جدول‌های تکمیلی (مهاجرت ۰۰۵۸)
+ *
+ * پنج جدول تازه که سه نیاز باقی‌ماندهٔ ماژول را می‌بندند:
+ *   ۱) CmmsWorkOrderHold   — چرخهٔ توقف/ادامهٔ دستورکار با علت مستند.
+ *   ۲) CmmsRcfaCause       — علل وزن‌دار برای نمودار استخوان‌ماهی و پارتو.
+ *   ۳) CmmsRcfaCapa        — اقدام اصلاحی/پیشگیرانه با مالک، سررسید و تأیید اثربخشی.
+ *   ۴) CmmsIntegrationEvent— صف خروجی رویداد بین‌بخشی (بدون کلید خارجی بیرونی).
+ *   ۵) CmmsCapacityBlock   — بلوکه‌سازی نرم ظرفیت مرکز کاری MES.
+ *
+ * همان سه قاعدهٔ بلوک پایه اینجا هم برقرار است: پیشوند `Cmms`، ماژول `cmms`،
+ * هیچ `foreignKeys` به جدول بیرونی (Mfg/Fin/Hrm/Scm) و هیچ CHECK وابسته به T-SQL.
+ *
+ * این بلوک **کاملاً افزودنی** است: هیچ جدول یا ستون موجودی را تغییر نمی‌دهد و
+ * هیچ ALTER TABLE در مهاجرت ۰۰۵۸ وجود ندارد.
+ * ═════════════════════════════════════════════════════════════════════════ */
+
+const CMMS_INTEGRATION_EVENT_TYPE_CHECK =
+  "EventType IN ('downtime.started','downtime.finished','downtime.reported','capacity.block.requested','capacity.block.released')";
+
+export const CMMS_EXTENSION_TABLES: TableDef[] = [
+  /* ۶۶ — صف خروجی رویداد. رویدادمحوری جای کلید خارجی بین‌بخشی را می‌گیرد:
+   * هر تغییر معنادار نت یک ردیف اینجا می‌گیرد و تحویل آن با HTTP به سامانهٔ
+   * مقصد ثبت می‌شود. `IdempotencyKey` تضمین می‌کند تحویل حداقل‌یک‌بار،
+   * دوباره‌کاری ایجاد نکند. */
+  {
+    name: "CmmsIntegrationEvent", module: "cmms",
+    title: { fa: "رویداد یکپارچگی بین‌بخشی (صف خروجی)", en: "Cross-module integration event (outbox)" }, pk: "Id",
+    columns: [
+      id(), site(),
+      req("EventType", "text", { len: 40, comment: "downtime.started|downtime.finished|downtime.reported|capacity.block.requested|capacity.block.released" }),
+      req("TargetSystem", "text", { len: 24, comment: "سامانهٔ مقصد رویداد — فعلاً فقط mes" }),
+      c("TargetRef", "text", { len: 120, comment: "ارجاع نرم به مرکز کاری/کارخانهٔ مقصد؛ عمداً بدون FK" }),
+      req("SourceTable", "text", { len: 60, comment: "جدول مبدأ رویداد در CMMS" }),
+      req("SourceId", "text", { len: 60, comment: "شناسهٔ ردیف مبدأ" }),
+      req("Contract", "text", { len: 40, default: "'cmms-mes-v1'", comment: "نسخهٔ قرارداد رویداد" }),
+      req("IdempotencyKey", "text", { len: 200 }),
+      c("CorrelationId", "text", { len: 80, comment: "زنجیرهٔ رویدادهای یک رخداد واحد (شروع→پایان)" }),
+      c("PayloadJson", "json"),
+      req("OccurredAt", "datetime"),
+      req("Status", "text", { len: 24, default: "'pending'", comment: "pending|published|acknowledged|failed|cancelled" }),
+      req("Attempts", "int", { default: "0" }),
+      c("LastAttemptAt", "datetime"), c("AcknowledgedAt", "datetime"),
+      c("ExternalRef", "text", { len: 120, comment: "شناسهٔ ردیف ساخته‌شده در سامانهٔ مقصد" }),
+      c("AckPayloadJson", "json", { comment: "پاسخ سامانهٔ مقصد؛ مثلاً مؤلفهٔ Availability به‌روزشده" }),
+      c("LastErrorCode", "text", { len: 60 }), c("LastErrorFa", "text", { len: 1000 }),
+      modelVersion(),
+    ],
+    indexes: [
+      { name: "UX_CmmsIntegrationEvent_Idem", columns: ["SiteId", "IdempotencyKey"], unique: true },
+      { name: "IX_CmmsIntegrationEvent_Status", columns: ["SiteId", "Status", "OccurredAt"] },
+      { name: "IX_CmmsIntegrationEvent_Source", columns: ["SiteId", "SourceTable", "SourceId"] },
+    ],
+    checks: [
+      ck("CK_CmmsIntegrationEvent_Type", CMMS_INTEGRATION_EVENT_TYPE_CHECK, ["EventType"]),
+      ck("CK_CmmsIntegrationEvent_Target", "TargetSystem IN ('mes')", ["TargetSystem"]),
+      ck("CK_CmmsIntegrationEvent_Status", "Status IN ('pending','published','acknowledged','failed','cancelled')", ["Status"]),
+      ck("CK_CmmsIntegrationEvent_Attempts", "Attempts >= 0", ["Attempts"]),
+    ],
+  },
+
+  /* ۶۷ — یک نوبت توقف دستورکار. هر نوبت یک ردیف می‌گیرد (نه یک ستون روی
+   * دستورکار) تا تاریخچه و علت‌یابی ممکن باشد و وضعیت پیش از توقف برای
+   * بازگرداندن دقیق در `resume` باقی بماند. */
+  {
+    name: "CmmsWorkOrderHold", module: "cmms",
+    title: { fa: "توقف دستورکار (Hold)", en: "Work order hold" }, pk: "Id",
+    columns: [
+      id(), site(), hardRef("WorkOrderId"),
+      req("HoldReasonCode", "text", { len: 40, comment: "کد علت از کاتالوگ CMMS_HOLD_REASONS" }),
+      req("HoldCategory", "text", { len: 24, comment: "material|labor|permit|schedule|safety|machine|process|other" }),
+      req("DowntimeType", "text", { len: 16, comment: "planned|unplanned — نگاشت به DowntimeType در MES" }),
+      req("PreviousStatus", "text", { len: 28, comment: "وضعیت پیش از توقف؛ مبنای بازگشت در resume" }),
+      req("HoldReasonFa", "text", { len: 1000 }),
+      c("NoteFa", "text", { len: 2000 }),
+      req("HeldAt", "datetime"), req("HeldBy", "text", { len: 60 }), c("ExpectedResumeAt", "datetime"),
+      req("HoldStatus", "text", { len: 16, default: "'open'", comment: "open|resumed|cancelled" }),
+      c("ResumedAt", "datetime"), c("ResumedBy", "text", { len: 60 }), c("ResumeNoteFa", "text", { len: 1000 }),
+      c("ResumedVia", "text", { len: 24, comment: "resume|start — مسیری که توقف از آن بسته شده" }),
+      c("DurationMinutes", "int"),
+      c("DowntimeEventId", "text", { len: 60, comment: "رویداد توقف ارسالی به MES" }),
+      c("WorkCenterRef", "text", { len: 60, comment: "ارجاع نرم به MfgWorkCenter در لحظهٔ توقف" }),
+      modelVersion(),
+    ],
+    indexes: [
+      { name: "IX_CmmsWorkOrderHold_Wo", columns: ["SiteId", "WorkOrderId", "HoldStatus"] },
+      { name: "IX_CmmsWorkOrderHold_Reason", columns: ["SiteId", "HoldReasonCode", "HeldAt"] },
+      { name: "IX_CmmsWorkOrderHold_Open", columns: ["SiteId", "HoldStatus", "HeldAt"] },
+    ],
+    foreignKeys: [
+      { column: "WorkOrderId", refTable: "CmmsWorkOrder", refColumn: "Id", onDelete: "CASCADE" },
+      { column: "DowntimeEventId", refTable: "CmmsIntegrationEvent", refColumn: "Id", onDelete: "SET NULL" },
+    ],
+    checks: [
+      ck("CK_CmmsWorkOrderHold_Category", "HoldCategory IN ('material','labor','permit','schedule','safety','machine','process','other')", ["HoldCategory"]),
+      ck("CK_CmmsWorkOrderHold_DowntimeType", "DowntimeType IN ('planned','unplanned')", ["DowntimeType"]),
+      ck("CK_CmmsWorkOrderHold_Status", "HoldStatus IN ('open','resumed','cancelled')", ["HoldStatus"]),
+      ck("CK_CmmsWorkOrderHold_Previous", "PreviousStatus IN ('draft','planned','scheduled','released','in-progress')", ["PreviousStatus"]),
+      ck("CK_CmmsWorkOrderHold_Open", "HoldStatus <> 'open' OR ResumedAt IS NULL", ["HoldStatus", "ResumedAt"]),
+      ck("CK_CmmsWorkOrderHold_Window", "ResumedAt IS NULL OR ResumedAt >= HeldAt", ["HeldAt", "ResumedAt"]),
+      ck("CK_CmmsWorkOrderHold_Duration", "DurationMinutes IS NULL OR DurationMinutes >= 0", ["DurationMinutes"]),
+    ],
+  },
+
+  /* ۶۸ — علت وزن‌دار. برخلاف ردیف‌های متنی زنجیرهٔ ۵ چرا، این جدول «عدد»
+   * دارد: فراوانی وقوع، شدت اثر و سختی شناسایی. همین عددها ورودی پارتو و
+   * اولویت‌بندی CAPA هستند. */
+  {
+    name: "CmmsRcfaCause", module: "cmms",
+    title: { fa: "علت تحلیل ریشه‌ای (استخوان‌ماهی/پارتو)", en: "RCFA cause (fishbone / pareto)" }, pk: "Id",
+    columns: [
+      id(), site(), hardRef("RcaCaseId"),
+      c("ParentCauseId", "text", { len: 60, comment: "علت والد در درخت علل (سلسله‌مراتب استخوان‌ماهی)" }),
+      req("Category", "text", { len: 24, comment: "شاخهٔ ۶M: man|machine|method|material|measurement|environment" }),
+      req("StatementFa", "text", { len: 1200 }),
+      req("OccurrenceCount", "int", { default: "0", comment: "فراوانی مشاهده‌شده — مبنای پارتو" }),
+      req("ImpactScore", "int", { default: "5", comment: "شدت اثر ۱..۱۰ (منطق Severity در IEC 60812)" }),
+      c("DetectionScore", "int", { comment: "سختی شناسایی ۱..۱۰ (منطق Detection در FMEA)" }),
+      req("IsRootCause", "bool", { default: "0" }),
+      c("EvidenceRef", "text", { len: 600 }),
+      c("VerifiedBy", "text", { len: 60 }), c("VerifiedAt", "datetime"),
+      c("SourceEntryId", "text", { len: 60, comment: "ردیف زنجیرهٔ ۵ چرا که این علت از آن استخراج شده" }),
+      modelVersion(),
+    ],
+    indexes: [
+      { name: "IX_CmmsRcfaCause_Case", columns: ["SiteId", "RcaCaseId", "Category"] },
+      { name: "IX_CmmsRcfaCause_Root", columns: ["SiteId", "RcaCaseId", "IsRootCause"] },
+      { name: "IX_CmmsRcfaCause_Branch", columns: ["SiteId", "ParentCauseId"] },
+    ],
+    foreignKeys: [
+      { column: "RcaCaseId", refTable: "CmmsRcaCase", refColumn: "Id", onDelete: "CASCADE" },
+      { column: "ParentCauseId", refTable: "CmmsRcfaCause", refColumn: "Id", onDelete: "NO ACTION" },
+    ],
+    checks: [
+      ck("CK_CmmsRcfaCause_Category", "Category IN ('man','machine','method','material','measurement','environment')", ["Category"]),
+      ck("CK_CmmsRcfaCause_Occurrence", "OccurrenceCount >= 0", ["OccurrenceCount"]),
+      ck("CK_CmmsRcfaCause_Impact", "ImpactScore >= 1 AND ImpactScore <= 10", ["ImpactScore"]),
+      ck("CK_CmmsRcfaCause_Detection", "DetectionScore IS NULL OR (DetectionScore >= 1 AND DetectionScore <= 10)", ["DetectionScore"]),
+      ck("CK_CmmsRcfaCause_Self", "ParentCauseId IS NULL OR ParentCauseId <> Id", ["ParentCauseId"]),
+    ],
+  },
+
+  /* ۶۹ — اقدام اصلاحی/پیشگیرانه. سه چیز اینجا قابل ممیزی است: مالک مشخص،
+   * ارجاع به دستورکار (وقتی اقدام اجرایی است) و تأیید اثربخشی. */
+  {
+    name: "CmmsRcfaCapa", module: "cmms",
+    title: { fa: "اقدام اصلاحی و پیشگیرانه (CAPA)", en: "Corrective and preventive action (CAPA)" }, pk: "Id",
+    columns: [
+      id(), site(), hardRef("RcaCaseId"),
+      c("RootCauseId", "text", { len: 60, comment: "ارجاع به CmmsRcfaCause" }),
+      c("RootCauseRef", "text", { len: 60, comment: "ارجاع به ردیف زنجیرهٔ ۵ چرا (CmmsRcaEntry)" }),
+      c("RootCauseFa", "text", { len: 1200 }),
+      req("ActionType", "text", { len: 24, comment: "containment|corrective|preventive|detection|systemic" }),
+      req("StatementFa", "text", { len: 1500 }),
+      req("Priority", "int", { default: "3" }),
+      req("Status", "text", { len: 24, default: "'draft'", comment: "draft|assigned|in-progress|implemented|verified|closed|cancelled" }),
+      c("OwnerUserId", "text", { len: 60, comment: "ارجاع نرم به کاربر مسئول؛ بدون FK به User" }),
+      c("OwnerNameFa", "text", { len: 120 }),
+      req("DueOn", "date"),
+      c("ImplementedAt", "datetime"), c("ImplementedBy", "text", { len: 60 }),
+      c("ImplementationEvidenceRef", "text", { len: 600 }),
+      c("VerificationResult", "text", { len: 24, comment: "effective|partially-effective|ineffective" }),
+      c("VerifiedAt", "datetime"), c("VerifiedBy", "text", { len: 60 }), c("VerificationNoteFa", "text", { len: 1000 }),
+      c("ReferralKind", "text", { len: 24, comment: "work-order|owner|vendor|procedure|training" }),
+      c("WorkOrderId", "text", { len: 60, comment: "دستورکار ساخته‌شده از این اقدام" }),
+      req("AutoCreatedWorkOrder", "bool", { default: "0" }),
+      c("EffectivenessVerifiedOn", "date"),
+      modelVersion(),
+    ],
+    indexes: [
+      { name: "IX_CmmsRcfaCapa_Case", columns: ["SiteId", "RcaCaseId", "Status"] },
+      { name: "IX_CmmsRcfaCapa_Owner", columns: ["OwnerUserId", "DueOn"] },
+      { name: "IX_CmmsRcfaCapa_WorkOrder", columns: ["WorkOrderId"] },
+    ],
+    foreignKeys: [
+      { column: "RcaCaseId", refTable: "CmmsRcaCase", refColumn: "Id", onDelete: "CASCADE" },
+      { column: "RootCauseId", refTable: "CmmsRcfaCause", refColumn: "Id", onDelete: "SET NULL" },
+      { column: "WorkOrderId", refTable: "CmmsWorkOrder", refColumn: "Id", onDelete: "SET NULL" },
+    ],
+    checks: [
+      ck("CK_CmmsRcfaCapa_Action", "ActionType IN ('containment','corrective','preventive','detection','systemic')", ["ActionType"]),
+      ck("CK_CmmsRcfaCapa_Status", "Status IN ('draft','assigned','in-progress','implemented','verified','closed','cancelled')", ["Status"]),
+      ck("CK_CmmsRcfaCapa_Verify", "VerificationResult IS NULL OR VerificationResult IN ('effective','partially-effective','ineffective')", ["VerificationResult"]),
+      ck("CK_CmmsRcfaCapa_Referral", "ReferralKind IS NULL OR ReferralKind IN ('work-order','owner','vendor','procedure','training')", ["ReferralKind"]),
+      ck("CK_CmmsRcfaCapa_Priority", "Priority BETWEEN 1 AND 5", ["Priority"]),
+      ck("CK_CmmsRcfaCapa_Done", "Status NOT IN ('implemented','verified','closed') OR ImplementedAt IS NOT NULL", ["Status", "ImplementedAt"]),
+      ck("CK_CmmsRcfaCapa_Verified", "Status <> 'verified' OR VerificationResult IS NOT NULL", ["Status", "VerificationResult"]),
+    ],
+  },
+
+  /* ۷۰ — بلوکه‌سازی نرم ظرفیت مرکز کاری. «نرم» یعنی: درخواست رزرو پنجرهٔ
+   * زمان‌بندی به MES می‌رود، MES آن را به‌صورت توقف برنامه‌ریزی‌شده ثبت می‌کند
+   * و موتور زمان‌بندی همان پنجره را رزروشده می‌بیند؛ اما هیچ قید پایگاه‌داده‌ای
+   * بین دو ماژول ساخته نمی‌شود. */
+  {
+    name: "CmmsCapacityBlock", module: "cmms",
+    title: { fa: "بلوکه‌سازی نرم ظرفیت مرکز کاری", en: "Soft work-center capacity block" }, pk: "Id",
+    columns: [
+      id(), site(), code("BlockNo"),
+      c("PlantRef", "text", { len: 60, comment: "ارجاع نرم به MfgPlant؛ عمداً بدون FK" }),
+      req("WorkCenterRef", "text", { len: 60, comment: "ارجاع نرم به MfgWorkCenter — کلید یکپارچگی زمان‌بندی" }),
+      req("SourceType", "text", { len: 24, comment: "pm-schedule|work-order|shutdown|manual" }),
+      c("SourceRef", "text", { len: 60, comment: "شناسهٔ برنامهٔ PM یا دستورکار مبدأ" }),
+      req("WindowStart", "datetime"), req("WindowEnd", "datetime"),
+      req("ReservedMinutes", "int", { default: "0" }),
+      req("Status", "text", { len: 24, default: "'requested'", comment: "requested|active|released|rejected|cancelled" }),
+      req("ReasonFa", "text", { len: 1000 }),
+      req("IsSoft", "bool", { default: "1", comment: "نرم: رزرو زمان‌بندی، نه قید سخت پایگاه‌داده" }),
+      req("RequestedAt", "datetime"), req("RequestedBy", "text", { len: 60 }), c("AcknowledgedAt", "datetime"),
+      c("ExternalRef", "text", { len: 120, comment: "شناسهٔ ردیف توقف برنامه‌ریزی‌شده در MES" }),
+      c("IntegrationEventId", "text", { len: 60 }),
+      c("ReleasedAt", "datetime"), c("ReleasedBy", "text", { len: 60 }), c("ReleaseReasonFa", "text", { len: 1000 }),
+      modelVersion(),
+    ],
+    indexes: [
+      { name: "UX_CmmsCapacityBlock_No", columns: ["SiteId", "BlockNo"], unique: true },
+      { name: "IX_CmmsCapacityBlock_Wc", columns: ["SiteId", "WorkCenterRef", "WindowStart"] },
+      { name: "IX_CmmsCapacityBlock_Status", columns: ["SiteId", "Status", "WindowStart"] },
+    ],
+    foreignKeys: [
+      { column: "IntegrationEventId", refTable: "CmmsIntegrationEvent", refColumn: "Id", onDelete: "SET NULL" },
+    ],
+    checks: [
+      ck("CK_CmmsCapacityBlock_Source", "SourceType IN ('pm-schedule','work-order','shutdown','manual')", ["SourceType"]),
+      ck("CK_CmmsCapacityBlock_Status", "Status IN ('requested','active','released','rejected','cancelled')", ["Status"]),
+      ck("CK_CmmsCapacityBlock_Window", "WindowEnd > WindowStart", ["WindowStart", "WindowEnd"]),
+      ck("CK_CmmsCapacityBlock_Minutes", "ReservedMinutes >= 0", ["ReservedMinutes"]),
+      ck("CK_CmmsCapacityBlock_Release", "Status <> 'released' OR ReleasedAt IS NOT NULL", ["Status", "ReleasedAt"]),
+    ],
+  },
+];
+
+/**
+ * فهرست کامل جدول‌های CMMS: پایهٔ ۰۰۵۷ + تکمیلی ۰۰۵۸.
+ *
+ * ترتیب مهم است — مهاجرت‌ها همین ترتیب را پیمایش می‌کنند و کلید خارجی درون
+ * `CREATE TABLE` می‌آید، پس والد باید پیش از فرزند باشد. جدول‌های تکمیلی
+ * فقط به جدول‌های پایه یا به یکدیگر ارجاع می‌دهند.
+ */
+export const CMMS_TABLES: TableDef[] = [...CMMS_FOUNDATION_TABLES, ...CMMS_EXTENSION_TABLES];
+
+/** نام جدول‌های پایه — قفل آزمون اسکیمای ۰۰۵۷. */
+export const CMMS_FOUNDATION_TABLE_NAMES: string[] = CMMS_FOUNDATION_TABLES.map((t) => t.name);
+
+/** نام جدول‌های تکمیلی — قفل آزمون اسکیمای ۰۰۵۸. */
+export const CMMS_EXTENSION_TABLE_NAMES: string[] = CMMS_EXTENSION_TABLES.map((t) => t.name);
 
 /** نام همهٔ جدول‌های CMMS — برای آزمون‌ها و تولید مهاجرت. */
 export const CMMS_TABLE_NAMES: string[] = CMMS_TABLES.map((t) => t.name);

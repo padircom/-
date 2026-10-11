@@ -13,7 +13,7 @@
  */
 
 import { MANUFACTURING_TABLES } from "./manufacturingSchema";
-import { CMMS_TABLES } from "./cmmsSchema";
+import { CMMS_EXTENSION_TABLES, CMMS_FOUNDATION_TABLES, CMMS_TABLES } from "./cmmsSchema";
 
 export const PERSISTENCE_VERSION = "sql-v1";
 
@@ -6328,7 +6328,26 @@ export const MIGRATIONS: Migration[] = [
    * برای MfgPlant در ۰۰۵۵ صریحاً پذیرفته شد. */
   {
     version: "0057", name: "cmms_asset_maintenance_foundation",
-    statements: CMMS_TABLES.flatMap((table) => [
+    statements: CMMS_FOUNDATION_TABLES.flatMap((table) => [
+      tableDdl(table, "mssql"),
+      ...(table.indexes ?? []).map((index) => indexDdl(table, index, "mssql")),
+    ]),
+  },
+
+  /* بخش ۳ — تکمیل ماژول CMMS: توقف/ادامهٔ دستورکار، RCFA ساخت‌یافته و
+   * یکپارچگی بین‌بخشی با MES.
+   *
+   * این مهاجرت هم **کاملاً افزودنی** است: فقط CREATE TABLE و CREATE INDEX
+   * دارد؛ هیچ ALTER یا DROP روی جدول موجود انجام نمی‌دهد. جدول‌های پایه در
+   * ۰۰۵۷ ساخته شده‌اند و فرزندان این بلوک به آن‌ها ارجاع می‌دهند.
+   *
+   * استقلال ارجاعی همان‌جا برقرار است: هیچ FK به جدول Mfg/Fin/Hrm/Scm
+   * ساخته نمی‌شود. پیوند با MES از راه ارجاع متنی
+   * (`CmmsCapacityBlock.WorkCenterRef`, `CmmsAsset.MfgWorkCenterId`) و صف
+   * رویداد (`CmmsIntegrationEvent`) انجام می‌شود. */
+  {
+    version: "0058", name: "cmms_hold_rcfa_and_cross_module_integration",
+    statements: CMMS_EXTENSION_TABLES.flatMap((table) => [
       tableDdl(table, "mssql"),
       ...(table.indexes ?? []).map((index) => indexDdl(table, index, "mssql")),
     ]),

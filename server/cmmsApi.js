@@ -50,6 +50,37 @@ import {
   validateWorkflowDefinition,
   advanceWorkflow,
   CmmsWorkflowError,
+  /* فاز ۴ — نگه‌داشت دستورکار، RCFA و یکپارچگی بین‌بخشی */
+  CMMS_HOLD_REASONS,
+  planWorkOrderTransition,
+  validateHoldRequest,
+  computeHoldMinutes,
+  summarizeHoldHistory,
+  CMMS_INTEGRATION_CONTRACT,
+  CMMS_CAPACITY_BLOCK_SOURCES,
+  buildIdempotencyKey,
+  buildDowntimeEvent,
+  buildCapacityBlockEvent,
+  reservedMinutesBetween,
+  detectCapacityBlockConflicts,
+  summarizeOutbox,
+  holdReasonByCode,
+  CMMS_HOLD_CATEGORIES,
+  CMMS_INTEGRATION_EVENT_TYPES,
+  RCFA_CASE_STATUSES,
+  RCFA_METHODS,
+  FISHBONE_CATEGORIES,
+  FISHBONE_CATEGORY_LABELS,
+  CAPA_ACTION_TYPES,
+  CAPA_VERIFICATION_RESULTS,
+  capaDueDate,
+  buildWhyQuestion,
+  nextWhyLevel,
+  evaluateFiveWhyChain,
+  validateWhyEntry,
+  computeParetoAnalysis,
+  summarizeFishbone,
+  evaluateRcfaReadiness,
 } from "./cmmsLogic.js";
 
 import {
@@ -68,6 +99,10 @@ const CODE_RE = /^[A-Za-z0-9][A-Za-z0-9._/-]{0,59}$/;
 /** کمینهٔ طول بارکد؛ چون CHECK وابسته به T-SQL در اسکیمای مشترک نگذاشتیم. */
 const MIN_BARCODE_LEN = 3;
 
+/** فهرست بستهٔ کدهای علت توقف — برای راهنمای خطای ورودی نادرست. */
+const CMMS_HOLD_REASON_CODES = CMMS_HOLD_REASONS.map((item) => item.code);
+const CMMS_INTEGRATION_EVENT_TYPE_LIST = [...CMMS_INTEGRATION_EVENT_TYPES];
+
 /* ═══════════════════════ خطاها ═══════════════════════ */
 
 export class CmmsApiError extends Error {
@@ -80,7 +115,7 @@ export class CmmsApiError extends Error {
   }
 }
 
-const bad = (field, message) => new CmmsApiError(400, "CMMS_VALIDATION_FAILED", message, { field });
+const bad = (field, message, extra = {}) => new CmmsApiError(400, "CMMS_VALIDATION_FAILED", message, { field, ...extra });
 const notFound = () => new CmmsApiError(404, "CMMS_NOT_FOUND", "رکورد در سایت جاری یافت نشد");
 const conflict = (code, message) => new CmmsApiError(409, code, message);
 const businessRule = (code, message, details = {}) => new CmmsApiError(422, code, message, details);
@@ -253,6 +288,290 @@ async function childrenOf(tx, table, siteId, parentColumn, parentId) {
   return listInSite(tx, table, siteId, { where: [{ column: parentColumn, op: "eq", value: parentId }] });
 }
 
+
+/**
+ * نگاشت «نوع توقف» CMMS به واژگان دوگانهٔ MES (`planned|unplanned`).
+ *
+ * MES فقط دو نوع می‌شناسد چون OEE تنها به همین دو تفکیک نیاز دارد: توقف
+ * برنامه‌ریزی‌شده از زمان تولید برنامه‌ریزی‌شده کم می‌شود و توقف ناخواسته از
+ * زمان عملیاتی. `no-demand` اینجا برنامه‌ریزی‌شده شمرده می‌شود تا نبود سفارش
+ * به‌عنوان افت دسترس‌پذیری ثبت نشود.
+ */
+function downtimeTypeForMes(type) {
+  return type === "planned" || type === "no-demand" ? "planned" : "unplanned";
+}
+
+/** ارجاع نرم تجهیز به مرکز کاری تولید — کلید شروع و پایان یکپارچگی. */
+function workCenterRefOfAsset(asset) {
+  const ref = String(asset?.MfgWorkCenterId ?? "").trim();
+  return ref.length ? ref : null;
+}
+
+/** پنجرهٔ برنامه‌ریزی‌شدهٔ دستورکار؛ بدون هر دو سر پنجره بلوکه‌سازی معنا ندارد. */
+function plannedWindowOf(workOrder) {
+  const start = workOrder?.PlannedStartAt ?? null;
+  const end = workOrder?.PlannedFinishAt ?? null;
+  if (!start || !end || String(end) <= String(start)) return null;
+  return { start, end };
+}
+
+/* ═══════════ یکپارچگی بین‌بخشی — توابع مشترک (فاز ۴) ═══════════ */
+
+/**
+ * قرارداد حمل‌ونقل رویداد.
+ *
+ * صف خروجی، رویداد را «ثبت» می‌کند و تحویل آن کار یک حمل‌ونقل است. در استقرار
+ * یک‌فرآیندی، سرور پل درون‌فرآیندی MES را تزریق می‌کند (`server/index.js`)؛ در
+ * استقرار جدا، همان قرارداد روی HTTP پیاده می‌شود. اگر هیچ حمل‌ونقلی تزریق نشده
+ * باشد، رویداد در صف می‌ماند و «تحویل‌شده» گزارش نمی‌شود — هیچ موفقیتی بدون
+ * شاهد ثبت نمی‌شود.
+ */
+function normalizeIntegrationTransport(transport) {
+  if (transport && typeof transport.deliver === "function") return transport;
+  return null;
+}
+
+/** باز کردن رکورد توقف باز یک دستورکار — بیش از یکی مجاز نیست. */
+async function openHoldOf(tx, siteId, workOrderId) {
+  return tx.findOne("CmmsWorkOrderHold", [
+    { column: "SiteId", op: "eq", value: siteId },
+    { column: "WorkOrderId", op: "eq", value: workOrderId },
+    { column: "HoldStatus", op: "eq", value: "open" },
+  ]);
+}
+
+/**
+ * ثبت رویداد در صف خروجی.
+ *
+ * کلید تکرارناپذیری پیش از ساخت بررسی می‌شود تا یک رخداد واحد (مثلاً
+ * تلاش دوبارهٔ کاربر) دو رویداد نسازد. رکورد موجود برگردانده می‌شود، نه
+ * رکورد تازه — این «idempotent append» است.
+ */
+async function enqueueIntegrationEvent(tx, { req, siteId, draft, sourceTable, sourceId, correlationId }) {
+  if (!draft) return null;
+  const existing = await tx.findOne("CmmsIntegrationEvent", [
+    { column: "SiteId", op: "eq", value: siteId },
+    { column: "IdempotencyKey", op: "eq", value: draft.idempotencyKey },
+  ]);
+  if (existing) return existing;
+  return tx.create("CmmsIntegrationEvent", {
+    SiteId: siteId,
+    EventType: draft.eventType,
+    TargetSystem: draft.targetSystem,
+    TargetRef: draft.targetRef ?? null,
+    SourceTable: sourceTable,
+    SourceId: sourceId,
+    Contract: draft.payload?.contract ?? CMMS_INTEGRATION_CONTRACT,
+    IdempotencyKey: draft.idempotencyKey,
+    CorrelationId: correlationId ?? null,
+    PayloadJson: draft.payload ?? null,
+    OccurredAt: draft.occurredAt ?? new Date().toISOString(),
+    Status: "pending",
+    Attempts: 0,
+    LastAttemptAt: null,
+    AcknowledgedAt: null,
+    ExternalRef: null,
+    AckPayloadJson: null,
+    LastErrorCode: null,
+    LastErrorFa: null,
+    ModelVersion: CMMS_MODEL_VERSION,
+  }, requestActor(req));
+}
+
+/**
+ * تحویل یک رویداد به سامانهٔ مقصد.
+ *
+ * رویدادی که پیش‌تر `acknowledged` شده دوباره فرستاده نمی‌شود (نتایج MES
+ * با همان `ExternalRef` برگردانده می‌شود)؛ تحویل حداقل‌یک‌بار نباید به
+ * ثبت چندبارهٔ توقف منجر شود.
+ */
+async function deliverIntegrationEvent(repo, req, event, transport) {
+  if (!event) return { delivered: false, eventId: null, status: "pending", error: { code: "CMMS_INTEGRATION_EVENT_MISSING", messageFa: "رویداد یافت نشد" } };
+  if (event.Status === "acknowledged") {
+    return {
+      delivered: true,
+      eventId: event.Id,
+      status: event.Status,
+      externalRef: event.ExternalRef ?? null,
+      ack: event.AckPayloadJson ?? null,
+      replayed: true,
+    };
+  }
+  if (event.Status === "cancelled") {
+    return { delivered: false, eventId: event.Id, status: event.Status, error: { code: "CMMS_INTEGRATION_CANCELLED", messageFa: "این رویداد لغو شده است" } };
+  }
+
+  const attemptedAt = new Date().toISOString();
+  const attempts = Number(event.Attempts ?? 0) + 1;
+  let outcome = null;
+  let failure = null;
+
+  if (!transport) {
+    failure = { code: "CMMS_INTEGRATION_NO_TRANSPORT", messageFa: "حمل‌ونقل یکپارچگی تنظیم نشده است؛ رویداد در صف ماند" };
+  } else {
+    try {
+      outcome = await transport.deliver({
+        eventId: event.Id,
+        eventType: event.EventType,
+        targetSystem: event.TargetSystem,
+        targetRef: event.TargetRef ?? null,
+        contract: event.Contract ?? CMMS_INTEGRATION_CONTRACT,
+        idempotencyKey: event.IdempotencyKey,
+        correlationId: event.CorrelationId ?? null,
+        occurredAt: event.OccurredAt,
+        payload: event.PayloadJson ?? null,
+      });
+      if (!outcome || outcome.ok !== true) {
+        failure = {
+          code: outcome?.code ?? "CMMS_INTEGRATION_DELIVERY_FAILED",
+          messageFa: outcome?.messageFa ?? "سامانهٔ مقصد رویداد را نپذیرفت",
+        };
+      }
+    } catch (err) {
+      failure = {
+        code: typeof err?.code === "string" && err.code ? err.code : "CMMS_INTEGRATION_DELIVERY_FAILED",
+        messageFa: err?.message ?? "خطای نامشخص در تحویل رویداد",
+      };
+    }
+  }
+
+  const patch = failure
+    ? { Status: "failed", Attempts: attempts, LastAttemptAt: attemptedAt, LastErrorCode: failure.code, LastErrorFa: failure.messageFa }
+    : {
+      Status: "acknowledged", Attempts: attempts, LastAttemptAt: attemptedAt, AcknowledgedAt: attemptedAt,
+      ExternalRef: outcome?.externalRef ?? null, AckPayloadJson: outcome?.ack ?? null,
+      LastErrorCode: null, LastErrorFa: null,
+    };
+  await repo.patch("CmmsIntegrationEvent", event.Id, patch, requestActor(req), event.RowVersion);
+  const updated = await repo.get("CmmsIntegrationEvent", event.Id);
+  return failure
+    ? { delivered: false, eventId: event.Id, status: "failed", attempts, error: failure, event: updated ?? { ...event, ...patch } }
+    : { delivered: true, eventId: event.Id, status: "acknowledged", attempts, externalRef: outcome?.externalRef ?? null, ack: outcome?.ack ?? null, event: updated ?? { ...event, ...patch } };
+}
+
+/** تحویل پس از تراکنش: خطای حمل‌ونقل نباید فرمان اصلی را شکست دهد. */
+async function deliverOutbox(repo, req, event, transport) {
+  /* بدون حمل‌ونقل، تلاشی صورت نمی‌گیرد و رویداد «در انتظار» می‌ماند؛ در غیر
+   * این‌صورت هر رویداد صرفاً به‌خاطر تنظیم‌نشدن اتصال «ناموفق» ثبت می‌شد. */
+  if (!event || !transport) return null;
+  try {
+    const fresh = await repo.get("CmmsIntegrationEvent", event.Id);
+    return await deliverIntegrationEvent(repo, req, fresh ?? event, transport);
+  } catch (err) {
+    return {
+      delivered: false, eventId: event.Id, status: "failed",
+      error: { code: "CMMS_INTEGRATION_DISPATCH_ERROR", messageFa: err?.message ?? "خطای نامشخص در تحویل رویداد" },
+    };
+  }
+}
+
+/**
+ * رزرو خودکار ظرفیت یک دستورکارِ آزادشده.
+ *
+ * این نقطهٔ «زمان‌بندی/اجرای PM» است: لحظه‌ای که دستورکار آزاد می‌شود، پنجرهٔ
+ * برنامه‌ریزی‌شده‌اش در MES به‌صورت توقف برنامه‌ریزی‌شده رزرو می‌شود تا موتور
+ * زمان‌بندی، ظرفیت ماشین را برای کار تولیدی خالی نبیند. اگر تجهیز ارجاع نرم
+ * به مرکز کاری نداشته باشد، هیچ رزروی ساخته نمی‌شود — بی‌دلیل ظرفیت نمی‌خوابد.
+ */
+async function reserveWorkOrderCapacity(tx, req, siteId, workOrder) {
+  const window = plannedWindowOf(workOrder);
+  if (!window) return { created: false, reason: "no-window", events: [] };
+  const asset = workOrder.AssetId ? await tx.get("CmmsAsset", workOrder.AssetId) : null;
+  const workCenterRef = workCenterRefOfAsset(asset);
+  if (!workCenterRef) return { created: false, reason: "no-work-center", events: [] };
+  const refs = [workOrder.Id, workOrder.PmScheduleId].filter(Boolean);
+  const existing = await listInSite(tx, "CmmsCapacityBlock", siteId, {
+    where: [
+      { column: "SourceRef", op: "in", value: refs },
+      { column: "Status", op: "in", value: ["requested", "active"] },
+    ],
+  });
+  if (existing.length > 0) return { created: false, reason: "already-blocked", events: [] };
+  const sourceType = workOrder.PmScheduleId ? "pm-schedule" : "work-order";
+  const result = await createCapacityBlockRecord(tx, {
+    req, siteId, workCenterRef, plantRef: null, sourceType,
+    sourceRef: workOrder.PmScheduleId ?? workOrder.Id,
+    windowStart: window.start, windowEnd: window.end,
+    reasonFa: `رزرو ظرفیت برای دستورکار ${workOrder.WorkOrderNo ?? workOrder.Id}`,
+    reservedMinutes: null,
+  });
+  return { created: true, block: result.row, conflict: result.conflict, events: result.event ? [result.event] : [] };
+}
+
+/**
+ * آزادسازی رزروهای نرم یک دستورکار — هنگام اتمام، بستن یا لغو.
+ *
+ * رزرو بدون آزادسازی یعنی ظرفیت مرده: ماشین رزرو می‌ماند در حالی که کار تمام
+ * شده است. پس هر مسیر پایانی، رزروهای باز را برمی‌گرداند.
+ */
+async function releaseWorkOrderCapacityBlocks(tx, req, siteId, workOrder, reasonFa) {
+  const refs = [workOrder.Id, workOrder.PmScheduleId].filter(Boolean);
+  if (refs.length === 0) return { released: 0, events: [] };
+  const rows = await listInSite(tx, "CmmsCapacityBlock", siteId, {
+    where: [
+      { column: "SourceRef", op: "in", value: refs },
+      { column: "Status", op: "in", value: ["requested", "active"] },
+    ],
+  });
+  const events = [];
+  const now = new Date().toISOString();
+  for (const block of rows) {
+    await tx.patch("CmmsCapacityBlock", block.Id, {
+      Status: "released", ReleasedAt: now, ReleasedBy: requestActor(req), ReleaseReasonFa: reasonFa,
+    }, requestActor(req), block.RowVersion);
+    const fresh = await tx.get("CmmsCapacityBlock", block.Id);
+    const event = await enqueueIntegrationEvent(tx, {
+      req, siteId, draft: buildCapacityBlockEvent(fresh, "released"),
+      sourceTable: "CmmsCapacityBlock", sourceId: block.Id,
+    });
+    if (event) await tx.patch("CmmsCapacityBlock", block.Id, { IntegrationEventId: event.Id }, requestActor(req), fresh.RowVersion);
+    if (event) events.push(event);
+  }
+  return { released: rows.length, events };
+}
+
+/**
+ * ساخت بلوکهٔ نرم ظرفیت برای یک پنجرهٔ زمان‌بندی.
+ *
+ * «نرم» یعنی رزرو در موتور زمان‌بندی MES ثبت می‌شود، نه قید پایگاه‌داده‌ای
+ * بین دو ماژول. هشدار هم‌پوشانی برمی‌گردد اما مانع ثبت نیست — دو دستورکار
+ * می‌توانند روی یک مرکز کاری هم‌پوشانی جزئی داشته باشند و تصمیم انسانی است.
+ */
+async function createCapacityBlockRecord(tx, {
+  req, siteId, workCenterRef, plantRef, sourceType, sourceRef, windowStart, windowEnd,
+  reasonFa, reservedMinutes,
+}) {
+  const minutes = reservedMinutes ?? reservedMinutesBetween(windowStart, windowEnd);
+  if (minutes == null) throw bad("WindowStart", "پنجرهٔ بلوکه‌سازی ظرفیت نامعتبر است");
+  if (!workCenterRef) throw businessRule("CMMS_CAPACITY_NO_WORK_CENTER", "مرکز کاری مقصد مشخص نشده است");
+  const seq = (await countInSite(tx, "CmmsCapacityBlock", siteId)) + 1;
+  const BlockNo = `CB-${todayUtc().replace(/-/g, "")}-${String(seq).padStart(4, "0")}`;
+  const activeRows = await listInSite(tx, "CmmsCapacityBlock", siteId, {
+    where: [{ column: "WorkCenterRef", op: "eq", value: workCenterRef }, { column: "Status", op: "in", value: ["requested", "active"] }],
+  });
+  const conflict = detectCapacityBlockConflicts(activeRows, {
+    Id: "__candidate__", WorkCenterRef: workCenterRef, WindowStart: windowStart, WindowEnd: windowEnd,
+  });
+  const now = new Date().toISOString();
+  const row = await tx.create("CmmsCapacityBlock", {
+    SiteId: siteId, BlockNo, PlantRef: plantRef ?? null, WorkCenterRef: workCenterRef,
+    SourceType: sourceType, SourceRef: sourceRef ?? null,
+    WindowStart: windowStart, WindowEnd: windowEnd, ReservedMinutes: minutes,
+    Status: "requested", ReasonFa: reasonFa,
+    IsSoft: true, RequestedAt: now, RequestedBy: requestActor(req),
+    AcknowledgedAt: null, ExternalRef: null, IntegrationEventId: null,
+    ReleasedAt: null, ReleasedBy: null, ReleaseReasonFa: null,
+    ModelVersion: CMMS_MODEL_VERSION,
+  }, requestActor(req));
+  const event = await enqueueIntegrationEvent(tx, {
+    req, siteId, draft: buildCapacityBlockEvent(row, "requested"),
+    sourceTable: "CmmsCapacityBlock", sourceId: row.Id,
+  });
+  if (event) await tx.patch("CmmsCapacityBlock", row.Id, { IntegrationEventId: event.Id }, requestActor(req), row.RowVersion);
+  return { row: await tx.get("CmmsCapacityBlock", row.Id), event, conflict };
+}
+
+
 /* ═══════════════════════ فهرست مسیرهای پیاده‌شده ═══════════════════════ */
 
 export const CMMS_IMPLEMENTED_ROUTES = Object.freeze([
@@ -384,11 +703,33 @@ export const CMMS_IMPLEMENTED_ROUTES = Object.freeze([
 
   /* داشبورد */
   "GET /api/cmms/sites/:siteId/dashboard",
+
+  /* فاز ۴ — توقف/ادامهٔ دستورکار */
+  "POST /api/cmms/sites/:siteId/work-orders/:workOrderId/hold",
+  "POST /api/cmms/sites/:siteId/work-orders/:workOrderId/resume",
+  "GET /api/cmms/sites/:siteId/work-orders/:workOrderId/holds",
+
+  /* فاز ۴ — RCFA تعاملی: ۵ چرا، استخوان‌ماهی، پارتو، CAPA و بستن */
+  "GET /api/cmms/sites/:siteId/rca-cases",
+  "GET /api/cmms/sites/:siteId/rca-cases/:caseId",
+  "POST /api/cmms/sites/:siteId/rca-cases/:caseId/causes",
+  "POST /api/cmms/sites/:siteId/rca-cases/:caseId/capas",
+  "POST /api/cmms/sites/:siteId/rca-cases/:caseId/capas/:capaId/implement",
+  "POST /api/cmms/sites/:siteId/rca-cases/:caseId/capas/:capaId/verify",
+  "POST /api/cmms/sites/:siteId/rca-cases/:caseId/capas/:capaId/refer",
+  "POST /api/cmms/sites/:siteId/rca-cases/:caseId/close",
+
+  /* فاز ۴ — یکپارچگی بین‌بخشی: صف رویداد و بلوکهٔ نرم ظرفیت */
+  "GET /api/cmms/sites/:siteId/integration/events",
+  "POST /api/cmms/sites/:siteId/integration/events/:eventId/dispatch",
+  "GET /api/cmms/sites/:siteId/capacity-blocks",
+  "POST /api/cmms/sites/:siteId/capacity-blocks",
+  "POST /api/cmms/sites/:siteId/capacity-blocks/:blockId/release",
 ]);
 
 /* ═══════════════════════ ثبت مسیرها ═══════════════════════ */
 
-export function registerCmmsRoutes(app, { repo, subjects, evaluate, subjectPermissions } = {}) {
+export function registerCmmsRoutes(app, { repo, subjects, evaluate, subjectPermissions, integrationTransport } = {}) {
   if (!app || typeof app.get !== "function" || typeof app.post !== "function") {
     throw new TypeError("Express-compatible app is required");
   }
@@ -400,6 +741,11 @@ export function registerCmmsRoutes(app, { repo, subjects, evaluate, subjectPermi
   }
 
   const getRepo = async () => (typeof repo === "function" ? repo() : repo);
+  /* حمل‌ونقل یکپارچگی، اگر تزریق شده باشد، رویدادها را به سامانهٔ مقصد می‌رساند.
+   * نبودنش خطا نیست: رویداد در صف می‌ماند و «تحویل‌نشده» گزارش می‌شود — هیچ
+   * موفقیتی بدون شاهد ثبت نمی‌شود. استقرار تک‌فرآیندی، پل درون‌فرآیندی MES را
+   * در `server/index.js` تزریق می‌کند. */
+  const transport = normalizeIntegrationTransport(integrationTransport);
 
   const fail = (req, res, err) => {
     if (err instanceof CmmsApiError) {
@@ -1628,7 +1974,14 @@ export function registerCmmsRoutes(app, { repo, subjects, evaluate, subjectPermi
     return lineNo;
   };
 
-  const woTransition = (action, fromStatuses, toStatus, permission, extraPatch = {}) =>
+  /**
+   * گذار سادهٔ وضعیت دستورکار.
+   *
+   * `options.after` قلاب پس از گذار است (رزرو/آزادسازی ظرفیت و بستن توقف باز)
+   * و رویدادهای یکپارچگیِ ساخته‌شده را برمی‌گرداند تا بیرون از تراکنش به MES
+   * تحویل شوند — تحویل شبکه‌ای هرگز نباید گذار را عقب بیندازد یا بشکند.
+   */
+  const woTransition = (action, fromStatuses, toStatus, permission, extraPatch = {}, options = {}) =>
     route(permission, async ({ repo: r, req, siteId }) => {
       const workOrderId = id(req.params.workOrderId, "workOrderId");
       const existing = await mustFind(r, "CmmsWorkOrder", workOrderId, siteId);
@@ -1646,21 +1999,72 @@ export function registerCmmsRoutes(app, { repo, subjects, evaluate, subjectPermi
       const materializedTasks = action === "release"
         ? await materializeChecklist(r, siteId, existing, requestActor(req))
         : 0;
-      await r.patch("CmmsWorkOrder", workOrderId, patch, requestActor(req), existing.RowVersion);
+      const hooks = options.after ? await options.after(r, { req, siteId, existing, now }) : null;
+      await r.patch("CmmsWorkOrder", workOrderId, { ...patch, ...(hooks?.patch ?? {}) }, requestActor(req), existing.RowVersion);
+      for (const event of hooks?.events ?? []) await deliverOutbox(r, req, event, transport);
       await writeAudit(r, req, `CMMS_WORK_ORDER_${action.toUpperCase()}`, "CmmsWorkOrder", workOrderId, permission, {
         from: existing.Status, to: toStatus, materializedTasks,
+        capacityCreated: hooks?.capacity?.created ?? null,
       });
       return r.get("CmmsWorkOrder", workOrderId);
     });
 
   app.post(`${ROOT}/work-orders/:workOrderId/release`,
-    woTransition("release", ["draft", "planned", "scheduled"], "released", "cmms.wo.release"));
+    woTransition("release", ["draft", "planned", "scheduled"], "released", "cmms.wo.release", {}, {
+      /* «زمان‌بندی/اجرای PM» همین‌جاست: پنجرهٔ دستورکار آزادشده در MES رزرو می‌شود. */
+      after: async (r, { req, siteId, existing }) => {
+        const capacity = await reserveWorkOrderCapacity(r, req, siteId, existing);
+        return { capacity, events: capacity.events };
+      },
+    }));
 
   app.post(`${ROOT}/work-orders/:workOrderId/start`,
-    woTransition("start", ["released", "on-hold"], "in-progress", "cmms.wo.execute"));
+    woTransition("start", ["released", "on-hold"], "in-progress", "cmms.wo.execute", {}, {
+      /* `start` از وضعیت on-hold یعنی بستن توقف باز با مسیر «شروع»، نه «ادامه»؛
+       * ردیف توقف باید در هر دو مسیر بسته شود وگرنه توقف باز بی‌پایان می‌ماند. */
+      after: async (r, { req, siteId, existing }) => {
+        const openHold = await openHoldOf(r, siteId, existing.Id);
+        if (!openHold) return {};
+        const now = new Date().toISOString();
+        const durationMinutes = computeHoldMinutes(openHold.HeldAt, now);
+        await r.patch("CmmsWorkOrderHold", openHold.Id, {
+          HoldStatus: "resumed", ResumedAt: now, ResumedBy: requestActor(req),
+          ResumedVia: "start", DurationMinutes: durationMinutes,
+        }, requestActor(req), openHold.RowVersion);
+        const events = [];
+        if (openHold.DowntimeEventId) {
+          const asset = existing.AssetId ? await r.get("CmmsAsset", existing.AssetId) : null;
+          if (asset) {
+            events.push(await enqueueIntegrationEvent(r, {
+              req, siteId,
+              draft: buildDowntimeEvent({
+                eventType: "downtime.finished", siteId, asset,
+                sourceTable: "CmmsWorkOrderHold", sourceId: openHold.Id, revision: 2,
+                startedAt: openHold.HeldAt, finishedAt: now, durationMinutes,
+                downtimeType: openHold.DowntimeType, reasonCode: openHold.HoldReasonCode, reasonFa: openHold.HoldReasonFa,
+                productionImpact: existing.ProductionImpact, workOrderRef: existing.WorkOrderNo,
+              }),
+              sourceTable: "CmmsWorkOrderHold", sourceId: openHold.Id, correlationId: openHold.Id,
+            }));
+          }
+        }
+        return { events: events.filter(Boolean) };
+      },
+    }));
 
   app.post(`${ROOT}/work-orders/:workOrderId/cancel`,
-    woTransition("cancel", ["draft", "planned", "scheduled", "released", "on-hold"], "cancelled", "cmms.wo.cancel"));
+    woTransition("cancel", ["draft", "planned", "scheduled", "released", "on-hold"], "cancelled", "cmms.wo.cancel", {}, {
+      after: async (r, { req, siteId, existing }) => {
+        const openHold = await openHoldOf(r, siteId, existing.Id);
+        if (openHold) {
+          await r.patch("CmmsWorkOrderHold", openHold.Id, {
+            HoldStatus: "cancelled", ResumedBy: requestActor(req),
+          }, requestActor(req), openHold.RowVersion);
+        }
+        const capacity = await releaseWorkOrderCapacityBlocks(r, req, siteId, existing, "دستورکار لغو شد");
+        return { events: capacity.events };
+      },
+    }));
 
   /* اتمام و بستن عمداً از الگوی سادهٔ بالا جدا نوشته شده‌اند، چون هر دو
    * قانون کسب‌وکاری دارند که در یک helper مشترک پنهان می‌شد. */
@@ -1686,7 +2090,12 @@ export function registerCmmsRoutes(app, { repo, subjects, evaluate, subjectPermi
       Status: "completed", CompletedAt: now, CompletedById: requestActor(req),
       ActualHours: actualHours, IsAssetDown: false,
     }, requestActor(req), existing.RowVersion);
-    await writeAudit(r, req, "CMMS_WORK_ORDER_COMPLETED", "CmmsWorkOrder", workOrderId, "cmms.wo.complete", { actualHours, taskCount: tasks.length });
+    /* کار تمام شد؛ ظرفیت رزروشدهٔ پس از اتمام باید برگردد. */
+    const capacity = await releaseWorkOrderCapacityBlocks(r, req, siteId, existing, "دستورکار اتمام یافت");
+    for (const event of capacity.events) await deliverOutbox(r, req, event, transport);
+    await writeAudit(r, req, "CMMS_WORK_ORDER_COMPLETED", "CmmsWorkOrder", workOrderId, "cmms.wo.complete", {
+      actualHours, taskCount: tasks.length, capacityReleased: capacity.released,
+    });
     return r.get("CmmsWorkOrder", workOrderId);
   }));
 
@@ -1702,7 +2111,11 @@ export function registerCmmsRoutes(app, { repo, subjects, evaluate, subjectPermi
     await r.patch("CmmsWorkOrder", workOrderId, {
       Status: "closed", ClosedAt: now, ClosedById: requestActor(req), ActualCost: actualCost,
     }, requestActor(req), existing.RowVersion);
-    await writeAudit(r, req, "CMMS_WORK_ORDER_CLOSED", "CmmsWorkOrder", workOrderId, "cmms.wo.close", { actualCost, costLines: costs.length });
+    const capacity = await releaseWorkOrderCapacityBlocks(r, req, siteId, existing, "دستورکار بسته شد");
+    for (const event of capacity.events) await deliverOutbox(r, req, event, transport);
+    await writeAudit(r, req, "CMMS_WORK_ORDER_CLOSED", "CmmsWorkOrder", workOrderId, "cmms.wo.close", {
+      actualCost, costLines: costs.length, capacityReleased: capacity.released,
+    });
     return r.get("CmmsWorkOrder", workOrderId);
   }));
 
@@ -1987,7 +2400,7 @@ export function registerCmmsRoutes(app, { repo, subjects, evaluate, subjectPermi
       "ProductionImpact", "CustomersAffected", "WorkOrderId", "FailureRecordId", "ReasonFa",
     ]));
     const assetId = id(req.body.AssetId, "AssetId");
-    await mustFind(r, "CmmsAsset", assetId, siteId);
+    const asset = await mustFind(r, "CmmsAsset", assetId, siteId);
     const StartedAt = isoDateTime(req.body.StartedAt, "StartedAt", { required: true });
     const EndedAt = isoDateTime(req.body.EndedAt, "EndedAt");
     if (EndedAt && EndedAt < StartedAt) throw bad("EndedAt", "پایان توقف پیش از شروع آن است");
@@ -2012,7 +2425,25 @@ export function registerCmmsRoutes(app, { repo, subjects, evaluate, subjectPermi
       FailureRecordId: req.body.FailureRecordId === undefined ? null : id(req.body.FailureRecordId, "FailureRecordId"),
       ReasonFa: text(req.body.ReasonFa, "ReasonFa", { max: 1000 }),
     }, requestActor(req));
-    await writeAudit(r, req, "CMMS_DOWNTIME_REPORTED", "CmmsDowntimeRecord", row.Id, "cmms.downtime.report", { assetId });
+    /* توقف ثبت‌شده بی‌فاصله به MES می‌رود تا Availability در زمان نزدیک به واقعیت
+     * به‌روز شود؛ نگاشت نوع توقف در `downtimeTypeForMes` است. */
+    const event = await enqueueIntegrationEvent(r, {
+      req, siteId,
+      draft: buildDowntimeEvent({
+        eventType: "downtime.reported", siteId, asset,
+        sourceTable: "CmmsDowntimeRecord", sourceId: row.Id,
+        startedAt: row.StartedAt, finishedAt: row.EndedAt,
+        durationMinutes: row.DurationHours == null ? null : Math.round(row.DurationHours * 60),
+        downtimeType: downtimeTypeForMes(row.DowntimeType),
+        reasonCode: null, reasonFa: row.ReasonFa,
+        productionImpact: row.ProductionImpact, workOrderRef: row.WorkOrderId,
+      }),
+      sourceTable: "CmmsDowntimeRecord", sourceId: row.Id,
+    });
+    await deliverOutbox(r, req, event, transport);
+    await writeAudit(r, req, "CMMS_DOWNTIME_REPORTED", "CmmsDowntimeRecord", row.Id, "cmms.downtime.report", {
+      assetId, integrationEventId: event?.Id ?? null,
+    });
     return row;
   }, 201));
 
@@ -3477,6 +3908,611 @@ export function registerCmmsRoutes(app, { repo, subjects, evaluate, subjectPermi
     });
     return r.get("CmmsAiRecommendation", recommendationId);
   }));
+
+  /* ═══════════════ ۱۱-الف. توقف و ادامهٔ دستورکار (Hold/Resume) ═══════════════
+   *
+   * چرا جدول جداگانه و نه یک ستون روی دستورکار: یک دستورکار می‌تواند در طول
+   * عمر خود چند بار بخوابد و هر بار علت متفاوتی داشته باشد. بدون تاریخچه،
+   * گزارش «چرا دستورکارها می‌خوابند» و بازگشت دقیق به وضعیت پیش از توقف
+   * ممکن نیست. قواعد گذار در `cmmsDomain.ts` است تا دو سمت از یک منبع
+   * حقیقت بخوانند.
+   */
+
+  app.post(`${ROOT}/work-orders/:workOrderId/hold`, route("cmms.wo.hold", async ({ repo: r, req, siteId }) => {
+    assertOnlyKeys(req.body, new Set(["HoldReasonCode", "HoldReasonFa", "NoteFa", "ExpectedResumeAt"]));
+    const workOrderId = id(req.params.workOrderId, "workOrderId");
+    const HoldReasonCode = text(req.body.HoldReasonCode, "HoldReasonCode", { required: true, max: 40 });
+    const reason = holdReasonByCode(HoldReasonCode);
+    if (!reason) {
+      throw bad("HoldReasonCode", `کد علت «${HoldReasonCode}» در کاتالوگ علل توقف نیست`, {
+        allowed: CMMS_HOLD_REASON_CODES,
+      });
+    }
+    const ExpectedResumeAt = isoDateTime(req.body.ExpectedResumeAt, "ExpectedResumeAt");
+    const HoldReasonFa = text(req.body.HoldReasonFa, "HoldReasonFa", { max: 1000 }) ?? reason.fa;
+    const NoteFa = text(req.body.NoteFa, "NoteFa", { max: 2000 });
+    /* شرح فقط از `NoteFa` می‌آید، نه از عنوان علت؛ وگرنه علل `requiresNote`
+     * با متن پیش‌فرض کاتالوگ «مستند» شمرده می‌شدند و قاعده بی‌اثر می‌شد. */
+    const issues = validateHoldRequest({ reasonCode: HoldReasonCode, noteFa: NoteFa, expectedResumeAt: ExpectedResumeAt });
+    if (issues.length) throw bad("HoldReasonCode", issues.join("؛ "), { issues });
+
+    const result = await r.transaction(async (tx) => {
+      const workOrder = await mustFind(tx, "CmmsWorkOrder", workOrderId, siteId);
+      const openHold = await openHoldOf(tx, siteId, workOrderId);
+      const plan = planWorkOrderTransition({ action: "hold", currentStatus: workOrder.Status, openHold });
+      if (!plan.allowed) {
+        throw businessRule(plan.code ?? "CMMS_WO_STATE", plan.messageFa ?? "توقف دستورکار در این وضعیت مجاز نیست", {
+          currentStatus: workOrder.Status, allowedFrom: plan.allowedFrom, openHoldId: openHold?.Id ?? null,
+        });
+      }
+      const now = new Date().toISOString();
+      const asset = workOrder.AssetId ? await tx.get("CmmsAsset", workOrder.AssetId) : null;
+      const hold = await tx.create("CmmsWorkOrderHold", {
+        SiteId: siteId, WorkOrderId: workOrderId,
+        HoldReasonCode: reason.code, HoldCategory: reason.category, DowntimeType: reason.downtimeType,
+        PreviousStatus: workOrder.Status, HoldReasonFa, NoteFa,
+        HeldAt: now, HeldBy: requestActor(req), ExpectedResumeAt,
+        HoldStatus: "open", ResumedAt: null, ResumedBy: null, ResumeNoteFa: null, ResumedVia: null,
+        DurationMinutes: null, DowntimeEventId: null, WorkCenterRef: workCenterRefOfAsset(asset),
+        ModelVersion: CMMS_MODEL_VERSION,
+      }, requestActor(req));
+      await tx.patch("CmmsWorkOrder", workOrderId, { Status: "on-hold" }, requestActor(req), workOrder.RowVersion);
+      /* توقف دستورکار یعنی ماشین ایستاده است؛ رویداد توقف همین‌جا زاده می‌شود
+       * تا MES بتواند مؤلفهٔ Availability را در زمان نزدیک به واقعیت به‌روز کند. */
+      const event = asset ? await enqueueIntegrationEvent(tx, {
+        req, siteId,
+        draft: buildDowntimeEvent({
+          eventType: "downtime.started", siteId, asset,
+          sourceTable: "CmmsWorkOrderHold", sourceId: hold.Id,
+          startedAt: now, finishedAt: null, downtimeType: reason.downtimeType,
+          reasonCode: reason.code, reasonFa: HoldReasonFa,
+          productionImpact: workOrder.ProductionImpact, workOrderRef: workOrder.WorkOrderNo,
+        }),
+        sourceTable: "CmmsWorkOrderHold", sourceId: hold.Id, correlationId: hold.Id,
+      }) : null;
+      if (event) await tx.patch("CmmsWorkOrderHold", hold.Id, { DowntimeEventId: event.Id }, requestActor(req), hold.RowVersion);
+      await createAuditRecord(tx, req, "CMMS_WORK_ORDER_HELD", "CmmsWorkOrderHold", hold.Id, "cmms.wo.hold", {
+        workOrderId, reasonCode: reason.code, from: workOrder.Status, downtimeEventId: event?.Id ?? null,
+      });
+      return { hold: await tx.get("CmmsWorkOrderHold", hold.Id), event };
+    });
+    return {
+      workOrder: await r.get("CmmsWorkOrder", workOrderId),
+      hold: result.hold,
+      integration: await deliverOutbox(r, req, result.event, transport),
+    };
+  }));
+
+  app.post(`${ROOT}/work-orders/:workOrderId/resume`, route("cmms.wo.resume", async ({ repo: r, req, siteId }) => {
+    assertOnlyKeys(req.body, new Set(["ResumeNoteFa", "NoteFa"]));
+    const workOrderId = id(req.params.workOrderId, "workOrderId");
+    const ResumeNoteFa = text(req.body.ResumeNoteFa ?? req.body.NoteFa, "ResumeNoteFa", { max: 1000 });
+
+    const result = await r.transaction(async (tx) => {
+      const workOrder = await mustFind(tx, "CmmsWorkOrder", workOrderId, siteId);
+      const openHold = await openHoldOf(tx, siteId, workOrderId);
+      const plan = planWorkOrderTransition({ action: "resume", currentStatus: workOrder.Status, openHold });
+      if (!plan.allowed) {
+        throw businessRule(plan.code ?? "CMMS_WO_STATE", plan.messageFa ?? "ادامهٔ دستورکار در این وضعیت مجاز نیست", {
+          currentStatus: workOrder.Status, allowedFrom: plan.allowedFrom, openHoldId: openHold?.Id ?? null,
+        });
+      }
+      const now = new Date().toISOString();
+      const durationMinutes = computeHoldMinutes(openHold.HeldAt, now);
+      await tx.patch("CmmsWorkOrderHold", openHold.Id, {
+        HoldStatus: "resumed", ResumedAt: now, ResumedBy: requestActor(req), ResumeNoteFa,
+        ResumedVia: "resume", DurationMinutes: durationMinutes,
+      }, requestActor(req), openHold.RowVersion);
+      await tx.patch("CmmsWorkOrder", workOrderId, { Status: plan.to }, requestActor(req), workOrder.RowVersion);
+      /* رویداد پایان فقط اگر رویداد شروع واقعاً ساخته شده باشد؛ وگرنه MES یک
+       * توقف بی‌شروع می‌گیرد و پنجرهٔ Availability خراب می‌شود. */
+      let event = null;
+      if (openHold.DowntimeEventId) {
+        const asset = workOrder.AssetId ? await tx.get("CmmsAsset", workOrder.AssetId) : null;
+        if (asset) {
+          event = await enqueueIntegrationEvent(tx, {
+            req, siteId,
+            draft: buildDowntimeEvent({
+              eventType: "downtime.finished", siteId, asset,
+              sourceTable: "CmmsWorkOrderHold", sourceId: openHold.Id, revision: 2,
+              startedAt: openHold.HeldAt, finishedAt: now, durationMinutes,
+              downtimeType: openHold.DowntimeType, reasonCode: openHold.HoldReasonCode, reasonFa: openHold.HoldReasonFa,
+              productionImpact: workOrder.ProductionImpact, workOrderRef: workOrder.WorkOrderNo,
+            }),
+            sourceTable: "CmmsWorkOrderHold", sourceId: openHold.Id, correlationId: openHold.Id,
+          });
+        }
+      }
+      await createAuditRecord(tx, req, "CMMS_WORK_ORDER_RESUMED", "CmmsWorkOrderHold", openHold.Id, "cmms.wo.resume", {
+        workOrderId, to: plan.to, durationMinutes, downtimeEventId: event?.Id ?? null,
+      });
+      return { hold: await tx.get("CmmsWorkOrderHold", openHold.Id), event };
+    });
+    return {
+      workOrder: await r.get("CmmsWorkOrder", workOrderId),
+      hold: result.hold,
+      integration: await deliverOutbox(r, req, result.event, transport),
+    };
+  }));
+
+  app.get(`${ROOT}/work-orders/:workOrderId/holds`, route("cmms.wo.view", async ({ repo: r, req, siteId }) => {
+    const workOrderId = id(req.params.workOrderId, "workOrderId");
+    await mustFind(r, "CmmsWorkOrder", workOrderId, siteId);
+    const holds = await childrenOf(r, "CmmsWorkOrderHold", siteId, "WorkOrderId", workOrderId);
+    const ordered = [...holds].sort((left, right) => String(left.HeldAt).localeCompare(String(right.HeldAt)));
+    return { holds: ordered, total: ordered.length, summary: summarizeHoldHistory(ordered) };
+  }));
+
+  /* ═══════════════ ۱۱-ب. RCFA تعاملی — ۵ چرا، استخوان‌ماهی، پارتو و CAPA ═══════════════
+   *
+   * مسیرهای ساخت پرونده و افزودن ردیف از قبل هست؛ اینجا «تحلیل» اضافه می‌شود:
+   * خواندن ساختارمند زنجیرهٔ چرا، علل وزن‌دار برای پارتو، CAPA با مالک و
+   * سررسید، ارجاع به مالک یا تبدیل به دستورکار، و بستنی که فقط با شاهد
+   * مستند (ریشهٔ علامت‌خورده + CAPA تأییدشده) انجام می‌شود.
+   */
+
+  app.get(`${ROOT}/rca-cases`, route("cmms.rca.view", async ({ repo: r, req, siteId }) => {
+    assertOnlyQueryKeys(req.query, new Set(["status", "method", "assetId", "from", "to", "limit", "offset"]));
+    const where = [];
+    if (req.query.status !== undefined) {
+      where.push({ column: "Status", op: "eq", value: oneOf(req.query.status, "status", [...RCFA_CASE_STATUSES], { required: true }) });
+    }
+    if (req.query.method !== undefined) {
+      where.push({ column: "Method", op: "eq", value: oneOf(req.query.method, "method", [...RCFA_METHODS, "apollo", "fault-tree"], { required: true }) });
+    }
+    if (req.query.assetId !== undefined) where.push({ column: "AssetId", op: "eq", value: id(req.query.assetId, "assetId") });
+    if (req.query.from !== undefined) where.push({ column: "OpenedOn", op: "gte", value: isoDate(req.query.from, "from", { required: true }) });
+    if (req.query.to !== undefined) where.push({ column: "OpenedOn", op: "lte", value: isoDate(req.query.to, "to", { required: true }) });
+    const rows = await listInSite(r, "CmmsRcaCase", siteId, {
+      where, orderBy: [{ column: "OpenedOn", dir: "desc" }],
+      limit: pageNumber(req.query.limit, "limit", 100, 500),
+      offset: pageNumber(req.query.offset, "offset", 0, 1_000_000),
+    });
+    const byStatus = rows.reduce((acc, row) => { acc[row.Status] = (acc[row.Status] ?? 0) + 1; return acc; }, {});
+    return { cases: rows, total: rows.length, byStatus };
+  }));
+
+  app.get(`${ROOT}/rca-cases/:caseId`, route("cmms.rca.view", async ({ repo: r, req, siteId }) => {
+    const caseId = id(req.params.caseId, "caseId");
+    const rcaCase = await mustFind(r, "CmmsRcaCase", caseId, siteId);
+    const [entries, causes, capas] = await Promise.all([
+      childrenOf(r, "CmmsRcaEntry", siteId, "RcaCaseId", caseId),
+      childrenOf(r, "CmmsRcfaCause", siteId, "RcaCaseId", caseId),
+      childrenOf(r, "CmmsRcfaCapa", siteId, "RcaCaseId", caseId),
+    ]);
+    const bySequence = (left, right) => Number(left.Sequence ?? 0) - Number(right.Sequence ?? 0);
+    const whys = entries.filter((entry) => entry.EntryType === "why").sort(bySequence);
+    const whyChain = evaluateFiveWhyChain(whys);
+    const fishbone = summarizeFishbone(causes);
+    /* پارتو وزنی است: علت کم‌تکرار با اثر ایمنی بالا نباید از فهرست حیاتی
+     * بیفتد. علل با فراوانی صفر وارد تحلیل نمی‌شوند چون پارتو معنایی ندارند. */
+    const pareto = computeParetoAnalysis(
+      causes.filter((cause) => Number(cause.OccurrenceCount ?? 0) > 0)
+        .map((cause) => ({ key: cause.Id, labelFa: cause.StatementFa, value: Number(cause.OccurrenceCount ?? 0), impactScore: cause.ImpactScore ?? 1 })),
+      { mode: "weighted" },
+    );
+    const readiness = evaluateRcfaReadiness({
+      status: rcaCase.Status, rootCauseFa: rcaCase.RootCauseFa, method: rcaCase.Method, whys, causes, capas,
+    });
+    return {
+      case: rcaCase, entries, whys, causes, capas,
+      analysis: {
+        whyChain,
+        fishbone,
+        pareto,
+        readiness,
+        nextWhy: buildWhyQuestion(whys[whys.length - 1]?.StatementFa ?? null, nextWhyLevel(whys)),
+      },
+      labels: { fishbone: FISHBONE_CATEGORY_LABELS },
+    };
+  }));
+
+  app.post(`${ROOT}/rca-cases/:caseId/causes`, route("cmms.rca.edit", async ({ repo: r, req, siteId }) => {
+    assertOnlyKeys(req.body, new Set([
+      "Category", "StatementFa", "ParentCauseId", "OccurrenceCount", "ImpactScore",
+      "DetectionScore", "IsRootCause", "EvidenceRef", "SourceEntryId",
+    ]));
+    const caseId = id(req.params.caseId, "caseId");
+    return r.transaction(async (tx) => {
+      const rcaCase = await mustFind(tx, "CmmsRcaCase", caseId, siteId);
+      if (rcaCase.Status === "verified") throw businessRule("CMMS_RCA_VERIFIED", "پروندهٔ تأییدشده قابل افزودن علت نیست");
+      const StatementFa = text(req.body.StatementFa, "StatementFa", { required: true, min: 5, max: 1200 });
+      const IsRootCause = bool(req.body.IsRootCause, "IsRootCause", false);
+      const EvidenceRef = text(req.body.EvidenceRef, "EvidenceRef", { max: 600 });
+      /* اعلام ریشه بدون مدرک، همان تحلیل تشریفاتی است؛ قاعده با زنجیرهٔ ۵ چرا یکسان است. */
+      if (IsRootCause && !EvidenceRef) throw bad("EvidenceRef", "اعلام ریشه بدون مدرک مستند پذیرفته نمی‌شود");
+      const ParentCauseId = req.body.ParentCauseId === undefined ? null : id(req.body.ParentCauseId, "ParentCauseId");
+      if (ParentCauseId) {
+        const parent = await tx.findOne("CmmsRcfaCause", [
+          { column: "SiteId", op: "eq", value: siteId }, { column: "Id", op: "eq", value: ParentCauseId },
+        ]);
+        if (!parent || parent.RcaCaseId !== caseId) throw bad("ParentCauseId", "علت والد در همین پرونده یافت نشد");
+      }
+      const SourceEntryId = req.body.SourceEntryId === undefined ? null : id(req.body.SourceEntryId, "SourceEntryId");
+      if (SourceEntryId) {
+        const entry = await tx.findOne("CmmsRcaEntry", [
+          { column: "SiteId", op: "eq", value: siteId }, { column: "Id", op: "eq", value: SourceEntryId },
+        ]);
+        if (!entry || entry.RcaCaseId !== caseId) throw bad("SourceEntryId", "ردیف مبدأ در همین پرونده یافت نشد");
+      }
+      const row = await tx.create("CmmsRcfaCause", {
+        SiteId: siteId, RcaCaseId: caseId, ParentCauseId,
+        Category: oneOf(req.body.Category, "Category", [...FISHBONE_CATEGORIES], { required: true }),
+        StatementFa, OccurrenceCount: number(req.body.OccurrenceCount, "OccurrenceCount", { integer: true, min: 0 }) ?? 1,
+        ImpactScore: number(req.body.ImpactScore, "ImpactScore", { integer: true, min: 1, max: 10 }) ?? 5,
+        DetectionScore: optionalNumber(req.body.DetectionScore, "DetectionScore", { integer: true, min: 1, max: 10 }),
+        IsRootCause, EvidenceRef,
+        VerifiedBy: IsRootCause ? requestActor(req) : null, VerifiedAt: IsRootCause ? new Date().toISOString() : null,
+        SourceEntryId, ModelVersion: CMMS_MODEL_VERSION,
+      }, requestActor(req));
+      const causes = await childrenOf(tx, "CmmsRcfaCause", siteId, "RcaCaseId", caseId);
+      if (rcaCase.Status === "open") {
+        await tx.patch("CmmsRcaCase", caseId, { Status: "in-progress" }, requestActor(req), rcaCase.RowVersion);
+      }
+      await createAuditRecord(tx, req, "CMMS_RCFA_CAUSE_ADDED", "CmmsRcfaCause", row.Id, "cmms.rca.edit", {
+        caseId, category: row.Category, isRootCause: IsRootCause,
+      });
+      return { cause: row, fishbone: summarizeFishbone(causes) };
+    });
+  }, 201));
+
+  app.post(`${ROOT}/rca-cases/:caseId/capas`, route("cmms.capa.create", async ({ repo: r, req, siteId }) => {
+    assertOnlyKeys(req.body, new Set([
+      "RootCauseId", "RootCauseRef", "RootCauseFa", "ActionType", "StatementFa", "Priority",
+      "OwnerUserId", "OwnerNameFa", "DueOn",
+    ]));
+    const caseId = id(req.params.caseId, "caseId");
+    return r.transaction(async (tx) => {
+      const rcaCase = await mustFind(tx, "CmmsRcaCase", caseId, siteId);
+      if (rcaCase.Status === "verified") throw businessRule("CMMS_RCA_VERIFIED", "پروندهٔ تأییدشده قابل افزودن CAPA نیست");
+      const Priority = number(req.body.Priority, "Priority", { integer: true, min: 1, max: 5 }) ?? 3;
+      const RootCauseId = req.body.RootCauseId === undefined ? null : id(req.body.RootCauseId, "RootCauseId");
+      if (RootCauseId) {
+        const cause = await tx.findOne("CmmsRcfaCause", [
+          { column: "SiteId", op: "eq", value: siteId }, { column: "Id", op: "eq", value: RootCauseId },
+        ]);
+        if (!cause || cause.RcaCaseId !== caseId) throw bad("RootCauseId", "علت ریشه در همین پرونده یافت نشد");
+      }
+      const OwnerUserId = text(req.body.OwnerUserId, "OwnerUserId", { max: 60 });
+      const OwnerNameFa = text(req.body.OwnerNameFa, "OwnerNameFa", { max: 120 });
+      const row = await tx.create("CmmsRcfaCapa", {
+        SiteId: siteId, RcaCaseId: caseId, RootCauseId,
+        RootCauseRef: req.body.RootCauseRef === undefined ? null : id(req.body.RootCauseRef, "RootCauseRef"),
+        RootCauseFa: text(req.body.RootCauseFa, "RootCauseFa", { max: 1200 }),
+        ActionType: oneOf(req.body.ActionType, "ActionType", [...CAPA_ACTION_TYPES], { required: true }),
+        StatementFa: text(req.body.StatementFa, "StatementFa", { required: true, min: 5, max: 1500 }),
+        Priority,
+        /* سررسید از SLA اولویت می‌آید تا «CAPA بدون موعد» ساخته نشود. */
+        DueOn: isoDate(req.body.DueOn, "DueOn", { required: false }) ?? capaDueDate(Priority),
+        Status: OwnerUserId || OwnerNameFa ? "assigned" : "draft",
+        OwnerUserId, OwnerNameFa,
+        ImplementedAt: null, ImplementedBy: null, ImplementationEvidenceRef: null,
+        VerificationResult: null, VerifiedAt: null, VerifiedBy: null, VerificationNoteFa: null,
+        ReferralKind: OwnerUserId || OwnerNameFa ? "owner" : null,
+        WorkOrderId: null, AutoCreatedWorkOrder: false, EffectivenessVerifiedOn: null,
+        ModelVersion: CMMS_MODEL_VERSION,
+      }, requestActor(req));
+      if (rcaCase.Status === "open") {
+        await tx.patch("CmmsRcaCase", caseId, { Status: "in-progress" }, requestActor(req), rcaCase.RowVersion);
+      }
+      await createAuditRecord(tx, req, "CMMS_RCFA_CAPA_CREATED", "CmmsRcfaCapa", row.Id, "cmms.capa.create", {
+        caseId, actionType: row.ActionType, priority: Priority, dueOn: row.DueOn,
+      });
+      return row;
+    });
+  }, 201));
+
+  app.post(`${ROOT}/rca-cases/:caseId/capas/:capaId/implement`, route("cmms.capa.create", async ({ repo: r, req, siteId }) => {
+    assertOnlyKeys(req.body, new Set(["ImplementationEvidenceRef", "NoteFa"]));
+    const caseId = id(req.params.caseId, "caseId");
+    const capaId = id(req.params.capaId, "capaId");
+    return r.transaction(async (tx) => {
+      const capa = await mustFind(tx, "CmmsRcfaCapa", capaId, siteId);
+      if (capa.RcaCaseId !== caseId) throw notFound();
+      if (capa.Status === "cancelled") throw businessRule("CMMS_CAPA_CANCELLED", "اقدام لغو‌شده قابل اجرا نیست");
+      if (capa.Status === "verified" || capa.Status === "closed") throw businessRule("CMMS_CAPA_DONE", `اقدام در وضعیت «${capa.Status}» است و اجرای دوباره نمی‌پذیرد`);
+      /* «اجرا شد» بدون شاهد، در ممیزی هیچ ارزشی ندارد. */
+      const ImplementationEvidenceRef = text(req.body.ImplementationEvidenceRef, "ImplementationEvidenceRef", { required: true, max: 600 });
+      const now = new Date().toISOString();
+      await tx.patch("CmmsRcfaCapa", capaId, {
+        Status: "implemented", ImplementedAt: now, ImplementedBy: requestActor(req),
+        ImplementationEvidenceRef, ReferralKind: capa.ReferralKind ?? "owner",
+      }, requestActor(req), capa.RowVersion);
+      await createAuditRecord(tx, req, "CMMS_RCFA_CAPA_IMPLEMENTED", "CmmsRcfaCapa", capaId, "cmms.capa.create", {
+        caseId, evidenceRef: ImplementationEvidenceRef,
+      });
+      return tx.get("CmmsRcfaCapa", capaId);
+    });
+  }));
+
+  app.post(`${ROOT}/rca-cases/:caseId/capas/:capaId/verify`, route("cmms.capa.verify", async ({ repo: r, req, siteId }) => {
+    assertOnlyKeys(req.body, new Set(["VerificationResult", "VerificationNoteFa", "EffectivenessVerifiedOn"]));
+    const caseId = id(req.params.caseId, "caseId");
+    const capaId = id(req.params.capaId, "capaId");
+    return r.transaction(async (tx) => {
+      const capa = await mustFind(tx, "CmmsRcfaCapa", capaId, siteId);
+      if (capa.RcaCaseId !== caseId) throw notFound();
+      if (!["implemented", "verified"].includes(capa.Status)) {
+        throw businessRule("CMMS_CAPA_NOT_IMPLEMENTED", `اثربخشی اقدامی که هنوز اجرا نشده تأیید نمی‌شود (وضعیت: ${capa.Status})`);
+      }
+      const VerificationResult = oneOf(req.body.VerificationResult, "VerificationResult", [...CAPA_VERIFICATION_RESULTS], { required: true });
+      const now = new Date().toISOString();
+      /* اثربخشی «ناکافی» یعنی کار هنوز تمام نیست: وضعیت به in-progress برمی‌گردد
+       * تا CAPA ناتمام در گزارش، بسته شمرده نشود. */
+      const status = VerificationResult === "ineffective" ? "in-progress" : "verified";
+      await tx.patch("CmmsRcfaCapa", capaId, {
+        Status: status, VerificationResult,
+        VerifiedAt: now, VerifiedBy: requestActor(req),
+        VerificationNoteFa: text(req.body.VerificationNoteFa, "VerificationNoteFa", { max: 1000 }),
+        EffectivenessVerifiedOn: isoDate(req.body.EffectivenessVerifiedOn, "EffectivenessVerifiedOn") ?? now.slice(0, 10),
+      }, requestActor(req), capa.RowVersion);
+      await createAuditRecord(tx, req, "CMMS_RCFA_CAPA_VERIFIED", "CmmsRcfaCapa", capaId, "cmms.capa.verify", {
+        caseId, verificationResult: VerificationResult, status,
+      });
+      const rcaCase = await mustFind(tx, "CmmsRcaCase", caseId, siteId);
+      const [whys, causes, capas] = await Promise.all([
+        childrenOf(tx, "CmmsRcaEntry", siteId, "RcaCaseId", caseId),
+        childrenOf(tx, "CmmsRcfaCause", siteId, "RcaCaseId", caseId),
+        childrenOf(tx, "CmmsRcfaCapa", siteId, "RcaCaseId", caseId),
+      ]);
+      const readiness = evaluateRcfaReadiness({
+        status: rcaCase.Status, rootCauseFa: rcaCase.RootCauseFa, method: rcaCase.Method,
+        whys: whys.filter((entry) => entry.EntryType === "why"), causes, capas,
+      });
+      return { capa: await tx.get("CmmsRcfaCapa", capaId), readiness };
+    });
+  }));
+
+  app.post(`${ROOT}/rca-cases/:caseId/capas/:capaId/refer`, route("cmms.capa.create", async ({ repo: r, req, siteId }) => {
+    assertOnlyKeys(req.body, new Set([
+      "ReferralKind", "OwnerUserId", "OwnerNameFa",
+      "WorkOrderType", "TitleFa", "PlannedStartAt", "PlannedFinishAt", "Priority",
+    ]));
+    const caseId = id(req.params.caseId, "caseId");
+    const capaId = id(req.params.capaId, "capaId");
+    const ReferralKind = oneOf(req.body.ReferralKind, "ReferralKind", ["owner", "vendor", "procedure", "training", "work-order"], { required: true });
+    return r.transaction(async (tx) => {
+      const rcaCase = await mustFind(tx, "CmmsRcaCase", caseId, siteId);
+      const capa = await mustFind(tx, "CmmsRcfaCapa", capaId, siteId);
+      if (capa.RcaCaseId !== caseId) throw notFound();
+      if (capa.Status === "verified" || capa.Status === "closed" || capa.Status === "cancelled") {
+        throw businessRule("CMMS_CAPA_DONE", `اقدام در وضعیت «${capa.Status}» قابل ارجاع نیست`);
+      }
+      if (ReferralKind === "work-order") {
+        if (capa.WorkOrderId) throw conflict("CMMS_CAPA_ALREADY_REFERRED", "از این اقدام قبلاً دستورکار ساخته شده است");
+        if (!rcaCase.AssetId) throw businessRule("CMMS_CAPA_NO_ASSET", "برای ساخت دستورکار، پرونده باید به یک تجهیز وصل باشد");
+        const WorkOrderType = oneOf(req.body.WorkOrderType, "WorkOrderType",
+          ["pm", "cm", "emergency", "overhaul", "project", "calibration", "inspection"],
+          { fallback: ["preventive", "systemic"].includes(capa.ActionType) ? "pm" : "cm" });
+        const PlannedStartAt = isoDateTime(req.body.PlannedStartAt, "PlannedStartAt");
+        const PlannedFinishAt = isoDateTime(req.body.PlannedFinishAt, "PlannedFinishAt");
+        if (PlannedStartAt && PlannedFinishAt && PlannedFinishAt < PlannedStartAt) {
+          throw bad("PlannedFinishAt", "پایان برنامه‌ریزی‌شده پیش از شروع آن است");
+        }
+        /* شمارهٔ دستورکار از شمارهٔ پرونده مشتق می‌شود و در برابر تکرار
+         * محافظت دارد؛ فرض «تاریخ یکتا است» در سامانهٔ چندکاربره غلط است. */
+        let WorkOrderNo = null;
+        for (let attempt = 1; attempt <= 50 && !WorkOrderNo; attempt += 1) {
+          const candidate = `CAPA-${rcaCase.CaseNo}-${String(attempt).padStart(2, "0")}`.slice(0, 60);
+          const clash = await tx.findOne("CmmsWorkOrder", [
+            { column: "SiteId", op: "eq", value: siteId }, { column: "WorkOrderNo", op: "eq", value: candidate },
+          ]);
+          if (!clash) WorkOrderNo = candidate;
+        }
+        if (!WorkOrderNo) throw businessRule("CMMS_CAPA_WO_NO", "شمارهٔ دستورکار یکتا برای این اقدام ساخته نشد");
+        const workOrder = await tx.create("CmmsWorkOrder", {
+          SiteId: siteId, WorkOrderNo, WorkOrderType, AssetId: rcaCase.AssetId,
+          LocationId: null, WorkRequestId: null, PmScheduleId: null, FamilyPmTaskId: null,
+          TitleFa: text(req.body.TitleFa, "TitleFa", { max: 300 }) ?? `اقدام اصلاحی ${rcaCase.CaseNo}`,
+          ScopeFa: capa.StatementFa,
+          Priority: number(req.body.Priority, "Priority", { integer: true, min: 1, max: 5 }) ?? capa.Priority ?? 3,
+          Status: "draft", PlannedStartAt, PlannedFinishAt,
+          EstimatedHours: null, EstimatedCost: null, CrewId: null, PrimaryTechnicianId: null, VendorId: null,
+          IsAssetDown: false, ProductionImpact: "none", ModelVersion: CMMS_MODEL_VERSION,
+        }, requestActor(req));
+        await tx.patch("CmmsRcfaCapa", capaId, {
+          WorkOrderId: workOrder.Id, AutoCreatedWorkOrder: true, ReferralKind: "work-order",
+          Status: capa.Status === "draft" ? "assigned" : capa.Status,
+        }, requestActor(req), capa.RowVersion);
+        await createAuditRecord(tx, req, "CMMS_RCFA_CAPA_REFERRED", "CmmsRcfaCapa", capaId, "cmms.capa.create", {
+          caseId, referralKind: ReferralKind, workOrderId: workOrder.Id, workOrderNo: WorkOrderNo,
+        });
+        return { capa: await tx.get("CmmsRcfaCapa", capaId), workOrder };
+      }
+      const OwnerUserId = text(req.body.OwnerUserId, "OwnerUserId", { max: 60 }) ?? capa.OwnerUserId;
+      const OwnerNameFa = text(req.body.OwnerNameFa, "OwnerNameFa", { max: 120 }) ?? capa.OwnerNameFa;
+      if (ReferralKind === "owner" && !OwnerUserId && !OwnerNameFa) {
+        throw bad("OwnerUserId", "ارجاع به مالک، نام یا شناسهٔ مسئول را لازم دارد");
+      }
+      await tx.patch("CmmsRcfaCapa", capaId, {
+        ReferralKind, OwnerUserId, OwnerNameFa,
+        Status: capa.Status === "draft" ? "assigned" : capa.Status,
+      }, requestActor(req), capa.RowVersion);
+      await createAuditRecord(tx, req, "CMMS_RCFA_CAPA_REFERRED", "CmmsRcfaCapa", capaId, "cmms.capa.create", {
+        caseId, referralKind: ReferralKind, ownerUserId: OwnerUserId ?? null,
+      });
+      return { capa: await tx.get("CmmsRcfaCapa", capaId), workOrder: null };
+    });
+  }, 201));
+
+  app.post(`${ROOT}/rca-cases/:caseId/close`, route("cmms.rca.close", async ({ repo: r, req, siteId }) => {
+    assertOnlyKeys(req.body, new Set([
+      "RootCauseFa", "CorrectiveActionFa", "PreventiveActionFa",
+      "EffectivenessVerifiedOn", "ClosedOn", "EstimatedAvoidedCost",
+    ]));
+    const caseId = id(req.params.caseId, "caseId");
+    return r.transaction(async (tx) => {
+      const rcaCase = await mustFind(tx, "CmmsRcaCase", caseId, siteId);
+      const [entries, causes, capas] = await Promise.all([
+        childrenOf(tx, "CmmsRcaEntry", siteId, "RcaCaseId", caseId),
+        childrenOf(tx, "CmmsRcfaCause", siteId, "RcaCaseId", caseId),
+        childrenOf(tx, "CmmsRcfaCapa", siteId, "RcaCaseId", caseId),
+      ]);
+      const whys = entries.filter((entry) => entry.EntryType === "why");
+      const RootCauseFa = text(req.body.RootCauseFa, "RootCauseFa", { max: 2000 }) ?? rcaCase.RootCauseFa;
+      const readiness = evaluateRcfaReadiness({
+        status: rcaCase.Status, rootCauseFa: RootCauseFa, method: rcaCase.Method, whys, causes, capas,
+      });
+      if (!readiness.ready) {
+        throw businessRule("CMMS_RCA_NOT_READY", "پرونده هنوز شرایط بستن/تأیید را ندارد", {
+          blockers: readiness.blockers, warnings: readiness.warnings, score: readiness.score,
+        });
+      }
+      const now = new Date().toISOString();
+      await tx.patch("CmmsRcaCase", caseId, {
+        Status: readiness.targetStatus,
+        RootCauseFa: readiness.targetStatus === "verified" ? RootCauseFa : RootCauseFa,
+        CorrectiveActionFa: text(req.body.CorrectiveActionFa, "CorrectiveActionFa", { max: 2000 }) ?? rcaCase.CorrectiveActionFa,
+        PreventiveActionFa: text(req.body.PreventiveActionFa, "PreventiveActionFa", { max: 2000 }) ?? rcaCase.PreventiveActionFa,
+        EffectivenessVerifiedOn: isoDate(req.body.EffectivenessVerifiedOn, "EffectivenessVerifiedOn")
+          ?? (readiness.targetStatus === "verified" ? now.slice(0, 10) : rcaCase.EffectivenessVerifiedOn),
+        ClosedOn: isoDate(req.body.ClosedOn, "ClosedOn") ?? rcaCase.ClosedOn ?? now.slice(0, 10),
+        EstimatedAvoidedCost: optionalNumber(req.body.EstimatedAvoidedCost, "EstimatedAvoidedCost", { min: 0 }) ?? rcaCase.EstimatedAvoidedCost,
+      }, requestActor(req), rcaCase.RowVersion);
+      await createAuditRecord(tx, req, `CMMS_RCA_CASE_${String(readiness.targetStatus).toUpperCase()}`, "CmmsRcaCase", caseId, "cmms.rca.close", {
+        from: rcaCase.Status, score: readiness.score, warnings: readiness.warnings,
+      });
+      return { case: await tx.get("CmmsRcaCase", caseId), readiness };
+    });
+  }));
+
+  /* ═══════════════ ۱۱-پ. یکپارچگی بین‌بخشی — صف رویداد و بلوکهٔ نرم ظرفیت ═══════════════ */
+
+  app.get(`${ROOT}/integration/events`, route("cmms.integration.view", async ({ repo: r, req, siteId }) => {
+    assertOnlyQueryKeys(req.query, new Set(["status", "eventType", "targetSystem", "sourceTable", "sourceId", "from", "to", "limit", "offset"]));
+    const where = [];
+    if (req.query.status !== undefined) {
+      where.push({ column: "Status", op: "eq", value: oneOf(req.query.status, "status", ["pending", "published", "acknowledged", "failed", "cancelled"], { required: true }) });
+    }
+    if (req.query.eventType !== undefined) {
+      where.push({ column: "EventType", op: "eq", value: oneOf(req.query.eventType, "eventType", [...CMMS_INTEGRATION_EVENT_TYPE_LIST], { required: true }) });
+    }
+    if (req.query.targetSystem !== undefined) where.push({ column: "TargetSystem", op: "eq", value: oneOf(req.query.targetSystem, "targetSystem", ["mes"], { required: true }) });
+    if (req.query.sourceTable !== undefined) where.push({ column: "SourceTable", op: "eq", value: text(req.query.sourceTable, "sourceTable", { max: 60, required: true }) });
+    if (req.query.sourceId !== undefined) where.push({ column: "SourceId", op: "eq", value: id(req.query.sourceId, "sourceId") });
+    if (req.query.from !== undefined) where.push({ column: "OccurredAt", op: "gte", value: isoDateTime(req.query.from, "from", { required: true }) });
+    if (req.query.to !== undefined) where.push({ column: "OccurredAt", op: "lte", value: isoDateTime(req.query.to, "to", { required: true }) });
+    const [all, page] = await Promise.all([
+      listInSite(r, "CmmsIntegrationEvent", siteId, { limit: 1000 }),
+      listInSite(r, "CmmsIntegrationEvent", siteId, {
+        where, orderBy: [{ column: "OccurredAt", dir: "desc" }],
+        limit: pageNumber(req.query.limit, "limit", 100, 500),
+        offset: pageNumber(req.query.offset, "offset", 0, 1_000_000),
+      }),
+    ]);
+    return { events: page, total: page.length, summary: summarizeOutbox(all) };
+  }));
+
+  app.post(`${ROOT}/integration/events/:eventId/dispatch`, route("cmms.integration.dispatch", async ({ repo: r, req, siteId }) => {
+    const eventId = id(req.params.eventId, "eventId");
+    const event = await mustFind(r, "CmmsIntegrationEvent", eventId, siteId);
+    if (event.Status === "cancelled") throw businessRule("CMMS_INTEGRATION_CANCELLED", "رویداد لغو‌شده فرستاده نمی‌شود");
+    const dispatch = await deliverIntegrationEvent(r, req, event, transport);
+    await writeAudit(r, req, `CMMS_INTEGRATION_${String(dispatch.status).toUpperCase()}`, "CmmsIntegrationEvent", eventId, "cmms.integration.dispatch", {
+      eventType: event.EventType, attempts: dispatch.attempts ?? null, externalRef: dispatch.externalRef ?? null,
+    });
+    if (!dispatch.delivered) {
+      throw businessRule(dispatch.error?.code ?? "CMMS_INTEGRATION_DELIVERY_FAILED",
+        dispatch.error?.messageFa ?? "تحویل رویداد به سامانهٔ مقصد ناموفق بود",
+        { eventId, attempts: dispatch.attempts ?? null, status: dispatch.status });
+    }
+    return { event: dispatch.event ?? { ...event, ...dispatch }, dispatch };
+  }));
+
+  app.get(`${ROOT}/capacity-blocks`, route("cmms.capacity.view", async ({ repo: r, req, siteId }) => {
+    assertOnlyQueryKeys(req.query, new Set(["status", "sourceType", "sourceRef", "workCenterRef", "from", "to", "limit", "offset"]));
+    const where = [];
+    if (req.query.status !== undefined) {
+      where.push({ column: "Status", op: "eq", value: oneOf(req.query.status, "status", ["requested", "active", "released", "rejected", "cancelled"], { required: true }) });
+    }
+    if (req.query.sourceType !== undefined) where.push({ column: "SourceType", op: "eq", value: oneOf(req.query.sourceType, "sourceType", [...CMMS_CAPACITY_BLOCK_SOURCES], { required: true }) });
+    if (req.query.sourceRef !== undefined) where.push({ column: "SourceRef", op: "eq", value: id(req.query.sourceRef, "sourceRef") });
+    if (req.query.workCenterRef !== undefined) where.push({ column: "WorkCenterRef", op: "eq", value: text(req.query.workCenterRef, "workCenterRef", { max: 60, required: true }) });
+    if (req.query.from !== undefined) where.push({ column: "WindowEnd", op: "gte", value: isoDateTime(req.query.from, "from", { required: true }) });
+    if (req.query.to !== undefined) where.push({ column: "WindowStart", op: "lte", value: isoDateTime(req.query.to, "to", { required: true }) });
+    const all = await listInSite(r, "CmmsCapacityBlock", siteId, { limit: 1000 });
+    const page = await listInSite(r, "CmmsCapacityBlock", siteId, {
+      where, orderBy: [{ column: "WindowStart", dir: "asc" }],
+      limit: pageNumber(req.query.limit, "limit", 100, 500),
+      offset: pageNumber(req.query.offset, "offset", 0, 1_000_000),
+    });
+    const active = all.filter((block) => block.Status === "requested" || block.Status === "active");
+    return {
+      blocks: page, total: page.length,
+      summary: {
+        total: all.length,
+        active: active.length,
+        released: all.filter((block) => block.Status === "released").length,
+        rejected: all.filter((block) => block.Status === "rejected").length,
+        reservedMinutes: active.reduce((sum, block) => sum + Number(block.ReservedMinutes ?? 0), 0),
+      },
+    };
+  }));
+
+  app.post(`${ROOT}/capacity-blocks`, route("cmms.capacity.block", async ({ repo: r, req, siteId }) => {
+    assertOnlyKeys(req.body, new Set([
+      "WorkCenterRef", "PlantRef", "SourceType", "SourceRef", "WindowStart", "WindowEnd", "ReasonFa", "ReservedMinutes",
+    ]));
+    const WorkCenterRef = text(req.body.WorkCenterRef, "WorkCenterRef", { required: true, max: 60 });
+    const SourceType = oneOf(req.body.SourceType, "SourceType", [...CMMS_CAPACITY_BLOCK_SOURCES], { required: true });
+    const SourceRef = req.body.SourceRef === undefined ? null : id(req.body.SourceRef, "SourceRef");
+    if (SourceType === "work-order" && !SourceRef) throw bad("SourceRef", "بلوکهٔ منبع‌گرفته از دستورکار باید شناسهٔ دستورکار را داشته باشد");
+    if (SourceType === "pm-schedule" && !SourceRef) throw bad("SourceRef", "بلوکهٔ منبع‌گرفته از برنامهٔ PM باید شناسهٔ برنامه را داشته باشد");
+    const WindowStart = isoDateTime(req.body.WindowStart, "WindowStart", { required: true });
+    const WindowEnd = isoDateTime(req.body.WindowEnd, "WindowEnd", { required: true });
+    if (WindowEnd <= WindowStart) throw bad("WindowEnd", "پایان پنجره باید بعد از شروع آن باشد");
+
+    const result = await r.transaction(async (tx) => {
+      if (SourceType === "work-order") await mustFind(tx, "CmmsWorkOrder", SourceRef, siteId);
+      if (SourceType === "pm-schedule") await mustFind(tx, "CmmsPmSchedule", SourceRef, siteId);
+      const reserved = optionalNumber(req.body.ReservedMinutes, "ReservedMinutes", { integer: true, min: 0 });
+      return createCapacityBlockRecord(tx, {
+        req, siteId, workCenterRef: WorkCenterRef,
+        plantRef: text(req.body.PlantRef, "PlantRef", { max: 60 }),
+        sourceType: SourceType, sourceRef: SourceRef,
+        windowStart: WindowStart, windowEnd: WindowEnd,
+        reasonFa: text(req.body.ReasonFa, "ReasonFa", { required: true, max: 1000 }),
+        reservedMinutes: reserved,
+      });
+    });
+    await writeAudit(r, req, "CMMS_CAPACITY_BLOCK_REQUESTED", "CmmsCapacityBlock", result.row.Id, "cmms.capacity.block", {
+      workCenterRef: WorkCenterRef, sourceType: SourceType, windowStart: WindowStart, windowEnd: WindowEnd,
+      conflicts: result.conflict?.conflicts?.length ?? 0,
+    });
+    return {
+      block: result.row,
+      conflict: result.conflict,
+      integration: await deliverOutbox(r, req, result.event, transport),
+    };
+  }, 201));
+
+  app.post(`${ROOT}/capacity-blocks/:blockId/release`, route("cmms.capacity.block", async ({ repo: r, req, siteId }) => {
+    assertOnlyKeys(req.body, new Set(["ReleaseReasonFa"]));
+    const blockId = id(req.params.blockId, "blockId");
+    const result = await r.transaction(async (tx) => {
+      const block = await mustFind(tx, "CmmsCapacityBlock", blockId, siteId);
+      if (block.Status === "released" || block.Status === "cancelled") {
+        throw businessRule("CMMS_CAPACITY_NOT_ACTIVE", `بلوکهٔ در وضعیت «${block.Status}» قابل آزادسازی نیست`);
+      }
+      const now = new Date().toISOString();
+      await tx.patch("CmmsCapacityBlock", blockId, {
+        Status: "released", ReleasedAt: now, ReleasedBy: requestActor(req),
+        ReleaseReasonFa: text(req.body.ReleaseReasonFa, "ReleaseReasonFa", { max: 1000 }),
+      }, requestActor(req), block.RowVersion);
+      const fresh = await tx.get("CmmsCapacityBlock", blockId);
+      const event = await enqueueIntegrationEvent(tx, {
+        req, siteId, draft: buildCapacityBlockEvent(fresh, "released"),
+        sourceTable: "CmmsCapacityBlock", sourceId: blockId,
+      });
+      if (event) await tx.patch("CmmsCapacityBlock", blockId, { IntegrationEventId: event.Id }, requestActor(req), fresh.RowVersion);
+      await createAuditRecord(tx, req, "CMMS_CAPACITY_BLOCK_RELEASED", "CmmsCapacityBlock", blockId, "cmms.capacity.block", {
+        from: block.Status, workCenterRef: block.WorkCenterRef,
+      });
+      return { block: await tx.get("CmmsCapacityBlock", blockId), event };
+    });
+    return { block: result.block, integration: await deliverOutbox(r, req, result.event, transport) };
+  }));
+
 
   /* ───────────────────────── ۱۲. داشبورد ───────────────────────── */
 

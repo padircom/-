@@ -101,7 +101,7 @@ function makeRepo() {
   return repo;
 }
 
-function makeApi() {
+function makeApi({ transport } = {}) {
   const handlers = new Map();
   const app = Object.fromEntries(["get", "post", "patch", "delete"].map((method) => [
     method, (path, handler) => handlers.set(`${method.toUpperCase()} ${path}`, handler),
@@ -117,7 +117,9 @@ function makeApi() {
   /* `subjectPermissions` همان چیزی است که لایهٔ HTTP در `server/index.js`
    * تزریق می‌کند؛ اگر اینجا نگذرانیم، تست‌ها شاخهٔ جایگزین را می‌آزمایند
    * و نه مسیر واقعی — یعنی خودِ اصلاح را اثبات نمی‌کنند. */
-  registerCmmsRoutes(app, { repo, subjects, evaluate, subjectPermissions });
+  /* «حمل‌ونقل یکپارچگی» در تست تزریق می‌شود تا تحویل واقعی رویداد به سامانهٔ
+   * مقصد بدون شبکه آزموده شود؛ عدم تزریق یعنی رویداد در صف می‌ماند. */
+  registerCmmsRoutes(app, { repo, subjects, evaluate, subjectPermissions, integrationTransport: transport });
   const call = async (method, path, { params = {}, query = {}, body = {}, headers = {}, requestId = "cmms-test" } = {}) => {
     const handler = handlers.get(`${method} ${path}`);
     assert.ok(handler, `مسیر ثبت نشده است: ${method} ${path}`);
@@ -189,7 +191,9 @@ test("همهٔ مسیرهای اعلام‌شده ثبت شده‌اند و هی
   const { handlers } = makeApi();
   const registered = [...handlers.keys()].sort();
   const declared = [...CMMS_IMPLEMENTED_ROUTES].sort();
-  assert.equal(registered.length, 105);
+  /* ۱۰۵ مسیر پیشین + ۱۶ مسیر فاز ۴: توقف/ادامه (۳)، RCFA تعاملی (۸) و
+   * یکپارچگی بین‌بخشی (۵). هیچ مسیری حذف یا تغییر نکرده است. */
+  assert.equal(registered.length, 121);
   assert.deepEqual(declared.filter((route) => !registered.includes(route)), [], "مسیر اعلام‌شده ولی ثبت‌نشده");
   assert.deepEqual(registered.filter((route) => !declared.includes(route)), [], "مسیر ثبت‌شده ولی اعلام‌نشده");
 });
@@ -1123,4 +1127,488 @@ test("کلاینت نمی‌تواند مجوز گذار را خودش در بد
       body: { ActionCode: "approve", ActorPermissions: ["cmms.wo.release"] },
     });
   assert.equal(error.field, "ActorPermissions");
+});
+
+/* ═══════════════════ ۹. فاز ۴ — توقف/ادامهٔ دستورکار (Hold / Resume) ═══════════════════
+ *
+ * ماشین وضعیت دامنه از پیش `on-hold` را می‌شناخت، اما مسیر REST نداشت؛ این
+ * بخش همان شکاف را می‌بندد: علت از کاتالوگ بسته، ردیف توقف باز، بازگشت به
+ * وضعیت پیش از توقف، و رویداد توقف برای MES.
+ */
+
+/** یک دستورکار آزادشده می‌سازد؛ ورودی اختیاری برای گره‌زدن تجهیز به مرکز کاری. */
+async function seedReleasedWorkOrder(call, { workOrderNo = "WO-HOLD", workCenterRef = null, planned = false } = {}) {
+  const { asset } = await seedFamilyAndAsset(call, { assetTag: `P-${workOrderNo}` });
+  if (workCenterRef) {
+    await ok(call, "PATCH", `${ROOT}/assets/:assetId`, {
+      as: ENGINEER, params: { assetId: asset.Id },
+      body: { MfgWorkCenterId: workCenterRef, RowVersion: asset.RowVersion },
+      /* مجوز ویرایش تجهیز با مهندس است؛ مقدار RowVersion از خود رکورد می‌آید. */
+    });
+  }
+  const createdWorkOrder = await created(call, `${ROOT}/work-orders`, {
+    as: PLANNER,
+    body: {
+      WorkOrderNo: workOrderNo, WorkOrderType: "cm", AssetId: asset.Id, TitleFa: "کار آزمون توقف",
+      ...(planned ? { PlannedStartAt: "2026-11-02T08:00:00Z", PlannedFinishAt: "2026-11-02T12:00:00Z" } : {}),
+    },
+  });
+  await ok(call, "POST", `${ROOT}/work-orders/:workOrderId/release`, { as: MANAGER, params: { workOrderId: createdWorkOrder.Id } });
+  return { asset, workOrder: createdWorkOrder };
+}
+
+test("توقف با کد علت ناشناخته ۴۰۰ می‌گیرد و کاتالوگ علل را برمی‌گرداند", async () => {
+  const { call } = makeApi();
+  const { workOrder } = await seedReleasedWorkOrder(call, { workOrderNo: "WO-H1" });
+  const error = await fails(call, "POST", `${ROOT}/work-orders/:workOrderId/hold`, 400, "CMMS_VALIDATION_FAILED", {
+    as: MANAGER, params: { workOrderId: workOrder.Id }, body: { HoldReasonCode: "why-not" },
+  });
+  assert.ok(Array.isArray(error.allowed) && error.allowed.includes("waiting-parts"));
+  /* علت «سایر» شرح الزامی دارد — اثبات قاعده در همان مسیر. */
+  await fails(call, "POST", `${ROOT}/work-orders/:workOrderId/hold`, 400, "CMMS_VALIDATION_FAILED", {
+    as: MANAGER, params: { workOrderId: workOrder.Id }, body: { HoldReasonCode: "other" },
+  });
+});
+
+test("توقف، دستورکار را on-hold می‌کند و ردیف توقف باز و تاریخچه می‌سازد", async () => {
+  const { call } = makeApi();
+  const { workOrder } = await seedReleasedWorkOrder(call, { workOrderNo: "WO-H2" });
+  const data = await ok(call, "POST", `${ROOT}/work-orders/:workOrderId/hold`, {
+    as: TECH, params: { workOrderId: workOrder.Id },
+    body: { HoldReasonCode: "waiting-parts", NoteFa: "قطعهٔ یدکی در انبار نیست" },
+  });
+  assert.equal(data.workOrder.Status, "on-hold");
+  assert.equal(data.hold.HoldStatus, "open");
+  assert.equal(data.hold.PreviousStatus, "released");
+  assert.equal(data.hold.HoldCategory, "material");
+  assert.equal(data.hold.DowntimeType, "unplanned");
+  assert.equal(data.hold.HeldBy, TECH);
+  /* بدون ارجاع تجهیز به مرکز کاری، رویداد بی‌مقصد ساخته نمی‌شود. */
+  assert.equal(data.integration, null);
+
+  const history = await ok(call, "GET", `${ROOT}/work-orders/:workOrderId/holds`, {
+    as: MANAGER, params: { workOrderId: workOrder.Id },
+  });
+  assert.equal(history.total, 1);
+  assert.equal(history.summary.count, 1);
+  assert.equal(history.summary.openHold, true);
+  assert.equal(history.summary.topReasonCode, "waiting-parts");
+  /* دستورکار متوقف، در فهرست بازها با وضعیت on-hold دیده می‌شود. */
+  const list = await ok(call, "GET", `${ROOT}/work-orders`, { as: MANAGER, query: { status: "on-hold" } });
+  assert.deepEqual(list.workOrders.map((row) => row.Id), [workOrder.Id]);
+});
+
+test("توقف دوباره روی توقف باز ۴۲۲ می‌گیرد و شروع، توقف را با مسیر start می‌بندد", async () => {
+  const { call } = makeApi();
+  const { workOrder } = await seedReleasedWorkOrder(call, { workOrderNo: "WO-H3" });
+  await ok(call, "POST", `${ROOT}/work-orders/:workOrderId/hold`, {
+    as: TECH, params: { workOrderId: workOrder.Id }, body: { HoldReasonCode: "machine-breakdown" },
+  });
+  await fails(call, "POST", `${ROOT}/work-orders/:workOrderId/hold`, 422, "CMMS_HOLD_ALREADY_OPEN", {
+    as: TECH, params: { workOrderId: workOrder.Id }, body: { HoldReasonCode: "waiting-crew" },
+  });
+  /* شروع از وضعیت on-hold مجاز است و همان ردیف باز را می‌بندد. */
+  await ok(call, "POST", `${ROOT}/work-orders/:workOrderId/start`, { as: TECH, params: { workOrderId: workOrder.Id } });
+  const history = await ok(call, "GET", `${ROOT}/work-orders/:workOrderId/holds`, {
+    as: TECH, params: { workOrderId: workOrder.Id },
+  });
+  assert.equal(history.summary.openHold, false);
+  assert.equal(history.holds[0].ResumedVia, "start");
+  assert.equal(typeof history.holds[0].DurationMinutes, "number");
+});
+
+test("ادامه، دستورکار را به وضعیت پیش از توقف برمی‌گرداند — نه به in-progress همیشه", async () => {
+  const { call } = makeApi();
+  const { workOrder } = await seedReleasedWorkOrder(call, { workOrderNo: "WO-H4" });
+  await ok(call, "POST", `${ROOT}/work-orders/:workOrderId/hold`, {
+    as: TECH, params: { workOrderId: workOrder.Id }, body: { HoldReasonCode: "waiting-permit" },
+  });
+  const data = await ok(call, "POST", `${ROOT}/work-orders/:workOrderId/resume`, {
+    as: TECH, params: { workOrderId: workOrder.Id }, body: { ResumeNoteFa: "مجوز صادر شد" },
+  });
+  /* وضعیت پیش از توقف released بود؛ ادامه باید همان را بازگرداند تا WO از
+   * مسیر آزادسازی بیرون نزند. */
+  assert.equal(data.workOrder.Status, "released");
+  assert.equal(data.hold.HoldStatus, "resumed");
+  assert.equal(data.hold.ResumedVia, "resume");
+  assert.equal(data.hold.ResumedBy, TECH);
+  /* توقف برنامه‌ریزی‌شده (انتظار مجوز) از زمان تولید کم می‌شود، نه از دسترس‌پذیری. */
+  assert.equal(data.hold.DowntimeType, "planned");
+  await fails(call, "POST", `${ROOT}/work-orders/:workOrderId/resume`, 422, "CMMS_HOLD_NOT_OPEN", {
+    as: TECH, params: { workOrderId: workOrder.Id }, body: {},
+  });
+});
+
+test("توقف دستورکار draft مجاز نیست و وضعیت‌های مجاز را برمی‌گرداند", async () => {
+  const { call } = makeApi();
+  const { asset } = await seedFamilyAndAsset(call);
+  const workOrder = await created(call, `${ROOT}/work-orders`, {
+    as: PLANNER, body: { WorkOrderNo: "WO-H5", WorkOrderType: "cm", AssetId: asset.Id, TitleFa: "پیش‌نویس" },
+  });
+  const error = await fails(call, "POST", `${ROOT}/work-orders/:workOrderId/hold`, 422, "CMMS_WO_STATE", {
+    as: MANAGER, params: { workOrderId: workOrder.Id }, body: { HoldReasonCode: "waiting-parts" },
+  });
+  assert.deepEqual(error.allowedFrom, ["planned", "scheduled", "released", "in-progress"]);
+});
+
+test("ادامه مجوز مستقل می‌خواهد: برنامه‌ریز می‌تواند متوقف کند ولی نه ادامه دهد", async () => {
+  const { call } = makeApi();
+  const { workOrder } = await seedReleasedWorkOrder(call, { workOrderNo: "WO-H6" });
+  await ok(call, "POST", `${ROOT}/work-orders/:workOrderId/hold`, {
+    as: PLANNER, params: { workOrderId: workOrder.Id }, body: { HoldReasonCode: "waiting-production-window" },
+  });
+  const error = await fails(call, "POST", `${ROOT}/work-orders/:workOrderId/resume`, 403, "CMMS_FORBIDDEN", {
+    as: PLANNER, params: { workOrderId: workOrder.Id }, body: {},
+  });
+  assert.equal(error.permission, "cmms.wo.resume");
+});
+
+/* ═══════════════════ ۱۰. RCFA تعاملی: ۵ چرا، استخوان‌ماهی، پارتو و CAPA ═══════════════════ */
+
+/** پروندهٔ RCFA با زنجیرهٔ سه‌سطحی و ریشهٔ مستند می‌سازد. */
+async function seedRcaCaseWithChain(call, { caseNo = "RCA-1" } = {}) {
+  const { asset } = await seedFamilyAndAsset(call, { assetTag: `A-${caseNo}` });
+  const rcaCase = await created(call, `${ROOT}/rca-cases`, {
+    as: RELIABILITY,
+    body: { CaseNo: caseNo, AssetId: asset.Id, Method: "combined", ProblemStatementFa: "نشتی مکرر پمپ در خط ۲" },
+  });
+  const statements = ["آب‌بند فرسوده شد", "آب‌بند در PM تعویض نشد", "فعالیت تعویض آب‌بند در برنامهٔ PM تعریف نشده بود"];
+  for (let index = 0; index < statements.length; index += 1) {
+    await created(call, `${ROOT}/rca-cases/:caseId/entries`, {
+      as: RELIABILITY, params: { caseId: rcaCase.Id },
+      body: {
+        EntryType: "why", Sequence: index + 1, StatementFa: statements[index],
+        IsRootCause: index === statements.length - 1,
+        EvidencePath: index === statements.length - 1 ? "doc:PM-PROGRAM-REV7" : null,
+      },
+    });
+  }
+  return { asset, rcaCase };
+}
+
+test("RCFA: زنجیرهٔ ۵ چرا با پرسش سطح بعدی و ارزیابی پیوستگی برمی‌گردد", async () => {
+  const { call } = makeApi();
+  const { rcaCase } = await seedRcaCaseWithChain(call, { caseNo: "RCA-2" });
+  const detail = await ok(call, "GET", `${ROOT}/rca-cases/:caseId`, { as: RELIABILITY, params: { caseId: rcaCase.Id } });
+  assert.equal(detail.whys.length, 3);
+  assert.equal(detail.analysis.whyChain.depth, 3);
+  assert.equal(detail.analysis.whyChain.terminated, true);
+  assert.equal(detail.analysis.whyChain.rootCauseLevel, 3);
+  assert.equal(detail.analysis.whyChain.evidencedCount, 1);
+  assert.deepEqual(detail.analysis.whyChain.issues, []);
+  /* پرسش سطح بعد از سطح پیشین ساخته می‌شود؛ متن ثابت نیست. */
+  assert.match(detail.analysis.nextWhy, /تعریف نشده بود/);
+  /* بدون CAPA، پرونده «آماده» نیست — بستن بی‌اقدام ممنوع است. */
+  assert.equal(detail.analysis.readiness.ready, false);
+  assert.ok(detail.analysis.readiness.blockers.some((item) => item.includes("CAPA")));
+});
+
+test("RCFA: علت استخوان‌ماهی با دستهٔ نامعتبر رد و ریشهٔ بدون شاهد رد می‌شود", async () => {
+  const { call } = makeApi();
+  const { rcaCase } = await seedRcaCaseWithChain(call, { caseNo: "RCA-3" });
+  await fails(call, "POST", `${ROOT}/rca-cases/:caseId/causes`, 400, "CMMS_VALIDATION_FAILED", {
+    as: RELIABILITY, params: { caseId: rcaCase.Id },
+    body: { Category: "weather", StatementFa: "شاخهٔ نامعتبر است" },
+  });
+  await fails(call, "POST", `${ROOT}/rca-cases/:caseId/causes`, 400, "CMMS_VALIDATION_FAILED", {
+    as: RELIABILITY, params: { caseId: rcaCase.Id },
+    body: { Category: "method", StatementFa: "روش بازرسی مبهم است", IsRootCause: true },
+  });
+  const causeRow = await created(call, `${ROOT}/rca-cases/:caseId/causes`, {
+    as: RELIABILITY, params: { caseId: rcaCase.Id },
+    body: {
+      Category: "method", StatementFa: "روش بازرسی آب‌بند مکتوب نشده است",
+      OccurrenceCount: 5, ImpactScore: 9, DetectionScore: 6, IsRootCause: true, EvidenceRef: "audit:PROC-12",
+    },
+  });
+  assert.equal(causeRow.cause.Category, "method");
+  assert.equal(causeRow.cause.IsRootCause, true);
+  assert.equal(causeRow.cause.VerifiedBy, RELIABILITY);
+  assert.equal(causeRow.fishbone.byCategory.find((row) => row.category === "method").rootCauseCount, 1);
+  /* پرونده باز، با نخستین علت به in-progress می‌رود. */
+  const [caseRow] = await (async () => [await ok(call, "GET", `${ROOT}/rca-cases/:caseId`, { as: RELIABILITY, params: { caseId: rcaCase.Id } })] )();
+  assert.equal(caseRow.case.Status, "in-progress");
+});
+
+test("RCFA: پارتو وزنی، سهم علت کم‌تکرار با اثر بالا را از حالت شمارشی بزرگ‌تر می‌کند", async () => {
+  const { call } = makeApi();
+  const { rcaCase } = await seedRcaCaseWithChain(call, { caseNo: "RCA-4" });
+  for (const cause of [
+    { Category: "machine", StatementFa: "لقی محور پمپ", OccurrenceCount: 9, ImpactScore: 3 },
+    { Category: "method", StatementFa: "نبود دستورالعمل ایمنی بازرسی", OccurrenceCount: 1, ImpactScore: 10 },
+  ]) {
+    await created(call, `${ROOT}/rca-cases/:caseId/causes`, {
+      as: RELIABILITY, params: { caseId: rcaCase.Id }, body: cause,
+    });
+  }
+  const detail = await ok(call, "GET", `${ROOT}/rca-cases/:caseId`, { as: RELIABILITY, params: { caseId: rcaCase.Id } });
+  const pareto = detail.analysis.pareto;
+  assert.equal(pareto.mode, "weighted");
+  assert.equal(pareto.rows.length, 2);
+  /* علت با ۹ وقوع و شدت ۳ وزن ۲۷ و علت با ۱ وقوع و شدت ۱۰ وزن ۱۰ می‌گیرد؛
+   * در حالت شمارشی سهم علت دوم فقط ۱۰٪ بود. `value` همان فراوانی خام است. */
+  assert.equal(pareto.total, 37);
+  assert.equal(pareto.rows[0].value, 9);
+  assert.equal(pareto.rows[0].sharePct, 72.97);
+  assert.equal(pareto.rows[1].sharePct, 27.03);
+  assert.equal(pareto.rows[1].classification, "trivial-many");
+  assert.deepEqual(pareto.issues, []);
+});
+
+test("CAPA: سررسید پیش‌فرض از اولویت، اجرای مستند و تأیید اثربخشی", async () => {
+  const { call } = makeApi();
+  const { rcaCase } = await seedRcaCaseWithChain(call, { caseNo: "RCA-5" });
+  const capa = await created(call, `${ROOT}/rca-cases/:caseId/capas`, {
+    as: RELIABILITY, params: { caseId: rcaCase.Id },
+    body: { ActionType: "preventive", StatementFa: "افزودن بازرسی آب‌بند به برنامهٔ PM", Priority: 1, OwnerUserId: "u-cmms-tech" },
+  });
+  assert.equal(capa.Status, "assigned");
+  assert.equal(capa.ReferralKind, "owner");
+  assert.ok(/^\d{4}-\d{2}-\d{2}$/.test(capa.DueOn), "سررسید پیش‌فرض باید تاریخ باشد");
+  /* اجرا بدون شاهد یعنی ممیزی بی‌ارزش. */
+  await fails(call, "POST", `${ROOT}/rca-cases/:caseId/capas/:capaId/implement`, 400, "CMMS_VALIDATION_FAILED", {
+    as: RELIABILITY, params: { caseId: rcaCase.Id, capaId: capa.Id }, body: {},
+  });
+  const implemented = await ok(call, "POST", `${ROOT}/rca-cases/:caseId/capas/:capaId/implement`, {
+    as: RELIABILITY, params: { caseId: rcaCase.Id, capaId: capa.Id },
+    body: { ImplementationEvidenceRef: "WO-PM-8821" },
+  });
+  assert.equal(implemented.Status, "implemented");
+  /* اثربخشی ناکافی، اقدام را به جریان برمی‌گرداند تا بسته شمرده نشود. */
+  const ineffective = await ok(call, "POST", `${ROOT}/rca-cases/:caseId/capas/:capaId/verify`, {
+    as: RELIABILITY, params: { caseId: rcaCase.Id, capaId: capa.Id },
+    body: { VerificationResult: "ineffective", VerificationNoteFa: "نشتی تکرار شد" },
+  });
+  assert.equal(ineffective.capa.Status, "in-progress");
+  assert.ok(ineffective.readiness.blockers.length > 0);
+  await ok(call, "POST", `${ROOT}/rca-cases/:caseId/capas/:capaId/implement`, {
+    as: RELIABILITY, params: { caseId: rcaCase.Id, capaId: capa.Id },
+    body: { ImplementationEvidenceRef: "WO-PM-9100" },
+  });
+  const effective = await ok(call, "POST", `${ROOT}/rca-cases/:caseId/capas/:capaId/verify`, {
+    as: RELIABILITY, params: { caseId: rcaCase.Id, capaId: capa.Id },
+    body: { VerificationResult: "effective" },
+  });
+  assert.equal(effective.capa.Status, "verified");
+  assert.equal(effective.capa.VerificationResult, "effective");
+  /* بدون نقش مهندس قابلیت اطمینان، تأیید اثربخشی ممکن نیست. */
+  await fails(call, "POST", `${ROOT}/rca-cases/:caseId/capas/:capaId/verify`, 403, "CMMS_FORBIDDEN", {
+    as: TECH, params: { caseId: rcaCase.Id, capaId: capa.Id }, body: { VerificationResult: "effective" },
+  });
+});
+
+test("CAPA: ارجاع به دستورکار جدید، و ارجاع دوباره ۴۰۹ می‌گیرد", async () => {
+  const { call } = makeApi();
+  const { rcaCase } = await seedRcaCaseWithChain(call, { caseNo: "RCA-6" });
+  const capa = await created(call, `${ROOT}/rca-cases/:caseId/capas`, {
+    as: RELIABILITY, params: { caseId: rcaCase.Id },
+    body: { ActionType: "corrective", StatementFa: "تعویض آب‌بند و بازسازی محور", Priority: 2 },
+  });
+  const referred = await created(call, `${ROOT}/rca-cases/:caseId/capas/:capaId/refer`, {
+    as: RELIABILITY, params: { caseId: rcaCase.Id, capaId: capa.Id },
+    body: { ReferralKind: "work-order", WorkOrderType: "cm" },
+  });
+  assert.equal(referred.capa.AutoCreatedWorkOrder, true);
+  assert.equal(referred.capa.ReferralKind, "work-order");
+  assert.equal(referred.workOrder.WorkOrderNo, "CAPA-RCA-6-01");
+  assert.equal(referred.workOrder.AssetId, rcaCase.AssetId);
+  assert.equal(referred.workOrder.Status, "draft");
+  await fails(call, "POST", `${ROOT}/rca-cases/:caseId/capas/:capaId/refer`, 409, "CMMS_CAPA_ALREADY_REFERRED", {
+    as: RELIABILITY, params: { caseId: rcaCase.Id, capaId: capa.Id },
+    body: { ReferralKind: "work-order" },
+  });
+  /* ارجاع به مالک انسانی هم مسیر مستند دارد. */
+  const assigned = await created(call, `${ROOT}/rca-cases/:caseId/capas/:capaId/refer`, {
+    as: RELIABILITY, params: { caseId: rcaCase.Id, capaId: capa.Id },
+    body: { ReferralKind: "training", OwnerNameFa: "واحد آموزش فنی" },
+  });
+  assert.equal(assigned.capa.ReferralKind, "training");
+  assert.equal(assigned.capa.OwnerNameFa, "واحد آموزش فنی");
+  assert.equal(assigned.workOrder, null);
+});
+
+test("RCFA: بستن تا آماده‌نشدن شرایط، ۴۲۲ با فهرست موانع می‌گیرد", async () => {
+  const { call } = makeApi();
+  const { rcaCase } = await seedRcaCaseWithChain(call, { caseNo: "RCA-7" });
+  const blocked = await fails(call, "POST", `${ROOT}/rca-cases/:caseId/close`, 422, "CMMS_RCA_NOT_READY", {
+    as: RELIABILITY, params: { caseId: rcaCase.Id },
+    body: { RootCauseFa: "نبود فعالیت تعویض آب‌بند در برنامهٔ PM" },
+  });
+  assert.ok(Array.isArray(blocked.blockers) && blocked.blockers.length > 0);
+  assert.ok(blocked.blockers.some((item) => item.includes("CAPA")));
+
+  const capa = await created(call, `${ROOT}/rca-cases/:caseId/capas`, {
+    as: RELIABILITY, params: { caseId: rcaCase.Id },
+    body: { ActionType: "preventive", StatementFa: "بازبینی برنامهٔ PM برای آب‌بند", Priority: 2, OwnerUserId: "u-cmms-tech" },
+  });
+  await ok(call, "POST", `${ROOT}/rca-cases/:caseId/capas/:capaId/implement`, {
+    as: RELIABILITY, params: { caseId: rcaCase.Id, capaId: capa.Id }, body: { ImplementationEvidenceRef: "REV-7" },
+  });
+  await ok(call, "POST", `${ROOT}/rca-cases/:caseId/capas/:capaId/verify`, {
+    as: RELIABILITY, params: { caseId: rcaCase.Id, capaId: capa.Id }, body: { VerificationResult: "effective" },
+  });
+  const closed = await ok(call, "POST", `${ROOT}/rca-cases/:caseId/close`, {
+    as: RELIABILITY, params: { caseId: rcaCase.Id },
+    body: { RootCauseFa: "نبود فعالیت تعویض آب‌بند در برنامهٔ PM" },
+  });
+  assert.equal(closed.case.Status, "closed");
+  assert.equal(closed.readiness.ready, true);
+  assert.equal(closed.case.RootCauseFa, "نبود فعالیت تعویض آب‌بند در برنامهٔ PM");
+  /* پروندهٔ بسته با اثربخشی تأییدشده به verified می‌رود. */
+  const verified = await ok(call, "POST", `${ROOT}/rca-cases/:caseId/close`, {
+    as: RELIABILITY, params: { caseId: rcaCase.Id },
+    body: { RootCauseFa: "نبود فعالیت تعویض آب‌بند در برنامهٔ PM" },
+  });
+  assert.equal(verified.case.Status, "verified");
+  assert.ok(verified.case.EffectivenessVerifiedOn);
+});
+
+/* ═══════════════════ ۱۱. یکپارچگی بین‌بخشی: صف رویداد و بلوکهٔ نرم ظرفیت ═══════════════════ */
+
+/** حمل‌ونقل آزمایشی — همان قرارداد `deliver` که سرور در استقرار واقعی تزریق می‌کند. */
+function makeTransport({ fail = false } = {}) {
+  const calls = [];
+  return {
+    calls,
+    async deliver(event) {
+      calls.push(event);
+      if (fail) return { ok: false, code: "E-MES-REJECTED", messageFa: "MES رویداد را نپذیرفت" };
+      return { ok: true, externalRef: `MES-DT-${calls.length}`, ack: { model: "cmms-mes-bridge-v1", applied: { duplicate: false } } };
+    },
+  };
+}
+
+test("توقف دستورکارِ گره‌خورده به مرکز کاری، رویداد downtime.started می‌سازد و تحویل می‌شود", async () => {
+  const transport = makeTransport();
+  const { call } = makeApi({ transport });
+  const { workOrder } = await seedReleasedWorkOrder(call, { workOrderNo: "WO-I1", workCenterRef: "WC-LINE-2" });
+  const data = await ok(call, "POST", `${ROOT}/work-orders/:workOrderId/hold`, {
+    as: MANAGER, params: { workOrderId: workOrder.Id },
+    body: { HoldReasonCode: "machine-breakdown", NoteFa: "یاتاقان داغ کرد" },
+  });
+  assert.equal(data.integration.delivered, true);
+  assert.equal(data.integration.status, "acknowledged");
+  assert.equal(data.integration.externalRef, "MES-DT-1");
+  assert.equal(transport.calls.length, 1);
+  assert.equal(transport.calls[0].eventType, "downtime.started");
+  assert.equal(transport.calls[0].targetRef, "WC-LINE-2");
+  assert.equal(transport.calls[0].payload.contract, "cmms-mes-v1");
+  assert.equal(transport.calls[0].payload.downtimeType, "unplanned");
+  assert.equal(transport.calls[0].payload.workCenterRef, "WC-LINE-2");
+
+  /* ادامه، رویداد پایان را با همان زنجیرهٔ همبستگی می‌فرستد. */
+  const resumed = await ok(call, "POST", `${ROOT}/work-orders/:workOrderId/resume`, {
+    as: MANAGER, params: { workOrderId: workOrder.Id }, body: {},
+  });
+  assert.equal(transport.calls.length, 2);
+  assert.equal(transport.calls[1].eventType, "downtime.finished");
+  assert.ok(transport.calls[1].payload.durationMinutes >= 0);
+  assert.equal(resumed.integration.delivered, true);
+
+  const events = await ok(call, "GET", `${ROOT}/integration/events`, {
+    as: MANAGER, query: { eventType: "downtime.finished" },
+  });
+  assert.equal(events.total, 1);
+  assert.equal(events.events[0].Status, "acknowledged");
+  /* خلاصهٔ صف، نمای کل سایت است نه نمای فیلترشده؛ هر دو رویداد تحویل شده‌اند. */
+  assert.equal(events.summary.acknowledged, 2);
+  assert.equal(events.summary.pending, 0);
+  assert.equal(events.summary.total, 2);
+});
+
+test("تحویل ناموفق، رویداد را failed می‌کند و دوباره‌فرستادن خطا را برمی‌گرداند", async () => {
+  const transport = makeTransport({ fail: true });
+  const { call } = makeApi({ transport });
+  const { workOrder } = await seedReleasedWorkOrder(call, { workOrderNo: "WO-I2", workCenterRef: "WC-LINE-3" });
+  const data = await ok(call, "POST", `${ROOT}/work-orders/:workOrderId/hold`, {
+    as: MANAGER, params: { workOrderId: workOrder.Id }, body: { HoldReasonCode: "waiting-vendor" },
+  });
+  assert.equal(data.integration.delivered, false);
+  assert.equal(data.integration.status, "failed");
+  const events = await ok(call, "GET", `${ROOT}/integration/events`, {
+    as: MANAGER, query: { status: "failed" },
+  });
+  assert.equal(events.total, 1);
+  assert.equal(events.events[0].LastErrorCode, "E-MES-REJECTED");
+  const error = await fails(call, "POST", `${ROOT}/integration/events/:eventId/dispatch`, 422, "E-MES-REJECTED", {
+    as: MANAGER, params: { eventId: events.events[0].Id },
+  });
+  assert.equal(error.attempts, 2);
+});
+
+test("بلوکهٔ نرم ظرفیت: رزرو، هشدار هم‌پوشانی و آزادسازی یک‌باره", async () => {
+  const { call } = makeApi();
+  const block = await created(call, `${ROOT}/capacity-blocks`, {
+    as: PLANNER,
+    body: {
+      WorkCenterRef: "WC-LINE-4", SourceType: "manual",
+      WindowStart: "2026-11-05T08:00:00Z", WindowEnd: "2026-11-05T12:00:00Z",
+      ReasonFa: "توقف برنامه‌ریزی‌شدهٔ تعویض گیربکس",
+    },
+  });
+  assert.equal(block.block.Status, "requested");
+  assert.equal(block.block.ReservedMinutes, 240);
+  assert.equal(block.block.IsSoft, true);
+  assert.equal(block.conflict.conflicts.length, 0);
+  assert.equal(block.conflict.overlapMinutes, 0);
+
+  const overlapping = await created(call, `${ROOT}/capacity-blocks`, {
+    as: PLANNER,
+    body: {
+      WorkCenterRef: "WC-LINE-4", SourceType: "shutdown",
+      WindowStart: "2026-11-05T10:00:00Z", WindowEnd: "2026-11-05T14:00:00Z",
+      ReasonFa: "هم‌پوشانی عمدی برای سنجش هشدار",
+    },
+  });
+  /* هم‌پوشانی هشدار است، نه خطا: تصمیم زمان‌بندی انسانی است. */
+  assert.equal(overlapping.conflict.conflicts.length, 1);
+  assert.equal(overlapping.conflict.conflicts[0].blockRef, block.block.Id);
+  assert.equal(overlapping.conflict.overlapMinutes, 120);
+
+  const released = await ok(call, "POST", `${ROOT}/capacity-blocks/:blockId/release`, {
+    as: PLANNER, params: { blockId: block.block.Id }, body: { ReleaseReasonFa: "تعویض به تعطیلات موکول شد" },
+  });
+  assert.equal(released.block.Status, "released");
+  assert.ok(released.block.ReleasedAt);
+  await fails(call, "POST", `${ROOT}/capacity-blocks/:blockId/release`, 422, "CMMS_CAPACITY_NOT_ACTIVE", {
+    as: PLANNER, params: { blockId: block.block.Id }, body: {},
+  });
+  const list = await ok(call, "GET", `${ROOT}/capacity-blocks`, { as: PLANNER, query: { workCenterRef: "WC-LINE-4" } });
+  assert.equal(list.summary.total, 2);
+  assert.equal(list.summary.active, 1);
+  assert.equal(list.summary.released, 1);
+  assert.equal(list.summary.reservedMinutes, 240);
+});
+
+test("آزادسازی دستورکار با پنجرهٔ زمان‌بندی، ظرفیت را رزرو و لغو، آن را آزاد می‌کند", async () => {
+  const transport = makeTransport();
+  const { call } = makeApi({ transport });
+  const { workOrder } = await seedReleasedWorkOrder(call, {
+    workOrderNo: "WO-I3", workCenterRef: "WC-LINE-5", planned: true,
+  });
+  const blocks = await ok(call, "GET", `${ROOT}/capacity-blocks`, { as: MANAGER, query: { sourceType: "work-order" } });
+  assert.equal(blocks.total, 1);
+  assert.equal(blocks.blocks[0].WorkCenterRef, "WC-LINE-5");
+  assert.equal(blocks.blocks[0].ReservedMinutes, 240);
+  assert.equal(blocks.blocks[0].SourceRef, workOrder.Id);
+  /* رویداد رزرو هم به MES رفته است. */
+  assert.equal(transport.calls.at(-1).eventType, "capacity.block.requested");
+  assert.equal(transport.calls.at(-1).payload.windowStart, "2026-11-02T08:00:00.000Z");
+
+  await ok(call, "POST", `${ROOT}/work-orders/:workOrderId/cancel`, { as: MANAGER, params: { workOrderId: workOrder.Id } });
+  const after = await ok(call, "GET", `${ROOT}/capacity-blocks`, { as: MANAGER, query: { sourceType: "work-order" } });
+  assert.equal(after.blocks[0].Status, "released");
+  assert.equal(transport.calls.at(-1).eventType, "capacity.block.released");
+  /* لغو دستورکار متوقف‌نشده هم رویداد توقف نمی‌فرستد. */
+  assert.ok(transport.calls.every((item) => !item.eventType.startsWith("downtime.")));
+});
+
+test("صف رویداد و بلوکه‌های ظرفیت مجوز مستقل دارند", async () => {
+  const { call } = makeApi();
+  await fails(call, "GET", `${ROOT}/integration/events`, 403, "CMMS_FORBIDDEN", { as: TECH });
+  await fails(call, "GET", `${ROOT}/capacity-blocks`, 403, "CMMS_FORBIDDEN", { as: TECH });
+  await fails(call, "POST", `${ROOT}/capacity-blocks`, 403, "CMMS_FORBIDDEN", {
+    as: RELIABILITY,
+    body: { WorkCenterRef: "WC-X", SourceType: "manual", WindowStart: "2026-11-09T08:00:00Z", WindowEnd: "2026-11-09T10:00:00Z", ReasonFa: "آزمون مجوز" },
+  });
 });

@@ -84,11 +84,13 @@ test("کاتالوگ: نسخه موتور و اندازه‌ها", () => {
   // mfg.plant.view (internal) and mfg.plant.edit (confidential, audited) —
   // changing the industry type is a plant-level decision, so only the
   // production manager holds the edit gate; planner and engineer only view.
-  /* ۲۹۶ مجوز پیشین + ۷۶ مجوز مستقل بخش ۳ (CMMS/EAM/APM) با پیشوند cmms.* —
+  /* ۲۹۶ مجوز پیشین + ۸۴ مجوز مستقل بخش ۳ (CMMS/EAM/APM) با پیشوند cmms.* —
      دارایی، خانوادهٔ تجهیز، دستورکار، انبار یدکی، پایش وضعیت، تحلیل
      قابلیت اطمینان، هزینهٔ چرخهٔ عمر، شاخص‌ها، هشدار، گردش‌کار و پنج موتور
-     هوش مصنوعی. دامنهٔ CMMS سایت‌محور است و از طریق plantIds ارزیابی می‌شود. */
-  assert.equal(PERMISSION_CATALOG.length, 372);
+     هوش مصنوعی. دامنهٔ CMMS سایت‌محور است و از طریق plantIds ارزیابی می‌شود.
+     تکمیل فاز ۲/۳/۴ هشت مجوز افزود: توقف/ادامهٔ دستورکار (hold/resume)،
+     ثبت و تأیید CAPA، و صف رویداد/ظرفیت یکپارچگی بین‌بخشی. */
+  assert.equal(PERMISSION_CATALOG.length, 380);
   /* ۲۸ نقش پیشین + ۷ نقش نت: maintenance_manager، maintenance_planner،
      reliability_engineer، maintenance_engineer، maintenance_technician،
      maintenance_storekeeper و condition_monitoring_analyst. تفکیک وظایف
