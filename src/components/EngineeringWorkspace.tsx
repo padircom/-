@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { type Lang } from "../data/framework";
 import { useAuth } from "../context/AuthContext";
+import { useCurrentProjectId } from "../context/SystemContext";
 import { logAudit } from "../services/auditLogger";
 import SystemBadge from "./SystemBadge";
 import {
@@ -26,7 +27,6 @@ const TABS: { id: EngTab; fa: string; en: string; icon: string }[] = [
   { id: "dashboard", fa: "پیشرفت و شاخص‌ها", en: "Progress & KPIs", icon: "📈" },
 ];
 
-const PROJECT_ID = "p1";
 
 /* قالب‌های خروجی گزارش A4 — سریال‌سازهای rpt-v1 روی سرور. */
 const ENG_EXPORTS: { format: string; fa: string; en: string }[] = [
@@ -39,8 +39,8 @@ const ENG_EXPORTS: { format: string; fa: string; en: string }[] = [
 /* گزارش در زبانهٔ تازه باز می‌شود تا وضعیت میز کار حفظ شود.
  * فرمت چاپی HTML است و PDF از مسیر چاپ مرورگر گرفته می‌شود؛ این کار
  * وابستگی npm به موتور PDF را حذف می‌کند و سربرگ سه‌لوگو را دست‌نخورده نگه می‌دارد. */
-function openEngReport(code: string, format: string, audience: string): void {
-  const url = `/api/eng/reports/${code}/render?projectId=${PROJECT_ID}&format=${format}&audience=${audience}`;
+function openEngReport(projectId: string, code: string, format: string, audience: string): void {
+  const url = `/api/eng/reports/${code}/render?projectId=${encodeURIComponent(projectId)}&format=${format}&audience=${audience}`;
   logAudit("ENG_REPORT_EXPORT", "Engineering", `${code} · ${format} · ${audience}`);
   window.open(url, "_blank", "noopener");
 }
@@ -255,11 +255,14 @@ type ActionPhase =
 function ActionCard({ rtl, action, userId, onApplied }: {
   rtl: boolean; action: EngAction; userId: string; onApplied: () => Promise<void>;
 }) {
+  /* شناسهٔ پروژه از «پروژهٔ جاری» می‌آید (SystemContext) — نه ثابتِ ماژول. */
+  const projectId = useCurrentProjectId();
+
   const [phase, setPhase] = useState<ActionPhase>({ kind: "idle" });
 
   const run = async (apply: boolean) => {
     setPhase({ kind: apply ? "applying" : "previewing" });
-    const url = `${action.path}?projectId=${PROJECT_ID}${apply ? "&apply=1" : ""}`;
+    const url = `${action.path}?projectId=${projectId}${apply ? "&apply=1" : ""}`;
     const r = await postEng(url, {}, userId);
 
     if (!r.ok) {
@@ -543,6 +546,9 @@ const SEVERITY_TONE: Record<string, string> = {
 };
 
 export default function EngineeringWorkspace({ lang, onBack }: Props) {
+  /* شناسهٔ پروژه از «پروژهٔ جاری» می‌آید (SystemContext) — نه ثابتِ ماژول. */
+  const projectId = useCurrentProjectId();
+
   const rtl = lang === "fa";
   const { user } = useAuth();
   /* هویت ثبت‌کننده؛ سرور با همین سرآیند مجوز را ارزیابی می‌کند. */
@@ -563,7 +569,7 @@ export default function EngineeringWorkspace({ lang, onBack }: Props) {
   /* پس از هر ثبت موفق دوباره صدا زده می‌شود تا جدول‌ها کهنه نمانند. */
   const loadAll = useCallback(async () => {
     setLoading(true);
-    const q = `projectId=${PROJECT_ID}`;
+    const q = `projectId=${projectId}`;
     const [o, m, a, c, i, t, v, cv, pa, pr] = await Promise.all([
       fetchJson(`/api/eng/overview?${q}`),
       fetchJson(`/api/eng/mdr?${q}`),
@@ -579,7 +585,7 @@ export default function EngineeringWorkspace({ lang, onBack }: Props) {
     setOverview(o); setMdr(m); setAging(a); setCrs(c); setIdc(i); setTq(t); setVpr(v);
     setCoverage(cv); setPoAudit(pa); setProcurement(pr);
     setLoading(false);
-  }, []);
+  }, [, projectId]);
 
   useEffect(() => {
     void loadAll();
@@ -670,6 +676,9 @@ export default function EngineeringWorkspace({ lang, onBack }: Props) {
 function MdrTab({ rtl, data, userId, onSaved }: {
   rtl: boolean; data: Json | null; userId: string; onSaved: () => Promise<void>;
 }) {
+  /* شناسهٔ پروژه از «پروژهٔ جاری» می‌آید (SystemContext) — نه ثابتِ ماژول. */
+  const projectId = useCurrentProjectId();
+
   const items = (data?.items ?? []) as Json[];
   const validation = data?.validation as Json | undefined;
 
@@ -692,7 +701,7 @@ function MdrTab({ rtl, data, userId, onSaved }: {
           { name: "targetIfcDate", fa: "تاریخ هدف صدور", kind: "date" },
         ]}
         onSubmit={async (v) => {
-          const r = await postEng(`/api/eng/mdr?projectId=${PROJECT_ID}`, v, userId);
+          const r = await postEng(`/api/eng/mdr?projectId=${projectId}`, v, userId);
           if (!r.ok) return { ok: false, messageFa: r.messageFa, issues: r.issues };
           logAudit("ENG_MDR_CREATE", "Engineering", String(v.docNo));
           await onSaved();
@@ -776,6 +785,9 @@ function ReviewTab({ rtl, aging, crs, mdr, userId, onSaved }: {
   rtl: boolean; aging: Json | null; crs: Json | null; mdr: Json | null;
   userId: string; onSaved: () => Promise<void>;
 }) {
+  /* شناسهٔ پروژه از «پروژهٔ جاری» می‌آید (SystemContext) — نه ثابتِ ماژول. */
+  const projectId = useCurrentProjectId();
+
   /* گزینه‌های مدرک و ریویژن از همان داده‌ای می‌آید که جدول را می‌سازد،
    * پس کاربر شناسه را دستی تایپ نمی‌کند و خطای کلید خارجی رخ نمی‌دهد. */
   const docOptions = ((mdr?.items ?? []) as Json[]).map((d) => ({
@@ -809,7 +821,7 @@ function ReviewTab({ rtl, aging, crs, mdr, userId, onSaved }: {
             { name: "reviewDueAt", fa: "مهلت بررسی", kind: "date" },
           ]}
           onSubmit={async (v) => {
-            const r = await postEng(`/api/eng/revision?projectId=${PROJECT_ID}`, v, userId);
+            const r = await postEng(`/api/eng/revision?projectId=${projectId}`, v, userId);
             if (!r.ok) return { ok: false, messageFa: r.messageFa, issues: r.issues };
             logAudit("ENG_REVISION_ISSUE", "Engineering", `${v.revCode} · ${v.purpose}`);
             await onSaved();
@@ -830,7 +842,7 @@ function ReviewTab({ rtl, aging, crs, mdr, userId, onSaved }: {
             { name: "commentText", fa: "متن نظر", kind: "textarea", required: true, span2: true },
           ]}
           onSubmit={async (v) => {
-            const r = await postEng(`/api/eng/crs?projectId=${PROJECT_ID}`, v, userId);
+            const r = await postEng(`/api/eng/crs?projectId=${projectId}`, v, userId);
             if (!r.ok) return { ok: false, messageFa: r.messageFa, issues: r.issues };
             logAudit("ENG_CRS_COMMENT", "Engineering", `${v.severity} · rev ${v.revisionId}`);
             await onSaved();
@@ -987,6 +999,9 @@ function IdcTab({ rtl, data }: { rtl: boolean; data: Json | null }) {
 function FieldTab({ rtl, data, userId, onSaved }: {
   rtl: boolean; data: Json | null; userId: string; onSaved: () => Promise<void>;
 }) {
+  /* شناسهٔ پروژه از «پروژهٔ جاری» می‌آید (SystemContext) — نه ثابتِ ماژول. */
+  const projectId = useCurrentProjectId();
+
   const aging = (data?.aging ?? []) as Json[];
   const crPlan = data?.crPlan as Json | undefined;
   const asBuilt = data?.asBuilt as Json | undefined;
@@ -1009,7 +1024,7 @@ function FieldTab({ rtl, data, userId, onSaved }: {
             { name: "costImpact", fa: "اثر هزینه (ریال)", kind: "number" },
           ]}
           onSubmit={async (v) => {
-            const r = await postEng(`/api/eng/tq?projectId=${PROJECT_ID}`, v, userId);
+            const r = await postEng(`/api/eng/tq?projectId=${projectId}`, v, userId);
             if (!r.ok) return { ok: false, messageFa: r.messageFa, issues: r.issues };
             logAudit("ENG_TQ_RAISE", "Engineering", `${v.code} · ${v.kind}`);
             await onSaved();
@@ -1204,6 +1219,9 @@ function DashboardTab({ rtl, overview, kpis, alerts, coverage, poAudit, userId, 
   coverage: Json | null; poAudit: Json | null;
   userId: string; onApplied: () => Promise<void>;
 }) {
+  /* شناسهٔ پروژه از «پروژهٔ جاری» می‌آید (SystemContext) — نه ثابتِ ماژول. */
+  const projectId = useCurrentProjectId();
+
   const byDiscipline = (overview?.progress?.byDiscipline ?? []) as Json[];
 
   return (
@@ -1226,7 +1244,7 @@ function DashboardTab({ rtl, overview, kpis, alerts, coverage, poAudit, userId, 
             <button
               key={x.format}
               type="button"
-              onClick={() => openEngReport("RPT-ENG-EXEC", x.format, "internal")}
+              onClick={() => openEngReport(projectId, "RPT-ENG-EXEC", x.format, "internal")}
               className="rounded-lg border border-[var(--accent)]/40 bg-[var(--accent)]/10 px-2 py-1 text-[9px] font-light tx1 transition hover:bg-[var(--accent)]/20"
             >
               {rtl ? x.fa : x.en}
@@ -1356,7 +1374,7 @@ function DashboardTab({ rtl, overview, kpis, alerts, coverage, poAudit, userId, 
                   <button
                     key={x.format}
                     type="button"
-                    onClick={() => openEngReport(r.code, x.format, r.audiences.includes("official") ? "official" : "internal")}
+                    onClick={() => openEngReport(projectId, r.code, x.format, r.audiences.includes("official") ? "official" : "internal")}
                     className="glass-row rounded-md px-1.5 py-0.5 text-[9px] font-light tx2 transition hover:tx1"
                     title={`${rtl ? r.title.fa : r.title.en} — ${rtl ? x.fa : x.en}`}
                   >

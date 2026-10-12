@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { type Lang } from "../data/framework";
 import { logAudit } from "../services/auditLogger";
 import { useAccess } from "../hooks/useAccess";
+import { useCurrentProjectId } from "../context/SystemContext";
 import AccessControlPanel from "./AccessControlPanel";
 import {
   CLASSIFICATION_LABEL,
@@ -75,6 +76,7 @@ function Card({ title, children, right }: { title: string; children: React.React
 }
 
 export default function SecurityCenter({ lang }: { lang: Lang }) {
+  const currentProjectId = useCurrentProjectId();
   const rtl = lang === "fa";
   const T = (b: { fa: string; en: string }) => (rtl ? b.fa : b.en);
   const { subject: me } = useAccess();
@@ -98,7 +100,9 @@ export default function SecurityCenter({ lang }: { lang: Lang }) {
   /* ── آزمون دسترسی ── */
   const [simUser, setSimUser] = useState("u-pm");
   const [simPerm, setSimPerm] = useState("fin.ipc.approve");
-  const [simProject, setSimProject] = useState("c1-p1");
+  /* آزمون دسترسی روی «پروژهٔ جاری» شروع می‌شود، نه یک شناسهٔ ثابت:
+   * پیش‌فرضِ `c1-p1` باعث می‌شد نتیجهٔ شبیه‌سازی به پروژهٔ دیگری ربط پیدا کند. */
+  const [simProject, setSimProject] = useState(() => currentProjectId);
   const [simDiscipline, setSimDiscipline] = useState("");
   const [simPreparer, setSimPreparer] = useState("u-cost");
 

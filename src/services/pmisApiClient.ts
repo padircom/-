@@ -19,6 +19,7 @@ import {
   type NotificationDto,
 } from "./pmisContract";
 import { loadSqlConfig, type SqlConfig } from "./sqlServer";
+import { currentUserId } from "./authStore";
 
 /**
  * PMIS Live REST API Client
@@ -45,6 +46,9 @@ export class PmisApiClient {
           ...(isFormData ? {} : { "Content-Type": "application/json" }),
           "X-Sql-Server": cfg.server,
           "X-Sql-Database": cfg.database,
+          /* هویت کاربر جاری. سرور بر پایهٔ همین هدر مجوز و محدودهٔ پروژه را
+           * می‌سنجد؛ نبودش یعنی ۴۰۱ برای هر مسیر مجوزدار. */
+          ...(currentUserId() ? { "x-user-id": currentUserId()! } : {}),
           ...(options?.headers ?? {}),
         },
       });
@@ -78,7 +82,8 @@ export class PmisApiClient {
     return res.data;
   }
 
-  async createIndustry(dto: Omit<IndustryDto, "id">): Promise<IndustryDto> {
+  /** `id` اختیاری است: می‌توان شناسهٔ کلاینت را فرستاد تا دو طرف یکی شود. */
+  async createIndustry(dto: Omit<IndustryDto, "id"> & { id?: string }): Promise<IndustryDto> {
     const res = await this.request<IndustryDto>("/industries", {
       method: "POST",
       body: JSON.stringify(dto),
@@ -113,7 +118,7 @@ export class PmisApiClient {
     return res.data;
   }
 
-  async createProject(dto: Omit<ProjectDto, "id">): Promise<ProjectDto> {
+  async createProject(dto: Omit<ProjectDto, "id" | "progress"> & { id?: string; progress?: never }): Promise<ProjectDto> {
     const res = await this.request<ProjectDto>("/projects", {
       method: "POST",
       body: JSON.stringify(dto),

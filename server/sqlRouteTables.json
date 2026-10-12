@@ -151,51 +151,10 @@
     ]
   },
   {
-    "method": "GET",
-    "path": "/api/industries",
-    "tables": [
-      "Industry_Master"
-    ]
-  },
-  {
     "method": "POST",
-    "path": "/api/industries",
+    "path": "/api/ai/run",
     "tables": [
-      "Industry_Master"
-    ]
-  },
-  {
-    "method": "PATCH",
-    "path": "/api/industries/:id",
-    "tables": [
-      "Industry_Master"
-    ]
-  },
-  {
-    "method": "DELETE",
-    "path": "/api/industries/:id",
-    "tables": [
-      "Industry_Master"
-    ]
-  },
-  {
-    "method": "GET",
-    "path": "/api/projects",
-    "tables": [
-      "Project_Master"
-    ]
-  },
-  {
-    "method": "POST",
-    "path": "/api/projects",
-    "tables": [
-      "Project_Master"
-    ]
-  },
-  {
-    "method": "PATCH",
-    "path": "/api/projects/:id",
-    "tables": [
+      "Industry_Master",
       "Project_Master"
     ]
   },

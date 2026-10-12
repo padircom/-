@@ -17,6 +17,7 @@ import { type Lang } from "../data/framework";
 import SystemBadge from "./SystemBadge";
 import HseFieldWorkspace, { type HseTab as FieldTab } from "./HseFieldWorkspace";
 import { useAuth } from "../context/AuthContext";
+import { useCurrentProjectId } from "../context/SystemContext";
 import { logAudit } from "../services/auditLogger";
 
 export type HseTab = "jsa" | "permit" | "incident" | "violation" | "training" | "dashboard" | "field";
@@ -31,7 +32,6 @@ const TABS: { id: HseTab; fa: string; en: string; icon: string }[] = [
   { id: "field", fa: "HSE کارگاهی", en: "Field HSE", icon: "🏗️" },
 ];
 
-const PROJECT_ID = "p1";
 const ACCENT = "#DC2626";
 
 type Props = { lang: Lang; onBack: () => void; initialTab?: HseTab; initialFieldTab?: FieldTab };
@@ -207,6 +207,9 @@ const num = (n: unknown, d = 2): string =>
 /* ═════════════════════ کامپوننت اصلی ═════════════════════ */
 
 export default function HSEWorkspace({ lang, onBack, initialTab, initialFieldTab }: Props) {
+  /* شناسهٔ پروژه از «پروژهٔ جاری» می‌آید (SystemContext) — نه ثابتِ ماژول. */
+  const projectId = useCurrentProjectId();
+
   const rtl = lang === "fa";
   const { user } = useAuth();
   const userId = user?.id ?? "";
@@ -233,7 +236,7 @@ export default function HSEWorkspace({ lang, onBack, initialTab, initialFieldTab
 
   const reload = useCallback(async () => {
     setLoading(true);
-    const q = `?projectId=${PROJECT_ID}`;
+    const q = `?projectId=${projectId}`;
     /* همهٔ خواندن‌ها موازی‌اند: نُه درخواست پشت سر هم، صفحه را در
      * شبکهٔ کارگاهی چند ثانیه سفید نگه می‌داشت. */
     const [j, p, i, v, tr, pp, ws, ev, vv] = await Promise.all([
@@ -257,7 +260,7 @@ export default function HSEWorkspace({ lang, onBack, initialTab, initialFieldTab
     setEnv(ev);
     setVocab(vv.data);
     setLoading(false);
-  }, [userId]);
+  }, [userId, projectId]);
 
   useEffect(() => { void reload(); }, [reload]);
 
@@ -348,7 +351,7 @@ export default function HSEWorkspace({ lang, onBack, initialTab, initialFieldTab
               {rtl ? "مدیریت ایمنی، بهداشت و محیط‌زیست" : "Health, Safety & Environment"}
             </div>
             <div className="truncate text-[9.5px] font-light tx3">
-              {rtl ? `دامنهٔ d16 · پروژهٔ ${PROJECT_ID}` : `Domain d16 · project ${PROJECT_ID}`}
+              {rtl ? `دامنهٔ d16 · پروژهٔ ${projectId}` : `Domain d16 · project ${projectId}`}
             </div>
             <SystemBadge domainId="d16" lang={lang} className="mt-1" />
           </div>
@@ -1069,6 +1072,9 @@ function PpeSection({ f, rtl }: { f: Fetched; rtl: boolean }) {
  * فقط «مجاز/غیرمجاز» و علت.
  */
 function ClearanceProbe({ rtl, userId }: { rtl: boolean; userId: string }) {
+  /* شناسهٔ پروژه از «پروژهٔ جاری» می‌آید (SystemContext) — نه ثابتِ ماژول. */
+  const projectId = useCurrentProjectId();
+
   const { user } = useAuth();
   const [person, setPerson] = useState("");
   const [res, setRes] = useState<Fetched | null>(null);
@@ -1079,7 +1085,7 @@ function ClearanceProbe({ rtl, userId }: { rtl: boolean; userId: string }) {
     if (!ref) return;
     setBusy(true);
     const out = await fetchJson(
-      `/api/hse/clearance/${encodeURIComponent(ref)}?projectId=${PROJECT_ID}`,
+      `/api/hse/clearance/${encodeURIComponent(ref)}?projectId=${projectId}`,
       userId,
     );
     setRes(out);
@@ -1307,6 +1313,9 @@ function EnvSection({ f, rtl }: { f: Fetched; rtl: boolean }) {
 function DashboardTab({
   incidents, violations, permits, rtl, userId,
 }: { incidents: Fetched; violations: Fetched; permits: Fetched; rtl: boolean; userId: string }) {
+  /* شناسهٔ پروژه از «پروژهٔ جاری» می‌آید (SystemContext) — نه ثابتِ ماژول. */
+  const projectId = useCurrentProjectId();
+
   const { user } = useAuth();
   const [period, setPeriod] = useState("");
   const [headCount, setHeadCount] = useState("");
@@ -1317,17 +1326,17 @@ function DashboardTab({
 
   const load = useCallback(async () => {
     setBusy(true);
-    const q = new URLSearchParams({ projectId: PROJECT_ID });
+    const q = new URLSearchParams({ projectId: projectId });
     if (period.trim()) q.set("period", period.trim());
     if (headCount.trim()) q.set("headCount", headCount.trim());
     const [m, a] = await Promise.all([
       fetchJson(`/api/hse/metrics?${q}`, userId),
-      fetchJson(`/api/hse/alerts?projectId=${PROJECT_ID}`, userId),
+      fetchJson(`/api/hse/alerts?projectId=${projectId}`, userId),
     ]);
     setMet(m);
     setAlerts(a);
     setBusy(false);
-  }, [period, headCount, userId]);
+  }, [period, headCount, userId, projectId]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -1389,7 +1398,7 @@ function DashboardTab({
             ph={rtl ? "مثلاً ۱۲۰" : "e.g. 120"}
           />
           <Btn onClick={() => void load()}>{busy ? (rtl ? "…" : "…") : (rtl ? "محاسبه" : "Compute")}</Btn>
-          <Btn onClick={() => void run(`/api/hse/metrics/publish?projectId=${PROJECT_ID}`,
+          <Btn onClick={() => void run(`/api/hse/metrics/publish?projectId=${projectId}`,
             { periodCode: d.periodCode, headCount: headCount.trim() ? Number(headCount) : undefined },
             rtl ? "عکس شاخص‌های دوره منتشر شد" : "Snapshot published")}>
             {rtl ? "انتشار عکس دوره" : "Publish snapshot"}
@@ -1622,6 +1631,9 @@ function MetricRow({ m, trend, rtl }: { m: Json; trend?: Json; rtl: boolean }) {
 function AlertRow({ a, rtl, onRun }: {
   a: Json; rtl: boolean; onRun: (p: string, b: Json, ok: string) => Promise<PostResult>;
 }) {
+  /* شناسهٔ پروژه از «پروژهٔ جاری» می‌آید (SystemContext) — نه ثابتِ ماژول. */
+  const projectId = useCurrentProjectId();
+
   const tone: Tone = a.isMuted ? "mute" : a.isTriggered ? (a.severity === "critical" ? "danger" : "warn") : "ok";
   const c = toneColor(tone);
   return (
@@ -1640,7 +1652,7 @@ function AlertRow({ a, rtl, onRun }: {
         </div>
         {a.isMuted ? (
           <Btn onClick={() => void onRun(
-            `/api/hse/alerts/${a.ruleCode}/unmute?projectId=${PROJECT_ID}`, {},
+            `/api/hse/alerts/${a.ruleCode}/unmute?projectId=${projectId}`, {},
             rtl ? "سکوت هشدار برداشته شد" : "Unmuted",
           )}>
             {rtl ? "بازگرداندن" : "Unmute"}
@@ -1652,7 +1664,7 @@ function AlertRow({ a, rtl, onRun }: {
             const reason = window.prompt(rtl ? "دلیل خاموش‌کردن هشدار:" : "Reason to mute:");
             if (!reason) return;
             void onRun(
-              `/api/hse/alerts/${a.ruleCode}/mute?projectId=${PROJECT_ID}`,
+              `/api/hse/alerts/${a.ruleCode}/mute?projectId=${projectId}`,
               /* سرور تاریخ پایان می‌خواهد نه شمار روز؛ هفت روز پیش‌فرض
                  است چون سقف سی روز موتور را نمی‌شکند و کاربر را وادار
                  به تصمیم دوباره می‌کند. */
@@ -1706,6 +1718,9 @@ function TypeBars({ byType, total, rtl }: { byType?: Record<string, number>; tot
  * راه‌اندازی تا لحظهٔ رد شدن درخواست نمی‌فهمد چه چیزی مانع است.
  */
 function RfsuProbe({ rtl, userId }: { rtl: boolean; userId: string }) {
+  /* شناسهٔ پروژه از «پروژهٔ جاری» می‌آید (SystemContext) — نه ثابتِ ماژول. */
+  const projectId = useCurrentProjectId();
+
   const [systemId, setSystemId] = useState("");
   const [busy, setBusy] = useState(false);
   const [res, setRes] = useState<Json | null>(null);
@@ -1716,7 +1731,7 @@ function RfsuProbe({ rtl, userId }: { rtl: boolean; userId: string }) {
     if (!id) return;
     setBusy(true);
     setErr(null);
-    const f = await fetchJson(`/api/hse/rfsu-clearance/${encodeURIComponent(id)}?projectId=${PROJECT_ID}`, userId);
+    const f = await fetchJson(`/api/hse/rfsu-clearance/${encodeURIComponent(id)}?projectId=${projectId}`, userId);
     setBusy(false);
     if (f.denied) {
       setRes(null);

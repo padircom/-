@@ -1,23 +1,29 @@
 import { useEffect, useState } from "react";
 import type { Lang } from "../data/framework";
+import { useCurrentProjectId } from "../context/SystemContext";
 import { oilfieldWorkStages } from "../data/oilfieldWorkStages";
 import StageDropdown from "./StageDropdown";
 
 export default function OilfieldWorkStages({ lang }: { lang: Lang }) {
   const fa = lang === "fa";
+  /* پیش‌نویس وزن‌ها به پروژهٔ جاری گره می‌خورد؛ پیش از این کلید ثابت
+   * `oilfield-work-step-weight-draft:c1-p1` بود و پیش‌نویس هر پروژه روی
+   * همان یکی می‌نشست. */
+  const projectId = useCurrentProjectId();
+  const draftKey = `oilfield-work-step-weight-draft:${projectId || "none"}`;
   const [category, setCategory] = useState("");
   const [group, setGroup] = useState("");
   const [job, setJob] = useState("");
   // Draft edits belong to this oilfield only; never mutate the reference catalogue.
   const [weightEdits, setWeightEdits] = useState<Record<string, string>>(() => {
     try {
-      const parsed: unknown = JSON.parse(localStorage.getItem("oilfield-work-step-weight-draft:c1-p1") ?? "{}");
+      const parsed: unknown = JSON.parse(localStorage.getItem(draftKey) ?? "{}");
       return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, string> : {};
     } catch { return {}; }
   });
   useEffect(() => {
-    try { localStorage.setItem("oilfield-work-step-weight-draft:c1-p1", JSON.stringify(weightEdits)); } catch { /* private browsing */ }
-  }, [weightEdits]);
+    try { localStorage.setItem(draftKey, JSON.stringify(weightEdits)); } catch { /* private browsing */ }
+  }, [weightEdits, draftKey]);
   const stepKey = (categoryIndex: string, jobIndex: number, stepIndex: number) => `${categoryIndex}:${jobIndex}:${stepIndex}`;
   const weightFor = (jobIndex: number, stepIndex: number, reference: number) =>
     weightEdits[stepKey(category, jobIndex, stepIndex)] ?? String(reference);

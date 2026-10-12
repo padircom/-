@@ -1,5 +1,7 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { DEMO_SUBJECTS, ROLE_CATALOG, effectivePermissions } from "../services/accessControl";
+/* کلید کاربر جاری در `services/authStore.ts` است تا `pmisApiClient` هم بدون
+ * وارد کردن React، همان را بخواند و هدر `x-user-id` را بفرستد. */
 import { type Lang } from "../data/framework";
 
 /* کدهای نقش با `ROLE_CATALOG` موتور RBAC یکی‌اند. پیش از این، این فهرست
@@ -65,7 +67,7 @@ type AuthContextType = {
   clearAudit: () => void;
 };
 
-const AUTH_USER_STORE = "pmis:auth-user:v1";
+import { AUTH_USER_STORE } from "../services/authStore";
 const AUDIT_STORE = "pmis:audit-log:v1";
 
 export const roleLabels: Record<string, { fa: string; en: string }> = Object.fromEntries(

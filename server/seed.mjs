@@ -30,15 +30,19 @@ import { seedCmms } from "./seed-cmms.mjs";
 import { seedScm } from "./seed-scm.mjs";
 
 const BASE = process.env.API || "http://127.0.0.1:4000";
-/* شناسهٔ پروژهٔ تب‌های قدیمی: چند تب (HRM، قرارداد، مهندسی) هنوز `p1` را
- * سخت‌کد کرده‌اند و رکوردهایشان را روی همین شناسه می‌سازیم. */
-const PROJECT = process.env.PROJECT_ID || "p1";
-/* شناسهٔ پروژهٔ «دورهٔ جاری»: همان شناسهٔ دامنهٔ RBAC کاربران نمونه
- * (`c1-p1`) و همان چیزی که میز کارهای d5 و App به‌عنوان پروژهٔ جاری
- * نشان می‌دهند. رکورد پایهٔ `Project` را فقط نقشی می‌تواند بسازد که این
- * شناسه در محدودهٔ او باشد (SEC-1) — پس پایهٔ پروژه و دادهٔ خرید/انبار
- * روی همین شناسه ساخته می‌شود، نه روی `p1`. */
+/* پروژهٔ نمونه — همان شناسهٔ دامنهٔ RBAC کاربران نمونه (`c1-p1`) و همان
+ * چیزی که App و میز کارها به‌عنوان «پروژهٔ جاری» نشان می‌دهند. رکورد پایهٔ
+ * `Project` را فقط نقشی می‌تواند بسازد که این شناسه در محدودهٔ او باشد
+ * (SEC-1). */
 const DEMO_PROJECT = process.env.DEMO_PROJECT_ID || "c1-p1";
+/* دادهٔ نمونهٔ همهٔ ماژول‌ها روی همین پروژه نوشته می‌شود.
+ *
+ * پیش از این HRM/پیمان/مهندسی/HSE روی `p1` بذر می‌شدند — شناسه‌ای که تا
+ * پیش از یکسان‌سازی «پروژهٔ جاری» در رابط کاربری سخت‌کد بود و هیچ پروژه‌ای
+ * در سامانه نداشت. نتیجه‌اش «صفرِ پنهان» بود: کاربر پروژهٔ `c1-p1` را باز
+ * می‌کرد و همهٔ پنل‌ها خالی بودند، بدون هیچ خطایی. حالا بذر و رابط کاربری
+ * یک شناسه دارند و مسیر REST همان مسیر واقعیِ ماژول است. */
+const PROJECT = process.env.PROJECT_ID || DEMO_PROJECT;
 
 let ok = 0;
 let skip = 0;
@@ -76,6 +80,21 @@ async function step(label, fn) {
 }
 
 /**
+ * درج از مسیر REST واقعی ماژول (نه درج خام جدول).
+ *
+ * دادهٔ پایه و رکورد پروژه نباید از در پشتیِ `/api/data/*` نوشته شوند:
+ * آن مسیر اعتبارسنجی دامنه و محدودهٔ پروژه را دور می‌زند و اگر روزی جدول
+ * جابه‌جا شود، بی‌صدا به فروشگاه دیگری می‌نویسد. ۴۰۹ یعنی همین رکورد از
+ * قبل هست، پس اجرای دوبارهٔ seed خطا نیست.
+ */
+async function api(path, body, user) {
+  const r = await call(path, { method: "POST", body, user });
+  if (r.status === 409) return "skip";
+  if (r.status >= 400) throw new Error(`${r.status} ${r.text.slice(0, 160)}`);
+  return r.json?.data ?? r.json;
+}
+
+/**
  * ردیف جدول عمومی؛ ۴۰۹ یعنی از قبل هست.
  *
  * `user` اجباری است چون SEC-1 نوشتن خام هر جدول را به مجوز همان جدول
@@ -96,13 +115,22 @@ async function row(table, data, user) {
 async function seedCore() {
   console.log("\n── پایه ──");
   /* پروژه بدون صنعت ساخته نمی‌شود (`IndustryId` اجباری است). */
-  await step("صنعت نفت و گاز", () => row("Industry", {
-    Id: "IND-OG", Code: "OG", TitleFa: "نفت، گاز و پتروشیمی", TitleEn: "Oil & Gas", IsActive: true,
+  /* شناسهٔ خوشه همان چیزی است که رابط کاربری و RBAC با آن کار می‌کنند:
+   * `c1..c5` (کلید `clusters` در framework.ts و `Industry_Master.Code`).
+   * پیش از این `Code` برابر `OG` بود و پس از «همگام‌سازی از سرور»، خوشه با
+   * شناسهٔ `OG` بالا می‌آمد در حالی که بقیهٔ برنامه `c1` را می‌شناخت —
+   * یعنی همان دوگانگیِ شناسه که این تغییر حذفش می‌کند. `Id` و `Code` عمداً
+   * یکی‌اند تا کلید فنی و کد دامنه از هم جدا نشوند. */
+  await step("خوشهٔ صنعتی نفت و گاز", () => api("/api/industries", {
+    Id: "c1", code: "c1", titleFa: "نفت و گاز", titleEn: "Oil & Gas",
+    icon: "🛢", color: "#7FB2FF", isActive: true,
   }, "u-admin"));
-  await step(`پروژه ${DEMO_PROJECT}`, () => row("Project", {
-    Id: DEMO_PROJECT, IndustryId: "IND-OG", Code: "OG-2401",
-    NameFa: "واحد فرآورش گاز — فاز ۱",
-    Status: "active", StartDate: "2026-01-01", FinishDate: "2027-06-30",
+  await step(`پروژه ${DEMO_PROJECT}`, () => api("/api/projects", {
+    Id: DEMO_PROJECT, industryId: "c1", code: "OG-2401",
+    nameFa: "واحد فرآورش گاز — فاز ۱", nameEn: "Gas Processing Unit — Phase 1",
+    clientFa: "شرکت ملی نفت", locationFa: "خوزستان",
+    status: "active", startDate: "2026-01-01", finishDate: "2027-06-30",
+    budget: 4_200_000_000,
   }, "u-pm"));
 
   for (const [id, title, budget] of [
@@ -116,15 +144,19 @@ async function seedCore() {
     }, "u-ceo"));
   }
 
-  for (const [id, name, mh] of [
-    ["A-CIV-01", "آرماتوربندی فونداسیون", 2400],
-    ["A-CIV-02", "قالب‌بندی و بتن‌ریزی", 1800],
-    ["A-MEC-01", "نصب اسپول لوله", 3200],
+  /* ستون پیشرفت در جدول `Activity` نامش `PhysicalPct` است، نه
+   * `PercentComplete`؛ نام اشتباه بی‌صدا دور ریخته می‌شد و پروژه همیشه
+   * «بدون مبنای پیشرفت» می‌ماند. پیشرفت پروژه از همین ردیف‌ها و به وزن
+   * `BudgetMh` محاسبه می‌شود (`projectProgress` در masterDataApi.js). */
+  for (const [id, name, mh, pct] of [
+    ["A-CIV-01", "آرماتوربندی فونداسیون", 2400, 40],
+    ["A-CIV-02", "قالب‌بندی و بتن‌ریزی", 1800, 25],
+    ["A-MEC-01", "نصب اسپول لوله", 3200, 15],
   ]) {
     await step(`فعالیت ${id}`, () => row("Activity", {
       Id: id, ProjectId: DEMO_PROJECT, Code: id, NameFa: name,
       BudgetMh: mh, PlannedStart: "2026-01-05", PlannedFinish: "2026-06-30",
-      PercentComplete: 0,
+      PhysicalPct: pct,
     }, "u-planner"));
   }
 }

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 import {
   clusters as defaultClusters,
   projectsByCluster as defaultProjectsByCluster,
@@ -7,6 +7,31 @@ import {
 } from "../data/framework";
 import { debounce } from "../utils/debounce";
 import { pmisApiClient } from "../services/pmisApiClient";
+
+/* ─────────── بودجه: نمایش ↔ عدد ───────────
+ * پیش از این هنگام «فرستادن به سرور» فقط رقم‌های رشته پاک می‌شد:
+ * «$4.2B» → 4.2 (دلار!) و «$780M» → 780. یعنی سرور عددی می‌گرفت که هزار
+ * میلیون برابر کوچک‌تر بود و کسی هم نمی‌فهمید. حالا پسوند B/M/K واقعاً
+ * ضرب می‌شود و نمایش هم به همان شکل فشردهٔ سند برمی‌گردد. */
+export function parseBudgetDisplay(display: string): number {
+  const match = /([0-9][0-9.,]*)\s*([BMK])?/i.exec(display ?? "");
+  if (!match) return 0;
+  const value = Number(match[1].replace(/,/g, ""));
+  if (!Number.isFinite(value)) return 0;
+  const scale = { B: 1e9, M: 1e6, K: 1e3 }[String(match[2] ?? "").toUpperCase() as "B" | "M" | "K"] ?? 1;
+  return value * scale;
+}
+
+export function formatBudget(value: number): string {
+  if (!Number.isFinite(value) || value <= 0) return "$0";
+  for (const [scale, suffix] of [[1e9, "B"], [1e6, "M"], [1e3, "K"]] as const) {
+    if (value >= scale) {
+      const scaled = value / scale;
+      return `$${Number.isInteger(scaled) ? scaled : scaled.toFixed(1)}${suffix}`;
+    }
+  }
+  return `$${Math.round(value).toLocaleString("en-US")}`;
+}
 
 export type SystemSettings = {
   fontScale: "normal" | "large" | "xlarge";
@@ -320,8 +345,12 @@ export const SystemProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         name: { fa: project.nameFa, en: project.nameEn || project.nameFa },
         client: { fa: project.clientFa || "-", en: project.clientFa || "-" },
         status: project.status,
+        /* سرور `progress` را از فعالیت‌های همان پروژه محاسبه می‌کند و اگر
+         * مبنایی نباشد `null` می‌دهد (`progressBasis: "none"`). نوع `Project`
+         * در framework.ts عدد می‌خواهد، پس اینجا صفر می‌شود؛ نمایش «—» به‌جای
+         * «۰٪» برای این حالت، کارِ باقی‌ماندهٔ همین بند است. */
         progress: Number(project.progress) || 0,
-        budget: project.budget == null ? "$0" : `$${Number(project.budget).toLocaleString("en-US")}`,
+        budget: project.budget == null ? "$0" : formatBudget(Number(project.budget)),
         location: { fa: project.locationFa || "-", en: project.locationFa || "-" },
       }));
       nextProjects[industry.code] = projects;
@@ -379,8 +408,12 @@ export const SystemProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       const remoteCodes = new Set(remoteProjects.items.map((row) => row.code));
       for (const project of projectsByCluster[cluster.id] ?? []) {
         if (remoteCodes.has(project.code)) continue;
-        const parsedBudget = Number(project.budget.replace(/[^0-9.]/g, "")) || 0;
+        const parsedBudget = parseBudgetDisplay(project.budget);
+        /* `progress` و `currency` فرستاده نمی‌شوند: ستون پیشرفت در جدول
+         * `Project` نیست (سرور آن را از فعالیت‌ها محاسبه می‌کند) و ارز هم
+         * نگه‌داری نمی‌شود؛ فرستادنشان فقط توهمِ ثبت‌شدن می‌ساخت. */
         await pmisApiClient.createProject({
+          id: project.id,
           industryId: cluster.id,
           code: project.code,
           nameFa: project.name.fa,
@@ -388,9 +421,7 @@ export const SystemProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           clientFa: project.client.fa,
           locationFa: project.location.fa,
           budget: parsedBudget,
-          currency: "USD",
           status: project.status,
-          progress: project.progress,
         });
         pushedProjects += 1;
       }
@@ -446,3 +477,44 @@ export const useSystem = () => {
   }
   return context;
 };
+
+/**
+ * پروژهٔ جاری — تنها منبعِ حقیقتِ شناسهٔ پروژه در رابط کاربری.
+ *
+ * پیش از این هر میز کار شناسهٔ پروژه را سخت‌کد کرده بود و دو دنیای جدا
+ * ساخته بود: میز کارهای تازه روی `c1-p1` و تب‌های قدیمی (HRM/پیمان/مهندسی
+ * و HSE) روی `p1` — پروژه‌ای که هیچ رکوردی در سامانه ندارد. نتیجه‌اش
+ * «صفرِ پنهان» بود: پنل‌ها بدون هیچ خطایی خالی می‌ماندند و هیچ‌کس نمی‌فهمید
+ * داده روی شناسهٔ دیگری نوشته شده است.
+ *
+ * قاعده: شناسه از `projectScope` می‌آید (همان چیزی که نوار انتخاب پروژه در
+ * App نشان می‌دهد و در localStorage می‌ماند). اگر سبد پروژه خالی باشد
+ * `hasProject=false` برمی‌گردد و میز کار باید حالت خالی نشان دهد — نه اینکه
+ * خودش شناسه‌ای از خودش بسازد.
+ */
+export type CurrentProject = {
+  projectId: string;
+  clusterId: string;
+  hasProject: boolean;
+  /** شناسه از سبد پروژه‌ها آمده یا ناگزیر از اولین پروژهٔ موجود استخراج شده. */
+  source: "scope" | "first-available" | "none";
+};
+
+export const useCurrentProject = (): CurrentProject => {
+  const { projectScope, clusters, projectsByCluster } = useSystem();
+
+  return useMemo(() => {
+    if (projectScope?.projectId) {
+      return { projectId: projectScope.projectId, clusterId: projectScope.clusterId, hasProject: true, source: "scope" as const };
+    }
+    const firstCluster = clusters.find((cluster) => (projectsByCluster[cluster.id] ?? []).length > 0);
+    const firstProject = firstCluster ? projectsByCluster[firstCluster.id]?.[0] : undefined;
+    if (firstCluster && firstProject) {
+      return { projectId: firstProject.id, clusterId: firstCluster.id, hasProject: true, source: "first-available" as const };
+    }
+    return { projectId: "", clusterId: "", hasProject: false, source: "none" as const };
+  }, [projectScope, clusters, projectsByCluster]);
+};
+
+/** فقط شناسهٔ پروژهٔ جاری — برای کلاینت‌ها و آدرس‌های REST. */
+export const useCurrentProjectId = (): string => useCurrentProject().projectId;
