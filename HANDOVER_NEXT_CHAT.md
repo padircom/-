@@ -1,5 +1,13 @@
 # انتقال به چت جدید — Arena Platform
-تاریخ به‌روزرسانی: 2026-09-27 — **گزارش مرجع جاری: `docs/GAP_ROADMAP.md`؛ بخش‌های پایین تاریخچه‌اند.**
+تاریخ به‌روزرسانی: 2026-10-12 — **گزارش مرجع جاری: `docs/GAP_ROADMAP.md`؛ بخش‌های پایین تاریخچه‌اند.**
+
+## نشست ۲۰۲۶-۱۰-۱۲ — اصلاح UI: منوی «نوع صنعت / الگوی تولید» در تب مهندسی ساخت (MES)
+- شاخهٔ نشست: `arena/9e9a6cae-repo` · **PR #32** به `main` (باز، mergeable).
+- مشکل: بخش ۵.۱۳ `docs/manufacturing-api.md` (تنظیمات کارخانه و IndustryType) فقط سمت سرور بود؛ هیچ ورودی بصری در UI نداشت.
+- تغییر: پنل جدید `MesIndustrySettingsPanel` در `src/components/MesCrudPanels.tsx` (فایل واحد) — بالای تب «مهندسی ساخت»؛ هفت گزینهٔ دقیق `MFG_INDUSTRY_TYPES`؛ اتصال به `GET/PATCH /api/mfg/plants/:plantId/settings` با If-Match/RowVersion؛ ۴۰۴ صادقانه = ساخت نخست با `NameFa` الزامی؛ ۴۰ۙ۹ → تازه‌خوانی؛ پیش‌نمایش بدون ذخیره از `GET /capabilities?industryType=`؛ بدون `mfg.plant.edit` فقط‌خوانده.
+- نگاشت قابلیت پاسخ PATCH به‌عنوان «فیلدهای اختصاصی صنعت» رندر می‌شود (فعال/نامرتبط + پیاده/هنوز پیاده)؛ منطق جدید سمت سرور یا کلاینت ساخته نشد.
+- دروازه‌ها: `npx tsc --noEmit` ✅ · `vite build` ✅ · `node --test server/manufacturing.plant.test.mjs` ۱۸/۱۸ ✅ · دودتست end-to-end روی JSON driver (۴۰۴ ← ساخت v1 ← به‌روزرسانی v2 ← ۴۰ۙ۹ ← ۴۰) ✅ · اجرای کامل `node --test server/*.test.mjs`: **۵۰۹۹/۵۰۹۹ سبز**.
+- بخش ۵.۱۳.۷ به `docs/manufacturing-api.md` اضافه شد تا محل UI در سند ثبت شود.
 
 ## ادامهٔ نقشهٔ راه (۲۰۲۶-۰۹-۲۷)
 - شاخهٔ نشست: `arena/01a0e2cf-repo`؛ SEC-1 و LIVE-3 تا LIVE-6 تکمیل شده‌اند؛ پیشرفت ۲۲/۱۳۵ ≈ ۱۶٪ (۱۳ مورد انجام‌شده، ۵۷ باز؛ P1: ۱۰۰٪). مرحلهٔ بعد **P2 / CSU-1** است.
