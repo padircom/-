@@ -118,3 +118,58 @@ for (const width of [1024, 390]) {
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   });
 }
+
+/* Top-level groups (PMIS, MES, CMMS, SCM, IIoT): plain headings, no card frame. */
+const groupTitles = (page: Page) => context(page).locator('.sidebar-group-title');
+const arrowState = (chevron: Locator) => chevron.evaluate(node => {
+  const s = getComputedStyle(node);
+  return [s.transform, s.getPropertyValue('rotate')].join(' / ');
+});
+
+test('the five main group titles are flat: no border, radius, shadow or background box', async ({ page }) => {
+  const titles = groupTitles(page);
+  await expect(titles).toHaveCount(5);
+  for (const title of await titles.all()) {
+    await expect(title).toHaveCSS('border-width', '0px');
+    await expect(title).toHaveCSS('border-radius', '0px');
+    await expect(title).toHaveCSS('box-shadow', 'none');
+    await expect(title).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+    // icon, label and collapse arrow stay in place
+    await expect(title.locator('svg')).toHaveCount(1);
+    await expect(title.locator('span').first()).not.toBeEmpty();
+  }
+});
+
+test('the active module keeps a text accent instead of the removed colour box', async ({ page }) => {
+  for (const theme of ['Dark theme', 'Light theme']) {
+    await page.getByRole('button', { name: theme, exact: true }).click();
+    const titles = groupTitles(page);
+    await expect(titles).toHaveCount(5);
+    const [active, inactive] = [titles.nth(0), titles.nth(1)];
+    const color = (locator: Locator) => locator.evaluate(el => getComputedStyle(el).color);
+    expect(await color(active)).not.toBe(await color(inactive));
+    for (const title of [active, inactive]) {
+      await expect(title).toHaveCSS('border-width', '0px');
+      await expect(title).toHaveCSS('box-shadow', 'none');
+      await expect(title).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+    }
+  }
+});
+
+test('group titles keep their icon, label, arrow rotation and accordion behaviour', async ({ page }) => {
+  const first = groupTitles(page).first();
+  const label = (await first.locator('span').nth(1).textContent())!;
+  await expect(first).toHaveAttribute('aria-expanded', 'false');
+  const closed = await arrowState(first.locator('svg'));
+  await first.click();
+  await expect(first).toHaveAttribute('aria-expanded', 'true');
+  // same heading element, same label; only the accordion state changed
+  await expect(first.locator('span').nth(1)).toHaveText(label);
+  const panel = first.locator('xpath=following-sibling::div[1]');
+  await expect(panel).toBeVisible();
+  expect(await arrowState(first.locator('svg'))).not.toBe(closed);
+  await expect(panel.locator('button').first()).toBeVisible();
+  await first.click();
+  await expect(first).toHaveAttribute('aria-expanded', 'false');
+  await expect(panel).toBeHidden();
+});

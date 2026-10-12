@@ -409,10 +409,8 @@ export default function RightSidebar({
                 type="button"
                 onClick={() => toggleSection("pmis")}
                 aria-expanded={sectionsOpen.pmis}
-                className={`flex w-full items-center gap-2 rounded-xl border px-2.5 py-2 text-start transition ${
-                  activeSystemView.system === "pmis"
-                    ? "border-sky-500/40 bg-sky-500/10 tx1"
-                    : "b-line-soft bg-black/15 tx2 hover:tx1"
+                className={`sidebar-group-title flex w-full items-center gap-2 px-2 py-2 text-start transition ${
+                  activeSystemView.system === "pmis" ? "is-active" : "tx2 hover:tx1"
                 }`}
               >
                 <span className="text-[12px]">📐</span>
@@ -492,10 +490,8 @@ export default function RightSidebar({
                 type="button"
                 onClick={() => toggleSection("mes")}
                 aria-expanded={sectionsOpen.mes}
-                className={`flex w-full items-center gap-2 rounded-xl border px-2.5 py-2 text-start transition ${
-                  activeSystemView.system === "mes"
-                    ? "border-emerald-500/40 bg-emerald-500/10 tx1"
-                    : "b-line-soft bg-black/15 tx2 hover:tx1"
+                className={`sidebar-group-title flex w-full items-center gap-2 px-2 py-2 text-start transition ${
+                  activeSystemView.system === "mes" ? "is-active" : "tx2 hover:tx1"
                 }`}
               >
                 <span className="text-[12px]">🏭</span>
@@ -551,10 +547,8 @@ export default function RightSidebar({
                 type="button"
                 onClick={() => toggleSection("cmms")}
                 aria-expanded={sectionsOpen.cmms}
-                className={`flex w-full items-center gap-2 rounded-xl border px-2.5 py-2 text-start transition ${
-                  activeSystemView.system === "cmms"
-                    ? "border-amber-500/40 bg-amber-500/10 tx1"
-                    : "b-line-soft bg-black/15 tx2 hover:tx1"
+                className={`sidebar-group-title flex w-full items-center gap-2 px-2 py-2 text-start transition ${
+                  activeSystemView.system === "cmms" ? "is-active" : "tx2 hover:tx1"
                 }`}
               >
                 <span className="text-[12px]">🔧</span>
@@ -610,10 +604,8 @@ export default function RightSidebar({
                 type="button"
                 onClick={() => toggleSection("scm")}
                 aria-expanded={sectionsOpen.scm}
-                className={`flex w-full items-center gap-2 rounded-xl border px-2.5 py-2 text-start transition ${
-                  activeSystemView.system === "scm"
-                    ? "border-teal-500/40 bg-teal-500/10 tx1"
-                    : "b-line-soft bg-black/15 tx2 hover:tx1"
+                className={`sidebar-group-title flex w-full items-center gap-2 px-2 py-2 text-start transition ${
+                  activeSystemView.system === "scm" ? "is-active" : "tx2 hover:tx1"
                 }`}
               >
                 <span className="text-[12px]">📦</span>
@@ -669,10 +661,8 @@ export default function RightSidebar({
                 type="button"
                 onClick={() => toggleSection("iiot")}
                 aria-expanded={sectionsOpen.iiot}
-                className={`flex w-full items-center gap-2 rounded-xl border px-2.5 py-2 text-start transition ${
-                  activeSystemView.system === "iiot"
-                    ? "border-purple-500/40 bg-purple-500/10 tx1"
-                    : "b-line-soft bg-black/15 tx2 hover:tx1"
+                className={`sidebar-group-title flex w-full items-center gap-2 px-2 py-2 text-start transition ${
+                  activeSystemView.system === "iiot" ? "is-active" : "tx2 hover:tx1"
                 }`}
               >
                 <span className="text-[12px]">📡</span>
