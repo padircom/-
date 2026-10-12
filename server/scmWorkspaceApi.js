@@ -20,6 +20,17 @@ const PROJECT_RE = /^[A-Za-z0-9_-]{1,60}$/;
 const CODE_RE = /^[A-Za-z0-9][A-Za-z0-9._\-]{0,39}$/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
+/**
+ * تاریخ ISO که واقعاً روی تقویم وجود دارد.
+ * `Date.parse("2026-02-30")` در V8 بی‌خطا به ۲ مارس می‌غلتد؛ بدون این کنترل،
+ * API تاریخ ناموجود را می‌پذیرفت و بی‌صدا ذخیره می‌کرد.
+ */
+function isRealDate(value) {
+  const [year, month, day] = value.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+}
+
 class ScmError extends Error {
   constructor(status, code, message, extra = {}) {
     super(message);
@@ -57,7 +68,7 @@ function date(v, field, { required = false } = {}) {
     if (required) throw bad("E-SCM-REQUIRED", `«${field}» الزامی است`, { field });
     return null;
   }
-  if (!DATE_RE.test(s) || Number.isNaN(Date.parse(s))) throw bad("E-SCM-INVALID-DATE", `«${field}» تاریخ YYYY-MM-DD نیست`, { field });
+  if (!DATE_RE.test(s) || !isRealDate(s)) throw bad("E-SCM-INVALID-DATE", `«${field}» تاریخ معتبر YYYY-MM-DD نیست`, { field });
   return s;
 }
 function num(v, field, { min = -Infinity, max = Infinity, int = false, required = false } = {}) {
