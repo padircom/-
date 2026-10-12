@@ -1,17 +1,24 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Lang } from "../data/framework";
 import CmmsRcfaPanel from "./CmmsRcfaPanel";
 import CmmsIntegrationPanel from "./CmmsIntegrationPanel";
+import {
+  CmmsAiPanel,
+  CmmsAlertsPanel,
+  CmmsAssetsPanel,
+  CmmsFamiliesPanel,
+  CmmsKpiPanel,
+  CmmsPmPanel,
+  CmmsSparesPanel,
+  CmmsWorkOrdersPanel,
+} from "./CmmsCrudPanels";
 import {
   canCmmsAccess,
   CmmsClient,
   CMMS_DEMO_USERS,
   CmmsRequestError,
   DEFAULT_SITE_ID,
-  type CmmsAsset,
   type CmmsDashboard,
-  type CmmsSparePart,
-  type CmmsWorkOrder,
 } from "../services/cmmsApi";
 
 export type CmmsSubModuleId =
@@ -166,95 +173,6 @@ function ErrorBox({ message, code, onRetry, fa }: { message: string; code?: stri
   );
 }
 
-/**
- * کنش‌های توقف/ادامهٔ دستورکار.
- *
- * علت توقف از کاتالوگ سرور می‌آید (`allowed` در خطای ۴۰۰)، ولی برای تجربهٔ
- * بهتر فرم، فهرست کوتاه رایج را نشان می‌دهد؛ هر مقدار دیگری سرور رد می‌کند.
- */
-function WorkOrderHoldActions({ siteId, userId, lang, row, onDone }: {
-  siteId: string;
-  userId: string;
-  lang: Lang;
-  row: { Id: string; Status: string };
-  onDone: () => void;
-}) {
-  const fa = lang === "fa";
-  const tr = (faText: string, enText: string) => (fa ? faText : enText);
-  const canHold = canCmmsAccess(userId, "cmms.wo.hold", siteId);
-  const canResume = canCmmsAccess(userId, "cmms.wo.resume", siteId);
-  const [reason, setReason] = useState("waiting-parts");
-  const [note, setNote] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const holdable = ["planned", "scheduled", "released", "in-progress"].includes(row.Status);
-
-  const run = async (work: () => Promise<unknown>) => {
-    setBusy(true);
-    setError(null);
-    try {
-      await work();
-      setNote("");
-      onDone();
-    } catch (err) {
-      setError(err instanceof CmmsRequestError ? err.message : err instanceof Error ? err.message : "خطا");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  if (row.Status === "on-hold" && canResume) {
-    return (
-      <div className="flex items-center gap-1.5" dir={fa ? "rtl" : "ltr"}>
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => run(() => CmmsClient.resumeWorkOrder(siteId, userId, row.Id, {}))}
-          className="rounded-lg border b-line-soft px-2 py-0.5 text-[11px] tx2 hover:tx1 disabled:opacity-40"
-        >
-          {busy ? "…" : tr("ادامه", "Resume")}
-        </button>
-        {error && <span className="text-[10px] text-rose-300">{error}</span>}
-      </div>
-    );
-  }
-
-  if (!holdable || !canHold) return <span className="tx3 text-[10px]">—</span>;
-
-  return (
-    <div className="flex flex-wrap items-center gap-1.5" dir={fa ? "rtl" : "ltr"}>
-      <select
-        value={reason}
-        onChange={(event) => setReason(event.target.value)}
-        className="rounded-lg border b-line-soft bg-black/25 px-1.5 py-0.5 text-[11px] tx1"
-        dir="ltr"
-      >
-        {["waiting-parts", "waiting-crew", "waiting-permit", "waiting-production-window", "machine-breakdown", "unsafe-condition", "other"].map((code) => (
-          <option key={code} value={code}>{code}</option>
-        ))}
-      </select>
-      {(["unsafe-condition", "other"] as string[]).includes(reason) && (
-        <input
-          value={note}
-          onChange={(event) => setNote(event.target.value)}
-          placeholder={tr("شرح الزامی", "note required")}
-          className="w-28 rounded-lg border b-line-soft bg-black/25 px-1.5 py-0.5 text-[11px] tx1"
-        />
-      )}
-      <button
-        type="button"
-        disabled={busy}
-        onClick={() => run(() => CmmsClient.holdWorkOrder(siteId, userId, row.Id, { HoldReasonCode: reason, NoteFa: note || null }))}
-        className="rounded-lg border b-line-soft px-2 py-0.5 text-[11px] tx2 hover:tx1 disabled:opacity-40"
-      >
-        {busy ? "…" : tr("توقف", "Hold")}
-      </button>
-      {error && <span className="text-[10px] text-rose-300">{error}</span>}
-    </div>
-  );
-}
-
 function StatCard({ label, value, hint, fa }: { label: string; value: string | number; hint?: string; fa: boolean }) {
   return (
     <div className="rounded-xl border b-line-soft bg-black/15 p-3 space-y-0.5">
@@ -299,31 +217,6 @@ export default function CmmsWorkspaceShell({ lang, activeSub, onSelectSub, onBac
     () => CmmsClient.getDashboard(siteId, userId),
     [siteId, userId, activeSub],
   );
-  const assets = useCmmsLoader<{ assets: CmmsAsset[]; total: number }>(
-    () => CmmsClient.listAssets(siteId, userId, { limit: 200 }),
-    [siteId, userId, activeSub],
-  );
-  const families = useCmmsLoader<{ families: Array<{ Id: string; FamilyCode: string; NameFa: string; Status: string; CriticalityRank: string }>; total: number }>(
-    () => CmmsClient.listFamilies(siteId, userId),
-    [siteId, userId, activeSub],
-  );
-  const workOrders = useCmmsLoader<{ workOrders: CmmsWorkOrder[]; total: number }>(
-    () => CmmsClient.listWorkOrders(siteId, userId, { limit: 200 }),
-    [siteId, userId, activeSub],
-  );
-  const spares = useCmmsLoader<{ parts: CmmsSparePart[]; total: number }>(
-    () => CmmsClient.listSpareParts(siteId, userId),
-    [siteId, userId, activeSub],
-  );
-  const alerts = useCmmsLoader<{ alerts: Array<{ Id: string; AlertCode: string; Severity: string; TitleFa: string; Status: string }>; total: number }>(
-    () => CmmsClient.listAlerts(siteId, userId),
-    [siteId, userId, activeSub],
-  );
-  const recommendations = useCmmsLoader<{ recommendations: Array<{ Id: string; Engine: string; RecommendationType: string; TitleFa: string; Confidence: number; Status: string }>; total: number }>(
-    () => CmmsClient.listRecommendations(siteId, userId),
-    [siteId, userId, activeSub],
-  );
-
   const renderBody = () => {
     if (!canSeeCurrent) {
       return (
@@ -401,70 +294,14 @@ export default function CmmsWorkspaceShell({ lang, activeSub, onSelectSub, onBac
         );
       }
 
-      case "assets": {
-        if (assets.state.kind === "loading") return <Loading fa={fa} />;
-        if (assets.state.kind === "error") return <ErrorBox {...pick(assets.state)} onRetry={assets.reload} fa={fa} />;
-        if (assets.state.kind !== "ready") return <Empty fa={fa} />;
-        return (
-          <DataTable
-            fa={fa}
-            emptyText={tr("هنوز تجهیزی ثبت نشده است", "No assets registered yet")}
-            columns={[
-              { key: "AssetTag", header: tr("برچسب", "Tag"), mono: true },
-              { key: "NameFa", header: tr("نام تجهیز", "Asset name") },
-              { key: "AssetState", header: tr("وضعیت", "State") },
-              { key: "CriticalityRank", header: tr("رتبهٔ بحرانی‌بودن", "Criticality"), align: "center" },
-            ]}
-            rows={assets.state.data.assets}
-          />
-        );
-      }
+      case "assets":
+        return <CmmsAssetsPanel fa={fa} siteId={siteId} userId={userId} />;
 
-      case "families": {
-        if (families.state.kind === "loading") return <Loading fa={fa} />;
-        if (families.state.kind === "error") return <ErrorBox {...pick(families.state)} onRetry={families.reload} fa={fa} />;
-        if (families.state.kind !== "ready") return <Empty fa={fa} />;
-        return (
-          <DataTable
-            fa={fa}
-            emptyText={tr("خانواده‌ای تعریف نشده است", "No families defined")}
-            columns={[
-              { key: "FamilyCode", header: tr("کد خانواده", "Family code"), mono: true },
-              { key: "NameFa", header: tr("نام", "Name") },
-              { key: "Status", header: tr("وضعیت", "Status") },
-              { key: "CriticalityRank", header: tr("رتبه", "Rank"), align: "center" },
-            ]}
-            rows={families.state.data.families}
-          />
-        );
-      }
+      case "families":
+        return <CmmsFamiliesPanel fa={fa} siteId={siteId} userId={userId} />;
 
-      case "work-orders": {
-        if (workOrders.state.kind === "loading") return <Loading fa={fa} />;
-        if (workOrders.state.kind === "error") return <ErrorBox {...pick(workOrders.state)} onRetry={workOrders.reload} fa={fa} />;
-        if (workOrders.state.kind !== "ready") return <Empty fa={fa} />;
-        return (
-          <DataTable
-            fa={fa}
-            emptyText={tr("دستورکاری ثبت نشده است", "No work orders")}
-            columns={[
-              { key: "WorkOrderNo", header: tr("شماره", "No."), mono: true },
-              { key: "TitleFa", header: tr("شرح", "Title") },
-              { key: "WorkOrderType", header: tr("نوع", "Type") },
-              { key: "Status", header: tr("وضعیت", "Status") },
-              { key: "Priority", header: tr("اولویت", "Priority"), align: "center" },
-              {
-                key: "actions",
-                header: tr("توقف / ادامه", "Hold / resume"),
-                render: (row) => (
-                  <WorkOrderHoldActions siteId={siteId} userId={userId} lang={lang} row={row} onDone={workOrders.reload} />
-                ),
-              },
-            ]}
-            rows={workOrders.state.data.workOrders}
-          />
-        );
-      }
+      case "work-orders":
+        return <CmmsWorkOrdersPanel fa={fa} siteId={siteId} userId={userId} />;
 
       case "rcfa":
         return <CmmsRcfaPanel siteId={siteId} userId={userId} lang={lang} />;
@@ -472,80 +309,20 @@ export default function CmmsWorkspaceShell({ lang, activeSub, onSelectSub, onBac
       case "integration":
         return <CmmsIntegrationPanel siteId={siteId} userId={userId} lang={lang} />;
 
-      case "spares": {
-        if (spares.state.kind === "loading") return <Loading fa={fa} />;
-        if (spares.state.kind === "error") return <ErrorBox {...pick(spares.state)} onRetry={spares.reload} fa={fa} />;
-        if (spares.state.kind !== "ready") return <Empty fa={fa} />;
-        const parts = spares.state.data.parts;
-        const belowReorder = parts.filter((part) => (part.QtyOnHand ?? 0) <= (part.ReorderPoint ?? part.MinStock ?? 0));
-        return (
-          <div className="space-y-3">
-            {belowReorder.length > 0 && (
-              <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3">
-                <div className="tx1 text-xs font-medium">
-                  {tr(`${belowReorder.length} قطعه زیر نقطهٔ سفارش است`, `${belowReorder.length} parts below reorder point`)}
-                </div>
-              </div>
-            )}
-            <DataTable
-              fa={fa}
-              emptyText={tr("قطعه‌ای ثبت نشده است", "No spare parts")}
-              columns={[
-                { key: "PartNumber", header: tr("کد قطعه", "Part no."), mono: true },
-                { key: "NameFa", header: tr("نام", "Name") },
-                { key: "Category", header: tr("دسته", "Category") },
-                { key: "QtyOnHand", header: tr("موجودی", "On hand"), align: "right" },
-                { key: "ReorderPoint", header: tr("نقطهٔ سفارش", "Reorder"), align: "right" },
-              ]}
-              rows={parts}
-            />
-          </div>
-        );
-      }
+      case "spares":
+        return <CmmsSparesPanel fa={fa} siteId={siteId} userId={userId} />;
 
-      case "condition": {
-        if (alerts.state.kind === "loading") return <Loading fa={fa} />;
-        if (alerts.state.kind === "error") return <ErrorBox {...pick(alerts.state)} onRetry={alerts.reload} fa={fa} />;
-        if (alerts.state.kind !== "ready") return <Empty fa={fa} />;
-        return (
-          <DataTable
-            fa={fa}
-            emptyText={tr("هشداری ثبت نشده است", "No alerts")}
-            columns={[
-              { key: "AlertCode", header: tr("کد هشدار", "Alert code"), mono: true },
-              { key: "TitleFa", header: tr("عنوان", "Title") },
-              { key: "Severity", header: tr("شدت", "Severity") },
-              { key: "Status", header: tr("وضعیت", "Status") },
-            ]}
-            rows={alerts.state.data.alerts}
-          />
-        );
-      }
+      case "condition":
+        return <CmmsAlertsPanel fa={fa} siteId={siteId} userId={userId} />;
 
       case "pm":
+        return <CmmsPmPanel fa={fa} siteId={siteId} userId={userId} />;
+
       case "analytics":
-      case "ai": {
-        if (current.id === "ai") {
-          if (recommendations.state.kind === "loading") return <Loading fa={fa} />;
-          if (recommendations.state.kind === "error") return <ErrorBox {...pick(recommendations.state)} onRetry={recommendations.reload} fa={fa} />;
-          if (recommendations.state.kind === "ready") {
-            return (
-              <DataTable
-                fa={fa}
-                emptyText={tr("پیشنهادی ثبت نشده است", "No recommendations yet")}
-                columns={[
-                  { key: "Engine", header: tr("موتور", "Engine"), mono: true },
-                  { key: "TitleFa", header: tr("پیشنهاد", "Suggestion") },
-                  { key: "Confidence", header: tr("اطمینان", "Confidence"), align: "right" },
-                  { key: "Status", header: tr("وضعیت", "Status") },
-                ]}
-                rows={recommendations.state.data.recommendations}
-              />
-            );
-          }
-        }
-        return <Empty fa={fa} />;
-      }
+        return <CmmsKpiPanel fa={fa} siteId={siteId} userId={userId} />;
+
+      case "ai":
+        return <CmmsAiPanel fa={fa} siteId={siteId} userId={userId} />;
 
       default:
         return <Empty fa={fa} />;
@@ -673,68 +450,6 @@ function Empty({ fa, text }: { fa: boolean; text?: string }) {
   return (
     <div className="tx3 text-xs py-6 text-center">
       {text ?? (fa ? "داده‌ای برای نمایش در این سایت وجود ندارد." : "No data to display for this site.")}
-    </div>
-  );
-}
-
-/**
- * جدول عمومی. `key` عمداً رشتهٔ آزاد است چون ستون‌ها از نام ستون‌های
- * پایگاه‌داده می‌آیند و هر زیرماژول شکل ردیف خودش را دارد.
- */
-function DataTable<T extends Record<string, any>>({
-  fa, columns, rows, emptyText,
-}: {
-  fa: boolean;
-  columns: Array<{ key: string; header: string; mono?: boolean; align?: "center" | "right"; render?: (row: T) => ReactNode }>;
-  rows: T[];
-  emptyText: string;
-}) {
-  if (rows.length === 0) return <Empty fa={fa} text={emptyText} />;
-  return (
-    <div className="overflow-x-auto rounded-xl border b-line-soft">
-      <table className="w-full text-xs">
-        <thead className="bg-black/25">
-          <tr>
-            {columns.map((column) => (
-              <th
-                key={column.key}
-                className={`px-3 py-2 tx3 font-medium whitespace-nowrap ${
-                  column.align === "center" ? "text-center" : column.align === "right" ? "text-right" : "text-start"
-                }`}
-              >
-                {column.header}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row, index) => (
-            <tr key={String(row.Id ?? index)} className="border-t b-line-soft">
-              {columns.map((column) => {
-                const value = row[column.key];
-                if (column.render) {
-                  return (
-                    <td key={column.key} className="px-3 py-1.5 tx2 whitespace-nowrap" dir="ltr">
-                      {column.render(row)}
-                    </td>
-                  );
-                }
-                return (
-                  <td
-                    key={column.key}
-                    className={`px-3 py-1.5 tx2 whitespace-nowrap ${column.mono ? "font-mono" : ""} ${
-                      column.align === "center" ? "text-center" : column.align === "right" ? "text-right" : "text-start"
-                    }`}
-                    dir="ltr"
-                  >
-                    {value == null ? "—" : String(value)}
-                  </td>
-                );
-              })}
-            </tr>
-          ))}
-        </tbody>
-      </table>
     </div>
   );
 }
