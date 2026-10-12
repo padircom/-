@@ -654,6 +654,20 @@ function enrichOperationCostRow(row) {
   };
 }
 
+/* این چهار کلید فقط «نمای محاسباتی»اند و ستون جدول نیستند. `deriveOperationCostRows`
+ * خروجی را با enrichOperationCostRow می‌آراید (چون مسیرهای خواندن همان را نشان
+ * می‌دهند) و مسیر reconcile همان ردیف‌های آراسته را دوباره در `MfgOperationCost`
+ * می‌نویسد؛ نتیجه: ستون ناشناخته — در درایور JSON خطای اعتبارسنجی و در SQL Server
+ * خطای «Invalid column name» (HTTP 500) که seed را هم نیمه‌کاره می‌گذاشت.
+ * پیش از هر نوشتن، کلیدهای محاسباتی حذف می‌شوند. */
+const OPERATION_COST_VIEW_KEYS = ["CostVariance", "CostVariancePct", "PlannedCostVariance", "PlannedCostVariancePct"];
+
+function persistableOperationCostRow(row) {
+  const out = { ...row };
+  for (const key of OPERATION_COST_VIEW_KEYS) delete out[key];
+  return out;
+}
+
 function assertSingleCostCurrency(rows, fallback = "IRR") {
   const currencies = new Set(rows
     .filter((row) => Math.abs(storedNumber(row.StandardAmount)) > 0.000001
@@ -7136,7 +7150,7 @@ export function registerManufacturingRoutes(app, { repo, subjects, evaluate } = 
           else {
             const derived = derivedByKey.get(key);
             if (!derived) continue;
-            operationCostsForVersion.push(await tx.create("MfgOperationCost", derived, subject.id));
+            operationCostsForVersion.push(await tx.create("MfgOperationCost", persistableOperationCostRow(derived), subject.id));
           }
         }
       }

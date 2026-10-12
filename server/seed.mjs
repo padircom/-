@@ -15,14 +15,30 @@
  * باعث `UNIQUE_VIOLATION` در آزمون‌ها می‌شود. مسیر پیش‌فرض اجرا
  * `server/rundata` است که در `.gitignore` است و هیچ آزمونی نمی‌خواندش.
  *
+ * این اسکریپت «دادهٔ نمونهٔ کامل» است: در پایان، seed نت (CMMS) و
+ * خرید/انبار (SCM) را هم می‌سازد تا میز کار d5 و فضای کاری CMMS در نصب
+ * تازه خالی نباشند. هر دو از مسیرهای REST واقعی خودشان می‌گذارند.
+ * (می‌توان جداگانه هم اجرا کرد: `node server/seed-cmms.mjs` و
+ * `node server/seed-scm.mjs`.)
+ *
  * اجرا (سرور باید بالا باشد):
  *   node server/seed.mjs
  *   API=http://127.0.0.1:4000 node server/seed.mjs
  */
 import process from "node:process";
+import { seedCmms } from "./seed-cmms.mjs";
+import { seedScm } from "./seed-scm.mjs";
 
 const BASE = process.env.API || "http://127.0.0.1:4000";
+/* شناسهٔ پروژهٔ تب‌های قدیمی: چند تب (HRM، قرارداد، مهندسی) هنوز `p1` را
+ * سخت‌کد کرده‌اند و رکوردهایشان را روی همین شناسه می‌سازیم. */
 const PROJECT = process.env.PROJECT_ID || "p1";
+/* شناسهٔ پروژهٔ «دورهٔ جاری»: همان شناسهٔ دامنهٔ RBAC کاربران نمونه
+ * (`c1-p1`) و همان چیزی که میز کارهای d5 و App به‌عنوان پروژهٔ جاری
+ * نشان می‌دهند. رکورد پایهٔ `Project` را فقط نقشی می‌تواند بسازد که این
+ * شناسه در محدودهٔ او باشد (SEC-1) — پس پایهٔ پروژه و دادهٔ خرید/انبار
+ * روی همین شناسه ساخته می‌شود، نه روی `p1`. */
+const DEMO_PROJECT = process.env.DEMO_PROJECT_ID || "c1-p1";
 
 let ok = 0;
 let skip = 0;
@@ -59,9 +75,17 @@ async function step(label, fn) {
   }
 }
 
-/** ردیف جدول عمومی؛ ۴۰۹ یعنی از قبل هست. */
-async function row(table, data) {
-  const r = await call(`/api/data/${table}`, { method: "POST", body: data });
+/**
+ * ردیف جدول عمومی؛ ۴۰۹ یعنی از قبل هست.
+ *
+ * `user` اجباری است چون SEC-1 نوشتن خام هر جدول را به مجوز همان جدول
+ * می‌بندد: بودجه با `u-ceo`، فعالیت با `u-planner`، دادهٔ پایهٔ کارخانه با
+ * `u-admin` و رکورد پروژه با `u-pm` (تنها نقشی که `core.project.edit` دارد و
+ * شناسهٔ نمونه در محدودهٔ اوست). پیش از این همهٔ ردیف‌ها با `u-admin` نوشته
+ * می‌شد و seed با هفت خطای ۴۰۳ نیمه‌کاره می‌ماند.
+ */
+async function row(table, data, user) {
+  const r = await call(`/api/data/${table}`, { method: "POST", body: data, user });
   if (r.status === 409) return "skip";
   if (r.status >= 400) throw new Error(`${r.status} ${r.text.slice(0, 120)}`);
   return r.json?.data ?? r.json;
@@ -74,12 +98,12 @@ async function seedCore() {
   /* پروژه بدون صنعت ساخته نمی‌شود (`IndustryId` اجباری است). */
   await step("صنعت نفت و گاز", () => row("Industry", {
     Id: "IND-OG", Code: "OG", TitleFa: "نفت، گاز و پتروشیمی", TitleEn: "Oil & Gas", IsActive: true,
-  }));
-  await step("پروژه p1", () => row("Project", {
-    Id: PROJECT, IndustryId: "IND-OG", Code: "OG-2401",
+  }, "u-admin"));
+  await step(`پروژه ${DEMO_PROJECT}`, () => row("Project", {
+    Id: DEMO_PROJECT, IndustryId: "IND-OG", Code: "OG-2401",
     NameFa: "واحد فرآورش گاز — فاز ۱",
     Status: "active", StartDate: "2026-01-01", FinishDate: "2027-06-30",
-  }));
+  }, "u-pm"));
 
   for (const [id, title, budget] of [
     ["CBS-CIV", "ابنیه و سازه", 8_000_000_000],
@@ -87,9 +111,9 @@ async function seedCore() {
     ["CBS-ELE", "برق و ابزار دقیق", 3_000_000_000],
   ]) {
     await step(`حساب هزینه ${id}`, () => row("CostAccount", {
-      Id: id, ProjectId: PROJECT, Code: id, TitleFa: title,
+      Id: id, ProjectId: DEMO_PROJECT, Code: id, TitleFa: title,
       Budget: budget, Committed: 0, Actual: 0, Currency: "IRR",
-    }));
+    }, "u-ceo"));
   }
 
   for (const [id, name, mh] of [
@@ -98,10 +122,10 @@ async function seedCore() {
     ["A-MEC-01", "نصب اسپول لوله", 3200],
   ]) {
     await step(`فعالیت ${id}`, () => row("Activity", {
-      Id: id, ProjectId: PROJECT, Code: id, NameFa: name,
+      Id: id, ProjectId: DEMO_PROJECT, Code: id, NameFa: name,
       BudgetMh: mh, PlannedStart: "2026-01-05", PlannedFinish: "2026-06-30",
       PercentComplete: 0,
-    }));
+    }, "u-planner"));
   }
 }
 
@@ -1112,9 +1136,22 @@ await seedTimesheets();
 await seedCost();
 await seedMfgAndReport();
 
+/* ── دادهٔ نمونهٔ SCM (خرید، تدارکات، انبار) و CMMS ────────────────
+ * جدا از درخت پروژه‌اند ولی در همان اجرای «seed کامل» ساخته می‌شوند؛
+ * پیش از این، نصب تازه میز کار d5 و CMMS را خالی و بی‌خطا نشان می‌داد و
+ * کسی متوجه نمی‌شد که دادهٔ نمونه ساخته نشده است.
+ * روی `DEMO_PROJECT` ساخته می‌شوند چون میز کار d5 (هزینه و تأمین) همان
+ * شناسهٔ دامنهٔ RBAC را به‌عنوان پروژهٔ جاری می‌خواند. */
+console.log("\n── خرید، تدارکات و انبار (SCM) ──");
+const scm = await seedScm({ base: BASE, projectId: DEMO_PROJECT });
+console.log("\n── نگهداری و تعمیرات (CMMS) ──");
+const cmms = await seedCmms({ base: BASE });
+
 console.log(`\n${ok} ساخته شد · ${skip} از قبل بود · ${fail} ناموفق`);
-if (fail > 0) {
-  console.log("\nناموفق‌ها معمولاً یعنی یک گیت کسب‌وکار فعال است (مثلاً مدرک ناقص).");
-  console.log("این خطا نیست — همان رفتاری است که در کاربرد واقعی هم رخ می‌دهد.");
+console.log(`SCM: ${scm.ok} ساخته شد · ${scm.skip} از قبل بود · ${scm.fail} ناموفق`);
+console.log(`CMMS: ${cmms.ok} ساخته شد · ${cmms.skip} از قبل بود · ${cmms.fail} ناموفق`);
+if (fail + scm.fail + cmms.fail > 0) {
+  console.log("\nناموفق‌ها یا یک گیت کسب‌وکار فعال است (مثلاً مدرک ناقص)،");
+  console.log("یا یک ۴۰۳ مجوز. هر دو در گزارش بالا با کد وضعیت مشخص شده‌اند.");
 }
 console.log(`\nحالا رابط کاربری را باز کنید: http://localhost:5173\n`);

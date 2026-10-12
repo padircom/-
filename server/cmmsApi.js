@@ -577,6 +577,7 @@ async function createCapacityBlockRecord(tx, {
 export const CMMS_IMPLEMENTED_ROUTES = Object.freeze([
   /* سایت و مکان */
   "GET /api/cmms/sites",
+  "POST /api/cmms/sites",
   "GET /api/cmms/sites/:siteId",
   "PATCH /api/cmms/sites/:siteId",
   "GET /api/cmms/sites/:siteId/locations",
@@ -823,14 +824,14 @@ export function registerCmmsRoutes(app, { repo, subjects, evaluate, subjectPermi
   };
 
   /** مسیر بدون siteId (فهرست سایت‌های مجاز کاربر). */
-  const globalRoute = (permission, handler) => async (req, res) => {
+  const globalRoute = (permission, handler, status = 200) => async (req, res) => {
     try {
       const userId = String(req.headers?.["x-user-id"] ?? "").trim();
       const subject = userId ? subjects.find((item) => item.id === userId && item.active !== false) ?? null : null;
       if (!subject) throw new CmmsApiError(401, "CMMS_AUTH_REQUIRED", "هویت کاربر معتبر و فعال الزامی است", { permission });
       req.cmmsSubject = subject;
       const data = await handler({ repo: await getRepo(), req, subject, permission });
-      return res.status(200).json({ ok: true, data, meta: { traceId: req.requestId, version: CMMS_API_VERSION } });
+      return res.status(status).json({ ok: true, data, meta: { traceId: req.requestId, version: CMMS_API_VERSION } });
     } catch (err) {
       return fail(req, res, err);
     }
@@ -846,6 +847,46 @@ export function registerCmmsRoutes(app, { repo, subjects, evaluate, subjectPermi
     const scoped = allowed.includes("*") ? all : all.filter((site) => allowed.includes(site.SiteId));
     return { sites: scoped, total: scoped.length };
   }));
+
+  /* ساخت سایت ریشهٔ دامنه — پیکربندی سامانه است، نه کار روزانهٔ نت.
+   *
+   * چرا این مسیر لازم شد: `CmmsSite` جدول دامنه است و مسیرهای سایت‌محور بدون
+   * یک ردیف سایت هیچ‌وقت داده برنمی‌گردانند. نبود این مسیر باعث می‌شد تنها راه
+   * ساخت سایت، نوشتن دستی فایل `CmmsSite.json` پیش از بالا آمدن سرور باشد —
+   * یعنی «دادهٔ نمونه از در پشتی» که خود پروژه صریحاً ممنوع کرده است. دقیقاً
+   * همان شکافی که `seed-cmms.mjs` در سرآیندش توضیح داده بود.
+   *
+   * مجوز: `sys.config.manage` (مدیر سامانه). بررسی دامنه اینجا عمداً بدون
+   * `plantId` است، چون سایتی که هنوز ساخته نشده در دامنهٔ هیچ کاربری نیست. */
+  app.post("/api/cmms/sites", globalRoute("sys.config.manage", async ({ repo: r, req, subject }) => {
+    assertOnlyKeys(req.body, new Set([
+      "SiteId", "SiteCode", "NameFa", "NameEn", "SiteType", "PolicyStatementFa",
+      "TimeZoneId", "Currency", "BaseYear", "IsActive", "NoteFa",
+    ]));
+    const decision = evaluate(subject, "sys.config.manage", {});
+    if (!decision.allow) {
+      throw new CmmsApiError(403, "CMMS_FORBIDDEN", "مجوز این عمل را ندارید", { permission: "sys.config.manage", reason: decision.code });
+    }
+    const SiteId = id(req.body.SiteId, "SiteId");
+    if (await r.findOne("CmmsSite", [{ column: "SiteId", op: "eq", value: SiteId }])) {
+      throw conflict("CMMS_DUPLICATE", `سایت «${SiteId}» از قبل وجود دارد`);
+    }
+    const row = await r.create("CmmsSite", {
+      SiteId,
+      SiteCode: code(req.body.SiteCode ?? SiteId, "SiteCode"),
+      NameFa: text(req.body.NameFa, "NameFa", { required: true, max: 240 }),
+      NameEn: text(req.body.NameEn, "NameEn", { max: 240 }),
+      SiteType: oneOf(req.body.SiteType, "SiteType", ["plant", "refinery", "power", "drilling", "utility", "workshop", "office"], { fallback: "plant" }),
+      PolicyStatementFa: text(req.body.PolicyStatementFa, "PolicyStatementFa", { max: 2000 }),
+      TimeZoneId: text(req.body.TimeZoneId, "TimeZoneId", { max: 80 }) ?? "Asia/Tehran",
+      Currency: text(req.body.Currency, "Currency", { max: 8 }) ?? "IRR",
+      BaseYear: optionalNumber(req.body.BaseYear, "BaseYear", { integer: true, min: 1900, max: 2200 }),
+      IsActive: bool(req.body.IsActive, "IsActive", true),
+      NoteFa: text(req.body.NoteFa, "NoteFa", { max: 1000 }),
+    }, requestActor(req));
+    await writeAudit(r, req, "CMMS_SITE_CREATED", "CmmsSite", row.Id, "sys.config.manage");
+    return { site: row };
+  }, 201));
 
   app.get(`${ROOT}`, route("cmms.asset.view", async ({ repo: r, req, siteId }) => {
     const site = await r.findOne("CmmsSite", [{ column: "SiteId", op: "eq", value: siteId }]);
@@ -3152,7 +3193,14 @@ export function registerCmmsRoutes(app, { repo, subjects, evaluate, subjectPermi
     await mustFind(r, "CmmsAsset", assetId, siteId);
     const row = await r.create("CmmsOeeSnapshot", {
       SiteId: siteId, AssetId: assetId, PeriodType, PeriodStart, PeriodEnd,
-      PlannedProductionMinutes: req.body.PlannedProductionMinutes, RunMinutes: req.body.RunMinutes,
+      /* اسکیمای `CmmsOeeSnapshot` ستون‌های ساعت دارد (`PlannedProductionHours`/`RunHours`).
+       * پیش‌تر دو ستون `PlannedProductionMinutes`/`RunMinutes` نوشته می‌شد که در جدول
+       * وجود ندارند: در درایور JSON خطای اعتبارسنجی و در SQL Server خطای ستون
+       * ناشناخته (HTTP 500) می‌داد و «محاسبهٔ OEE با ذخیره» هیچ‌وقت کار نمی‌کرد.
+       * ورودی API همان دقیقه می‌ماند (قرارداد بیرونی تغییر نمی‌کند) و اینجا به ساعت
+       * تبدیل می‌شود — دقیقاً مثل BreakdownHours/CalendarHours. */
+      PlannedProductionHours: (req.body.PlannedProductionMinutes ?? 0) / 60,
+      RunHours: (req.body.RunMinutes ?? 0) / 60,
       BreakdownHours: (req.body.BreakdownMinutes ?? 0) / 60, SetupHours: (req.body.SetupMinutes ?? 0) / 60,
       MinorStopHours: (req.body.MinorStopMinutes ?? 0) / 60, ReducedSpeedHours: (req.body.ReducedSpeedMinutes ?? 0) / 60,
       StartupRejectUnits: req.body.StartupRejectUnits ?? 0, ProductionRejectUnits: req.body.ProductionRejectUnits ?? 0,
