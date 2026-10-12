@@ -163,7 +163,7 @@ CMMS همان سه‌لایه را بازتولید می‌کند تا نگهد�
 |------|-------|
 | `src/services/persistence.ts` | import `CMMS_TABLES`، الحاق به `SCHEMA`، افزودن مهاجرت `0057` |
 | `src/services/accessControl.ts` | افزودن ۴۸ مجوز `cmms.*` و ۷ نقش نگهداری |
-| `src/services/cmmsApi.ts` | **جدید** — کلاینت `CmmsClient` (۷۳ متد روی ۱۲۱ مسیر)، `CmmsRequestError`، کاربران نمونه و پیش‌نمایش RBAC سمت کلاینت |
+| `src/services/cmmsApi.ts` | **جدید** — کلاینت `CmmsClient` (۷۳ متد روی ۱۲۲ مسیر)، `CmmsRequestError`، کاربران نمونه و پیش‌نمایش RBAC سمت کلاینت |
 | `src/components/CmmsWorkspaceShell.tsx` | فضای کاری متصل به API (۱۱ زیرماژول؛ توقف/ادامه در تب دستورکار) |
 | `src/components/CmmsRcfaPanel.tsx` | **جدید** — پنل تعاملی ۵ چرا/استخوان‌ماهی/پارتو و چرخهٔ CAPA |
 | `src/components/CmmsIntegrationPanel.tsx` | **جدید** — صف رویداد و بلوکهٔ نرم ظرفیت |
@@ -185,7 +185,7 @@ CMMS همان سه‌لایه را بازتولید می‌کند تا نگهد�
 | `server/cmms.schema.test.mjs` | شمار جدول‌ها، استقلال FK، ستون‌های حسابرسی، مهاجرت ۰۰۵۷ |
 | `server/cmms.domain.test.mjs` | ISO 14224، FMEA/RPN، RCM، CBM، IEEE 1366، OEE، قابلیت اطمینان، LCC، PM، گردش‌کار |
 | `server/cmms.ai.test.mjs` | هر ۵ ماژول AI + قطعیت و توضیح‌پذیری |
-| `server/cmms.rest.test.mjs` | ۶۸ تست: ۱۲۱ مسیر REST، RBAC (۴۰۱/۴۰۳)، اعتبارسنجی (۴۰۰)، تکراری (۴۰۹)، قواعد تجاری (۴۲۲)، توقف/ادامه، RCFA/CAPA و یکپارچگی |
+| `server/cmms.rest.test.mjs` | ۶۹ تست: ۱۲۲ مسیر REST، RBAC (۴۰۱/۴۰۳)، اعتبارسنجی (۴۰۰)، تکراری (۴۰۹)، قواعد تجاری (۴۲۲)، توقف/ادامه، RCFA/CAPA و یکپارچگی |
 | `server/cmms.mesBridge.test.mjs` | **جدید** — ۱۱ تست: اِعمال قرارداد `cmms-mes-v1`، تکرارناپذیری، ترجمهٔ بلوکه به توقف برنامه‌ریزی‌شده، RBAC سمت MES |
 
 ---

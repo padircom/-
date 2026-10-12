@@ -192,8 +192,9 @@ test("همهٔ مسیرهای اعلام‌شده ثبت شده‌اند و هی
   const registered = [...handlers.keys()].sort();
   const declared = [...CMMS_IMPLEMENTED_ROUTES].sort();
   /* ۱۰۵ مسیر پیشین + ۱۶ مسیر فاز ۴: توقف/ادامه (۳)، RCFA تعاملی (۸) و
-   * یکپارچگی بین‌بخشی (۵). هیچ مسیری حذف یا تغییر نکرده است. */
-  assert.equal(registered.length, 121);
+   * یکپارچگی بین‌بخشی (۵) + یک مسیر ساخت سایت (POST /api/cmms/sites).
+   * هیچ مسیری حذف یا تغییر نکرده است. */
+  assert.equal(registered.length, 122);
   assert.deepEqual(declared.filter((route) => !registered.includes(route)), [], "مسیر اعلام‌شده ولی ثبت‌نشده");
   assert.deepEqual(registered.filter((route) => !declared.includes(route)), [], "مسیر ثبت‌شده ولی اعلام‌نشده");
 });
@@ -211,6 +212,47 @@ test("وابستگی‌های ناقص هنگام ثبت مسیر استثنا �
   assert.throws(() => registerCmmsRoutes(null, {}), TypeError);
   assert.throws(() => registerCmmsRoutes({ get() {}, post() {} }, {}), TypeError);
   assert.throws(() => registerCmmsRoutes({ get() {}, post() {} }, { repo: makeRepo() }), TypeError);
+});
+
+/* ═══════════════ ۱.۱ ساخت سایت ریشه (پیش‌نیاز همهٔ مسیرهای سایت‌محور) ═══════════════ */
+
+/* سایت ریشهٔ دامنه است و تا پیش از این مسیر REST نداشت؛ تنها راه، نوشتن
+ * دستی `CmmsSite.json` پیش از بالا آمدن سرور بود — همان «دادهٔ نمونه از در
+ * پشتی» که پروژه ممنوعش کرده. این آزمون قرارداد مسیر تازه را قفل می‌کند. */
+test("ساخت سایت فقط با مجوز مدیر سامانه و یک‌بار", async () => {
+  const { call, repo } = makeApi();
+  const created = await ok(call, "POST", "/api/cmms/sites", {
+    as: "u-admin",
+    expectStatus: 201,
+    body: { SiteId: "SITE-NEW", SiteCode: "SITE-NEW", NameFa: "مجتمع تازه", SiteType: "refinery", Currency: "IRR" },
+  });
+  assert.equal(created.site.SiteId, "SITE-NEW");
+  assert.equal(created.site.SiteType, "refinery");
+  assert.equal(await repo.count("CmmsSite"), 1);
+
+  /* ۴۰۹ تکراری، نه ۵۰۰ و نه ردیف دوم. */
+  await fails(call, "POST", "/api/cmms/sites", 409, "CMMS_DUPLICATE", {
+    as: "u-admin",
+    body: { SiteId: "SITE-NEW", NameFa: "مجتمع تازه" },
+  });
+  assert.equal(await repo.count("CmmsSite"), 1);
+
+  /* نقش عملیاتی نت، مجوز پیکربندی سامانه ندارد (SOD-06). */
+  await fails(call, "POST", "/api/cmms/sites", 403, "CMMS_FORBIDDEN", {
+    as: MANAGER,
+    body: { SiteId: "SITE-HACK", NameFa: "سایت متفرقه" },
+  });
+  assert.equal(await repo.count("CmmsSite"), 1);
+
+  /* فیلد ناشناخته و شناسهٔ بدشکل هم ۴۰۰ می‌گیرند، نه ۵۰۰. */
+  await fails(call, "POST", "/api/cmms/sites", 400, "CMMS_VALIDATION_FAILED", {
+    as: "u-admin",
+    body: { SiteId: "SITE-BAD", NameFa: "سایت", UnknownField: 1 },
+  });
+  await fails(call, "POST", "/api/cmms/sites", 400, "CMMS_VALIDATION_FAILED", {
+    as: "u-admin",
+    body: { SiteId: "بد شکل", NameFa: "سایت" },
+  });
 });
 
 /* ═══════════════════════ ۲. احراز هویت، RBAC و دامنهٔ سایت ═══════════════════════ */
