@@ -1439,13 +1439,12 @@ app.get("/api/diagnostics/readiness", async (req, res) => {
 });
 
 app.get("/api/integrations/status", (req, res) => {
+  // فقط اتصالات بیرونی؛ CMMS و IIoT/DAS ماژول داخلی‌اند و کانکتور خارجی ندارند.
   const items = [
     { id: "p6", name: "Primavera P6", configured: Boolean(process.env.P6_API_URL), mode: process.env.P6_API_URL ? "api" : "file-import" },
     { id: "msp", name: "Microsoft Project", configured: true, mode: "file-import" },
     { id: "sap", name: "ERP / SAP", configured: Boolean(process.env.SAP_API_URL), mode: "rest-odata" },
     { id: "powerbi", name: "Power BI", configured: Boolean(process.env.POWERBI_WORKSPACE_ID), mode: "embedded" },
-    { id: "cmms", name: "CMMS", configured: Boolean(process.env.CMMS_API_URL), mode: "rest" },
-    { id: "iot", name: "IoT Sensors", configured: Boolean(process.env.MQTT_BROKER_URL), mode: "mqtt" },
     { id: "dms", name: "DMS", configured: Boolean(process.env.DMS_API_URL), mode: "rest" },
   ];
   res.json({ ok: true, data: items, meta: { traceId: req.requestId, timestamp: new Date().toISOString() } });

@@ -28,17 +28,17 @@ test('configuration-only API never produces green, fake latency or a fixed conne
   await expect(row(page, 'msp')).toHaveAttribute('data-health', 'disconnected');
   await expect(row(page, 'sap')).toHaveAttribute('data-health', 'disconnected');
   await expect(row(page, 'pbi')).toHaveAttribute('data-health', 'unknown');
-  await expect(row(page, 'das')).toHaveAttribute('data-health', 'unknown');
+  await expect(row(page, 'dms')).toHaveAttribute('data-health', 'unknown');
   await expect(page.locator('[data-health="connected"]')).toHaveCount(0);
-  await expect(page.locator('.sources-sidebar header p')).toHaveText('0 of 8 connections verified');
+  await expect(page.locator('.sources-sidebar header p')).toHaveText('0 of 5 connections verified');
   await expect(row(page, 'p6')).not.toContainText('12ms');
   await expect(row(page, 'msp')).toHaveAttribute('title', /file import.*not a live connection/);
   await row(page, 'msp').click();
   await expect(page.locator('#source-health-detail')).toContainText('not a live connection');
-  await row(page, 'das').click();
+  await row(page, 'dms').click();
   await expect(page.locator('#source-health-detail')).toContainText('did not report this source');
   await page.locator('.app-header').getByRole('button', { name: 'فارسی', exact: true }).click();
-  await expect(row(page, 'das')).toContainText('نامشخص');
+  await expect(row(page, 'dms')).toContainText('نامشخص');
   await expect(page.locator('#source-health-detail')).toContainText('API برای این منبع');
 });
 
@@ -51,7 +51,7 @@ test('fresh explicit health, Power BI alias, failure, and automatic recovery', a
   await expect(row(page, 'p6')).toHaveAttribute('data-health', 'connected');
   await expect(row(page, 'p6')).toContainText('23 ms');
   await expect(row(page, 'pbi')).toHaveAttribute('data-health', 'connected');
-  await expect(page.locator('.sources-sidebar header p')).toHaveText('2 of 8 connections verified');
+  await expect(page.locator('.sources-sidebar header p')).toHaveText('2 of 5 connections verified');
   online = false;
   await page.clock.runFor(30_100);
   await expect(row(page, 'p6')).toHaveAttribute('data-health', 'disconnected');

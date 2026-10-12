@@ -1618,7 +1618,9 @@ export const domainExportFormats: Record<string, FormatKind[]> = {
 };
 
 /* ============================================================
-   LEFT SIDEBAR — 8 data integration sources
+   LEFT SIDEBAR — 5 external data integration sources
+   فقط اتصالات بیرونی واقعی؛ ماژول‌های داخلی (CMMS، IIoT/DAS و …)
+   منبع دادهٔ بیرونی محسوب نمی‌شوند و در این فهرست نیستند.
    ============================================================ */
 export type Source = {
   id: string;
@@ -1633,9 +1635,6 @@ export const dataSources: Source[] = [
   { id: "msp", name: "Microsoft Project", icon: "🗓", color: "#3B82F6", kind: { fa: "زمان‌بندی", en: "Scheduling" } },
   { id: "sap", name: "ERP / SAP", icon: "🏛", color: "#22D3EE", kind: { fa: "مالی و منابع", en: "Finance & Resources" } },
   { id: "pbi", name: "Power BI", icon: "📶", color: "#FACC15", kind: { fa: "تحلیل داده", en: "Analytics" } },
-  { id: "cmms", name: "CMMS", icon: "🔧", color: "#A78BFA", kind: { fa: "نگهداری و تعمیرات", en: "Maintenance" } },
-  { id: "das", name: "Drilling DAS", icon: "🛢", color: "#34D399", kind: { fa: "داده حفاری", en: "Drilling Data" } },
-  { id: "iot", name: "IoT Sensors", icon: "📡", color: "#F472B6", kind: { fa: "پایش میدانی", en: "Field Telemetry" } },
   { id: "dms", name: "DMS", icon: "📁", color: "#94A3B8", kind: { fa: "مستندات", en: "Documents" } },
 ];
 

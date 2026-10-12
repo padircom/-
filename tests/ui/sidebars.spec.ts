@@ -32,7 +32,7 @@ test.beforeEach(async ({ page }) => {
 
 test('all source rows and icons are flat, with selection and health preserved', async ({ page }) => {
   const rows = sources(page).locator('.source-row');
-  await expect(rows).toHaveCount(8);
+  await expect(rows).toHaveCount(5);
   for (const item of await rows.all()) {
     await expect(item).toHaveCSS('border-width', '0px');
     await expect(item).toHaveCSS('border-radius', '0px');

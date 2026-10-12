@@ -19,7 +19,7 @@ test('configured/ready/API availability is not a verified connection', () => {
   assert.equal(sourceHealth(snapshot([{ id: 'p6', configured: true }], { timestamp: checkedAt }), 'p6', now).status, 'unknown');
 });
 test('missing sources and file imports never turn green', () => {
-  assert.equal(sourceHealth(snapshot([]), 'das', now).reason, 'missing');
+  assert.equal(sourceHealth(snapshot([]), 'dms', now).reason, 'missing');
   assert.equal(state({ configured: true, mode: 'file-import', connected: true, checkedAt }).reason, 'file-import');
   assert.equal(state({ configured: false, connected: true, checkedAt }).reason, 'unconfigured');
 });
@@ -43,7 +43,7 @@ test('both old per-source evidence and expired snapshots invalidate green', () =
 test('Power BI API identity maps to the existing sidebar id', () => {
   const result = snapshot([{ id: 'powerbi', connected: true, checkedAt }]);
   assert.equal(sourceHealth(result, 'pbi', now).status, 'connected');
-  assert.equal(sourceHealth(result, 'das', now).status, 'unknown');
+  assert.equal(sourceHealth(result, 'dms', now).status, 'unknown');
 });
 test('bad envelopes, duplicate identities and degraded responses fail closed', () => {
   for (const body of [null, {}, { ok: false, data: [] }, { ok: true, data: {} }, { ok: true, data: [null] },
