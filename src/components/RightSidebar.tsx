@@ -485,9 +485,6 @@ export default function RightSidebar({
                 <span className="min-w-0 flex-1 truncate text-[11px] font-semibold">
                   {rtl ? "مدیریت و کنترل پروژه (PMIS)" : "Project Management & Control (PMIS)"}
                 </span>
-                <span className="rounded border border-sky-500/30 bg-sky-500/10 px-1.5 py-0.5 text-[8.5px] text-sky-300" dir="ltr">
-                  PMIS
-                </span>
                 <svg
                   viewBox="0 0 24 24"
                   fill="none"
@@ -572,9 +569,6 @@ export default function RightSidebar({
                 <span className="min-w-0 flex-1 truncate text-[11px] font-semibold">
                   {rtl ? "برنامه‌ریزی و کنترل تولید (MES)" : "Manufacturing Execution (MES)"}
                 </span>
-                <span className="rounded border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 text-[8.5px] text-emerald-300" dir="ltr">
-                  MES
-                </span>
                 <svg
                   viewBox="0 0 24 24"
                   fill="none"
@@ -634,9 +628,6 @@ export default function RightSidebar({
                 <span className="text-[12px]">🔧</span>
                 <span className="min-w-0 flex-1 truncate text-[11px] font-semibold">
                   {rtl ? "نگهداری و تعمیرات (CMMS)" : "Maintenance Management (CMMS)"}
-                </span>
-                <span className="rounded border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[8.5px] text-amber-300" dir="ltr">
-                  CMMS
                 </span>
                 <svg
                   viewBox="0 0 24 24"
@@ -698,9 +689,6 @@ export default function RightSidebar({
                 <span className="min-w-0 flex-1 truncate text-[11px] font-semibold">
                   {rtl ? "زنجیره تأمین، بازرگانی و مالی (SCM & Finance)" : "Supply Chain, Commercial & Finance (SCM & Finance)"}
                 </span>
-                <span className="rounded border border-teal-500/30 bg-teal-500/10 px-1.5 py-0.5 text-[8.5px] text-teal-300" dir="ltr">
-                  SCM
-                </span>
                 <svg
                   viewBox="0 0 24 24"
                   fill="none"
@@ -760,9 +748,6 @@ export default function RightSidebar({
                 <span className="text-[12px]">📡</span>
                 <span className="min-w-0 flex-1 truncate text-[11px] font-semibold">
                   {rtl ? "پایش میدانی و اینترنت اشیاء (IIoT & DAS)" : "Field Monitoring & Industrial IoT (IIoT & DAS)"}
-                </span>
-                <span className="rounded border border-purple-500/30 bg-purple-500/10 px-1.5 py-0.5 text-[8.5px] text-purple-300" dir="ltr">
-                  IIoT
                 </span>
                 <svg
                   viewBox="0 0 24 24"
