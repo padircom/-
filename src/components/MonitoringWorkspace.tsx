@@ -6,6 +6,7 @@ import { type MonitoringData, type MonitoringItem, type SourceState } from '../s
 import ReportBuilderPanel from './ReportBuilderPanel';
 import DrillDownPanel from './DrillDownPanel';
 import AiAssistantPanel from './AiAssistantPanel';
+import { PowerBiAction } from './ConnectorActions';
 
 export type MonitorTab = 'dash' | 'wpd' | 'evm' | 'kpi' | 'phi' | 'var' | 'ews' | 'action' | 'forecast' | 'reports' | 'builder' | 'drill' | 'ai' | 'scurve' | 'exec';
 type Props = { lang: Lang; projectId: string; initialTab?: MonitorTab; subId?: string; hideTabs?: boolean };
@@ -64,6 +65,9 @@ function LiveMonitoring({lang,projectId,initialTab,subId,hideTabs,userId}:Props 
     <header className="glass-dark rounded-xl p-3 flex flex-wrap items-center gap-3">
       <div className="flex-1"><h3 className="tx1 font-semibold">{text('پایش و کنترل — دادهٔ واقعی پروژه','Monitoring — persisted project data')}</h3><p className="text-xs tx3" dir="ltr">{projectId}</p></div>
       <button className={button} disabled={loading} onClick={()=>setRevision(v=>v+1)}>{text('تازه‌سازی','Refresh')}</button>
+      {/* خروجی/اتصال Power BI از پنل حذف‌شدهٔ «منابع داده» به صفحهٔ داشبوردها و
+        * گزارشات منتقل شد؛ وضعیت اتصال از همان قرارداد سلامت سرور می‌آید. */}
+      <PowerBiAction lang={lang} canExport={Boolean(current)} onExport={exportData} />
       <label className="text-xs tx2"><input type="checkbox" checked={auto} onChange={e=>setAuto(e.target.checked)}/> {text('بازخوانی واقعی هر ۳۰ ثانیه','Fetch every 30 seconds')}</label>
       <label className="text-xs tx3">{text('افق پیش‌نگر (روز)','Lookahead (days)')} <select className="bg-[var(--row)] tx1 rounded-lg border b-line-soft p-2" value={horizon} onChange={e=>setHorizon(Number(e.target.value))}>{[30,60,90].map(n=><option key={n} value={n}>{n}</option>)}</select></label>
     </header>

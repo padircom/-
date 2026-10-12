@@ -24,7 +24,6 @@ for (const lang of ['fa', 'en'] as const) {
     const module = page.locator('.context-sidebar h3').first();
     await expect(module).toHaveCSS('font-size', expected.text);
     const bannerSize = await fontSize(page.locator('.app-header h1'));
-    const sourceSize = await fontSize(page.locator('[data-source-id="p6"] .tx1'));
     await page.getByRole('button', { name: lang === 'fa' ? 'گزارش عملکرد' : 'Reports', exact: true }).click();
     const workspace = page.locator('.app-main > section');
     const refresh = workspace.getByRole('button', { name: lang === 'fa' ? 'تازه‌سازی' : 'Refresh', exact: true });
@@ -42,7 +41,9 @@ for (const lang of ['fa', 'en'] as const) {
       await expect(workspace.locator('header h3')).toHaveCSS('font-size', expected.title);
     }
     await expect(page.locator('.app-header h1')).toHaveCSS('font-size', bannerSize);
-    await expect(page.locator('[data-source-id="p6"] .tx1')).toHaveCSS('font-size', sourceSize);
+    // پنل «منابع داده» حذف شده است؛ دکمهٔ Power BI روی همین صفحه با همان توکن
+    // متن رندر می‌شود.
+    await expect(page.locator('[data-connector-actions="powerbi"] button').first()).toHaveCSS('font-size', expected.text);
   });
 
   test(`inner process/subprocess labels and central workspace text share the token (${lang})`, async ({ page }) => {
@@ -85,6 +86,5 @@ test('all legacy body sizes normalize; font scaling works and header/icons/chart
     await expect(page.locator('#type-fixture svg text')).toHaveCSS('font-size', '9px');
     await expect(page.locator('#type-fixture .bg-white p')).toHaveCSS('font-size', '10px');
     await expect(page.locator('.app-header h1')).toHaveCSS('font-size', '15px');
-    await expect(page.locator('[data-source-id="p6"] .tx1')).toHaveCSS('font-size', '11px');
   }
 });

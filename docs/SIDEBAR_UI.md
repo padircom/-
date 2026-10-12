@@ -68,3 +68,18 @@
 - سه آزمون در `tests/ui/sidebars.spec.ts`: تخت‌بودن هر پنج عنوان (بدون کادر،
   گوشه، سایه و زمینه)، تفاوت رنگ عنوان فعال با غیرفعال در تم تیره و روشن، و
   دست‌نخورده‌ماندن آیکون/متن/فلش و رفتار آکاردئون.
+
+## حذف کامل پنل/کشوی منابع داده (چپ)
+
+- `src/components/LeftSidebar.tsx` و `src/components/SidebarFrame.tsx` حذف شدند؛
+  `App.tsx` دیگر نه import آن‌ها را دارد و نه state انتخاب منبع (`source`).
+  سایدبار اصلی (راست، `.context-sidebar`) با عرض ثابت ۳۲۰ پیکسل بدون دکمهٔ
+  پنهان‌سازی باقی می‌ماند.
+- در `src/sidebars.css` قاعده‌های ردیف منبع (`.source-row`)، دکمهٔ جمع‌شدن
+  (`.sidebar-toggle`)، ریل ۴۰ پیکسلی (`--sidebar-rail-size`، `[data-collapsed]`)
+  و ترنزیشن‌هایشان حذف شدند؛ قاعدهٔ reduced-motion مربوط به `.sources-sidebar`
+  در `src/i18n.css` هم برداشته شد. `.sidebar-dock` اکنون فقط داک راست است.
+- تست‌های وابسته به پنل چپ (`sidebars.spec.ts`, `data-source-health.spec.ts`,
+  `i18n.spec.ts`, `header.spec.ts`, `process-sidebar.spec.ts`,
+  `workspace-typography.spec.ts`) بازنویسی یا به سطح‌های جدید منتقل شدند و
+  حذف پنل را هم صریحاً assert می‌کنند (`.sources-sidebar` → ۰).

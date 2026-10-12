@@ -20,6 +20,7 @@ import DprProgressFallback from "./DprProgressFallback";
 import DprSupportTables from "./DprSupportTables";
 import { isDprFormatActive, isDprSupportBoxActive } from "../data/dprScope";
 import MspAnalysisPanel from "./MspAnalysisPanel";
+import { ScheduleImportActions } from "./ConnectorActions";
 
 export type PexTab =
   | "dashboard"
@@ -114,6 +115,9 @@ export default function PlanningWorkspace({
 
   const [live, setLive] = useState<ApiSchedule | null>(null);
 
+  /* خواندن برنامه از سرور؛ بازخوانی پس از ورود فایل هم از همین مسیر می‌آید تا
+   * نمودار و اعداد همان دادهٔ سرور باشند، نه محاسبهٔ محلی. */
+  const [scheduleRevision, setScheduleRevision] = useState(0);
   useEffect(() => {
     let alive = true;
     getSchedule(weightMode, alpha).then((res) => {
@@ -122,7 +126,8 @@ export default function PlanningWorkspace({
     return () => {
       alive = false;
     };
-  }, [weightMode, alpha]);
+  }, [weightMode, alpha, scheduleRevision]);
+  const reloadSchedule = () => setScheduleRevision((value) => value + 1);
 
   const m = useMemo(() => buildPexModel(weightMode, alpha), [weightMode, alpha]);
 
@@ -505,6 +510,9 @@ export default function PlanningWorkspace({
 
         {tab === "baseline" && (
           <div className="fade-rise space-y-2">
+            {/* ورود برنامه از پنل حذف‌شدهٔ «منابع داده» به همین صفحهٔ
+              * زمان‌بندی/گانت منتقل شده است. */}
+            <ScheduleImportActions lang={lang} projectId={projectId} onImported={() => void reloadSchedule()} />
             <nav className="flex flex-wrap items-center gap-1 rounded-xl bg-black/15 p-1">
               {([
                 { id: "baseline" as const, fa: "برنامه پایه", en: "Baseline" },
