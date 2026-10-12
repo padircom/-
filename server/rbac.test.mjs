@@ -82,8 +82,10 @@ test("کاتالوگ: نسخه موتور و اندازه‌ها", () => {
   // confidential so the production planner can plan without touching cost data.
   // Plant registry / industry type adds two explicit permissions:
   // mfg.plant.view (internal) and mfg.plant.edit (confidential, audited) —
-  // changing the industry type is a plant-level decision, so only the
-  // production manager holds the edit gate; planner and engineer only view.
+  // changing the industry type is a plant-level decision, so the production
+  // manager holds the edit gate; the manufacturing engineer (default user of
+  // the engineering workspace in the demo) may also edit, audited; the
+  // production planner only views.
   /* ۲۹۶ مجوز پیشین + ۸۴ مجوز مستقل بخش ۳ (CMMS/EAM/APM) با پیشوند cmms.* —
      دارایی، خانوادهٔ تجهیز، دستورکار، انبار یدکی، پایش وضعیت، تحلیل
      قابلیت اطمینان، هزینهٔ چرخهٔ عمر، شاخص‌ها، هشدار، گردش‌کار و پنج موتور

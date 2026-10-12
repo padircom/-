@@ -310,6 +310,7 @@ export default function App() {
                 lang={lang}
                 initialTab={activeSystemView.tab}
                 onTabChange={(nextTab) => setActiveSystemView({ system: "mes", tab: nextTab })}
+                onExit={() => setActiveSystemView({ system: "pmis" })}
               />
             </Suspense>
           ) : activeSystemView.system === "cmms" ? (
@@ -373,16 +374,27 @@ export default function App() {
           )}
         </section>
 
-        {/* سایدبار چارچوب فقط در صفحهٔ اصلی دیده می‌شود.
+        {/* سایدبار چارچوب فقط در نمای PMIS دیده می‌شود.
           *
-          * پس از انتخاب خوشه/صنعت و پروژه، `ModuleDetail` باز می‌شود و
-          * خودش سایدبار فرعی «فرآیندها و زیرفرآیندها» را دارد. نگه
-          * داشتن سایدبار اصلی در کنارش یعنی دو ستون ناوبری هم‌زمان و
-          * ۳۲۰ پیکسل فضای کاری از دست رفته — بی‌آنکه کاری از آن برآید.
+          * دو حالت ورود به فضای کاری «عمیق» وجود دارد و در هر دو سایدبار
+          * اصلی باید محو شود (دو ستون ناوبری هم‌زمان = ۳۲۰ پیکسل فضای
+          * کاری از دست رفته، بی‌آنکه کاری از آن برآید):
           *
-          * بازگشت از راه دکمهٔ «بازگشت» درون خودِ صفحهٔ حوزه انجام
-          * می‌شود (`onBack`)، پس هیچ مسیری بن‌بست نمی‌شود. */}
-        {!moduleNav && (
+          * ۱) ماژول PMIS: انتخاب خوشه/صنعت و پروژه، `ModuleDetail` را باز
+          * می‌کند (`moduleNav`)؛ خودش سایدبار فرعی «فرآیندها و
+          * زیرفرآیندها» را دارد.
+          *
+          * ۲) چهار ماژول جدید (MES, CMMS, SCM, IIoT): `moduleNav` نمی‌گذارند
+          * و از `activeSystemView.system` ردیف می‌شوند. هرکدام خودش سایدبار
+          * فرعی زیرماژول‌ها (ModuleWorkspaceShell navItems) را دارد؛ نگه
+          * داشتن سایدبار اصلی کنارشان همان دو ستون ناوبری PMIS بود و به
+          * همین دلیل این‌ها هم پشت شرط `system === "pmis"` قفل شدند.
+          *
+          * بازگشت در هر دو حالت از راه دکمهٔ «بازگشت به نمای اصلی» درون
+          * خودِ فضای کاری انجام می‌شود (`onBack`/`onBackHome` →
+          * `setActiveSystemView({ system: "pmis" })` یا `onBack` →
+          * `setModuleNav(null)`)، پس هیچ مسیری بن‌بست نمی‌شود. */}
+        {!moduleNav && activeSystemView.system === "pmis" && (
           <RightSidebar
             lang={lang}
             quickAction={quickAction}

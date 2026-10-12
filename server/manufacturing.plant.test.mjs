@@ -370,14 +370,21 @@ test("MFG-PLANT: هویت، مجوز و دامنهٔ کارخانه پیش از 
   assert.equal(denied.body.error.code, "MFG_FORBIDDEN");
   assert.equal(denied.body.error.permission, "mfg.plant.view");
 
-  /* تفکیک وظایف: برنامه‌ریز و مهندس می‌بینند ولی ویرایش نمی‌کنند. */
-  for (const userId of [PLAN, ENG]) {
-    const forbidden = await call("PATCH", SETTINGS, {
-      params: { plantId: PLANT }, headers: H(userId), body: { IndustryType: "food", NameFa: "x" },
-    });
-    assert.equal(forbidden.statusCode, 403, `${userId} نباید بتواند ویرایش کند`);
-    assert.equal(forbidden.body.error.permission, "mfg.plant.edit");
-  }
+  /* تفکیک وظایف: برنامه‌ریز فقط می‌بیند و ویرایش نمی‌کند. */
+  const planForbidden = await call("PATCH", SETTINGS, {
+    params: { plantId: PLANT }, headers: H(PLAN), body: { IndustryType: "food", NameFa: "x" },
+  });
+  assert.equal(planForbidden.statusCode, 403, `${PLAN} نباید بتواند ویرایش کند`);
+  assert.equal(planForbidden.body.error.permission, "mfg.plant.edit");
+
+  /* مهندس ساخت (کاربر پیش‌فرض تب مهندسی در دمو) می‌تواند الگوی تولید را
+   * پیکربندی کند؛ ویرایش همچنان حسابرسی‌شده است (mfg.plant.edit با audited). */
+  const engCreated = await call("PATCH", SETTINGS, {
+    params: { plantId: PLANT }, headers: H(ENG), body: { IndustryType: "food", NameFa: "کارخانهٔ آزمایشی" },
+  });
+  assert.equal(engCreated.statusCode, 200, `${ENG} باید بتواند تنظیمات را بسازد/ویرایش کند`);
+  assert.equal(engCreated.body.data.plant.industryType, "food");
+  assert.equal(engCreated.body.data.plant.rowVersion, 1);
 
   const scoped = await call("GET", SETTINGS, { params: { plantId: "PLANT-OTHER" }, headers: H(MANAGER) });
   assert.equal(scoped.statusCode, 403);

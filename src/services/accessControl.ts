@@ -1313,8 +1313,11 @@ export const ROLE_CATALOG: RoleDef[] = [
       /* بخش ۱۱: نسخهٔ تولید ترکیب BOM+Routing است، پس مالکیتش با مهندسی ساخت است؛
        * اما تبدیل سفارش برنامه‌ریزی‌شده به او داده نمی‌شود (تفکیک وظایف). */
       "mfg.version.view", "mfg.version.edit", "mfg.plannedorder.view", "mfg.conformance.view",
-      /* نوع صنعت را فقط می‌بیند؛ تغییرش با مدیر تولید است. */
-      "mfg.plant.view",
+      /* الگوی تولید/نوع صنعت بخشی از مستر مهندسی است که این نقش مالک آن است؛
+       * چون کاربر پیش‌فرض تب «مهندسی ساخت» مهندس ساخت است، ویرایش این‌جا هم
+       * فعال است (تصمیم دمو). تغییر همچنان حسابرسی می‌شود
+       * (audited=true) و مدیر تولید این مجوز را هم نگه داشته است. */
+      "mfg.plant.view", "mfg.plant.edit",
     ],
   },
   {
@@ -1359,7 +1362,8 @@ export const ROLE_CATALOG: RoleDef[] = [
       "mfg.mps.approve", "mfg.plannedorder.view", "mfg.plannedorder.approve", "mfg.plannedorder.convert",
       "mfg.crp.view", "mfg.version.view", "mfg.conformance.view",
       /* پیکربندی سطح کارخانه (از جمله نوع صنعت) یک تصمیم مدیریتی است، پس
-       * ویرایشش فقط با مدیر تولید است. */
+       * ویرایشش با مدیر تولید است؛ مهندس ساخت هم برای دمو آن را دارد
+       * (تفصیل در نقش manufacturing_engineer). برنامه‌ریز فقط مشاهده می‌کند. */
       "mfg.plant.view", "mfg.plant.edit",
     ],
   },

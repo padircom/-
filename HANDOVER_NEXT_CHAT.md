@@ -1,5 +1,33 @@
 # انتقال به چت جدید — Arena Platform
-تاریخ به‌روزرسانی: 2026-09-27 — **گزارش مرجع جاری: `docs/GAP_ROADMAP.md`؛ بخش‌های پایین تاریخچه‌اند.**
+تاریخ به‌روزرسانی: 2026-10-12 — **گزارش مرجع جاری: `docs/GAP_ROADMAP.md`؛ بخش‌های پایین تاریخچه‌اند.**
+
+## نشست ۲۰۲۶-۱۰-۱۲ — اصلاح UI: منوی «نوع صنعت / الگوی تولید» در تب مهندسی ساخت (MES)
+- شاخهٔ نشست: `arena/9e9a6cae-repo` · **PR #32** به `main` (باز، mergeable).
+- مشکل: بخش ۵.۱۳ `docs/manufacturing-api.md` (تنظیمات کارخانه و IndustryType) فقط سمت سرور بود؛ هیچ ورودی بصری در UI نداشت.
+- تغییر: پنل جدید `MesIndustrySettingsPanel` در `src/components/MesCrudPanels.tsx` (فایل واحد) — بالای تب «مهندسی ساخت»؛ هفت گزینهٔ دقیق `MFG_INDUSTRY_TYPES`؛ اتصال به `GET/PATCH /api/mfg/plants/:plantId/settings` با If-Match/RowVersion؛ ۴۰۴ صادقانه = ساخت نخست با `NameFa` الزامی؛ ۴۰ۙ۹ → تازه‌خوانی؛ پیش‌نمایش بدون ذخیره از `GET /capabilities?industryType=`؛ بدون `mfg.plant.edit` فقط‌خوانده.
+- نگاشت قابلیت پاسخ PATCH به‌عنوان «فیلدهای اختصاصی صنعت» رندر می‌شود (فعال/نامرتبط + پیاده/هنوز پیاده)؛ منطق جدید سمت سرور یا کلاینت ساخته نشد.
+- دروازه‌ها: `npx tsc --noEmit` ✅ · `vite build` ✅ · `node --test server/manufacturing.plant.test.mjs` ۱۸/۱۸ ✅ · دودتست end-to-end روی JSON driver (۴۰۴ ← ساخت v1 ← به‌روزرسانی v2 ← ۴۰ۙ۹ ← ۴۰) ✅ · اجرای کامل `node --test server/*.test.mjs`: **۵۰۹۹/۵۰۹۹ سبز**.
+- بخش ۵.۱۳.۷ به `docs/manufacturing-api.md` اضافه شد تا محل UI در سند ثبت شود.
+
+## نشست ۲۰۲۶-۱۰-۱۲ (ادامه) — همسان‌سازی رفتار سایدبار اصلی در MES/CMMS/SCM/IIoT با PMIS
+- همان **PR #32** (طبق تصمیم کاربر، هر دو اصلاح در یک PR ماندند).
+- مشکل: با ورود به فضای کاری ۴ ماژول جدید، سایدبار اصلی راست (`.context-sidebar`) همچنان نمایش داده می‌شد؛ در PMIS با ورود به صفحهٔ حوزه محو می‌شود.
+- ریشه: PMIS از `moduleNav` و ۴ ماژول جدید از `activeSystemView.system` ردیف می‌شدند؛ شرط قدیمی `!moduleNav` آن‌ها را نمی‌شناخت.
+- تغییر (فقط UI): ۱) `App.tsx` — سایدبار راست هم پشت `system === "pmis"` قفل شد (چپ از قبل قفل بود)؛ ۲) `ManufacturingWorkspace.tsx` — پروپ `onExit` + دکمهٔ استاندارد «بازگشت به نمای اصلی» (MES پیش‌تر داخل اپ اصلی دکمهٔ بازگشت نداشت و با محو‌شدن سایدبار بن‌بست می‌شد)؛ حالت standalone دست‌نخورده؛ ۳) آزمون Playwright جدید `tests/ui/module-workspace-sidebars.spec.ts` برای ۴ ماژول + parity با PMIS.
+- دروازه‌ها: `npx tsc --noEmit` ✅ · `vite build` ✅ · ترنسفرهای زندهٔ Vite ✅ · اجرای Playwright در CI (browser در سندباکس در دسترس نیست).
+- نکته: پیش از اجرای آزمون‌های REST، API پیش‌نمایش (پورت ۴۰۰۰) را متوقف کنید (قفل `server/rundata`).
+
+## نشست ۲۰۲۶-۱۰-۱۲ (ادامه ۲) — رفع ۴۰۳ دسترسی تنظیمات صنعت در دمو
+- همان **PR #32**.
+- مشکل: کاربر پیش‌فرض تب «مهندسی ساخت» (`u-mfg-eng` / نقش `manufacturing_engineer`) فقط `mfg.plant.view` داشت؛ تغییر نوع صنعت ۴۰۳ می‌داد و منو غیرفعال می‌ماند (autoRoleFollow کاربر را به این نقش می‌برد).
+- تصمیم (با درخواست مالک محصول): `mfg.plant.edit` به نقش `manufacturing_engineer` هم داده شد — مهندس ساخت مالک مستر مهندسی است و الگوی تولید بخشی از همان مستر است. مدیر تولید مجوزش را نگه داشته؛ برنامه‌ریز (`production_planner`) همچنان فقط مشاهده (۴۰). ویرایش همچنان `audited` است (`MFG_PLANT_SETTINGS_UPDATED`).
+- تغییرات: `src/services/accessControl.ts` (منبع واحد RBAC؛ `server/rbacLogic.js` با `npm run build:rbac` بازتولید شد) + به‌روزرسانی آزمون‌های قفل‌شده (`manufacturing.plant.test.mjs`: برنامه‌ریز ۴۰۳ می‌ماند، مهندس ۲۰ می‌گیرد؛ کامنت `rbac.test.mjs`) + بخش ۵.۱۳.۶ سند API باجدول تفکیک وظایف.
+- دودتست زنده: `u-mfg-eng` PATCH → ۲۰۰ (v4) با ردیف ممیزی؛ `u-mfg-plan` PATCH → ۴۰؛ `u-mfg-operator` GET → ۴۰ (تغییر نکرده).
+
+## نشست ۲۰۲۶-۱۰-۱۲ (ادامه ۳) — حذف بج اختصاری کنار عنوان ۵ سرگروه سایدبار
+- همان **PR #32** (اصلاح چهارم).
+- تغییر: `src/components/RightSidebar.tsx` — فقط ۵ اسپن بج مجزا (PMIS/MES/CMMS/SCM/IIoT) از کنار عنوان سرگروه‌ها حذف شد؛ متن اصلی عناوین و همهٔ منطق دست‌نخورده (تغییر صرفاً ظاهری، ۱۵ خط).
+- دروازه: `npx tsc --noEmit` ✅ + ترنسفر زندهٔ Vite با صفر رخداد بج ✅.
 
 ## ادامهٔ نقشهٔ راه (۲۰۲۶-۰۹-۲۷)
 - شاخهٔ نشست: `arena/01a0e2cf-repo`؛ SEC-1 و LIVE-3 تا LIVE-6 تکمیل شده‌اند؛ پیشرفت ۲۲/۱۳۵ ≈ ۱۶٪ (۱۳ مورد انجام‌شده، ۵۷ باز؛ P1: ۱۰۰٪). مرحلهٔ بعد **P2 / CSU-1** است.

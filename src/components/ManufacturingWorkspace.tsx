@@ -71,6 +71,13 @@ export interface ManufacturingWorkspaceProps {
   onTabChange?: (tab: MfgTab) => void;
   standalone?: boolean;
   onExitStandalone?: () => void;
+  /**
+   * خروج به نمای اصلی اپ میزبان (حالت غیر-standalone). وقتی این مقدار بده شود
+   * دکمهٔ «بازگشت به نمای اصلی» در سربرگ پوستهٔ ماژول رندر می‌شود — همان
+   * رفتار CMMS/SCM/IIoT و ModuleDetail. قبل از این، MES داخل اپ اصلی هیچ
+   * دکمهٔ بازگشت نداشت و خروج فقط از سایدبار راست ممکن بود.
+   */
+  onExit?: () => void;
 }
 
 const TABS: Array<{
@@ -100,6 +107,7 @@ export default function ManufacturingWorkspace({
   onTabChange,
   standalone = false,
   onExitStandalone,
+  onExit,
 }: ManufacturingWorkspaceProps) {
   const { user: authUser } = useAuth();
   const fa = lang === "fa";
@@ -1702,6 +1710,9 @@ export default function ManufacturingWorkspace({
       className={standalone ? "h-screen w-screen p-4 bg-[var(--bg)]" : ""}
       accent={MES_ACCENT}
       icon="🏭"
+      /* حالت غیر-standalone: دکمهٔ «بازگشت به نمای اصلی» — همان الگوی CMMS/SCM/IIoT.
+         حالت standalone تغییر نمی‌کند (دکمهٔ «بازگشت به پورتال» در actions). */
+      onBack={standalone ? undefined : onExit}
       title={tr("سامانهٔ مستقل برنامه‌ریزی و کنترل تولید (Standalone MES)", "Standalone Manufacturing Execution System (MES)")}
       subtitle={tr(
         "دیتابیس مستقل (۲۶ جدول Mfg*) · بک‌اند مستقل کارخانه‌محور · فرانت‌اند مستقل · ارتباط با سامانه‌های دیگر فقط از طریق REST API",
