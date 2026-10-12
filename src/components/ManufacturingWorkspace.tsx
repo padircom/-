@@ -45,6 +45,13 @@ import {
   type MfgWorkCenterResource,
 } from "../services/manufacturingApi";
 import type { DispatchRule } from "../services/manufacturingModel";
+import {
+  MesEngineeringCrudSection,
+  MesExecutionCrudSection,
+  MesMrpCrudSection,
+  MesOrdersCrudSection,
+  MesPlanningCrudSection,
+} from "./MesCrudPanels";
 
 export type MfgTab =
   | "overview"
@@ -2038,6 +2045,9 @@ export default function ManufacturingWorkspace({
       )}
 
       {/* ══════════════════════ ۲) تب مهندسی ساخت ══════════════════════ */}
+      {tab === "engineering" && (
+        <MesEngineeringCrudSection fa={fa} plantId={plantId} userId={mfgUserId} onChanged={() => void loadActiveTab()} />
+      )}
       {!loading && tab === "engineering" && (
         <div className="space-y-3">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
@@ -2217,6 +2227,9 @@ export default function ManufacturingWorkspace({
       )}
 
       {/* ══════════════════════ ۳) تب سفارش‌های تولید ══════════════════════ */}
+      {tab === "orders" && (
+        <MesOrdersCrudSection fa={fa} plantId={plantId} userId={mfgUserId} onChanged={() => void loadActiveTab()} />
+      )}
       {!loading && tab === "orders" && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
           <section className="glass-dark rounded-xl p-3 space-y-3">
@@ -2696,6 +2709,9 @@ export default function ManufacturingWorkspace({
       )}
 
       {/* ══════════════════════ ۵) تب اجرای کارگاهی و کنترل عملیات (Phase 2: Operation Control & Progress Logging) ══════════════════════ */}
+      {tab === "execution" && (
+        <MesExecutionCrudSection fa={fa} plantId={plantId} userId={mfgUserId} onChanged={() => void loadActiveTab()} />
+      )}
       {!loading && tab === "execution" && (
         <div className="space-y-3">
           {/* فیلترهای صف اعزام کارگاهی */}
@@ -3302,6 +3318,9 @@ export default function ManufacturingWorkspace({
       )}
 
       {/* ══════════════════════ ۶) تب مواد، MRP، کمبود، مصرف و هشدارها (Phase 3) ══════════════════════ */}
+      {tab === "mrp" && (
+        <MesMrpCrudSection fa={fa} plantId={plantId} userId={mfgUserId} />
+      )}
       {!loading && tab === "mrp" && (
         <div className="space-y-3">
           {/* نوار فرمان اجرای MRP و صدور پیشنهاد تأمین */}
@@ -3752,6 +3771,9 @@ export default function ManufacturingWorkspace({
       )}
 
       {/* ══════════════════════ ۷) تب بهای تمام‌شده و تطبیق مالی ══════════════════════ */}
+      {tab === "planning" && (
+        <MesPlanningCrudSection fa={fa} plantId={plantId} userId={mfgUserId} onChanged={() => void loadActiveTab()} />
+      )}
       {!loading && tab === "planning" && (
         <div className="space-y-3">
           <section className="glass-dark rounded-xl p-3 flex flex-wrap items-center gap-2 text-xs">
