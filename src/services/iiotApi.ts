@@ -817,8 +817,15 @@ export function iiotCalibrateSensor(
   body: { calibratedAt?: string; certificateNo?: string; resultFa?: string; RowVersion?: number },
   opts: IiotRequestOptions = {},
 ) {
+  /* سرور کلیدهای دقیق `calibratedAt`, `CertificateNo`, `ResultFa` را می‌خواهد و
+   * کلید ناشناخته را رد می‌کند؛ نام‌های camelCase این تابع باید اینجا نگاشت شوند. */
+  const payload: Record<string, unknown> = {};
+  if (body.calibratedAt) payload.calibratedAt = body.calibratedAt;
+  if (body.certificateNo) payload.CertificateNo = body.certificateNo;
+  if (body.resultFa) payload.ResultFa = body.resultFa;
+  if (body.RowVersion !== undefined) payload.RowVersion = body.RowVersion;
   return iiotFetch<{ sensor: IiotSensorNode; nextCalibrationDue: string | null }>(
-    rigId, `/sensors/${encodeURIComponent(sensorId)}/calibration`, { ...opts, method: "POST", body },
+    rigId, `/sensors/${encodeURIComponent(sensorId)}/calibration`, { ...opts, method: "POST", body: payload },
   );
 }
 
