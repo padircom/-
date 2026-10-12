@@ -107,6 +107,21 @@ export default function AdminWorkspace({ lang, subId, onBack, onOpenFlowNet }: P
     setTimeout(() => setToast(null), 3000);
   };
 
+  /**
+   * همگام‌سازی دادهٔ پایه با سرور.
+   *
+   * پیش از این هر چهار مسیر `.catch(() => {})` بودند و پیام موفقیت بی‌قید
+   * و شرط نشان داده می‌شد: کاربر فکر می‌کرد خوشه/پروژه ثبت شده، ولی سرور
+   * هیچ رکوردی نداشت (یا ۴۰۳/۴۰۰ می‌داد) و کسی هم نمی‌فهمید. حالا نتیجهٔ
+   * واقعی سرور گزارش می‌شود؛ اگر سرور در دسترس نبود، صریح می‌گوییم «فقط
+   * محلی ذخیره شد» تا کسی روی دادهٔ همگام‌نشده حساب باز نکند.
+   */
+  const syncToast = (error: unknown) => {
+    const reason = error instanceof Error ? error.message : String(error);
+    const detail = reason.replace(/^API Error \[\d+\]:\s*/, "").slice(0, 140);
+    showToast(rtl ? `فقط محلی ذخیره شد — سرور: ${detail}` : `Saved locally only — server: ${detail}`);
+  };
+
   /* ─────────── Handlers for Cluster ─────────── */
   const startEditCluster = (c: Cluster) => {
     setEditingClusterId(c.id);
@@ -125,13 +140,17 @@ export default function AdminWorkspace({ lang, subId, onBack, onOpenFlowNet }: P
         icon: clusterIcon,
         color: clusterColor,
       });
-      pmisApiClient.updateIndustry(editingClusterId, {
-        titleFa: clusterFa,
-        titleEn: clusterEn || clusterFa,
-        icon: clusterIcon,
-        color: clusterColor,
-      }).catch(() => {});
-      showToast(rtl ? "خوشه صنعتی با موفقیت ویرایش شد" : "Industry cluster updated");
+      try {
+        await pmisApiClient.updateIndustry(editingClusterId, {
+          titleFa: clusterFa,
+          titleEn: clusterEn || clusterFa,
+          icon: clusterIcon,
+          color: clusterColor,
+        });
+        showToast(rtl ? "خوشه صنعتی با موفقیت ویرایش شد" : "Industry cluster updated");
+      } catch (error) {
+        syncToast(error);
+      }
       setEditingClusterId(null);
     } else {
       const newId = `c${Date.now().toString().slice(-4)}`;
@@ -147,15 +166,22 @@ export default function AdminWorkspace({ lang, subId, onBack, onOpenFlowNet }: P
         completed: 0,
       };
       addCluster(newCluster);
-      pmisApiClient.createIndustry({
-        code: newId,
-        titleFa: clusterFa,
-        titleEn: clusterEn || clusterFa,
-        icon: clusterIcon,
-        color: clusterColor,
-        isActive: true,
-      }).catch(() => {});
-      showToast(rtl ? "خوشه صنعتی جدید ایجاد شد" : "New industry cluster created");
+      try {
+        /* `id` هم فرستاده می‌شود تا شناسهٔ محلی و شناسهٔ سرور یکی باشد؛
+         * وگرنه خوشه در مرورگر `c1234` می‌شد و در سرور یک شناسهٔ دیگر. */
+        await pmisApiClient.createIndustry({
+          id: newId,
+          code: newId,
+          titleFa: clusterFa,
+          titleEn: clusterEn || clusterFa,
+          icon: clusterIcon,
+          color: clusterColor,
+          isActive: true,
+        });
+        showToast(rtl ? "خوشه صنعتی جدید ایجاد شد" : "New industry cluster created");
+      } catch (error) {
+        syncToast(error);
+      }
       setIsAddingCluster(false);
     }
     setClusterFa("");
@@ -193,29 +219,38 @@ export default function AdminWorkspace({ lang, subId, onBack, onOpenFlowNet }: P
 
     if (editingProjectId) {
       updateProject(selectedClusterForProjects, editingProjectId, projectPayload);
-      pmisApiClient.updateProject(editingProjectId, {
-        nameFa: prjNameFa,
-        nameEn: prjNameEn || prjNameFa,
-        clientFa: prjClientFa,
-        locationFa: prjLocFa,
-        status: prjStatus,
-        progress: Number(prjProgress) || 0,
-      }).catch(() => {});
-      showToast(rtl ? "پروژه با موفقیت به‌روزرسانی شد" : "Project updated successfully");
+      try {
+        /* `progress` فرستاده نمی‌شود: سرور آن را از فعالیت‌های همان پروژه
+         * محاسبه می‌کند و عدد دستی را (با اعلام در ignoredFields) رد می‌کند. */
+        await pmisApiClient.updateProject(editingProjectId, {
+          nameFa: prjNameFa,
+          nameEn: prjNameEn || prjNameFa,
+          clientFa: prjClientFa,
+          locationFa: prjLocFa,
+          status: prjStatus,
+        });
+        showToast(rtl ? "پروژه با موفقیت به‌روزرسانی شد" : "Project updated successfully");
+      } catch (error) {
+        syncToast(error);
+      }
       setEditingProjectId(null);
     } else {
       addProject(selectedClusterForProjects, projectPayload);
-      pmisApiClient.createProject({
-        industryId: selectedClusterForProjects,
-        code: prjCode,
-        nameFa: prjNameFa,
-        nameEn: prjNameEn || prjNameFa,
-        clientFa: prjClientFa,
-        locationFa: prjLocFa,
-        status: prjStatus,
-        progress: Number(prjProgress) || 0,
-      }).catch(() => {});
-      showToast(rtl ? "پروژه جدید با موفقیت ثبت شد" : "New project added successfully");
+      try {
+        await pmisApiClient.createProject({
+          id: projectPayload.id,
+          industryId: selectedClusterForProjects,
+          code: prjCode,
+          nameFa: prjNameFa,
+          nameEn: prjNameEn || prjNameFa,
+          clientFa: prjClientFa,
+          locationFa: prjLocFa,
+          status: prjStatus,
+        });
+        showToast(rtl ? "پروژه جدید با موفقیت ثبت شد" : "New project added successfully");
+      } catch (error) {
+        syncToast(error);
+      }
       setIsAddingProject(false);
     }
 

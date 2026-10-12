@@ -41,6 +41,7 @@ import { registerDprTablesRoutes } from "./dprTablesApi.js";
 import { registerFinWorkspaceRoutes } from "./finWorkspaceApi.js";
 import { registerCkmWorkspaceRoutes } from "./ckmWorkspaceApi.js";
 import { registerScmWorkspaceRoutes } from "./scmWorkspaceApi.js";
+import { registerMasterDataRoutes } from "./masterDataApi.js";
 import { canDprTransition, openDprBlocked, validateDpr } from "./pexDprLogic.js";
 import { inspectionBand, inspectionScore, nextInspectionDue, ptwCanTransition, ptwMissing, severityWeight, validateIncident, validateInspection, validatePermit, woPermitGate } from "./hseFieldLogic.js";
 import {
@@ -958,6 +959,10 @@ registerRccWorkspaceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: r
 registerEqmWorkspaceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
 registerMonitoringWorkspaceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
 registerStrategyExcellenceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
+/* Core/P0: دادهٔ پایهٔ خوشه‌ها و پروژه‌ها روی لایهٔ ماندگاری مشترک — با درایور
+ * JSON هم کار می‌کند. مسیرهای قدیمیِ SQL Server (dbo.Industry_Master /
+ * dbo.Project_Master) در همین نسخه حذف شدند تا یک منبع حقیقت بماند. */
+registerMasterDataRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
 /* P7/CPMS: میز کار ساخت و اجرا — پروژه‌ای، مجوز مستقل، پیوست واقعی. */
 registerCpmWorkspaceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate, storageRoot, acceptedMimeTypes, maxFileBytes });
 /* P8/PMO: منشور، فرم‌ساز و کارت سلامت — با گردش تأیید و SOD-30. */
@@ -2143,84 +2148,13 @@ app.post("/api/ai/run", async (req, res) => {
   }
 });
 
-/* ──────────────────────── Industries ──────────────────────── */
-app.get("/api/industries", async (req, res) => {
-  try {
-    const pool = await getPool(req);
-    const result = await pool.request().query(`SELECT Code AS id, Code AS code, TitleFa AS titleFa, TitleEn AS titleEn, Icon AS icon, Color AS color, IsActive AS isActive FROM dbo.Industry_Master WHERE IsActive = 1 ORDER BY Id ASC`);
-    res.json({ ok: true, data: { items: result.recordset, page: 1, pageSize: result.recordset.length, total: result.recordset.length }, meta: { traceId: req.requestId, timestamp: new Date().toISOString() } });
-  } catch (err) {
-    res.status(500).json({ ok: false, error: { code: "QUERY_ERROR", message: err.message, traceId: req.requestId } });
-  }
-});
-app.post("/api/industries", async (req, res) => {
-  try {
-    const { code, titleFa, titleEn, icon, color } = req.body;
-    const pool = await getPool(req);
-    const result = await pool.request().input("Code", sql.NVarChar(20), code).input("TitleFa", sql.NVarChar(200), titleFa).input("TitleEn", sql.NVarChar(200), titleEn || null).input("Icon", sql.NVarChar(30), icon || "🏗").input("Color", sql.NVarChar(20), color || "#38BDF8").query(`INSERT INTO dbo.Industry_Master (Code, TitleFa, TitleEn, Icon, Color) VALUES (@Code, @TitleFa, @TitleEn, @Icon, @Color); SELECT Code AS id, Code AS code, TitleFa AS titleFa, TitleEn AS titleEn, Icon AS icon, Color AS color, IsActive AS isActive FROM dbo.Industry_Master WHERE Code = @Code;`);
-    res.json({ ok: true, data: result.recordset[0], meta: { traceId: req.requestId, timestamp: new Date().toISOString() } });
-  } catch (err) {
-    res.status(500).json({ ok: false, error: { code: "INSERT_ERROR", message: err.message, traceId: req.requestId } });
-  }
-});
-app.patch("/api/industries/:id", async (req, res) => {
-  try {
-    const pool = await getPool(req);
-    const { titleFa, titleEn, icon, color, isActive } = req.body;
-    const result = await pool.request().input("Code", sql.NVarChar(20), req.params.id).input("TitleFa", sql.NVarChar(200), titleFa || null).input("TitleEn", sql.NVarChar(200), titleEn || null).input("Icon", sql.NVarChar(30), icon || null).input("Color", sql.NVarChar(20), color || null).input("IsActive", sql.Bit, isActive == null ? null : Boolean(isActive)).query(`UPDATE dbo.Industry_Master SET TitleFa = COALESCE(@TitleFa, TitleFa), TitleEn = COALESCE(@TitleEn, TitleEn), Icon = COALESCE(@Icon, Icon), Color = COALESCE(@Color, Color), IsActive = COALESCE(@IsActive, IsActive), UpdatedAt = GETDATE() WHERE Code = @Code; SELECT Code AS id, Code AS code, TitleFa AS titleFa, TitleEn AS titleEn, Icon AS icon, Color AS color, IsActive AS isActive FROM dbo.Industry_Master WHERE Code = @Code;`);
-    if (!result.recordset[0]) return res.status(404).json({ ok: false, error: { code: "NOT_FOUND", message: "Industry was not found", traceId: req.requestId } });
-    res.json({ ok: true, data: result.recordset[0], meta: { traceId: req.requestId, timestamp: new Date().toISOString() } });
-  } catch (err) {
-    res.status(500).json({ ok: false, error: { code: "UPDATE_ERROR", message: err.message, traceId: req.requestId } });
-  }
-});
-app.delete("/api/industries/:id", async (req, res) => {
-  try {
-    const pool = await getPool(req);
-    await pool.request().input("Code", sql.NVarChar(20), req.params.id).query("UPDATE dbo.Industry_Master SET IsActive = 0, UpdatedAt = GETDATE() WHERE Code = @Code");
-    res.json({ ok: true, data: { success: true }, meta: { traceId: req.requestId, timestamp: new Date().toISOString() } });
-  } catch (err) {
-    res.status(500).json({ ok: false, error: { code: "DELETE_ERROR", message: err.message, traceId: req.requestId } });
-  }
-});
-
-/* ──────────────────────── Projects ──────────────────────── */
-app.get("/api/projects", async (req, res) => {
-  try {
-    const pool = await getPool(req);
-    const industryId = req.query.industryId;
-    let query = `SELECT ProjectCode AS id, IndustryCode AS industryId, ProjectCode AS code, NameFa AS nameFa, NameEn AS nameEn, ClientFa AS clientFa, LocationFa AS locationFa, Budget, Status AS status, Progress AS progress FROM dbo.Project_Master WHERE IsArchived = 0`;
-    const request = pool.request();
-    if (industryId) { query += ` AND IndustryCode = @IndustryCode`; request.input("IndustryCode", sql.NVarChar(20), industryId); }
-    query += ` ORDER BY Id DESC`;
-    const result = await request.query(query);
-    res.json({ ok: true, data: { items: result.recordset, page: 1, pageSize: result.recordset.length, total: result.recordset.length }, meta: { traceId: req.requestId, timestamp: new Date().toISOString() } });
-  } catch (err) {
-    res.status(500).json({ ok: false, error: { code: "QUERY_ERROR", message: err.message, traceId: req.requestId } });
-  }
-});
-app.post("/api/projects", async (req, res) => {
-  try {
-    const { industryId, code, nameFa, nameEn, clientFa, locationFa, budget, status, progress } = req.body;
-    const pool = await getPool(req);
-    const result = await pool.request().input("IndustryCode", sql.NVarChar(20), industryId).input("ProjectCode", sql.NVarChar(50), code).input("NameFa", sql.NVarChar(400), nameFa).input("NameEn", sql.NVarChar(400), nameEn || null).input("ClientFa", sql.NVarChar(200), clientFa || null).input("LocationFa", sql.NVarChar(250), locationFa || null).input("Budget", sql.Decimal(18, 2), parseFloat(String(budget || "0").replace(/[^0-9.]/g, "")) || 0).input("Status", sql.NVarChar(20), status || "active").input("Progress", sql.Decimal(5, 2), progress || 0).query(`INSERT INTO dbo.Project_Master (IndustryCode, ProjectCode, NameFa, NameEn, ClientFa, LocationFa, Budget, Status, Progress) VALUES (@IndustryCode, @ProjectCode, @NameFa, @NameEn, @ClientFa, @LocationFa, @Budget, @Status, @Progress); SELECT ProjectCode AS id, IndustryCode AS industryId, ProjectCode AS code, NameFa AS nameFa, Status AS status, Progress AS progress FROM dbo.Project_Master WHERE ProjectCode = @ProjectCode;`);
-    res.json({ ok: true, data: result.recordset[0], meta: { traceId: req.requestId, timestamp: new Date().toISOString() } });
-  } catch (err) {
-    res.status(500).json({ ok: false, error: { code: "INSERT_ERROR", message: err.message, traceId: req.requestId } });
-  }
-});
-app.patch("/api/projects/:id", async (req, res) => {
-  try {
-    const pool = await getPool(req);
-    const { nameFa, nameEn, clientFa, locationFa, budget, status, progress } = req.body;
-    const result = await pool.request().input("ProjectCode", sql.NVarChar(50), req.params.id).input("NameFa", sql.NVarChar(400), nameFa || null).input("NameEn", sql.NVarChar(400), nameEn || null).input("ClientFa", sql.NVarChar(200), clientFa || null).input("LocationFa", sql.NVarChar(250), locationFa || null).input("Budget", sql.Decimal(18, 2), budget == null ? null : Number(budget)).input("Status", sql.NVarChar(20), status || null).input("Progress", sql.Decimal(5, 2), progress == null ? null : Number(progress)).query(`UPDATE dbo.Project_Master SET NameFa = COALESCE(@NameFa, NameFa), NameEn = COALESCE(@NameEn, NameEn), ClientFa = COALESCE(@ClientFa, ClientFa), LocationFa = COALESCE(@LocationFa, LocationFa), Budget = COALESCE(@Budget, Budget), Status = COALESCE(@Status, Status), Progress = COALESCE(@Progress, Progress), UpdatedAt = GETDATE() WHERE ProjectCode = @ProjectCode; SELECT ProjectCode AS id, IndustryCode AS industryId, ProjectCode AS code, NameFa AS nameFa, NameEn AS nameEn, ClientFa AS clientFa, LocationFa AS locationFa, Budget AS budget, Status AS status, Progress AS progress FROM dbo.Project_Master WHERE ProjectCode = @ProjectCode;`);
-    if (!result.recordset[0]) return res.status(404).json({ ok: false, error: { code: "NOT_FOUND", message: "Project was not found", traceId: req.requestId } });
-    res.json({ ok: true, data: result.recordset[0], meta: { traceId: req.requestId, timestamp: new Date().toISOString() } });
-  } catch (err) {
-    res.status(500).json({ ok: false, error: { code: "UPDATE_ERROR", message: err.message, traceId: req.requestId } });
-  }
-});
-
+/* ──────────────── دادهٔ پایهٔ خوشه‌ها و پروژه‌ها ────────────────
+ * مسیرهای `/api/industries` و `/api/projects` در `server/masterDataApi.js`
+ * ثبت می‌شوند (پیش از میان‌افزار بی‌درخواست، در بالای همین فایل). نسخهٔ
+ * قبلیِ این‌جا مستقیم `getPool(req)` و `dbo.Industry_Master` /
+ * `dbo.Project_Master` را صدا می‌زد: بدون SQL Server فقط ۵۰۰ می‌داد و
+ * میان‌افزار تنزّل آرام، نوشتن را به فروشگاه موازیِ `*_Master.json` می‌برد.
+ * اکنون یک منبع حقیقت روی جدول‌های `Industry` / `Project` هست. */
 /* ──────────────────────── Daily Reports ──────────────────────── */
 app.get("/api/projects/:projectId/daily-reports", async (req, res) => {
   try {

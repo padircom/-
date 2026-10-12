@@ -29,6 +29,7 @@ export type IndustryDto = {
 
 export type ProjectDto = {
   id: string;
+  /** کد خوشه (مثل `c1`) — همان کلیدی که رابط کاربری خوشه‌ها را با آن می‌شناسد. */
   industryId: string;
   code: string;
   nameFa: string;
@@ -40,7 +41,10 @@ export type ProjectDto = {
   budget?: number;
   currency?: string;
   status: "active" | "tender" | "stopped" | "completed";
-  progress: number;
+  /** `null` یعنی هیچ مبنایی برای پیشرفت ثبت نشده — نه صفرِ ساختگی.
+   *  رابط کاربری باید در این حالت «—» نشان دهد، نه «۰٪». */
+  progress: number | null;
+  progressBasis?: "activity_mh_weighted" | "activity_average" | "none";
 };
 
 export type ProjectScopeDto = { industryId: string; projectId: string };
@@ -279,13 +283,16 @@ export const PMIS_ENDPOINTS: Endpoint[] = [
   { method: "POST", path: "/notifications/test", entity: "Notification_Queue", descriptionFa: "ارسال تستی ایمیل یا پیامک" },
   { method: "GET", path: "/diagnostics/readiness", entity: "System", descriptionFa: "آزمون آمادگی استقرار و اسکیما" },
   { method: "GET", path: "/integrations/status", entity: "Integration_Log", descriptionFa: "وضعیت کانکتورهای خارجی" },
-  { method: "GET", path: "/industries", entity: "Industry_Master", descriptionFa: "فهرست خوشه‌ها و صنایع" },
-  { method: "POST", path: "/industries", entity: "Industry_Master", descriptionFa: "ایجاد خوشه صنعتی" },
-  { method: "PATCH", path: "/industries/:id", entity: "Industry_Master", descriptionFa: "ویرایش خوشه صنعتی" },
-  { method: "DELETE", path: "/industries/:id", entity: "Industry_Master", descriptionFa: "آرشیو خوشه صنعتی" },
-  { method: "GET", path: "/projects", entity: "Project_Master", descriptionFa: "فهرست و جستجوی پروژه‌ها" },
-  { method: "POST", path: "/projects", entity: "Project_Master", descriptionFa: "ثبت پروژه" },
-  { method: "PATCH", path: "/projects/:id", entity: "Project_Master", descriptionFa: "ویرایش پروژه" },
+  /* جدول‌های مرجع همین‌اند: `Industry` و `Project` (نه `*_Master`). نگاشت
+   * قدیمی مسیرها را به جدول‌های موازی می‌برد و همان چیزی بود که باعث می‌شد
+   * نوشتن‌ها در فروشگاه دیگری بی‌صدا گم شوند. */
+  { method: "GET", path: "/industries", entity: "Industry", descriptionFa: "فهرست خوشه‌ها و صنایع" },
+  { method: "POST", path: "/industries", entity: "Industry", descriptionFa: "ایجاد خوشه صنعتی" },
+  { method: "PATCH", path: "/industries/:id", entity: "Industry", descriptionFa: "ویرایش خوشه صنعتی" },
+  { method: "DELETE", path: "/industries/:id", entity: "Industry", descriptionFa: "غیرفعال‌سازی خوشه صنعتی" },
+  { method: "GET", path: "/projects", entity: "Project", descriptionFa: "فهرست و جستجوی پروژه‌ها" },
+  { method: "POST", path: "/projects", entity: "Project", descriptionFa: "ثبت پروژه" },
+  { method: "PATCH", path: "/projects/:id", entity: "Project", descriptionFa: "ویرایش پروژه" },
   { method: "GET", path: "/projects/:id/templates", entity: "Report_Template", descriptionFa: "قالب‌های سازمانی و ابلاغی پروژه" },
   { method: "POST", path: "/projects/:id/templates", entity: "Report_Template", descriptionFa: "بارگذاری قالب گزارش" },
   { method: "DELETE", path: "/projects/:id/templates/:templateId", entity: "Report_Template", descriptionFa: "آرشیو قالب گزارش" },
