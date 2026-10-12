@@ -9,6 +9,14 @@
 - دروازه‌ها: `npx tsc --noEmit` ✅ · `vite build` ✅ · `node --test server/manufacturing.plant.test.mjs` ۱۸/۱۸ ✅ · دودتست end-to-end روی JSON driver (۴۰۴ ← ساخت v1 ← به‌روزرسانی v2 ← ۴۰ۙ۹ ← ۴۰) ✅ · اجرای کامل `node --test server/*.test.mjs`: **۵۰۹۹/۵۰۹۹ سبز**.
 - بخش ۵.۱۳.۷ به `docs/manufacturing-api.md` اضافه شد تا محل UI در سند ثبت شود.
 
+## نشست ۲۰۲۶-۱۰-۱۲ (ادامه) — همسان‌سازی رفتار سایدبار اصلی در MES/CMMS/SCM/IIoT با PMIS
+- همان **PR #32** (طبق تصمیم کاربر، هر دو اصلاح در یک PR ماندند).
+- مشکل: با ورود به فضای کاری ۴ ماژول جدید، سایدبار اصلی راست (`.context-sidebar`) همچنان نمایش داده می‌شد؛ در PMIS با ورود به صفحهٔ حوزه محو می‌شود.
+- ریشه: PMIS از `moduleNav` و ۴ ماژول جدید از `activeSystemView.system` ردیف می‌شدند؛ شرط قدیمی `!moduleNav` آن‌ها را نمی‌شناخت.
+- تغییر (فقط UI): ۱) `App.tsx` — سایدبار راست هم پشت `system === "pmis"` قفل شد (چپ از قبل قفل بود)؛ ۲) `ManufacturingWorkspace.tsx` — پروپ `onExit` + دکمهٔ استاندارد «بازگشت به نمای اصلی» (MES پیش‌تر داخل اپ اصلی دکمهٔ بازگشت نداشت و با محو‌شدن سایدبار بن‌بست می‌شد)؛ حالت standalone دست‌نخورده؛ ۳) آزمون Playwright جدید `tests/ui/module-workspace-sidebars.spec.ts` برای ۴ ماژول + parity با PMIS.
+- دروازه‌ها: `npx tsc --noEmit` ✅ · `vite build` ✅ · ترنسفرهای زندهٔ Vite ✅ · اجرای Playwright در CI (browser در سندباکس در دسترس نیست).
+- نکته: پیش از اجرای آزمون‌های REST، API پیش‌نمایش (پورت ۴۰۰۰) را متوقف کنید (قفل `server/rundata`).
+
 ## ادامهٔ نقشهٔ راه (۲۰۲۶-۰۹-۲۷)
 - شاخهٔ نشست: `arena/01a0e2cf-repo`؛ SEC-1 و LIVE-3 تا LIVE-6 تکمیل شده‌اند؛ پیشرفت ۲۲/۱۳۵ ≈ ۱۶٪ (۱۳ مورد انجام‌شده، ۵۷ باز؛ P1: ۱۰۰٪). مرحلهٔ بعد **P2 / CSU-1** است.
 - دروازهٔ فعلی: **۴۳۲۳/۴۳۲۳ آزمون**، `npx tsc --noEmit` و `npm run build` موفق.
