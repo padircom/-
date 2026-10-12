@@ -170,3 +170,14 @@ const rows: WorkStageRow[] = [
 ];
 
 export const oilfieldWorkStages = buildWorkStages(rows);
+
+/**
+ * دامنهٔ این کاتالوگ مرجع.
+ *
+ * کاتالوگ مراحل کاری نفت فقط به پروژهٔ نفتیِ نمونهٔ سامانه تعلق دارد؛ برای
+ * پروژه‌ای دیگر هیچ دادهٔ مرجعی وجود ندارد، پس تب باید پنهان بماند. این
+ * شناسه عمداً در خودِ ماژول داده نشسته است، نه در کامپوننت: پیش از این
+ * `PlanningWorkspace` آن را سخت‌کد کرده بود و با تغییر پروژهٔ جاری کسی
+ * نمی‌فهمید چرا تب ناپدید می‌شود.
+ */
+export const OILFIELD_CATALOGUE_SCOPE = { clusterId: "c1", projectId: "c1-p1" } as const;

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
+import { useCurrentProjectId } from "../context/SystemContext";
 import { logAudit } from "../services/auditLogger";
 import type { Lang } from "../data/framework";
 
@@ -14,7 +15,6 @@ import type { Lang } from "../data/framework";
  * سرور همان اعتبارسنجی را دوباره انجام می‌دهد؛ آنچه اینجاست فقط برای کوتاه
  * کردن رفت‌وبرگشت کاربر است، نه جای کنترل سمت سرور. */
 
-const PROJECT_ID = "p1";
 
 type Json = Record<string, any>;
 
@@ -273,6 +273,9 @@ const HEALTH_TONE: Record<string, string> = {
 function GuaranteeSection({
   contractId, userId, onDone,
 }: { contractId: string; userId: string; onDone: () => void }) {
+  /* شناسهٔ پروژه از «پروژهٔ جاری» می‌آید (SystemContext) — نه ثابتِ ماژول. */
+  const projectId = useCurrentProjectId();
+
   const [reg, setReg] = useState<Json | null>(null);
   const [denied, setDenied] = useState(false);
   const [unauth, setUnauth] = useState(false);
@@ -282,13 +285,13 @@ function GuaranteeSection({
   const load = useCallback(async () => {
     if (!contractId) { setReg(null); return; }
     setBusy(true);
-    const q = `?projectId=${PROJECT_ID}&contractId=${encodeURIComponent(contractId)}`;
+    const q = `?projectId=${projectId}&contractId=${encodeURIComponent(contractId)}`;
     const r = await getGuarded(`/api/cnt/guarantee${q}`, userId);
     setReg(r.data);
     setDenied(r.denied);
     setUnauth(r.unauth);
     setBusy(false);
-  }, [contractId, userId]);
+  }, [contractId, userId, projectId]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -438,7 +441,7 @@ function GuaranteeSection({
                           const d = window.prompt("تاریخ تمدید (YYYY-MM-DD):");
                           if (!d) return;
                           void act(
-                            `/api/cnt/guarantee/${g.Id}/extend?projectId=${PROJECT_ID}&contractId=${contractId}`,
+                            `/api/cnt/guarantee/${g.Id}/extend?projectId=${projectId}&contractId=${contractId}`,
                             { newExpiry: d },
                             `ضمانت‌نامهٔ ${g.Code} تا ${d} تمدید شد`,
                             "CNT_GUARANTEE_EXTEND",
@@ -455,7 +458,7 @@ function GuaranteeSection({
                         onClick={() => {
                           if (!window.confirm(`آزادسازی ضمانت‌نامهٔ ${g.Code}؟ این عمل برگشت‌پذیر نیست.`)) return;
                           void act(
-                            `/api/cnt/guarantee/${g.Id}/close?projectId=${PROJECT_ID}&contractId=${contractId}`,
+                            `/api/cnt/guarantee/${g.Id}/close?projectId=${projectId}&contractId=${contractId}`,
                             { action: "release" },
                             `ضمانت‌نامهٔ ${g.Code} آزاد شد`,
                             "CNT_GUARANTEE_RELEASE",
@@ -469,7 +472,7 @@ function GuaranteeSection({
                         onClick={() => {
                           if (!window.confirm(`ضبط ضمانت‌نامهٔ ${g.Code}؟ این عمل برگشت‌پذیر نیست.`)) return;
                           void act(
-                            `/api/cnt/guarantee/${g.Id}/close?projectId=${PROJECT_ID}&contractId=${contractId}`,
+                            `/api/cnt/guarantee/${g.Id}/close?projectId=${projectId}&contractId=${contractId}`,
                             { action: "forfeit" },
                             `ضمانت‌نامهٔ ${g.Code} ضبط شد`,
                             "CNT_GUARANTEE_FORFEIT",
@@ -517,7 +520,7 @@ function GuaranteeSection({
         ]}
         onSubmit={async (v) => {
           const r = await act(
-            `/api/cnt/guarantee?projectId=${PROJECT_ID}&contractId=${contractId}`,
+            `/api/cnt/guarantee?projectId=${projectId}&contractId=${contractId}`,
             {
               code: v.code, guaranteeType: v.guaranteeType, bankName: v.bankName,
               guaranteeNo: v.guaranteeNo, amount: Number(v.amount),
@@ -580,7 +583,7 @@ function GuaranteeSection({
         ]}
         onSubmit={async (v) => {
           const r = await act(
-            `/api/cnt/advance?projectId=${PROJECT_ID}&contractId=${contractId}`,
+            `/api/cnt/advance?projectId=${projectId}&contractId=${contractId}`,
             {
               installmentNo: Number(v.installmentNo),
               paidAmount: Number(v.paidAmount),
@@ -609,7 +612,7 @@ function GuaranteeSection({
           ]}
           onSubmit={async (v) => {
             const r = await postJson(
-              `/api/cnt/advance/recover?projectId=${PROJECT_ID}&contractId=${contractId}`,
+              `/api/cnt/advance/recover?projectId=${projectId}&contractId=${contractId}`,
               { grossAmount: Number(v.grossAmount) },
               userId,
             );
@@ -657,6 +660,9 @@ const SUB_STATE_TONE: Record<string, string> = {
 function SubIpcSection({
   contractId, userId, onDone,
 }: { contractId: string; userId: string; onDone: () => void }) {
+  /* شناسهٔ پروژه از «پروژهٔ جاری» می‌آید (SystemContext) — نه ثابتِ ماژول. */
+  const projectId = useCurrentProjectId();
+
   const [reg, setReg] = useState<Json | null>(null);
   const [denied, setDenied] = useState(false);
   const [unauth, setUnauth] = useState(false);
@@ -666,18 +672,18 @@ function SubIpcSection({
 
   const load = useCallback(async () => {
     if (!contractId) { setReg(null); return; }
-    const q = `?projectId=${PROJECT_ID}&contractId=${encodeURIComponent(contractId)}`;
+    const q = `?projectId=${projectId}&contractId=${encodeURIComponent(contractId)}`;
     const r = await getGuarded(`/api/cnt/subipc${q}`, userId);
     setReg(r.data);
     setDenied(r.denied);
     setUnauth(r.unauth);
-  }, [contractId, userId]);
+  }, [contractId, userId, projectId]);
 
   const loadDetail = useCallback(async (id: string) => {
     if (!id) { setDetail(null); return; }
-    const r = await getGuarded(`/api/cnt/subipc/${encodeURIComponent(id)}?projectId=${PROJECT_ID}`, userId);
+    const r = await getGuarded(`/api/cnt/subipc/${encodeURIComponent(id)}?projectId=${projectId}`, userId);
     setDetail(r.data);
-  }, [userId]);
+  }, [userId, projectId]);
 
   useEffect(() => { void load(); }, [load]);
   useEffect(() => { void loadDetail(openId); }, [openId, loadDetail]);
@@ -822,7 +828,7 @@ function SubIpcSection({
         ]}
         submitFa="ایجاد"
         onSubmit={async (v) => {
-          const q = `?projectId=${PROJECT_ID}&contractId=${encodeURIComponent(contractId)}`;
+          const q = `?projectId=${projectId}&contractId=${encodeURIComponent(contractId)}`;
           const r = await act(`/api/cnt/subipc${q}`, {
             periodCode: v.periodCode,
             mainIpcId: v.mainIpcId || undefined,
@@ -946,7 +952,7 @@ function SubIpcSection({
                 ]}
                 submitFa="افزودن ردیف"
                 onSubmit={async (v) => {
-                  const r = await act(`/api/cnt/subipc/${encodeURIComponent(openId)}/line?projectId=${PROJECT_ID}`, {
+                  const r = await act(`/api/cnt/subipc/${encodeURIComponent(openId)}/line?projectId=${projectId}`, {
                     descriptionFa: v.descriptionFa,
                     boqItemId: v.boqItemId || undefined,
                     unit: v.unit || undefined,
@@ -990,7 +996,7 @@ function SubIpcSection({
                 ]}
                 submitFa="ثبت کسر"
                 onSubmit={async (v) => {
-                  const r = await act(`/api/cnt/subipc/${encodeURIComponent(openId)}/deduction?projectId=${PROJECT_ID}`, {
+                  const r = await act(`/api/cnt/subipc/${encodeURIComponent(openId)}/deduction?projectId=${projectId}`, {
                     sourceModule: v.sourceModule,
                     descriptionFa: v.descriptionFa,
                     amount: v.amount ? Number(v.amount) : undefined,
@@ -1015,7 +1021,7 @@ function SubIpcSection({
                   <button
                     key={st}
                     onClick={() => void act(
-                      `/api/cnt/subipc/${encodeURIComponent(openId)}/transition?projectId=${PROJECT_ID}`,
+                      `/api/cnt/subipc/${encodeURIComponent(openId)}/transition?projectId=${projectId}`,
                       { to: st },
                       `وضعیت به «${SUB_STATE_FA[st] ?? st}» تغییر کرد`,
                       "CNT_SUBIPC_TRANSITION",
@@ -1158,6 +1164,9 @@ const RPT_FORMATS: { key: string; fa: string }[] = [
 function ReportsSection({
   contractId, userId,
 }: { contractId: string; userId: string }) {
+  /* شناسهٔ پروژه از «پروژهٔ جاری» می‌آید (SystemContext) — نه ثابتِ ماژول. */
+  const projectId = useCurrentProjectId();
+
   const [catalog, setCatalog] = useState<Json | null>(null);
   const [denied, setDenied] = useState(false);
   const [unauth, setUnauth] = useState(false);
@@ -1200,13 +1209,13 @@ function ReportsSection({
 
   const query = useCallback(() => {
     const p = new URLSearchParams({
-      projectId: PROJECT_ID,
+      projectId: projectId,
       contractId,
       audience,
     });
     for (const [k, v] of Object.entries(lh)) if (v.trim()) p.set(k, v.trim());
     return p.toString();
-  }, [contractId, audience, lh]);
+  }, [contractId, audience, lh, projectId]);
 
   const doPreview = useCallback(async () => {
     if (!code) return;
@@ -1500,6 +1509,9 @@ function ReportsSection({
 function FinBridgeSection({
   contractId, userId, onDone,
 }: { contractId: string; userId: string; onDone: () => void }) {
+  /* شناسهٔ پروژه از «پروژهٔ جاری» می‌آید (SystemContext) — نه ثابتِ ماژول. */
+  const projectId = useCurrentProjectId();
+
   const [rec, setRec] = useState<Json | null>(null);
   const [summary, setSummary] = useState<Json | null>(null);
   const [postable, setPostable] = useState<Json | null>(null);
@@ -1510,7 +1522,7 @@ function FinBridgeSection({
 
   const load = useCallback(async () => {
     if (!contractId) { setRec(null); return; }
-    const q = `?projectId=${PROJECT_ID}&contractId=${encodeURIComponent(contractId)}`;
+    const q = `?projectId=${projectId}&contractId=${encodeURIComponent(contractId)}`;
     const [r, s, p] = await Promise.all([
       getGuarded(`/api/cnt/fin/reconcile${q}`, userId),
       getGuarded(`/api/cnt/fin/summary${q}`, userId),
@@ -1521,7 +1533,7 @@ function FinBridgeSection({
     setPostable(p.data);
     setDenied(r.denied);
     setUnauth(r.unauth);
-  }, [contractId, userId]);
+  }, [contractId, userId, projectId]);
 
   useEffect(() => { void load(); }, [load]);
   useEffect(() => { setPreview(null); setMsg(null); }, [contractId]);
@@ -1716,7 +1728,7 @@ function FinBridgeSection({
           ]}
           submitFa="اتصال به حساب"
           onSubmit={async (v) => act(
-            `/api/cnt/fin/account?projectId=${PROJECT_ID}&contractId=${encodeURIComponent(contractId)}`,
+            `/api/cnt/fin/account?projectId=${projectId}&contractId=${encodeURIComponent(contractId)}`,
             { costAccountCode: v.costAccountCode },
             "حساب هزینهٔ پیمان تنظیم شد",
             "CNT_FIN_ACCOUNT",
@@ -1816,7 +1828,7 @@ function FinBridgeSection({
             onSubmit={async (v) => {
               const apply = v.mode === "apply";
               const r = await act(
-                `/api/cnt/fin/post?projectId=${PROJECT_ID}&contractId=${encodeURIComponent(contractId)}`,
+                `/api/cnt/fin/post?projectId=${projectId}&contractId=${encodeURIComponent(contractId)}`,
                 {
                   ipcId: v.ipcId,
                   apply,
@@ -1853,7 +1865,7 @@ function FinBridgeSection({
             ]}
             submitFa="برگشت ثبت"
             onSubmit={async (v) => act(
-              `/api/cnt/fin/reverse?projectId=${PROJECT_ID}&contractId=${encodeURIComponent(contractId)}`,
+              `/api/cnt/fin/reverse?projectId=${projectId}&contractId=${encodeURIComponent(contractId)}`,
               { ipcId: v.ipcId, reasonFa: v.reasonFa },
               "ثبت مالی برگشت خورد",
               "CNT_FIN_REVERSE",
@@ -1910,6 +1922,9 @@ const TREND_TONE: Record<string, string> = {
 function KpiSection({
   contractId, userId, onDone,
 }: { contractId: string; userId: string; onDone: () => void }) {
+  /* شناسهٔ پروژه از «پروژهٔ جاری» می‌آید (SystemContext) — نه ثابتِ ماژول. */
+  const projectId = useCurrentProjectId();
+
   const [card, setCard] = useState<Json | null>(null);
   const [rules, setRules] = useState<Json | null>(null);
   const [denied, setDenied] = useState(false);
@@ -1919,16 +1934,16 @@ function KpiSection({
 
   const load = useCallback(async () => {
     if (!contractId) { setCard(null); return; }
-    const q = `?projectId=${PROJECT_ID}&contractId=${encodeURIComponent(contractId)}`;
+    const q = `?projectId=${projectId}&contractId=${encodeURIComponent(contractId)}`;
     const [k, r] = await Promise.all([
       getGuarded(`/api/cnt/kpi${q}`, userId),
-      getGuarded(`/api/cnt/alert-rule?projectId=${PROJECT_ID}`, userId),
+      getGuarded(`/api/cnt/alert-rule?projectId=${projectId}`, userId),
     ]);
     setCard(k.data);
     setRules(r.data);
     setDenied(k.denied);
     setUnauth(k.unauth);
-  }, [contractId, userId]);
+  }, [contractId, userId, projectId]);
 
   useEffect(() => { void load(); }, [load]);
   useEffect(() => { setShowRules(false); setMsg(null); }, [contractId]);
@@ -2163,7 +2178,7 @@ function KpiSection({
           ]}
           submitFa="ثبت عکس"
           onSubmit={async (v) => {
-            const q = `?projectId=${PROJECT_ID}&contractId=${encodeURIComponent(contractId)}`;
+            const q = `?projectId=${projectId}&contractId=${encodeURIComponent(contractId)}`;
             return act(`/api/cnt/kpi/snapshot${q}`, { periodCode: v.periodCode },
               "عکس دوره‌ای ثبت شد", "CNT_KPI_SNAPSHOT");
           }}
@@ -2244,7 +2259,7 @@ function KpiSection({
                 ]}
                 submitFa="اعمال"
                 onSubmit={async (v) => act(
-                  `/api/cnt/alert-rule?projectId=${PROJECT_ID}`,
+                  `/api/cnt/alert-rule?projectId=${projectId}`,
                   {
                     ruleCode: v.ruleCode,
                     thresholdValue: v.thresholdValue === "" ? undefined : Number(v.thresholdValue),
@@ -2280,6 +2295,9 @@ const CONTRACT_KPI_HINT: Record<string, string> = {
 function ProgressSection({
   contractId, userId, onDone,
 }: { contractId: string; userId: string; onDone: () => void }) {
+  /* شناسهٔ پروژه از «پروژهٔ جاری» می‌آید (SystemContext) — نه ثابتِ ماژول. */
+  const projectId = useCurrentProjectId();
+
   const [snap, setSnap] = useState<Json | null>(null);
   const [curve, setCurve] = useState<Json | null>(null);
   const [milestones, setMilestones] = useState<Json | null>(null);
@@ -2291,7 +2309,7 @@ function ProgressSection({
 
   const load = useCallback(async () => {
     if (!contractId) { setSnap(null); return; }
-    const q = `?projectId=${PROJECT_ID}&contractId=${encodeURIComponent(contractId)}`;
+    const q = `?projectId=${projectId}&contractId=${encodeURIComponent(contractId)}`;
     /* سه فراخوان موازی: هیچ‌کدام به دیگری وابسته نیست و سریال کردن
        فقط انتظار کاربر را سه برابر می‌کند. */
     const [s, c, m] = await Promise.all([
@@ -2304,17 +2322,17 @@ function ProgressSection({
     setMilestones(m.data);
     setDenied(s.denied);
     setUnauth(s.unauth);
-  }, [contractId, userId]);
+  }, [contractId, userId, projectId]);
 
   useEffect(() => { void load(); }, [load]);
   useEffect(() => { setShowLines(false); setBreakdown(null); setMsg(null); }, [contractId]);
 
   const loadBreakdown = useCallback(async () => {
-    const q = `?projectId=${PROJECT_ID}&contractId=${encodeURIComponent(contractId)}`;
+    const q = `?projectId=${projectId}&contractId=${encodeURIComponent(contractId)}`;
     const r = await getGuarded(`/api/cnt/progress/breakdown${q}`, userId);
     setBreakdown(r.data);
     setShowLines(true);
-  }, [contractId, userId]);
+  }, [contractId, userId, projectId]);
 
   const act = useCallback(async (path: string, body: Json, okFa: string, auditAction: string) => {
     const r = await postJson(path, body, userId);
@@ -2536,7 +2554,7 @@ function ProgressSection({
                       {m.effectivePct < 100 && (
                         <button
                           onClick={() => void act(
-                            `/api/cnt/milestone/${encodeURIComponent(String(m.Id))}/achieve?projectId=${PROJECT_ID}`,
+                            `/api/cnt/milestone/${encodeURIComponent(String(m.Id))}/achieve?projectId=${projectId}`,
                             { status: "achieved" },
                             `نقطهٔ عطف ${m.MilestoneNo} محقق ثبت شد`,
                             "CNT_MILESTONE_ACHIEVE",
@@ -2571,7 +2589,7 @@ function ProgressSection({
               ]}
               submitFa="تأیید"
               onSubmit={async (v) => act(
-                `/api/cnt/milestone/${encodeURIComponent(v.milestoneId)}/achieve?projectId=${PROJECT_ID}`,
+                `/api/cnt/milestone/${encodeURIComponent(v.milestoneId)}/achieve?projectId=${projectId}`,
                 { status: "verified", evidenceDocNo: v.evidenceDocNo, achievedDate: v.achievedDate || undefined },
                 "نقطهٔ عطف تأیید شد",
                 "CNT_MILESTONE_VERIFY",
@@ -2585,6 +2603,9 @@ function ProgressSection({
 }
 
 export default function ContractsPanel({ lang }: { lang: Lang }) {
+  /* شناسهٔ پروژه از «پروژهٔ جاری» می‌آید (SystemContext) — نه ثابتِ ماژول. */
+  const projectId = useCurrentProjectId();
+
   const rtl = lang === "fa";
   const { user } = useAuth();
   const userId = user?.id ?? "";
@@ -2599,11 +2620,11 @@ export default function ContractsPanel({ lang }: { lang: Lang }) {
 
   const reload = useCallback(async () => {
     setLoading(true);
-    const d = await getJson(`/api/cnt/contracts?projectId=${PROJECT_ID}`);
+    const d = await getJson(`/api/cnt/contracts?projectId=${projectId}`);
     setList(d);
     setLoading(false);
     return d;
-  }, []);
+  }, [, projectId]);
 
   useEffect(() => { void reload(); }, [reload]);
 
@@ -2617,8 +2638,8 @@ export default function ContractsPanel({ lang }: { lang: Lang }) {
 
   const loadDetail = useCallback(async (id: string) => {
     if (!id) { setDetail(null); return; }
-    setDetail(await getJson(`/api/cnt/contracts/${encodeURIComponent(id)}?projectId=${PROJECT_ID}`));
-  }, []);
+    setDetail(await getJson(`/api/cnt/contracts/${encodeURIComponent(id)}?projectId=${projectId}`));
+  }, [, projectId]);
 
   useEffect(() => { void loadDetail(selectedId); }, [selectedId, loadDetail]);
 
@@ -2864,7 +2885,7 @@ export default function ContractsPanel({ lang }: { lang: Lang }) {
           { name: "advancePct", fa: "پیش‌پرداخت ٪", kind: "number" },
         ]}
         onSubmit={async (v) => {
-          const r = await postJson(`/api/cnt/contracts?projectId=${PROJECT_ID}`, {
+          const r = await postJson(`/api/cnt/contracts?projectId=${projectId}`, {
             code: v.code,
             titleFa: v.titleFa,
             contractType: v.contractType,
@@ -2926,7 +2947,7 @@ export default function ContractsPanel({ lang }: { lang: Lang }) {
             { name: "costAccountCode", fa: "کد حساب هزینه", kind: "text" },
           ]}
           onSubmit={async (v) => {
-            const r = await postJson(`/api/cnt/boq?projectId=${PROJECT_ID}`, {
+            const r = await postJson(`/api/cnt/boq?projectId=${projectId}`, {
               contractId: selectedId,
               itemNo: v.itemNo,
               titleFa: v.titleFa,
@@ -2973,7 +2994,7 @@ export default function ContractsPanel({ lang }: { lang: Lang }) {
           { name: "inspectionRecordCode", fa: "کد تأییدیهٔ بازرسی", kind: "text" },
         ]}
         onSubmit={async (v) => {
-          const r = await postJson(`/api/cnt/measurement?projectId=${PROJECT_ID}`, {
+          const r = await postJson(`/api/cnt/measurement?projectId=${projectId}`, {
             boqItemId: v.boqItemId,
             sheetNo: v.sheetNo ? Number(v.sheetNo) : undefined,
             locationFa: v.locationFa || undefined,

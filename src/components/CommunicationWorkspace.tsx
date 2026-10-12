@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { type Lang } from "../data/framework";
 import { logAudit } from "../services/auditLogger";
 import { useAuth } from "../context/AuthContext";
+import { useCurrentProjectId } from "../context/SystemContext";
 import { DEMO_SUBJECTS, can as rbacCan } from "../services/accessControl";
 import { DEFAULT_RESPONSE_DAYS, isTimeBarred, type EngagementLevel, type Letter, type LessonCategory } from "../services/communication";
 import {
@@ -41,9 +42,6 @@ const TABS: { id: CkmTab; fa: string; en: string; icon: string; proc: string }[]
   { id: "analytics", fa: "تحلیل و گزارش ارتباطات", en: "Communication Analytics", icon: "📊", proc: "d11-p6" },
 ];
 
-
-/** پروژهٔ جاری؛ همان شناسهٔ دامنهٔ RBAC. */
-const PROJECT_ID = "c1-p1";
 
 const ALL_CATEGORIES: LessonCategory[] = LESSON_CATEGORIES;
 
@@ -175,7 +173,9 @@ export default function CommunicationWorkspace({
   const rtl = lang === "fa";
   const { user } = useAuth();
   const userId = user?.id ?? null;
-  const client = useMemo(() => new CkmClient(PROJECT_ID, userId), [userId]);
+  /* شناسهٔ پروژه دیگر در این فایل ثابت نیست؛ از میز کار/سبد پروژه می‌آید. */
+  const projectId = useCurrentProjectId();
+  const client = useMemo(() => new CkmClient(projectId, userId), [projectId, userId]);
   const subject = useMemo(() => DEMO_SUBJECTS.find((s) => s.id === userId) ?? null, [userId]);
 
   const [tab, setTab] = useState<CkmTab>(initialTab);

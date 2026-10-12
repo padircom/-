@@ -68,7 +68,12 @@ export class CkmClient {
   letterLinks = (no: string) => this.req<{ count: number; items: any[] }>("GET", `/letters/${e(no)}/links`);
   createLetterLink = (no: string, body: unknown) => this.req("POST", `/letters/${e(no)}/links`, body);
   deleteLetterLink = (no: string, linkId: string) => this.req("DELETE", `/letters/${e(no)}/links/${e(linkId)}`);
-  letterTemplates = () => this.req<{ count: number; items: any[] }>("GET", "/../edms/c1-p1/templates?templateType=letter", {} as any);
+  /* قالب‌های نامه در ماژول EDMS همان پروژه‌اند، نه یک پروژهٔ ثابت.
+   * پیش از این مسیر `/../edms/c1-p1/templates` سخت‌کد بود و برای هر پروژهٔ
+   * دیگری الگوی پروژهٔ نمونه را نشان می‌داد. */
+  letterTemplates = () => jsonRequest<{ count: number; items: any[] }>(
+    `/api/edms/${e(this.projectId)}/templates?templateType=letter`, this.userId, "GET",
+  );
   doneReferral = (id: string, body: unknown = {}) => this.req("POST", `/referrals/${e(id)}/done`, body);
 
   createRule = (r: unknown) => this.req("POST", "/rules", r);

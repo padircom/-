@@ -8,6 +8,7 @@ import { workingDaysBetween, type WeightMode } from "../services/planning";
 import { getSchedule, type ApiSchedule } from "../services/pexApiClient";
 import BreakdownBuilder from "./BreakdownBuilder";
 import OilfieldWorkStages from "./OilfieldWorkStages";
+import { OILFIELD_CATALOGUE_SCOPE } from "../data/oilfieldWorkStages";
 import PetrochemicalWorkStages from "./PetrochemicalWorkStages";
 import ContractWorkshop from "./ContractWorkshop";
 import InteractiveGantt, { type GanttActivity } from "./InteractiveGantt";
@@ -166,7 +167,7 @@ export default function PlanningWorkspace({
    *
    * نفتی به یک پروژه بسته است (c1-p1)، پتروشیمی به کل خوشهٔ c2 و هر پنج
    * پروژهٔ زیرمجموعه‌اش. پس شرط نمایش یکسان نیست و جدا نگه داشته شده. */
-  const showOilfield = clusterId === "c1" && projectId === "c1-p1";
+  const showOilfield = clusterId === OILFIELD_CATALOGUE_SCOPE.clusterId && projectId === OILFIELD_CATALOGUE_SCOPE.projectId;
   const showPetrochemical = clusterId === "c2";
 
   /* اگر دامنه عوض شود در حالی که زیرتبِ صنعتی باز است، آن زیرتب دیگر

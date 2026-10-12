@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Lang } from "../data/framework";
 import { logAudit } from "../services/auditLogger";
 import { useAuth } from "../context/AuthContext";
+import { useCurrentProjectId } from "../context/SystemContext";
 import { DEMO_SUBJECTS, can as rbacCan } from "../services/accessControl";
 import ContractsPanel from "./ContractsPanel";
 import { FIN_FORMULA_VERSION, agingBucket, needsAutoCr, progressInvoice, varianceSeverity, type CurveType } from "../services/finance";
@@ -39,9 +40,6 @@ const TABS: { id: FinTab; fa: string; en: string; icon: string; proc: string }[]
   { id: "balance", fa: "بالانس مصالح", en: "Material Balance", icon: "⚖️", proc: "d5-p8" },
   { id: "pnl", fa: "سود و زیان پروژه", en: "Project P&L", icon: "📈", proc: "d5-p9" },
 ];
-
-/** پروژهٔ جاری؛ همان شناسهٔ دامنهٔ RBAC. */
-const PROJECT_ID = "c1-p1";
 
 const PR_STATUS: Record<PrStatus, { fa: string; en: string; cls: string }> = {
   draft: { fa: "پیش‌نویس", en: "draft", cls: "border b-line-soft tx3" },
@@ -135,11 +133,14 @@ export default function CostSupplyWorkspace({
   initialTab?: FinTab;
   hideTabs?: boolean;
 }) {
+  /* شناسهٔ پروژه از «پروژهٔ جاری» می‌آید (SystemContext) — نه ثابتِ ماژول. */
+  const projectId = useCurrentProjectId();
+
   const rtl = lang === "fa";
   const { user } = useAuth();
   const userId = user?.id ?? null;
-  const client = useMemo(() => new FinClient(PROJECT_ID, userId), [userId]);
-  const scmClient = useMemo(() => new ScmClient(PROJECT_ID, userId), [userId]);
+  const client = useMemo(() => new FinClient(projectId, userId), [userId, projectId]);
+  const scmClient = useMemo(() => new ScmClient(projectId, userId), [userId, projectId]);
   const subject = useMemo(() => DEMO_SUBJECTS.find((s) => s.id === userId) ?? null, [userId]);
   const perm = useMemo(
     () => ({

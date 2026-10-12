@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { type Lang } from "../data/framework";
 import { useAuth } from "../context/AuthContext";
+import { useCurrentProjectId } from "../context/SystemContext";
 import { logAudit } from "../services/auditLogger";
 import {
   HRM_FORMULA_VERSION,
@@ -663,7 +664,6 @@ export default function WorkforceWorkspace({
 
 /* ═══════════════ تب تایم‌شیت (D4) ═══════════════ */
 
-const HRM_PROJECT_ID = "p1";
 
 type Json = Record<string, unknown>;
 
@@ -749,6 +749,9 @@ async function hrmPost(path: string, body: Json, userId: string): Promise<HrmPos
 }
 
 function TimesheetTab({ rtl, userId }: { rtl: boolean; userId: string }) {
+  /* شناسهٔ پروژه از «پروژهٔ جاری» می‌آید (SystemContext) — نه ثابتِ ماژول. */
+  const projectId = useCurrentProjectId();
+
   const [workDate, setWorkDate] = useState("");
   const [list, setList] = useState<Json | null>(null);
   const [periods, setPeriods] = useState<Json | null>(null);
@@ -765,12 +768,12 @@ function TimesheetTab({ rtl, userId }: { rtl: boolean; userId: string }) {
   const fmt = (n: number) => Number(n || 0).toLocaleString(rtl ? "fa-IR" : "en-US", { maximumFractionDigits: 2 });
 
   const load = useCallback(async () => {
-    const q = `projectId=${HRM_PROJECT_ID}${workDate ? `&workDate=${workDate}` : ""}`;
+    const q = `projectId=${projectId}${workDate ? `&workDate=${workDate}` : ""}`;
     const [l, p, c, d] = await Promise.all([
       hrmGet(`/api/hrm/timesheets?${q}`, userId),
-      hrmGet(`/api/hrm/periods?projectId=${HRM_PROJECT_ID}`, userId),
-      hrmGet(`/api/hrm/conflicts?projectId=${HRM_PROJECT_ID}&status=open`, userId),
-      hrmGet(`/api/hrm/devices?projectId=${HRM_PROJECT_ID}`, userId),
+      hrmGet(`/api/hrm/periods?projectId=${projectId}`, userId),
+      hrmGet(`/api/hrm/conflicts?projectId=${projectId}&status=open`, userId),
+      hrmGet(`/api/hrm/devices?projectId=${projectId}`, userId),
     ]);
     setList(l.data);
     setPeriods(p.data);
@@ -780,33 +783,33 @@ function TimesheetTab({ rtl, userId }: { rtl: boolean; userId: string }) {
     setDevices(d.data);
     setDenied(l.denied);
     setUnauth(l.unauth);
-  }, [workDate, userId]);
+  }, [workDate, userId, projectId]);
 
   useEffect(() => { void load(); }, [load]);
 
   const openSheet = useCallback(async (id: string) => {
     setSelected(id);
     setMsg(null);
-    const r = await hrmGet(`/api/hrm/timesheets/${id}?projectId=${HRM_PROJECT_ID}`, userId);
+    const r = await hrmGet(`/api/hrm/timesheets/${id}?projectId=${projectId}`, userId);
     setDetail(r.data);
-  }, [userId]);
+  }, [userId, projectId]);
 
   const closeConflict = useCallback(async (id: string, resolution: string, noteFa?: string) => {
     setBusy(true);
     setMsg(null);
-    const r = await hrmPost(`/api/hrm/conflicts/${id}/close`, { projectId: HRM_PROJECT_ID, resolution, noteFa }, userId);
+    const r = await hrmPost(`/api/hrm/conflicts/${id}/close`, { projectId: projectId, resolution, noteFa }, userId);
     setMsg(r.ok
       ? { kind: "ok", text: String((r.data as Json)?.messageFa ?? "تعارض بسته شد") }
       : { kind: "err", text: r.messageFa ?? "بستن تعارض انجام نشد", details: r.detailsFa });
     logAudit(r.ok ? "HRM_CONFLICT_CLOSE" : "HRM_CONFLICT_CLOSE_DENIED", "Workforce", id);
     await load();
     setBusy(false);
-  }, [userId, load]);
+  }, [userId, load, projectId]);
 
   const act = useCallback(async (id: string, to: string, extra: Json = {}) => {
     setBusy(true);
     setMsg(null);
-    const r = await hrmPost(`/api/hrm/timesheets/${id}/transition`, { projectId: HRM_PROJECT_ID, to, ...extra }, userId);
+    const r = await hrmPost(`/api/hrm/timesheets/${id}/transition`, { projectId: projectId, to, ...extra }, userId);
     if (r.ok) {
       setMsg({ kind: "ok", text: String((r.data as Json)?.messageFa ?? "انجام شد") });
       logAudit(`HRM_TS_${to.toUpperCase()}`, "Workforce", id);
@@ -817,19 +820,19 @@ function TimesheetTab({ rtl, userId }: { rtl: boolean; userId: string }) {
       logAudit(`HRM_TS_${to.toUpperCase()}_DENIED`, "Workforce", r.messageFa ?? "");
     }
     setBusy(false);
-  }, [userId, load, openSheet]);
+  }, [userId, load, openSheet, projectId]);
 
   const lockPeriod = useCallback(async (periodCode: string) => {
     setBusy(true);
     setMsg(null);
-    const r = await hrmPost("/api/hrm/periods/lock", { projectId: HRM_PROJECT_ID, periodCode }, userId);
+    const r = await hrmPost("/api/hrm/periods/lock", { projectId: projectId, periodCode }, userId);
     setMsg(r.ok
       ? { kind: "ok", text: String((r.data as Json)?.messageFa ?? "دوره بسته شد") }
       : { kind: "err", text: r.messageFa ?? "بستن دوره ممکن نشد", details: r.detailsFa });
     logAudit(r.ok ? "HRM_PERIOD_LOCK" : "HRM_PERIOD_LOCK_DENIED", "Workforce", periodCode);
     await load();
     setBusy(false);
-  }, [userId, load]);
+  }, [userId, load, projectId]);
 
   if (unauth) {
     return (
@@ -1270,6 +1273,9 @@ const TREND_FA: Record<string, string> = {
 };
 
 function ProductivityTab({ rtl, userId }: { rtl: boolean; userId: string }) {
+  /* شناسهٔ پروژه از «پروژهٔ جاری» می‌آید (SystemContext) — نه ثابتِ ماژول. */
+  const projectId = useCurrentProjectId();
+
   const [period, setPeriod] = useState("2026-09");
   const [prod, setProd] = useState<Json | null>(null);
   const [rca, setRca] = useState<Json | null>(null);
@@ -1287,11 +1293,11 @@ function ProductivityTab({ rtl, userId }: { rtl: boolean; userId: string }) {
     Number(n || 0).toLocaleString(rtl ? "fa-IR" : "en-US", { maximumFractionDigits: d });
 
   const load = useCallback(async () => {
-    const q = `projectId=${HRM_PROJECT_ID}&periodCode=${period}`;
+    const q = `projectId=${projectId}&periodCode=${period}`;
     const [p, r, c, k] = await Promise.all([
       hrmGet(`/api/hrm/productivity?${q}`, userId),
       hrmGet(`/api/hrm/rca?${q}`, userId),
-      hrmGet(`/api/hrm/rates/calibration?projectId=${HRM_PROJECT_ID}`, userId),
+      hrmGet(`/api/hrm/rates/calibration?projectId=${projectId}`, userId),
       hrmGet(`/api/hrm/rca-catalog`, userId),
     ]);
     setProd(p.data);
@@ -1301,14 +1307,14 @@ function ProductivityTab({ rtl, userId }: { rtl: boolean; userId: string }) {
     /* صندوق رویداد مجوز جدا دارد (`core.event.view`)؛ نبودش خطا
      * نیست و فقط آن بخش خالی می‌ماند. */
     const [ob, rc] = await Promise.all([
-      hrmGet(`/api/events/outbox?projectId=${HRM_PROJECT_ID}`, userId),
-      hrmGet(`/api/events/reconcile?projectId=${HRM_PROJECT_ID}`, userId),
+      hrmGet(`/api/events/outbox?projectId=${projectId}`, userId),
+      hrmGet(`/api/events/reconcile?projectId=${projectId}`, userId),
     ]);
     setOutbox(ob.data);
     setRecon(rc.data);
     setDenied(p.denied);
     setUnauth(p.unauth);
-  }, [period, userId]);
+  }, [period, userId, projectId]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -1321,7 +1327,7 @@ function ProductivityTab({ rtl, userId }: { rtl: boolean; userId: string }) {
   const postCost = useCallback(async (apply: boolean) => {
     setBusy(true);
     setMsg(null);
-    const r = await hrmPost("/api/hrm/cost/post", { projectId: HRM_PROJECT_ID, periodCode: period, apply }, userId);
+    const r = await hrmPost("/api/hrm/cost/post", { projectId: projectId, periodCode: period, apply }, userId);
     if (r.ok) {
       setCostPlan(r.data as Json);
       setMsg({
@@ -1340,31 +1346,31 @@ function ProductivityTab({ rtl, userId }: { rtl: boolean; userId: string }) {
     }
     logAudit(apply ? "HRM_COST_POST" : "HRM_COST_PREVIEW", "Workforce", period);
     setBusy(false);
-  }, [period, userId]);
+  }, [period, userId, projectId]);
 
   const compute = useCallback(async () => {
     setBusy(true);
     setMsg(null);
-    const r = await hrmPost("/api/hrm/productivity/compute", { projectId: HRM_PROJECT_ID, periodCode: period }, userId);
+    const r = await hrmPost("/api/hrm/productivity/compute", { projectId: projectId, periodCode: period }, userId);
     setMsg(r.ok
       ? { kind: "ok", text: String((r.data as Json)?.messageFa ?? "محاسبه انجام شد") }
       : { kind: "err", text: r.messageFa ?? "محاسبه انجام نشد", details: r.detailsFa });
     logAudit(r.ok ? "HRM_PROD_COMPUTE" : "HRM_PROD_COMPUTE_DENIED", "Workforce", period);
     await load();
     setBusy(false);
-  }, [period, userId, load]);
+  }, [period, userId, load, projectId]);
 
   const finalize = useCallback(async () => {
     setBusy(true);
     setMsg(null);
-    const r = await hrmPost("/api/hrm/metrics/finalize", { projectId: HRM_PROJECT_ID, periodCode: period }, userId);
+    const r = await hrmPost("/api/hrm/metrics/finalize", { projectId: projectId, periodCode: period }, userId);
     setMsg(r.ok
       ? { kind: "ok", text: String((r.data as Json)?.messageFa ?? "دوره نهایی شد") }
       : { kind: "err", text: r.messageFa ?? "نهایی‌سازی ممکن نشد", details: r.detailsFa });
     logAudit(r.ok ? "HRM_METRIC_FINALIZE" : "HRM_METRIC_FINALIZE_DENIED", "Workforce", period);
     await load();
     setBusy(false);
-  }, [period, userId, load]);
+  }, [period, userId, load, projectId]);
 
   if (unauth) {
     return (
@@ -1876,6 +1882,9 @@ const SUB_ATT_TONE: Record<string, string> = {
 };
 
 function CrewTab({ rtl, userId }: { rtl: boolean; userId: string }) {
+  /* شناسهٔ پروژه از «پروژهٔ جاری» می‌آید (SystemContext) — نه ثابتِ ماژول. */
+  const projectId = useCurrentProjectId();
+
   const [onDate, setOnDate] = useState("2026-09-08");
   const [workingDays, setWorkingDays] = useState(22);
   const [board, setBoard] = useState<Json | null>(null);
@@ -1896,15 +1905,15 @@ function CrewTab({ rtl, userId }: { rtl: boolean; userId: string }) {
 
   const load = useCallback(async () => {
     const [b, s] = await Promise.all([
-      hrmGet(`/api/hrm/crews?projectId=${HRM_PROJECT_ID}&onDate=${onDate}&workingDays=${workingDays}`, userId),
-      hrmGet(`/api/hrm/subcontracts?projectId=${HRM_PROJECT_ID}`, userId),
+      hrmGet(`/api/hrm/crews?projectId=${projectId}&onDate=${onDate}&workingDays=${workingDays}`, userId),
+      hrmGet(`/api/hrm/subcontracts?projectId=${projectId}`, userId),
     ]);
     setBoard(b.data);
     setSubs(s.data);
     setDenied(b.denied);
     setUnauth(b.unauth);
     setSubDenied(s.denied);
-  }, [onDate, workingDays, userId]);
+  }, [onDate, workingDays, userId, projectId]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -1912,19 +1921,19 @@ function CrewTab({ rtl, userId }: { rtl: boolean; userId: string }) {
   const loadSub = useCallback(async () => {
     if (!subId) { setAtt(null); setIpc(null); return; }
     const [a, i] = await Promise.all([
-      hrmGet(`/api/hrm/sub-attendance?projectId=${HRM_PROJECT_ID}&subContractId=${subId}&periodCode=${period}`, userId),
-      hrmGet(`/api/hrm/sub-ipc?projectId=${HRM_PROJECT_ID}&subContractId=${subId}&periodCode=${period}`, userId),
+      hrmGet(`/api/hrm/sub-attendance?projectId=${projectId}&subContractId=${subId}&periodCode=${period}`, userId),
+      hrmGet(`/api/hrm/sub-ipc?projectId=${projectId}&subContractId=${subId}&periodCode=${period}`, userId),
     ]);
     setAtt(a.data);
     setIpc(i.data);
-  }, [subId, period, userId]);
+  }, [subId, period, userId, projectId]);
 
   useEffect(() => { void loadSub(); }, [loadSub]);
 
   const act = useCallback(async (path: string, body: Json, code: string, ref: string) => {
     setBusy(true);
     setMsg(null);
-    const r = await hrmPost(path, { projectId: HRM_PROJECT_ID, ...body }, userId);
+    const r = await hrmPost(path, { projectId: projectId, ...body }, userId);
     setMsg(r.ok
       ? { kind: "ok", text: String((r.data as Json)?.messageFa ?? "انجام شد") }
       : {
@@ -1938,7 +1947,7 @@ function CrewTab({ rtl, userId }: { rtl: boolean; userId: string }) {
     await load();
     await loadSub();
     setBusy(false);
-  }, [userId, load, loadSub]);
+  }, [userId, load, loadSub, projectId]);
 
   if (unauth) {
     return (
@@ -2430,6 +2439,9 @@ const DOC_STATE_TONE: Record<string, string> = {
 };
 
 function OnboardingTab({ rtl, userId }: { rtl: boolean; userId: string }) {
+  /* شناسهٔ پروژه از «پروژهٔ جاری» می‌آید (SystemContext) — نه ثابتِ ماژول. */
+  const projectId = useCurrentProjectId();
+
   const [panel, setPanel] = useState<Json | null>(null);
   const [watch, setWatch] = useState<Json | null>(null);
   const [mob, setMob] = useState<Json | null>(null);
@@ -2445,30 +2457,30 @@ function OnboardingTab({ rtl, userId }: { rtl: boolean; userId: string }) {
 
   const load = useCallback(async () => {
     const [p, w, m] = await Promise.all([
-      hrmGet(`/api/hrm/people?projectId=${HRM_PROJECT_ID}`, userId),
-      hrmGet(`/api/hrm/expiry-watch?projectId=${HRM_PROJECT_ID}`, userId),
-      hrmGet(`/api/hrm/mob-requests?projectId=${HRM_PROJECT_ID}`, userId),
+      hrmGet(`/api/hrm/people?projectId=${projectId}`, userId),
+      hrmGet(`/api/hrm/expiry-watch?projectId=${projectId}`, userId),
+      hrmGet(`/api/hrm/mob-requests?projectId=${projectId}`, userId),
     ]);
     setPanel(p.data);
     setWatch(w.data);
     setMob(m.data);
     setDenied(p.denied);
     setUnauth(p.unauth);
-  }, [userId]);
+  }, [userId, projectId]);
 
   useEffect(() => { void load(); }, [load]);
 
   const openPerson = useCallback(async (id: string) => {
     setSelected(id);
     setMsg(null);
-    const r = await hrmGet(`/api/hrm/people/${id}?projectId=${HRM_PROJECT_ID}`, userId);
+    const r = await hrmGet(`/api/hrm/people/${id}?projectId=${projectId}`, userId);
     setDetail(r.data);
-  }, [userId]);
+  }, [userId, projectId]);
 
   const act = useCallback(async (path: string, body: Json, code: string, ref: string) => {
     setBusy(true);
     setMsg(null);
-    const r = await hrmPost(path, { projectId: HRM_PROJECT_ID, ...body }, userId);
+    const r = await hrmPost(path, { projectId: projectId, ...body }, userId);
     setMsg(r.ok
       ? { kind: "ok", text: String((r.data as Json)?.messageFa ?? "انجام شد") }
       : {
@@ -2479,11 +2491,11 @@ function OnboardingTab({ rtl, userId }: { rtl: boolean; userId: string }) {
     logAudit(r.ok ? code : `${code}_DENIED`, "Workforce", ref);
     await load();
     if (selected) {
-      const d = await hrmGet(`/api/hrm/people/${selected}?projectId=${HRM_PROJECT_ID}`, userId);
+      const d = await hrmGet(`/api/hrm/people/${selected}?projectId=${projectId}`, userId);
       setDetail(d.data);
     }
     setBusy(false);
-  }, [userId, load, selected]);
+  }, [userId, load, selected, projectId]);
 
   if (unauth) {
     return (
@@ -2930,6 +2942,9 @@ const SEV_TONE: Record<string, string> = {
 };
 
 function AnalyticsTab({ rtl, userId }: { rtl: boolean; userId: string }) {
+  /* شناسهٔ پروژه از «پروژهٔ جاری» می‌آید (SystemContext) — نه ثابتِ ماژول. */
+  const projectId = useCurrentProjectId();
+
   const [view, setView] = useState<Json | null>(null);
   const [groupBy, setGroupBy] = useState("trade");
   const [report, setReport] = useState<Json | null>(null);
@@ -2952,35 +2967,35 @@ function AnalyticsTab({ rtl, userId }: { rtl: boolean; userId: string }) {
 
   const load = useCallback(async () => {
     const [r, c] = await Promise.all([
-      hrmGet(`/api/hrm/analytics?projectId=${HRM_PROJECT_ID}&groupBy=${groupBy}`, userId),
-      hrmGet(`/api/hrm/reports?projectId=${HRM_PROJECT_ID}`, userId),
+      hrmGet(`/api/hrm/analytics?projectId=${projectId}&groupBy=${groupBy}`, userId),
+      hrmGet(`/api/hrm/reports?projectId=${projectId}`, userId),
     ]);
     setView(r.data);
     setCatalog(c.data);
     setDenied(r.denied);
     setUnauth(r.unauth);
-  }, [userId, groupBy]);
+  }, [userId, groupBy, projectId]);
 
   useEffect(() => { void load(); }, [load]);
 
   const makeReport = useCallback(async () => {
     setBusy(true);
     setMsg(null);
-    const r = await hrmGet(`/api/hrm/analytics/report?projectId=${HRM_PROJECT_ID}&groupBy=${groupBy}`, userId);
+    const r = await hrmGet(`/api/hrm/analytics/report?projectId=${projectId}&groupBy=${groupBy}`, userId);
     if (r.data) {
       setReport(r.data);
       setMsg({ kind: "ok", text: "گزارش رسمی صادر شد" });
-      logAudit("HRM_REPORT_EXPORT", "Workforce", HRM_PROJECT_ID);
+      logAudit("HRM_REPORT_EXPORT", "Workforce", projectId);
     } else {
       setReport(null);
       setMsg({
         kind: "err",
         text: r.denied ? "مجوز «hrm.analytics.export» را ندارید" : "صدور گزارش انجام نشد",
       });
-      logAudit("HRM_REPORT_EXPORT_DENIED", "Workforce", HRM_PROJECT_ID);
+      logAudit("HRM_REPORT_EXPORT_DENIED", "Workforce", projectId);
     }
     setBusy(false);
-  }, [userId, groupBy]);
+  }, [userId, groupBy, projectId]);
 
   /**
    * پیش از دانلود، وضعیت دروازه با نسخهٔ JSON سنجیده می‌شود.
@@ -2993,7 +3008,7 @@ function AnalyticsTab({ rtl, userId }: { rtl: boolean; userId: string }) {
     setBusy(true);
     setMsg(null);
     setGate(null);
-    const q = `projectId=${HRM_PROJECT_ID}&groupBy=${groupBy}&audience=${audience}`;
+    const q = `projectId=${projectId}&groupBy=${groupBy}&audience=${audience}`;
     const r = await hrmGet(`/api/hrm/reports/${rptCode}?${q}`, userId);
     if (r.data) {
       setGate(r.data.gate as Json);
@@ -3008,10 +3023,10 @@ function AnalyticsTab({ rtl, userId }: { rtl: boolean; userId: string }) {
     }
     logAudit(r.data ? "HRM_RPT_CHECK" : "HRM_RPT_BLOCKED", "Workforce", rptCode);
     setBusy(false);
-  }, [userId, groupBy, rptCode, audience, rtl]);
+  }, [userId, groupBy, rptCode, audience, rtl, projectId]);
 
   const downloadUrl = (format: string) =>
-    `/api/hrm/reports/${rptCode}?projectId=${HRM_PROJECT_ID}&groupBy=${groupBy}&audience=${audience}&format=${format}`;
+    `/api/hrm/reports/${rptCode}?projectId=${projectId}&groupBy=${groupBy}&audience=${audience}&format=${format}`;
 
   if (unauth) {
     return (
