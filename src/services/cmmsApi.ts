@@ -529,6 +529,31 @@ export const CmmsClient = {
   releaseCapacityBlock: (siteId: string, userId: string | null | undefined, blockId: string, body: Record<string, unknown> = {}) =>
     cmmsFetch<{ block: any; integration: any }>(siteId, `/capacity-blocks/${encodeURIComponent(blockId)}/release`, { method: "POST", userId, body }),
 
+  /* ── مسیرهای CRUD که سرور دارد و کلاینت تا امروز صدا نمی‌زد ── */
+  patchFamily: (siteId: string, userId: string | null | undefined, familyId: string, rowVersion: number, body: Record<string, unknown>) =>
+    cmmsFetch<CmmsFamily>(siteId, `/families/${encodeURIComponent(familyId)}`, { method: "PATCH", userId, ifMatch: rowVersion, body: { ...body, RowVersion: rowVersion } }),
+
+  patchSparePart: (siteId: string, userId: string | null | undefined, partId: string, rowVersion: number, body: Record<string, unknown>) =>
+    cmmsFetch<CmmsSparePart>(siteId, `/spare-parts/${encodeURIComponent(partId)}`, { method: "PATCH", userId, ifMatch: rowVersion, body: { ...body, RowVersion: rowVersion } }),
+
+  listPmSchedules: (siteId: string, userId?: string | null, query?: { assetId?: string; triggerType?: string; isActive?: boolean; limit?: number; offset?: number }) =>
+    cmmsFetch<{ schedules: any[]; total: number }>(siteId, "/pm-schedules", { userId, query }),
+
+  createPmSchedule: (siteId: string, userId: string | null | undefined, body: Record<string, unknown>) =>
+    cmmsFetch<any>(siteId, "/pm-schedules", { method: "POST", userId, body }),
+
+  createKpiTarget: (siteId: string, userId: string | null | undefined, body: Record<string, unknown>) =>
+    cmmsFetch<any>(siteId, "/kpi-targets", { method: "POST", userId, body }),
+
+  cancelWorkOrder: (siteId: string, userId: string | null | undefined, workOrderId: string, body: Record<string, unknown> = {}) =>
+    cmmsFetch<CmmsWorkOrder>(siteId, `/work-orders/${encodeURIComponent(workOrderId)}/cancel`, { method: "POST", userId, body }),
+
+  createAlert: (siteId: string, userId: string | null | undefined, body: Record<string, unknown>) =>
+    cmmsFetch<any>(siteId, "/alerts", { method: "POST", userId, body }),
+
+  resolveAlert: (siteId: string, userId: string | null | undefined, alertId: string, body: Record<string, unknown> = {}) =>
+    cmmsFetch<any>(siteId, `/alerts/${encodeURIComponent(alertId)}/resolve`, { method: "POST", userId, body }),
+
   /* ── داشبورد ── */
   getDashboard: (siteId: string, userId?: string | null) =>
     cmmsFetch<CmmsDashboard>(siteId, "/dashboard", { userId }),

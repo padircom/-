@@ -1,4 +1,5 @@
 import type { Lang } from "../data/framework";
+import ModuleWorkspaceShell, { moduleCardCls, moduleChipCls } from "./ModuleWorkspaceShell";
 
 export type ScmSubModuleId =
   | "inventory"
@@ -70,120 +71,81 @@ interface Props {
   onBackHome?: () => void;
 }
 
+/** رنگ تأکیدی SCM (هم‌خوان با تیل قبلی). */
+const SCM_ACCENT = "#2dd4bf";
+
 export default function ScmWorkspaceShell({ lang, activeSub, onSelectSub, onBackHome }: Props) {
   const fa = lang === "fa";
   const tr = (faText: string, enText: string) => (fa ? faText : enText);
   const current = SCM_SUBMODULES.find((s) => s.id === activeSub) ?? SCM_SUBMODULES[0];
 
   return (
-    <div dir={fa ? "rtl" : "ltr"} className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-1">
-      <header className="glass-dark rounded-xl p-3.5 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <span className="grid h-10 w-10 place-items-center rounded-xl border border-teal-500/40 bg-teal-500/10 text-lg">
-            📦
-          </span>
-          <div>
-            <div className="flex items-center gap-2">
-              <h2 className="tx1 font-semibold text-sm">
-                {tr(
-                  "سامانهٔ زنجیره تأمین، بازرگانی و مالی (SCM & Finance)",
-                  "Supply Chain, Commercial & Financial System (SCM & Finance)",
-                )}
-              </h2>
-              <span className="rounded-md border border-teal-500/40 bg-teal-500/10 px-2 py-0.5 text-[10px] text-teal-300">
-                {tr("پوستهٔ اولیه (Workspace Shell)", "Workspace Shell")}
+    <ModuleWorkspaceShell
+      lang={lang}
+      accent={SCM_ACCENT}
+      icon="📦"
+      title={tr(
+        "سامانهٔ زنجیره تأمین، بازرگانی و مالی (SCM & Finance)",
+        "Supply Chain, Commercial & Financial System (SCM & Finance)",
+      )}
+      subtitle={tr(
+        "سرگروه چهارم سازمان · مدیریت یکپارچهٔ انبار، تدارکات، فروش (CRM) و حسابداری مالی",
+        "Organizational Pillar #4 · Integrated warehousing, procurement, CRM sales, and financial accounting",
+      )}
+      badges={
+        <span className="rounded-md border border-teal-500/40 bg-teal-500/10 px-2 py-0.5 text-[10px] text-teal-300">
+          {tr("پوستهٔ اولیه (Workspace Shell)", "Workspace Shell")}
+        </span>
+      }
+      onBack={onBackHome}
+      navTitle={tr("زیرماژول‌های SCM", "SCM Submodules")}
+      navItems={SCM_SUBMODULES.map((item) => ({
+        id: item.id,
+        label: fa ? item.fa : item.en,
+        icon: item.icon,
+      }))}
+      activeId={current.id}
+      onSelect={onSelectSub}
+      panelTitle={fa ? current.fa : current.en}
+      panelIcon={current.icon}
+      panelDesc={fa ? current.descFa : current.descEn}
+      panelMeta={<span className={moduleChipCls} dir="ltr">module: scm-finance / {current.id}</span>}
+    >
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        <div className={`${moduleCardCls} space-y-1 p-3.5`}>
+          <div className="tx3 text-xs">{tr("وضعیت زیرماژول", "Submodule Status")}</div>
+          <div className="tx1 font-semibold text-sm text-teal-300">
+            {tr("پوستهٔ آماده (Placeholder Shell)", "Placeholder Shell Ready")}
+          </div>
+          <p className="tx3 text-[11px]">
+            {tr(
+              "ساختار ناوبری و رابط کاربری اولیه ایجاد شده است و منطق دامنه و API در فازهای آتی متصل می‌شود.",
+              "UI shell and navigation are wired; domain logic and APIs will be connected in upcoming phases.",
+            )}
+          </p>
+        </div>
+
+        <div className={`${moduleCardCls} space-y-1 p-3.5`}>
+          <div className="tx3 text-xs">{tr("موجودیت‌های هدف در دیتابیس", "Target Domain Entities")}</div>
+          <div className="flex flex-wrap gap-1.5 pt-1" dir="ltr">
+            {current.plannedEntities.map((ent) => (
+              <span key={ent} className="rounded border b-line-soft bg-black/25 px-2 py-0.5 text-xs tx2">
+                {ent}
               </span>
-            </div>
-            <p className="tx3 text-xs mt-0.5">
-              {tr(
-                "سرگروه چهارم سازمان · مدیریت یکپارچهٔ انبار، تدارکات، فروش (CRM) و حسابداری مالی",
-                "Organizational Pillar #4 · Integrated warehousing, procurement, CRM sales, and financial accounting",
-              )}
-            </p>
+            ))}
           </div>
         </div>
-        {onBackHome && (
-          <button
-            type="button"
-            onClick={onBackHome}
-            className="rounded-lg border b-line-soft px-3 py-1.5 text-xs tx2 hover:tx1"
-          >
-            {tr("بازگشت به نمای اصلی", "Back to Hub")}
-          </button>
-        )}
-      </header>
 
-      {/* نوار تب‌های ۵گانهٔ SCM & Finance */}
-      <nav className="flex flex-wrap gap-1.5">
-        {SCM_SUBMODULES.map((item) => {
-          const active = item.id === current.id;
-          return (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => onSelectSub(item.id)}
-              className={`rounded-lg border b-line-soft px-3 py-1.5 text-xs transition flex items-center gap-1.5 ${
-                active ? "toggle-on tx1 font-medium" : "tx2 hover:tx1"
-              }`}
-            >
-              <span>{item.icon}</span>
-              <span>{fa ? item.fa : item.en}</span>
-            </button>
-          );
-        })}
-      </nav>
-
-      {/* نمای پوستهٔ زیرماژول انتخاب‌شده */}
-      <section className="glass-dark rounded-2xl p-5 space-y-4 flex-1">
-        <div className="flex flex-wrap items-start justify-between gap-3 border-b b-line-soft pb-3">
-          <div className="flex items-center gap-2.5">
-            <span className="text-2xl">{current.icon}</span>
-            <div>
-              <h3 className="tx1 font-semibold text-base">{fa ? current.fa : current.en}</h3>
-              <p className="tx3 text-xs mt-0.5">{fa ? current.descFa : current.descEn}</p>
-            </div>
-          </div>
-          <span className="rounded-lg border b-line-soft bg-black/20 px-2.5 py-1 text-[11px] tx3" dir="ltr">
-            module: scm-finance / {current.id}
-          </span>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <div className="rounded-xl border b-line-soft bg-black/15 p-3.5 space-y-1">
-            <div className="tx3 text-xs">{tr("وضعیت زیرماژول", "Submodule Status")}</div>
-            <div className="tx1 font-semibold text-sm text-teal-300">
-              {tr("پوستهٔ آماده (Placeholder Shell)", "Placeholder Shell Ready")}
-            </div>
-            <p className="tx3 text-[11px]">
-              {tr(
-                "ساختار ناوبری و رابط کاربری اولیه ایجاد شده است و منطق دامنه و API در فازهای آتی متصل می‌شود.",
-                "UI shell and navigation are wired; domain logic and APIs will be connected in upcoming phases.",
-              )}
-            </p>
-          </div>
-
-          <div className="rounded-xl border b-line-soft bg-black/15 p-3.5 space-y-1">
-            <div className="tx3 text-xs">{tr("موجودیت‌های هدف در دیتابیس", "Target Domain Entities")}</div>
-            <div className="flex flex-wrap gap-1.5 pt-1" dir="ltr">
-              {current.plannedEntities.map((ent) => (
-                <span key={ent} className="rounded border b-line-soft bg-black/25 px-2 py-0.5 text-xs tx2">
-                  {ent}
-                </span>
-              ))}
-            </div>
-          </div>
-
-          <div className="rounded-xl border b-line-soft bg-black/15 p-3.5 space-y-1">
-            <div className="tx3 text-xs">{tr("یکپارچگی با سایر بخش‌های سازمان", "Cross-System Integration")}</div>
-            <div className="tx2 text-xs leading-5">
-              {tr(
-                "تبدیل سفارش‌های فروش CRM به سفارش تولید (MES)، دریافت پیشنهادهای خرید MRP و تطبیق سند مالی بهای تمام‌شده.",
-                "Feeds CRM sales orders into MES production orders, processes MRP purchase proposals, and reconciles financial cost ledgers.",
-              )}
-            </div>
+        <div className={`${moduleCardCls} space-y-1 p-3.5`}>
+          <div className="tx3 text-xs">{tr("یکپارچگی با سایر بخش‌های سازمان", "Cross-System Integration")}</div>
+          <div className="tx2 text-xs leading-5">
+            {tr(
+              "تبدیل سفارش‌های فروش CRM به سفارش تولید (MES)، دریافت پیشنهادهای خرید MRP و تطبیق سند مالی بهای تمام‌شده.",
+              "Feeds CRM sales orders into MES production orders, processes MRP purchase proposals, and reconciles financial cost ledgers.",
+            )}
           </div>
         </div>
-      </section>
-    </div>
+      </div>
+    </ModuleWorkspaceShell>
   );
 }

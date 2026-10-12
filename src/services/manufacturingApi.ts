@@ -1717,7 +1717,7 @@ export const MfgClient = {
     userId: string | null | undefined,
     orderId: string,
     rowVersion: number,
-    body: { CloseReasonFa?: string } = {},
+    body: { CloseReason?: string; NoteFa?: string | null } = {},
   ) =>
     mfgFetch<MfgProductionOrder>(plantId, `/orders/${encodeURIComponent(orderId)}/close`, {
       method: "POST",

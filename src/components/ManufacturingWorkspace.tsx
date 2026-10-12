@@ -45,6 +45,14 @@ import {
   type MfgWorkCenterResource,
 } from "../services/manufacturingApi";
 import type { DispatchRule } from "../services/manufacturingModel";
+import ModuleWorkspaceShell, { ModuleTabs, moduleChipCls, moduleSelectCls } from "./ModuleWorkspaceShell";
+import {
+  MesEngineeringCrudSection,
+  MesExecutionCrudSection,
+  MesMrpCrudSection,
+  MesOrdersCrudSection,
+  MesPlanningCrudSection,
+} from "./MesCrudPanels";
 
 export type MfgTab =
   | "overview"
@@ -81,6 +89,9 @@ const TABS: Array<{
   { id: "mrp", fa: "مواد، MRP، کمبود و مصرف", en: "Materials & MRP", defaultUser: "u-mfg-material", permission: "mfg.material.view" },
   { id: "cost", fa: "رول‌آپ هزینه و تطبیق مالی", en: "Cost Roll-up & Reconcile", defaultUser: "u-mfg-cost", permission: "mfg.cost.view" },
 ];
+
+/** رنگ تأکیدی MES (نارنجی گرم). */
+const MES_ACCENT = "#fb923c";
 
 export default function ManufacturingWorkspace({
   lang,
@@ -1686,35 +1697,28 @@ export default function ManufacturingWorkspace({
   }
 
   return (
-    <div dir={fa ? "rtl" : "ltr"} className={`flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto ${standalone ? "h-screen w-screen p-4 bg-[var(--bg)]" : "p-1"}`}>
-      {/* ── نوار فرمان سامانهٔ مستقل برنامه‌ریزی و کنترل تولید (Standalone MES) ── */}
-      <header className="glass-dark rounded-xl p-3 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-3">
-          <span className="grid h-9 w-9 place-items-center rounded-xl border b-line-soft text-base">🏭</span>
-          <div>
-            <div className="flex items-center gap-2">
-              <h3 className="tx1 font-semibold">
-                {tr("سامانهٔ مستقل برنامه‌ریزی و کنترل تولید (Standalone MES)", "Standalone Manufacturing Execution System (MES)")}
-              </h3>
-              <span className="rounded-md border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[10px] text-emerald-300" dir="ltr">
-                mfg-api-v1 · 65 REST Routes
-              </span>
-            </div>
-            <p className="tx3 text-xs mt-0.5">
-              {tr(
-                "دیتابیس مستقل (۲۶ جدول Mfg*) · بک‌اند مستقل کارخانه‌محور · فرانت‌اند مستقل · ارتباط با سامانه‌های دیگر فقط از طریق REST API",
-                "Independent DB (26 Mfg* tables) · Plant-scoped backend · Standalone frontend · External integration via REST API only",
-              )}
-            </p>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
+    <ModuleWorkspaceShell
+      lang={fa ? "fa" : "en"}
+      className={standalone ? "h-screen w-screen p-4 bg-[var(--bg)]" : ""}
+      accent={MES_ACCENT}
+      icon="🏭"
+      title={tr("سامانهٔ مستقل برنامه‌ریزی و کنترل تولید (Standalone MES)", "Standalone Manufacturing Execution System (MES)")}
+      subtitle={tr(
+        "دیتابیس مستقل (۲۶ جدول Mfg*) · بک‌اند مستقل کارخانه‌محور · فرانت‌اند مستقل · ارتباط با سامانه‌های دیگر فقط از طریق REST API",
+        "Independent DB (26 Mfg* tables) · Plant-scoped backend · Standalone frontend · External integration via REST API only",
+      )}
+      badges={
+        <span className="rounded-md border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[10px] text-emerald-300" dir="ltr">
+          mfg-api-v1 · 65 REST Routes
+        </span>
+      }
+      actions={
+        <>
           <label className="tx3 text-xs flex items-center gap-1.5">
             <span>{tr("کارخانه:", "Plant:")}</span>
             <input
               aria-label="Plant ID"
-              className="rounded-lg border b-line-soft bg-[var(--row)] px-2 py-1 text-xs tx1 w-28"
+              className={`${moduleSelectCls} w-28`}
               dir="ltr"
               value={plantId}
               onChange={(e) => setPlantId(e.target.value.trim() || DEFAULT_PLANT_ID)}
@@ -1725,7 +1729,7 @@ export default function ManufacturingWorkspace({
             <span>{tr("نقش کارگاهی (RBAC):", "MES Role:")}</span>
             <select
               aria-label="MES User"
-              className="rounded-lg border b-line-soft bg-[var(--row)] px-2 py-1 text-xs tx1"
+              className={moduleSelectCls}
               value={mfgUserId}
               onChange={(e) => {
                 setAutoRoleFollow(false);
@@ -1770,33 +1774,35 @@ export default function ManufacturingWorkspace({
               {tr("پنجرهٔ مستقل MES ↗", "Standalone MES ↗")}
             </a>
           )}
-        </div>
-      </header>
-
-      {/* ── نوار تب‌های ۷گانهٔ MES ── */}
-      <nav className="flex flex-wrap gap-1.5">
-        {TABS.map((tItem) => {
-          const allowed = canMfgAccess(mfgUserId, tItem.permission, plantId);
-          return (
-            <button
-              key={tItem.id}
-              type="button"
-              onClick={() => {
-                setTab(tItem.id);
-                onTabChange?.(tItem.id);
-              }}
-              className={`${btnCls} flex items-center gap-1.5 ${tab === tItem.id ? "toggle-on tx1" : "tx2"}`}
-            >
-              <span>{fa ? tItem.fa : tItem.en}</span>
-              <span
-                className={`h-2 w-2 rounded-full ${allowed ? "bg-emerald-400" : "bg-amber-400"}`}
-                title={allowed ? tr("مجوز فعال", "Permitted") : tr(`نیازمند ${tItem.permission}`, `Requires ${tItem.permission}`)}
-              />
-            </button>
-          );
-        })}
-      </nav>
-
+        </>
+      }
+      navTitle={tr("ماژول‌های MES", "MES Modules")}
+      navIcon="🏭"
+      navItems={TABS.map((tItem) => {
+        const allowed = canMfgAccess(mfgUserId, tItem.permission, plantId);
+        return {
+          id: tItem.id,
+          label: fa ? tItem.fa : tItem.en,
+          trailing: (
+            <span
+              className={`h-2 w-2 shrink-0 rounded-full ${allowed ? "bg-emerald-400" : "bg-amber-400"}`}
+              title={allowed ? tr("مجوز فعال", "Permitted") : tr(`نیازمند ${tItem.permission}`, `Requires ${tItem.permission}`)}
+            />
+          ),
+        };
+      })}
+      activeId={tab}
+      onSelect={(nextTab) => {
+        setTab(nextTab);
+        onTabChange?.(nextTab);
+      }}
+      panelTitle={(() => {
+        const activeTab = TABS.find((tItem) => tItem.id === tab);
+        return activeTab ? (fa ? activeTab.fa : activeTab.en) : undefined;
+      })()}
+      panelMeta={<span className={moduleChipCls} dir="ltr">{mfgUserId}</span>}
+    >
+      <div className="flex flex-col gap-3">
       {/* ── وضعیت نقش فعال و بازهٔ زمانی ── */}
       <div className="glass rounded-xl px-3 py-2 flex flex-wrap items-center justify-between gap-2 text-xs tx3">
         <div>
@@ -2038,6 +2044,9 @@ export default function ManufacturingWorkspace({
       )}
 
       {/* ══════════════════════ ۲) تب مهندسی ساخت ══════════════════════ */}
+      {tab === "engineering" && (
+        <MesEngineeringCrudSection fa={fa} plantId={plantId} userId={mfgUserId} onChanged={() => void loadActiveTab()} />
+      )}
       {!loading && tab === "engineering" && (
         <div className="space-y-3">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
@@ -2217,6 +2226,9 @@ export default function ManufacturingWorkspace({
       )}
 
       {/* ══════════════════════ ۳) تب سفارش‌های تولید ══════════════════════ */}
+      {tab === "orders" && (
+        <MesOrdersCrudSection fa={fa} plantId={plantId} userId={mfgUserId} onChanged={() => void loadActiveTab()} />
+      )}
       {!loading && tab === "orders" && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
           <section className="glass-dark rounded-xl p-3 space-y-3">
@@ -2696,6 +2708,9 @@ export default function ManufacturingWorkspace({
       )}
 
       {/* ══════════════════════ ۵) تب اجرای کارگاهی و کنترل عملیات (Phase 2: Operation Control & Progress Logging) ══════════════════════ */}
+      {tab === "execution" && (
+        <MesExecutionCrudSection fa={fa} plantId={plantId} userId={mfgUserId} onChanged={() => void loadActiveTab()} />
+      )}
       {!loading && tab === "execution" && (
         <div className="space-y-3">
           {/* فیلترهای صف اعزام کارگاهی */}
@@ -3121,29 +3136,16 @@ export default function ManufacturingWorkspace({
 
               {/* تب‌های فرعی ثبت توقف، ضایعات و دوباره‌کاری */}
               <div className="border-t b-line-soft pt-3 space-y-2.5">
-                <div className="flex flex-wrap gap-1.5">
-                  <button
-                    type="button"
-                    className={`${btnCls} ${execEventSubTab === "downtime" ? "toggle-on" : ""}`}
-                    onClick={() => setExecEventSubTab("downtime")}
-                  >
-                    {tr("ثبت توقف (POST /downtime)", "Downtime Log")}
-                  </button>
-                  <button
-                    type="button"
-                    className={`${btnCls} ${execEventSubTab === "scrap" ? "toggle-on" : ""}`}
-                    onClick={() => setExecEventSubTab("scrap")}
-                  >
-                    {tr("ثبت ضایعات (POST /scrap)", "Scrap Log")}
-                  </button>
-                  <button
-                    type="button"
-                    className={`${btnCls} ${execEventSubTab === "rework" ? "toggle-on" : ""}`}
-                    onClick={() => setExecEventSubTab("rework")}
-                  >
-                    {tr("دستور دوباره‌کاری (POST /rework)", "Rework Order")}
-                  </button>
-                </div>
+                <ModuleTabs
+                  ariaLabel={tr("ثبت رویدادهای کارگاهی", "Shop-floor event log")}
+                  items={[
+                    { id: "downtime" as const, label: tr("ثبت توقف (POST /downtime)", "Downtime Log") },
+                    { id: "scrap" as const, label: tr("ثبت ضایعات (POST /scrap)", "Scrap Log") },
+                    { id: "rework" as const, label: tr("دستور دوباره‌کاری (POST /rework)", "Rework Order") },
+                  ]}
+                  activeId={execEventSubTab}
+                  onSelect={setExecEventSubTab}
+                />
 
                 {execEventSubTab === "downtime" && canMfgAccess(mfgUserId, "mfg.downtime.report", plantId) && (
                   <form onSubmit={handleReportDowntime} className="space-y-2">
@@ -3302,6 +3304,9 @@ export default function ManufacturingWorkspace({
       )}
 
       {/* ══════════════════════ ۶) تب مواد، MRP، کمبود، مصرف و هشدارها (Phase 3) ══════════════════════ */}
+      {tab === "mrp" && (
+        <MesMrpCrudSection fa={fa} plantId={plantId} userId={mfgUserId} />
+      )}
       {!loading && tab === "mrp" && (
         <div className="space-y-3">
           {/* نوار فرمان اجرای MRP و صدور پیشنهاد تأمین */}
@@ -3752,11 +3757,16 @@ export default function ManufacturingWorkspace({
       )}
 
       {/* ══════════════════════ ۷) تب بهای تمام‌شده و تطبیق مالی ══════════════════════ */}
+      {tab === "planning" && (
+        <MesPlanningCrudSection fa={fa} plantId={plantId} userId={mfgUserId} onChanged={() => void loadActiveTab()} />
+      )}
       {!loading && tab === "planning" && (
         <div className="space-y-3">
           <section className="glass-dark rounded-xl p-3 flex flex-wrap items-center gap-2 text-xs">
             <span className="tx1 font-semibold">{tr("زیربخش برنامه‌ریزی:", "Planning area:")}</span>
-            {([
+            <ModuleTabs
+              ariaLabel={tr("زیرماژول‌های برنامه‌ریزی", "Planning submodules")}
+              items={([
               ["mps", "برنامهٔ اصلی تولید (MPS)", "Master Production Schedule"],
               ["demand", "تقاضا و پیش‌بینی", "Demand & Forecast"],
               ["lotsize", "اندازه‌گذاری لات (EOQ/POQ/L4L/FOQ)", "Lot Sizing (EOQ/POQ/L4L/FOQ)"],
@@ -3767,11 +3777,10 @@ export default function ManufacturingWorkspace({
               ["pegging", "Lead Time و Pegging", "Lead Time & Pegging"],
               ["version", "نسخهٔ تولید", "Production Versions"],
               ["conformance", "انطباق ISA-95", "ISA-95 Conformance"],
-            ] as const).map(([id, fa, en]) => (
-              <button key={id} className={`${btnCls} ${planSubTab === id ? "toggle-on" : ""}`} onClick={() => setPlanSubTab(id)}>
-                {tr(fa, en)}
-              </button>
-            ))}
+            ] as const).map(([id, fa, en]) => ({ id, label: tr(fa, en) }))}
+              activeId={planSubTab}
+              onSelect={setPlanSubTab}
+            />
           </section>
 
           {/* ═══ MPS ═══ */}
@@ -4584,6 +4593,7 @@ export default function ManufacturingWorkspace({
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </ModuleWorkspaceShell>
   );
 }

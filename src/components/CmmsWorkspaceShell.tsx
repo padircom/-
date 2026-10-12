@@ -1,17 +1,25 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Lang } from "../data/framework";
+import ModuleWorkspaceShell, { moduleCardCls, moduleChipCls, moduleSelectCls } from "./ModuleWorkspaceShell";
 import CmmsRcfaPanel from "./CmmsRcfaPanel";
 import CmmsIntegrationPanel from "./CmmsIntegrationPanel";
+import {
+  CmmsAiPanel,
+  CmmsAlertsPanel,
+  CmmsAssetsPanel,
+  CmmsFamiliesPanel,
+  CmmsKpiPanel,
+  CmmsPmPanel,
+  CmmsSparesPanel,
+  CmmsWorkOrdersPanel,
+} from "./CmmsCrudPanels";
 import {
   canCmmsAccess,
   CmmsClient,
   CMMS_DEMO_USERS,
   CmmsRequestError,
   DEFAULT_SITE_ID,
-  type CmmsAsset,
   type CmmsDashboard,
-  type CmmsSparePart,
-  type CmmsWorkOrder,
 } from "../services/cmmsApi";
 
 export type CmmsSubModuleId =
@@ -166,98 +174,9 @@ function ErrorBox({ message, code, onRetry, fa }: { message: string; code?: stri
   );
 }
 
-/**
- * کنش‌های توقف/ادامهٔ دستورکار.
- *
- * علت توقف از کاتالوگ سرور می‌آید (`allowed` در خطای ۴۰۰)، ولی برای تجربهٔ
- * بهتر فرم، فهرست کوتاه رایج را نشان می‌دهد؛ هر مقدار دیگری سرور رد می‌کند.
- */
-function WorkOrderHoldActions({ siteId, userId, lang, row, onDone }: {
-  siteId: string;
-  userId: string;
-  lang: Lang;
-  row: { Id: string; Status: string };
-  onDone: () => void;
-}) {
-  const fa = lang === "fa";
-  const tr = (faText: string, enText: string) => (fa ? faText : enText);
-  const canHold = canCmmsAccess(userId, "cmms.wo.hold", siteId);
-  const canResume = canCmmsAccess(userId, "cmms.wo.resume", siteId);
-  const [reason, setReason] = useState("waiting-parts");
-  const [note, setNote] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const holdable = ["planned", "scheduled", "released", "in-progress"].includes(row.Status);
-
-  const run = async (work: () => Promise<unknown>) => {
-    setBusy(true);
-    setError(null);
-    try {
-      await work();
-      setNote("");
-      onDone();
-    } catch (err) {
-      setError(err instanceof CmmsRequestError ? err.message : err instanceof Error ? err.message : "خطا");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  if (row.Status === "on-hold" && canResume) {
-    return (
-      <div className="flex items-center gap-1.5" dir={fa ? "rtl" : "ltr"}>
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => run(() => CmmsClient.resumeWorkOrder(siteId, userId, row.Id, {}))}
-          className="rounded-lg border b-line-soft px-2 py-0.5 text-[11px] tx2 hover:tx1 disabled:opacity-40"
-        >
-          {busy ? "…" : tr("ادامه", "Resume")}
-        </button>
-        {error && <span className="text-[10px] text-rose-300">{error}</span>}
-      </div>
-    );
-  }
-
-  if (!holdable || !canHold) return <span className="tx3 text-[10px]">—</span>;
-
-  return (
-    <div className="flex flex-wrap items-center gap-1.5" dir={fa ? "rtl" : "ltr"}>
-      <select
-        value={reason}
-        onChange={(event) => setReason(event.target.value)}
-        className="rounded-lg border b-line-soft bg-black/25 px-1.5 py-0.5 text-[11px] tx1"
-        dir="ltr"
-      >
-        {["waiting-parts", "waiting-crew", "waiting-permit", "waiting-production-window", "machine-breakdown", "unsafe-condition", "other"].map((code) => (
-          <option key={code} value={code}>{code}</option>
-        ))}
-      </select>
-      {(["unsafe-condition", "other"] as string[]).includes(reason) && (
-        <input
-          value={note}
-          onChange={(event) => setNote(event.target.value)}
-          placeholder={tr("شرح الزامی", "note required")}
-          className="w-28 rounded-lg border b-line-soft bg-black/25 px-1.5 py-0.5 text-[11px] tx1"
-        />
-      )}
-      <button
-        type="button"
-        disabled={busy}
-        onClick={() => run(() => CmmsClient.holdWorkOrder(siteId, userId, row.Id, { HoldReasonCode: reason, NoteFa: note || null }))}
-        className="rounded-lg border b-line-soft px-2 py-0.5 text-[11px] tx2 hover:tx1 disabled:opacity-40"
-      >
-        {busy ? "…" : tr("توقف", "Hold")}
-      </button>
-      {error && <span className="text-[10px] text-rose-300">{error}</span>}
-    </div>
-  );
-}
-
 function StatCard({ label, value, hint, fa }: { label: string; value: string | number; hint?: string; fa: boolean }) {
   return (
-    <div className="rounded-xl border b-line-soft bg-black/15 p-3 space-y-0.5">
+    <div className={`${moduleCardCls} p-3 space-y-0.5`}>
       <div className="tx3 text-[11px]">{label}</div>
       <div className="tx1 text-lg font-semibold" dir="ltr">{value}</div>
       {hint && <div className="tx3 text-[10px]">{fa ? hint : hint}</div>}
@@ -268,6 +187,9 @@ function StatCard({ label, value, hint, fa }: { label: string; value: string | n
 function SectionTitle({ fa, en, children }: { fa: boolean; en: string; children: string }) {
   return <h4 className="tx2 text-xs font-medium">{fa ? children : en}</h4>;
 }
+
+/** رنگ تأکیدی CMMS (هم‌خوان با کاشی کهربایی قبلی). */
+const CMMS_ACCENT = "#fbbf24";
 
 export default function CmmsWorkspaceShell({ lang, activeSub, onSelectSub, onBackHome }: Props) {
   const fa = lang === "fa";
@@ -299,35 +221,10 @@ export default function CmmsWorkspaceShell({ lang, activeSub, onSelectSub, onBac
     () => CmmsClient.getDashboard(siteId, userId),
     [siteId, userId, activeSub],
   );
-  const assets = useCmmsLoader<{ assets: CmmsAsset[]; total: number }>(
-    () => CmmsClient.listAssets(siteId, userId, { limit: 200 }),
-    [siteId, userId, activeSub],
-  );
-  const families = useCmmsLoader<{ families: Array<{ Id: string; FamilyCode: string; NameFa: string; Status: string; CriticalityRank: string }>; total: number }>(
-    () => CmmsClient.listFamilies(siteId, userId),
-    [siteId, userId, activeSub],
-  );
-  const workOrders = useCmmsLoader<{ workOrders: CmmsWorkOrder[]; total: number }>(
-    () => CmmsClient.listWorkOrders(siteId, userId, { limit: 200 }),
-    [siteId, userId, activeSub],
-  );
-  const spares = useCmmsLoader<{ parts: CmmsSparePart[]; total: number }>(
-    () => CmmsClient.listSpareParts(siteId, userId),
-    [siteId, userId, activeSub],
-  );
-  const alerts = useCmmsLoader<{ alerts: Array<{ Id: string; AlertCode: string; Severity: string; TitleFa: string; Status: string }>; total: number }>(
-    () => CmmsClient.listAlerts(siteId, userId),
-    [siteId, userId, activeSub],
-  );
-  const recommendations = useCmmsLoader<{ recommendations: Array<{ Id: string; Engine: string; RecommendationType: string; TitleFa: string; Confidence: number; Status: string }>; total: number }>(
-    () => CmmsClient.listRecommendations(siteId, userId),
-    [siteId, userId, activeSub],
-  );
-
   const renderBody = () => {
     if (!canSeeCurrent) {
       return (
-        <div className="rounded-xl border b-line-soft bg-black/15 p-4">
+        <div className={`${moduleCardCls} p-4`}>
           <div className="tx1 text-sm font-medium">{tr("مجوز دسترسی به این بخش را ندارید", "You do not have access to this section")}</div>
           <p className="tx3 text-[11px] mt-1" dir="ltr">
             {tr("مجوز لازم: ", "Required permission: ")}{current.viewPermission}
@@ -358,7 +255,7 @@ export default function CmmsWorkspaceShell({ lang, activeSub, onSelectSub, onBac
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div className="rounded-xl border b-line-soft bg-black/15 p-3.5 space-y-2">
+              <div className={`${moduleCardCls} p-3.5 space-y-2`}>
                 <SectionTitle fa={fa} en="Work orders by status">{tr("دستورکارها بر پایهٔ وضعیت", "Work orders by status")}</SectionTitle>
                 <div className="flex flex-wrap gap-1.5">
                   {Object.entries(d.workOrdersByStatus).map(([status, count]) => (
@@ -369,7 +266,7 @@ export default function CmmsWorkspaceShell({ lang, activeSub, onSelectSub, onBac
                   {Object.keys(d.workOrdersByStatus).length === 0 && <span className="tx3 text-[11px]">{tr("داده‌ای نیست", "No data")}</span>}
                 </div>
               </div>
-              <div className="rounded-xl border b-line-soft bg-black/15 p-3.5 space-y-2">
+              <div className={`${moduleCardCls} p-3.5 space-y-2`}>
                 <SectionTitle fa={fa} en="Reliability highlights">{tr("نمای قابلیت اطمینان", "Reliability highlights")}</SectionTitle>
                 <div className="grid grid-cols-2 gap-2 text-[11px] tx2">
                   <div>{tr("دسترس‌پذیری", "Availability")}: <span dir="ltr">{d.highlights.latestAvailabilityPct != null ? `${d.highlights.latestAvailabilityPct}%` : "—"}</span></div>
@@ -401,70 +298,14 @@ export default function CmmsWorkspaceShell({ lang, activeSub, onSelectSub, onBac
         );
       }
 
-      case "assets": {
-        if (assets.state.kind === "loading") return <Loading fa={fa} />;
-        if (assets.state.kind === "error") return <ErrorBox {...pick(assets.state)} onRetry={assets.reload} fa={fa} />;
-        if (assets.state.kind !== "ready") return <Empty fa={fa} />;
-        return (
-          <DataTable
-            fa={fa}
-            emptyText={tr("هنوز تجهیزی ثبت نشده است", "No assets registered yet")}
-            columns={[
-              { key: "AssetTag", header: tr("برچسب", "Tag"), mono: true },
-              { key: "NameFa", header: tr("نام تجهیز", "Asset name") },
-              { key: "AssetState", header: tr("وضعیت", "State") },
-              { key: "CriticalityRank", header: tr("رتبهٔ بحرانی‌بودن", "Criticality"), align: "center" },
-            ]}
-            rows={assets.state.data.assets}
-          />
-        );
-      }
+      case "assets":
+        return <CmmsAssetsPanel fa={fa} siteId={siteId} userId={userId} />;
 
-      case "families": {
-        if (families.state.kind === "loading") return <Loading fa={fa} />;
-        if (families.state.kind === "error") return <ErrorBox {...pick(families.state)} onRetry={families.reload} fa={fa} />;
-        if (families.state.kind !== "ready") return <Empty fa={fa} />;
-        return (
-          <DataTable
-            fa={fa}
-            emptyText={tr("خانواده‌ای تعریف نشده است", "No families defined")}
-            columns={[
-              { key: "FamilyCode", header: tr("کد خانواده", "Family code"), mono: true },
-              { key: "NameFa", header: tr("نام", "Name") },
-              { key: "Status", header: tr("وضعیت", "Status") },
-              { key: "CriticalityRank", header: tr("رتبه", "Rank"), align: "center" },
-            ]}
-            rows={families.state.data.families}
-          />
-        );
-      }
+      case "families":
+        return <CmmsFamiliesPanel fa={fa} siteId={siteId} userId={userId} />;
 
-      case "work-orders": {
-        if (workOrders.state.kind === "loading") return <Loading fa={fa} />;
-        if (workOrders.state.kind === "error") return <ErrorBox {...pick(workOrders.state)} onRetry={workOrders.reload} fa={fa} />;
-        if (workOrders.state.kind !== "ready") return <Empty fa={fa} />;
-        return (
-          <DataTable
-            fa={fa}
-            emptyText={tr("دستورکاری ثبت نشده است", "No work orders")}
-            columns={[
-              { key: "WorkOrderNo", header: tr("شماره", "No."), mono: true },
-              { key: "TitleFa", header: tr("شرح", "Title") },
-              { key: "WorkOrderType", header: tr("نوع", "Type") },
-              { key: "Status", header: tr("وضعیت", "Status") },
-              { key: "Priority", header: tr("اولویت", "Priority"), align: "center" },
-              {
-                key: "actions",
-                header: tr("توقف / ادامه", "Hold / resume"),
-                render: (row) => (
-                  <WorkOrderHoldActions siteId={siteId} userId={userId} lang={lang} row={row} onDone={workOrders.reload} />
-                ),
-              },
-            ]}
-            rows={workOrders.state.data.workOrders}
-          />
-        );
-      }
+      case "work-orders":
+        return <CmmsWorkOrdersPanel fa={fa} siteId={siteId} userId={userId} />;
 
       case "rcfa":
         return <CmmsRcfaPanel siteId={siteId} userId={userId} lang={lang} />;
@@ -472,190 +313,87 @@ export default function CmmsWorkspaceShell({ lang, activeSub, onSelectSub, onBac
       case "integration":
         return <CmmsIntegrationPanel siteId={siteId} userId={userId} lang={lang} />;
 
-      case "spares": {
-        if (spares.state.kind === "loading") return <Loading fa={fa} />;
-        if (spares.state.kind === "error") return <ErrorBox {...pick(spares.state)} onRetry={spares.reload} fa={fa} />;
-        if (spares.state.kind !== "ready") return <Empty fa={fa} />;
-        const parts = spares.state.data.parts;
-        const belowReorder = parts.filter((part) => (part.QtyOnHand ?? 0) <= (part.ReorderPoint ?? part.MinStock ?? 0));
-        return (
-          <div className="space-y-3">
-            {belowReorder.length > 0 && (
-              <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3">
-                <div className="tx1 text-xs font-medium">
-                  {tr(`${belowReorder.length} قطعه زیر نقطهٔ سفارش است`, `${belowReorder.length} parts below reorder point`)}
-                </div>
-              </div>
-            )}
-            <DataTable
-              fa={fa}
-              emptyText={tr("قطعه‌ای ثبت نشده است", "No spare parts")}
-              columns={[
-                { key: "PartNumber", header: tr("کد قطعه", "Part no."), mono: true },
-                { key: "NameFa", header: tr("نام", "Name") },
-                { key: "Category", header: tr("دسته", "Category") },
-                { key: "QtyOnHand", header: tr("موجودی", "On hand"), align: "right" },
-                { key: "ReorderPoint", header: tr("نقطهٔ سفارش", "Reorder"), align: "right" },
-              ]}
-              rows={parts}
-            />
-          </div>
-        );
-      }
+      case "spares":
+        return <CmmsSparesPanel fa={fa} siteId={siteId} userId={userId} />;
 
-      case "condition": {
-        if (alerts.state.kind === "loading") return <Loading fa={fa} />;
-        if (alerts.state.kind === "error") return <ErrorBox {...pick(alerts.state)} onRetry={alerts.reload} fa={fa} />;
-        if (alerts.state.kind !== "ready") return <Empty fa={fa} />;
-        return (
-          <DataTable
-            fa={fa}
-            emptyText={tr("هشداری ثبت نشده است", "No alerts")}
-            columns={[
-              { key: "AlertCode", header: tr("کد هشدار", "Alert code"), mono: true },
-              { key: "TitleFa", header: tr("عنوان", "Title") },
-              { key: "Severity", header: tr("شدت", "Severity") },
-              { key: "Status", header: tr("وضعیت", "Status") },
-            ]}
-            rows={alerts.state.data.alerts}
-          />
-        );
-      }
+      case "condition":
+        return <CmmsAlertsPanel fa={fa} siteId={siteId} userId={userId} />;
 
       case "pm":
+        return <CmmsPmPanel fa={fa} siteId={siteId} userId={userId} />;
+
       case "analytics":
-      case "ai": {
-        if (current.id === "ai") {
-          if (recommendations.state.kind === "loading") return <Loading fa={fa} />;
-          if (recommendations.state.kind === "error") return <ErrorBox {...pick(recommendations.state)} onRetry={recommendations.reload} fa={fa} />;
-          if (recommendations.state.kind === "ready") {
-            return (
-              <DataTable
-                fa={fa}
-                emptyText={tr("پیشنهادی ثبت نشده است", "No recommendations yet")}
-                columns={[
-                  { key: "Engine", header: tr("موتور", "Engine"), mono: true },
-                  { key: "TitleFa", header: tr("پیشنهاد", "Suggestion") },
-                  { key: "Confidence", header: tr("اطمینان", "Confidence"), align: "right" },
-                  { key: "Status", header: tr("وضعیت", "Status") },
-                ]}
-                rows={recommendations.state.data.recommendations}
-              />
-            );
-          }
-        }
-        return <Empty fa={fa} />;
-      }
+        return <CmmsKpiPanel fa={fa} siteId={siteId} userId={userId} />;
+
+      case "ai":
+        return <CmmsAiPanel fa={fa} siteId={siteId} userId={userId} />;
 
       default:
         return <Empty fa={fa} />;
     }
   };
 
-  return (
-    <div dir={fa ? "rtl" : "ltr"} className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-1">
-      <header className="glass-dark rounded-xl p-3.5 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <span className="grid h-10 w-10 place-items-center rounded-xl border border-amber-500/40 bg-amber-500/10 text-lg">🔧</span>
-          <div>
-            <div className="flex items-center gap-2">
-              <h2 className="tx1 font-semibold text-sm">
-                {tr("سامانهٔ نگهداری و تعمیرات (CMMS)", "Computerized Maintenance Management System (CMMS)")}
-              </h2>
-              <span className="rounded-md border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[10px] text-emerald-300">
-                {tr("متصل به API", "Live API")}
-              </span>
-            </div>
-            <p className="tx3 text-xs mt-0.5">
-              {tr(
-                "بخش سوم سازمان · ISO 55000/14224/60812/60300 · ۱۲۱ مسیر REST زیر /api/cmms",
-                "Organizational Pillar #3 · ISO 55000/14224/60812/60300 · 121 REST routes under /api/cmms",
-              )}
-            </p>
-          </div>
-        </div>
+  const siteOptions = sites.length === 0 ? [{ SiteId: DEFAULT_SITE_ID, NameFa: DEFAULT_SITE_ID }] : sites;
 
-        <div className="flex flex-wrap items-center gap-2">
-          <select
-            value={siteId}
-            onChange={(event) => setSiteId(event.target.value)}
-            className="rounded-lg border b-line-soft bg-black/25 px-2.5 py-1.5 text-xs tx1"
-            dir="ltr"
-          >
-            {sites.length === 0 && <option value={DEFAULT_SITE_ID}>{DEFAULT_SITE_ID}</option>}
-            {sites.map((site) => (
+  return (
+    <ModuleWorkspaceShell
+      lang={lang}
+      accent={CMMS_ACCENT}
+      icon="🔧"
+      title={tr("سامانهٔ نگهداری و تعمیرات (CMMS)", "Computerized Maintenance Management System (CMMS)")}
+      subtitle={tr(
+        "بخش سوم سازمان · ISO 55000/14224/60812/60300 · ۱۲۱ مسیر REST زیر /api/cmms",
+        "Organizational Pillar #3 · ISO 55000/14224/60812/60300 · 121 REST routes under /api/cmms",
+      )}
+      badges={
+        <span className="rounded-md border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[10px] text-emerald-300">
+          {tr("متصل به API", "Live API")}
+        </span>
+      }
+      actions={
+        <>
+          <select value={siteId} onChange={(event) => setSiteId(event.target.value)} className={moduleSelectCls} dir="ltr">
+            {siteOptions.map((site) => (
               <option key={site.SiteId} value={site.SiteId}>{site.SiteId} — {site.NameFa}</option>
             ))}
           </select>
-
-          <select
-            value={userId}
-            onChange={(event) => setUserId(event.target.value)}
-            className="rounded-lg border b-line-soft bg-black/25 px-2.5 py-1.5 text-xs tx1"
-            dir="ltr"
-          >
+          <select value={userId} onChange={(event) => setUserId(event.target.value)} className={moduleSelectCls} dir="ltr">
             {CMMS_DEMO_USERS.map((user) => (
               <option key={user.id} value={user.id}>{fa ? user.fa : user.en}</option>
             ))}
           </select>
-
-          {onBackHome && (
-            <button type="button" onClick={onBackHome} className="rounded-lg border b-line-soft px-3 py-1.5 text-xs tx2 hover:tx1">
-              {tr("بازگشت به نمای اصلی", "Back to Hub")}
-            </button>
-          )}
-        </div>
-      </header>
-
-      <nav className="flex flex-wrap gap-1.5">
-        {CMMS_SUBMODULES.map((item) => {
-          const active = item.id === current.id;
-          const allowed = canCmmsAccess(userId, item.viewPermission, siteId);
-          return (
-            <button
-              key={item.id}
-              type="button"
-              disabled={!allowed}
-              onClick={() => onSelectSub(item.id)}
-              title={allowed ? undefined : tr("مجوز این بخش را ندارید", "No permission for this section")}
-              className={`rounded-lg border b-line-soft px-3 py-1.5 text-xs transition flex items-center gap-1.5 ${
-                !allowed ? "opacity-40 cursor-not-allowed tx3"
-                  : active ? "toggle-on tx1 font-medium"
-                  : "tx2 hover:tx1"
-              }`}
-            >
-              <span>{item.icon}</span>
-              <span>{fa ? item.fa : item.en}</span>
-            </button>
-          );
-        })}
-      </nav>
-
-      {visibleSubs.length === 0 && (
-        <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-3.5">
-          <div className="tx1 text-xs font-medium">
-            {tr("این کاربر به هیچ بخشی از CMMS در این سایت دسترسی ندارد", "This user has no CMMS access on this site")}
-          </div>
-        </div>
-      )}
-
-      <section className="glass-dark rounded-2xl p-5 space-y-4 flex-1">
-        <div className="flex flex-wrap items-start justify-between gap-3 border-b b-line-soft pb-3">
-          <div className="flex items-center gap-2.5">
-            <span className="text-2xl">{current.icon}</span>
-            <div>
-              <h3 className="tx1 font-semibold text-base">{fa ? current.fa : current.en}</h3>
-              <p className="tx3 text-xs mt-0.5">{fa ? current.descFa : current.descEn}</p>
+        </>
+      }
+      onBack={onBackHome}
+      navTitle={tr("زیرماژول‌های CMMS", "CMMS Submodules")}
+      navItems={CMMS_SUBMODULES.map((item) => {
+        const allowed = canCmmsAccess(userId, item.viewPermission, siteId);
+        return {
+          id: item.id,
+          label: fa ? item.fa : item.en,
+          icon: item.icon,
+          disabled: !allowed,
+          disabledHint: tr("مجوز این بخش را ندارید", "No permission for this section"),
+        };
+      })}
+      activeId={current.id}
+      onSelect={onSelectSub}
+      panelTitle={fa ? current.fa : current.en}
+      panelIcon={current.icon}
+      panelDesc={fa ? current.descFa : current.descEn}
+      panelMeta={<span className={moduleChipCls} dir="ltr">{siteId} · {current.viewPermission}</span>}
+      notice={
+        visibleSubs.length === 0 ? (
+          <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-3.5">
+            <div className="tx1 text-xs font-medium">
+              {tr("این کاربر به هیچ بخشی از CMMS در این سایت دسترسی ندارد", "This user has no CMMS access on this site")}
             </div>
           </div>
-          <span className="rounded-lg border b-line-soft bg-black/20 px-2.5 py-1 text-[11px] tx3" dir="ltr">
-            {siteId} · {current.viewPermission}
-          </span>
-        </div>
-
-        {renderBody()}
-      </section>
-    </div>
+        ) : undefined
+      }
+    >
+      {renderBody()}
+    </ModuleWorkspaceShell>
   );
 }
 
@@ -673,68 +411,6 @@ function Empty({ fa, text }: { fa: boolean; text?: string }) {
   return (
     <div className="tx3 text-xs py-6 text-center">
       {text ?? (fa ? "داده‌ای برای نمایش در این سایت وجود ندارد." : "No data to display for this site.")}
-    </div>
-  );
-}
-
-/**
- * جدول عمومی. `key` عمداً رشتهٔ آزاد است چون ستون‌ها از نام ستون‌های
- * پایگاه‌داده می‌آیند و هر زیرماژول شکل ردیف خودش را دارد.
- */
-function DataTable<T extends Record<string, any>>({
-  fa, columns, rows, emptyText,
-}: {
-  fa: boolean;
-  columns: Array<{ key: string; header: string; mono?: boolean; align?: "center" | "right"; render?: (row: T) => ReactNode }>;
-  rows: T[];
-  emptyText: string;
-}) {
-  if (rows.length === 0) return <Empty fa={fa} text={emptyText} />;
-  return (
-    <div className="overflow-x-auto rounded-xl border b-line-soft">
-      <table className="w-full text-xs">
-        <thead className="bg-black/25">
-          <tr>
-            {columns.map((column) => (
-              <th
-                key={column.key}
-                className={`px-3 py-2 tx3 font-medium whitespace-nowrap ${
-                  column.align === "center" ? "text-center" : column.align === "right" ? "text-right" : "text-start"
-                }`}
-              >
-                {column.header}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row, index) => (
-            <tr key={String(row.Id ?? index)} className="border-t b-line-soft">
-              {columns.map((column) => {
-                const value = row[column.key];
-                if (column.render) {
-                  return (
-                    <td key={column.key} className="px-3 py-1.5 tx2 whitespace-nowrap" dir="ltr">
-                      {column.render(row)}
-                    </td>
-                  );
-                }
-                return (
-                  <td
-                    key={column.key}
-                    className={`px-3 py-1.5 tx2 whitespace-nowrap ${column.mono ? "font-mono" : ""} ${
-                      column.align === "center" ? "text-center" : column.align === "right" ? "text-right" : "text-start"
-                    }`}
-                    dir="ltr"
-                  >
-                    {value == null ? "—" : String(value)}
-                  </td>
-                );
-              })}
-            </tr>
-          ))}
-        </tbody>
-      </table>
     </div>
   );
 }

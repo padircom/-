@@ -64,6 +64,7 @@ import {
   type IiotAction,
   type IiotChartGeometry,
 } from "../services/iiotDashboard";
+import ModuleWorkspaceShell, { moduleCardCls, moduleChipCls, moduleSelectCls } from "./ModuleWorkspaceShell";
 
 export type IiotSubModuleId =
   | "drilling-das"
@@ -132,6 +133,9 @@ interface Props {
 }
 
 const INTERVAL_OPTIONS = [3000, 5000, 10000];
+
+/** رنگ تأکیدی IIoT & DAS (بنفش هم‌خوان با هدر قبلی). */
+const IIOT_ACCENT = "#c084fc";
 
 export default function IiotWorkspaceShell({ lang, activeSub, onSelectSub, onBackHome }: Props) {
   const fa = lang === "fa";
@@ -220,7 +224,7 @@ export default function IiotWorkspaceShell({ lang, activeSub, onSelectSub, onBac
   const renderBody = () => {
     if (!canSeeCurrent) {
       return (
-        <div className="rounded-xl border b-line-soft bg-black/15 p-4 space-y-1">
+        <div className={`${moduleCardCls} p-4 space-y-1`}>
           <div className="tx1 text-sm font-medium">{tr("مجوز دسترسی به این بخش را ندارید", "You do not have access to this section")}</div>
           <p className="tx3 text-[11px]" dir="ltr">{tr("مجوز لازم: ", "Required permission: ")}{current.viewPermission}</p>
           <p className="tx3 text-[11px]">
@@ -244,7 +248,7 @@ export default function IiotWorkspaceShell({ lang, activeSub, onSelectSub, onBac
               `No rig with id ${rigId} exists, so the live dashboard has nothing to show (HTTP 404).`,
             )}
           />
-          <div className="rounded-xl border b-line-soft bg-black/15 p-4 space-y-3">
+          <div className={`${moduleCardCls} p-4 space-y-3`}>
             <div className="tx1 text-sm font-medium">{tr("آماده‌سازی دکل نمونه از راه REST", "Prepare the demo rig via REST")}</div>
             <p className="tx3 text-[11px]">
               {tr(
@@ -327,56 +331,50 @@ export default function IiotWorkspaceShell({ lang, activeSub, onSelectSub, onBac
   const canSeeAny = IIOT_SUBMODULES.some((item) => canIiotAccess(userId, item.viewPermission, rigId));
 
   return (
-    <div dir={fa ? "rtl" : "ltr"} className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-1">
-      <header className="glass-dark rounded-xl p-3.5 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <span className="grid h-10 w-10 place-items-center rounded-xl border border-purple-500/40 bg-purple-500/10 text-lg">📡</span>
-          <div>
-            <div className="flex flex-wrap items-center gap-2">
-              <h2 className="tx1 font-semibold text-sm">
-                {tr("سامانهٔ پایش میدانی و اینترنت اشیاء صنعتی (IIoT & DAS)", "Field Telemetry, Data Acquisition & Industrial IoT (IIoT & DAS)")}
-              </h2>
-              <span className={`rounded-md border px-2 py-0.5 text-[10px] ${live ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-300" : "border-amber-500/40 bg-amber-500/10 text-amber-300"}`}>
-                {live ? tr(`زنده · هر ${Math.round(intervalMs / 1000)} ثانیه`, `Live · every ${Math.round(intervalMs / 1000)}s`) : tr("متوقف", "Paused")}
-              </span>
-              {dash && (
-                <span className="rounded-md border b-line-soft bg-black/20 px-2 py-0.5 text-[10px] tx3" dir="ltr">
-                  ts: {dash.tsDriver ?? "—"} · engine: {dash.modelVersion}
-                </span>
-              )}
-            </div>
-            <p className="tx3 text-xs mt-0.5">
-              {tr(
-                "سرگروه پنجم سازمان · پایش بلادرنگ سنسورها، عملیات حفاری (Drilling DAS) و تله‌متری تجهیزات",
-                "Organizational Pillar #5 · Real-time sensor telemetry, Drilling DAS, and equipment condition monitoring",
-              )}
-            </p>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-1.5">
+    <ModuleWorkspaceShell
+      lang={lang}
+      accent={IIOT_ACCENT}
+      icon="📡"
+      title={tr(
+        "سامانهٔ پایش میدانی و اینترنت اشیاء صنعتی (IIoT & DAS)",
+        "Field Telemetry, Data Acquisition & Industrial IoT (IIoT & DAS)",
+      )}
+      subtitle={tr(
+        "سرگروه پنجم سازمان · پایش بلادرنگ سنسورها، عملیات حفاری (Drilling DAS) و تله‌متری تجهیزات",
+        "Organizational Pillar #5 · Real-time sensor telemetry, Drilling DAS, and equipment condition monitoring",
+      )}
+      badges={
+        <>
+          <span className={`rounded-md border px-2 py-0.5 text-[10px] ${live ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-300" : "border-amber-500/40 bg-amber-500/10 text-amber-300"}`}>
+            {live ? tr(`زنده · هر ${Math.round(intervalMs / 1000)} ثانیه`, `Live · every ${Math.round(intervalMs / 1000)}s`) : tr("متوقف", "Paused")}
+          </span>
+          {dash && (
+            <span className={moduleChipCls} dir="ltr">
+              ts: {dash.tsDriver ?? "—"} · engine: {dash.modelVersion}
+            </span>
+          )}
+        </>
+      }
+      actions={
+        <>
           <select
             value={rigId}
             onChange={(event) => { setRigId(event.target.value); bump(); }}
-            className="rounded-lg border b-line-soft bg-black/25 px-2.5 py-1.5 text-xs tx1"
+            className={moduleSelectCls}
             dir="ltr"
           >
             {!rigRows.some((row) => row.RigId === rigId) && <option value={rigId}>{rigId}</option>}
             {rigRows.map((row) => <option key={row.RigId} value={row.RigId}>{row.RigId} — {row.NameFa}</option>)}
           </select>
 
-          <select
-            value={userId}
-            onChange={(event) => setUserId(event.target.value)}
-            className="rounded-lg border b-line-soft bg-black/25 px-2.5 py-1.5 text-xs tx1"
-          >
+          <select value={userId} onChange={(event) => setUserId(event.target.value)} className={moduleSelectCls}>
             {IIOT_DEMO_USERS.map((user) => <option key={user.id} value={user.id}>{fa ? user.fa : user.en}</option>)}
           </select>
 
           <select
             value={String(intervalMs)}
             onChange={(event) => setIntervalMs(Number(event.target.value))}
-            className="rounded-lg border b-line-soft bg-black/25 px-2.5 py-1.5 text-xs tx1"
+            className={moduleSelectCls}
             dir="ltr"
           >
             {INTERVAL_OPTIONS.map((option) => <option key={option} value={String(option)}>{option / 1000}s</option>)}
@@ -386,66 +384,43 @@ export default function IiotWorkspaceShell({ lang, activeSub, onSelectSub, onBac
             {live ? tr("توقف", "Pause") : tr("ادامه", "Resume")}
           </Btn>
           <Btn onClick={() => { bump(); if (dashboard.state.kind === "ready") dashboard.refresh(); }}>{tr("تازه‌سازی", "Refresh")}</Btn>
-
-          {onBackHome && (
-            <button type="button" onClick={onBackHome} className="rounded-lg border b-line-soft px-3 py-1.5 text-xs tx2 hover:tx1">
-              {tr("بازگشت به نمای اصلی", "Back to Hub")}
-            </button>
-          )}
-        </div>
-      </header>
-
-      {/* نوار تب‌های ۴گانهٔ IIoT & DAS */}
-      <nav className="flex flex-wrap gap-1.5">
-        {IIOT_SUBMODULES.map((item) => {
-          const active = item.id === current.id;
-          const allowed = canIiotAccess(userId, item.viewPermission, rigId);
-          return (
-            <button
-              key={item.id}
-              type="button"
-              disabled={!allowed}
-              title={allowed ? undefined : tr(`مجوز لازم: ${item.viewPermission}`, `Required permission: ${item.viewPermission}`)}
-              onClick={() => onSelectSub(item.id)}
-              className={`rounded-lg border b-line-soft px-3 py-1.5 text-xs transition flex items-center gap-1.5 ${
-                !allowed ? "cursor-not-allowed opacity-40 tx3" : active ? "toggle-on tx1 font-medium" : "tx2 hover:tx1"
-              }`}
-            >
-              <span>{item.icon}</span>
-              <span>{fa ? item.fa : item.en}</span>
-            </button>
-          );
-        })}
-      </nav>
-
-      {!canSeeAny && (
-        <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-3.5">
-          <div className="tx1 text-xs font-medium">
-            {tr("این کاربر به هیچ بخشی از IIoT & DAS در این دکل دسترسی ندارد", "This user has no IIoT & DAS access on this rig")}
-          </div>
-        </div>
-      )}
-
-      <section className="glass-dark rounded-2xl p-4 space-y-4 flex-1">
-        <div className="flex flex-wrap items-start justify-between gap-3 border-b b-line-soft pb-3">
-          <div className="flex items-center gap-2.5">
-            <span className="text-2xl">{current.icon}</span>
-            <div>
-              <h3 className="tx1 font-semibold text-base">{fa ? current.fa : current.en}</h3>
-              <p className="tx3 text-xs mt-0.5">{fa ? current.descFa : current.descEn}</p>
+        </>
+      }
+      onBack={onBackHome}
+      navTitle={tr("زیرماژول‌های IIoT", "IIoT Submodules")}
+      navItems={IIOT_SUBMODULES.map((item) => {
+        const allowed = canIiotAccess(userId, item.viewPermission, rigId);
+        return {
+          id: item.id,
+          label: fa ? item.fa : item.en,
+          icon: item.icon,
+          disabled: !allowed,
+          disabledHint: tr(`مجوز لازم: ${item.viewPermission}`, `Required permission: ${item.viewPermission}`),
+        };
+      })}
+      activeId={current.id}
+      onSelect={onSelectSub}
+      panelTitle={fa ? current.fa : current.en}
+      panelIcon={current.icon}
+      panelDesc={fa ? current.descFa : current.descEn}
+      panelMeta={
+        <>
+          {dash && <Chip text={`${tr("دکل", "rig")}: ${dash.rig.RigNo}`} dir="ltr" />}
+          <span className={moduleChipCls} dir="ltr">{rigId} · {current.viewPermission}</span>
+        </>
+      }
+      notice={
+        !canSeeAny ? (
+          <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-3.5">
+            <div className="tx1 text-xs font-medium">
+              {tr("این کاربر به هیچ بخشی از IIoT & DAS در این دکل دسترسی ندارد", "This user has no IIoT & DAS access on this rig")}
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-1.5">
-            {dash && <Chip text={`${tr("دکل", "rig")}: ${dash.rig.RigNo}`} dir="ltr" />}
-            <span className="rounded-lg border b-line-soft bg-black/20 px-2.5 py-1 text-[11px] tx3" dir="ltr">
-              {rigId} · {current.viewPermission}
-            </span>
-          </div>
-        </div>
-
-        {renderBody()}
-      </section>
-    </div>
+        ) : undefined
+      }
+    >
+      {renderBody()}
+    </ModuleWorkspaceShell>
   );
 }
 
