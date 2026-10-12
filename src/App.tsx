@@ -211,6 +211,11 @@ export default function App() {
     if (projectId) changeScope(clusterId, projectId);
   };
 
+  /* The primary navigation belongs to the PMIS home view only. Its detailed
+   * pages and the MES/CMMS/SCM/IIoT workspaces each provide their own back
+   * button, so the main sidebars must not compete with their local navigation. */
+  const showPrimarySidebars = moduleNav === null && activeSystemView.system === "pmis";
+
   return (
     <div className="app-shell flex h-screen w-screen flex-col overflow-hidden">
       {/* ═══ Expanded corporate command bar ═══ */}
@@ -295,7 +300,7 @@ export default function App() {
         {/* سایدبار منابع داده هم مثل سایدبار چارچوب فقط در صفحهٔ اصلی
           * می‌ماند. در صفحهٔ حوزه، فضای کاری به پنل تخصصی می‌رسد و
           * ۲۴۸ پیکسل دیگر آزاد می‌شود. */}
-        {!moduleNav && activeSystemView.system === "pmis" && (
+        {showPrimarySidebars && (
           <LeftSidebar
             lang={lang}
             activeSource={source}
@@ -394,7 +399,7 @@ export default function App() {
           * خودِ فضای کاری انجام می‌شود (`onBack`/`onBackHome` →
           * `setActiveSystemView({ system: "pmis" })` یا `onBack` →
           * `setModuleNav(null)`)، پس هیچ مسیری بن‌بست نمی‌شود. */}
-        {!moduleNav && activeSystemView.system === "pmis" && (
+        {showPrimarySidebars && (
           <RightSidebar
             lang={lang}
             quickAction={quickAction}

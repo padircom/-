@@ -103,34 +103,8 @@ const quickActions: QuickAction[] = [
   { id: "calc", label: { fa: "محاسبات", en: "Calculations" }, icon: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className={iconClass}><rect x="4" y="3" width="16" height="18" rx="2" /><circle cx="9" cy="11" r="2" /><path d="M13 11h4M13 15h4M13 7h4" /></svg>) },
 ];
 
-/* میان‌بر حوزه‌ها — پرکاربردترین‌ها. این‌ها جایگزینِ فهرست نیستند؛
- * همان حوزه‌ها در گروهِ خودشان هم پیدا می‌شوند. */
-const domainShortcuts = [
-  { id: "d1", icon: "🗂" },
-  { id: "d2", icon: "📅" },
-  { id: "d17", icon: "⚡" },
-];
-
 const selectClass =
   "w-full rounded-lg border b-line-soft bg-[var(--row)] px-2 py-1.5 text-[10.5px] font-light tx1 outline-none transition focus:border-[var(--accent)]";
-
-const GROUP_STORE_KEY = "arena.sidebar.groups";
-
-function loadGroupState(): { open: string | null; supportOpen: boolean } {
-  try {
-    const raw = localStorage.getItem(GROUP_STORE_KEY);
-    if (raw) {
-      const p = JSON.parse(raw) as { open?: unknown; supportOpen?: unknown };
-      return {
-        open: typeof p.open === "string" ? p.open : "pg2",
-        supportOpen: typeof p.supportOpen === "boolean" ? p.supportOpen : true,
-      };
-    }
-  } catch {
-    /* حافظه در دسترس نیست — پیش‌فرض */
-  }
-  return { open: "pg2", supportOpen: true };
-}
 
 export default function RightSidebar({
   lang,
@@ -146,7 +120,12 @@ export default function RightSidebar({
   const [openDomain, setOpenDomain] = useState<string | null>(null);
   const [selCluster, setSelCluster] = useState<string>(() => projectScope?.clusterId ?? "");
   const [selProject, setSelProject] = useState<string>(() => projectScope?.projectId ?? "");
-  const [groupState, setGroupState] = useState(loadGroupState);
+  /* گروه‌های داخلی PMIS هم در هر نشست بسته شروع می‌شوند؛ وضعیت بازشدهٔ
+   * قبلی ذخیره/بازیابی نمی‌شود تا رفرش، گروهی را خودکار باز نکند. */
+  const [groupState, setGroupState] = useState<{ open: string | null; supportOpen: boolean }>({
+    open: null,
+    supportOpen: false,
+  });
   const [query, setQuery] = useState("");
   const [taxonomyOverrides, setTaxonomyOverrides] = useState<Record<string, Process[]>>({});
   const [sectionsOpen, setSectionsOpen] = useState<{
@@ -156,11 +135,11 @@ export default function RightSidebar({
     scm: boolean;
     iiot: boolean;
   }>({
-    pmis: true,
-    mes: true,
-    cmms: true,
-    scm: true,
-    iiot: true,
+    pmis: false,
+    mes: false,
+    cmms: false,
+    scm: false,
+    iiot: false,
   });
 
   const toggleSection = (key: "pmis" | "mes" | "cmms" | "scm" | "iiot") => {
@@ -207,14 +186,6 @@ export default function RightSidebar({
     return () => window.removeEventListener("pmis:taxonomy-updated", onTaxonomyUpdated);
   }, [projectScope?.projectId]);
 
-  useEffect(() => {
-    try {
-      localStorage.setItem(GROUP_STORE_KEY, JSON.stringify(groupState));
-    } catch {
-      /* حافظه در دسترس نیست — نادیده */
-    }
-  }, [groupState]);
-
   const toggleDomain = (id: string) => {
     onSelectSystemView?.({ system: "pmis" });
     // System administration is global; it never requires an industry/project context.
@@ -223,22 +194,6 @@ export default function RightSidebar({
       return;
     }
     setOpenDomain((prev) => (prev === id ? null : id));
-    setSelCluster(projectScope?.clusterId ?? "");
-    setSelProject(projectScope?.projectId ?? "");
-  };
-
-  /* پرش میان‌بر: گروه میزبان باز می‌شود و فرم ورود همان حوزه باز می‌ماند. */
-  const jumpToDomain = (id: string) => {
-    const d = domains.find((x) => x.id === id);
-    if (!d) return;
-    onSelectSystemView?.({ system: "pmis" });
-    setSectionsOpen((prev) => ({ ...prev, pmis: true }));
-    if (d.group === "support") {
-      setGroupState((s) => ({ ...s, supportOpen: true }));
-    } else {
-      setGroupState((s) => ({ ...s, open: d.group }));
-    }
-    setOpenDomain(id);
     setSelCluster(projectScope?.clusterId ?? "");
     setSelProject(projectScope?.projectId ?? "");
   };
@@ -435,27 +390,6 @@ export default function RightSidebar({
           )}
         </div>
 
-        {/* میان‌بر حوزه‌ها */}
-        <div className="mt-2 grid grid-cols-3 gap-1.5">
-          {domainShortcuts.map((s) => {
-            const d = domains.find((x) => x.id === s.id);
-            if (!d) return null;
-            const active = openDomain === d.id;
-            return (
-              <button
-                key={s.id}
-                type="button"
-                onClick={() => jumpToDomain(s.id)}
-                title={t(d.title, lang)}
-                className={`flex min-w-0 items-center justify-center gap-1 rounded-lg border px-1.5 py-1.5 text-[9px] font-light transition ${active ? "row-on" : "b-line-soft bg-black/10 tx2 hover:tx1"}`}
-                style={active ? { borderColor: d.accent, color: d.accent } : undefined}
-              >
-                <span className="text-[12px] leading-none">{s.icon}</span>
-                <span className="truncate">{t(d.title, lang).split(" ").slice(0, 2).join(" ")}</span>
-              </button>
-            );
-          })}
-        </div>
       </header>
 
       <div className="thin-scroll flex-1 space-y-2.5 overflow-y-auto px-3 py-3">
@@ -483,7 +417,7 @@ export default function RightSidebar({
               >
                 <span className="text-[12px]">📐</span>
                 <span className="min-w-0 flex-1 truncate text-[11px] font-semibold">
-                  {rtl ? "مدیریت و کنترل پروژه (PMIS)" : "Project Management & Control (PMIS)"}
+                  {rtl ? "مدیریت و کنترل پروژه" : "Project Management & Control"}
                 </span>
                 <svg
                   viewBox="0 0 24 24"
@@ -549,7 +483,6 @@ export default function RightSidebar({
             {/* ── خط جداکنندهٔ بصری (Divider) بین بخش ۱ و ۲ ── */}
             <div role="separator" aria-orientation="horizontal" className="my-2 flex items-center gap-2 px-1">
               <span className="hair h-px flex-1" />
-              <span className="text-[8px] tracking-widest tx4" dir="ltr">MES</span>
               <span className="hair h-px flex-1" />
             </div>
 
@@ -567,7 +500,7 @@ export default function RightSidebar({
               >
                 <span className="text-[12px]">🏭</span>
                 <span className="min-w-0 flex-1 truncate text-[11px] font-semibold">
-                  {rtl ? "برنامه‌ریزی و کنترل تولید (MES)" : "Manufacturing Execution (MES)"}
+                  {rtl ? "برنامه‌ریزی و کنترل تولید" : "Manufacturing Execution"}
                 </span>
                 <svg
                   viewBox="0 0 24 24"
@@ -609,7 +542,6 @@ export default function RightSidebar({
             {/* ── خط جداکنندهٔ بصری (Divider) بین بخش ۲ و ۳ ── */}
             <div role="separator" aria-orientation="horizontal" className="my-2 flex items-center gap-2 px-1">
               <span className="hair h-px flex-1" />
-              <span className="text-[8px] tracking-widest tx4" dir="ltr">CMMS</span>
               <span className="hair h-px flex-1" />
             </div>
 
@@ -627,7 +559,7 @@ export default function RightSidebar({
               >
                 <span className="text-[12px]">🔧</span>
                 <span className="min-w-0 flex-1 truncate text-[11px] font-semibold">
-                  {rtl ? "نگهداری و تعمیرات (CMMS)" : "Maintenance Management (CMMS)"}
+                  {rtl ? "نگهداری و تعمیرات" : "Maintenance Management"}
                 </span>
                 <svg
                   viewBox="0 0 24 24"
@@ -669,7 +601,6 @@ export default function RightSidebar({
             {/* ── خط جداکنندهٔ بصری (Divider) بین بخش ۳ و ۴ ── */}
             <div role="separator" aria-orientation="horizontal" className="my-2 flex items-center gap-2 px-1">
               <span className="hair h-px flex-1" />
-              <span className="text-[8px] tracking-widest tx4" dir="ltr">SCM &amp; Finance</span>
               <span className="hair h-px flex-1" />
             </div>
 
@@ -687,7 +618,7 @@ export default function RightSidebar({
               >
                 <span className="text-[12px]">📦</span>
                 <span className="min-w-0 flex-1 truncate text-[11px] font-semibold">
-                  {rtl ? "زنجیره تأمین، بازرگانی و مالی (SCM & Finance)" : "Supply Chain, Commercial & Finance (SCM & Finance)"}
+                  {rtl ? "زنجیره تأمین، بازرگانی و مالی" : "Supply Chain, Commercial & Finance"}
                 </span>
                 <svg
                   viewBox="0 0 24 24"
@@ -729,7 +660,6 @@ export default function RightSidebar({
             {/* ── خط جداکنندهٔ بصری (Divider) بین بخش ۴ و ۵ ── */}
             <div role="separator" aria-orientation="horizontal" className="my-2 flex items-center gap-2 px-1">
               <span className="hair h-px flex-1" />
-              <span className="text-[8px] tracking-widest tx4" dir="ltr">IIoT &amp; DAS</span>
               <span className="hair h-px flex-1" />
             </div>
 
@@ -747,7 +677,7 @@ export default function RightSidebar({
               >
                 <span className="text-[12px]">📡</span>
                 <span className="min-w-0 flex-1 truncate text-[11px] font-semibold">
-                  {rtl ? "پایش میدانی و اینترنت اشیاء (IIoT & DAS)" : "Field Monitoring & Industrial IoT (IIoT & DAS)"}
+                  {rtl ? "پایش میدانی و اینترنت اشیاء" : "Field Monitoring & Industrial IoT"}
                 </span>
                 <svg
                   viewBox="0 0 24 24"

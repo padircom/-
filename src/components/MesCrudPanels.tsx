@@ -205,6 +205,7 @@ function industryTypeLabel(fa: boolean, code: MfgIndustryType | null | undefined
  */
 export function MesIndustrySettingsPanel({ fa, plantId, userId }: { fa: boolean; plantId: string; userId: string }) {
   const tr = (faText: string, enText: string) => (fa ? faText : enText);
+  const canView = canMfgAccess(userId, "mfg.plant.view", plantId);
   const canEdit = canMfgAccess(userId, "mfg.plant.edit", plantId);
 
   const [settings, setSettings] = useState<MfgPlantSettingsResponse | null>(null);
@@ -221,6 +222,17 @@ export function MesIndustrySettingsPanel({ fa, plantId, userId }: { fa: boolean;
     setLoadError("");
     setSaveMessage(null);
     setPreview(null);
+
+    /* هیچ درخواست تنظیمات برای نقش بی‌مجوز فرستاده نمی‌شود؛ API این مسیر
+     * را با mfg.plant.view محافظت می‌کند و پاسخ ۴۰۳ در رابط ایجاد نمی‌کنیم. */
+    if (!canView) {
+      setSettings(null);
+      setDraft("");
+      setLoadError(tr("برای مشاهدهٔ نوع صنعت، مجوز mfg.plant.view لازم است.", "Viewing industry settings requires mfg.plant.view."));
+      setLoading(false);
+      return;
+    }
+
     try {
       const res = await MfgClient.getPlantSettings(plantId, userId);
       setSettings(res);
@@ -238,16 +250,19 @@ export function MesIndustrySettingsPanel({ fa, plantId, userId }: { fa: boolean;
     } finally {
       setLoading(false);
     }
-  }, [plantId, userId]);
+  }, [plantId, userId, canView, fa]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
-  /* پیش‌نمایش قابلیت‌های صنعتِ انتخابی وقتی هنوز رکوردی ذخیره نشده.
-   * اگر رکورد وجود داشته باشد، پاسخ همین PATCH جدید نگاشت به‌روز را برمی‌گرداند. */
+  /* منوی انتخاب برای نقش‌های فقط‌خواندنی هم فعال است: آن‌ها نگاشت صنعت را
+   * با GET مجاز پیش‌نمایش می‌کنند، اما هرگز PATCH نمی‌فرستند. */
   useEffect(() => {
-    if (settings !== null || draft === "") {
+    const needsPreview = draft !== "" && (
+      settings === null || (!canEdit && draft !== settings.plant.industryType)
+    );
+    if (!canView || !needsPreview) {
       setPreview(null);
       return;
     }
@@ -256,19 +271,23 @@ export function MesIndustrySettingsPanel({ fa, plantId, userId }: { fa: boolean;
       .then((res) => {
         if (!cancelled) setPreview(res);
       })
-      .catch(() => {
-        if (!cancelled) setPreview(null);
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setPreview(null);
+        if (err instanceof MfgRequestError && err.status !== 404) {
+          setLoadError(describeMesError(err));
+        }
       });
     return () => {
       cancelled = true;
     };
-  }, [settings, draft, plantId, userId]);
+  }, [settings, draft, plantId, userId, canView, canEdit]);
 
   const committed = settings?.plant.industryType ?? null;
   const effectiveMap = preview ?? settings?.capabilities ?? null;
 
   const save = async (next: MfgIndustryType) => {
-    if (!next || saving) return;
+    if (!next || saving || !canEdit) return;
     setSaving(true);
     setSaveMessage(null);
     try {
@@ -310,8 +329,9 @@ export function MesIndustrySettingsPanel({ fa, plantId, userId }: { fa: boolean;
   const onIndustryChange = (value: string) => {
     const next = (MFG_INDUSTRY_TYPES as readonly string[]).includes(value) ? (value as MfgIndustryType) : "";
     setDraft(next);
+    setLoadError("");
     setSaveMessage(null);
-    // اگر کارخانه پیکربندی شده باشد، تغییر بلافاصله ذخیره می‌شود (PATCH با If-Match).
+    // ویرایشگر تغییر را ذخیره می‌کند؛ نقش فقط‌خواندنی فقط پیش‌نمایش مجاز GET می‌گیرد.
     if (next !== "" && settings !== null && next !== committed && canEdit) {
       void save(next);
     }
@@ -332,7 +352,7 @@ export function MesIndustrySettingsPanel({ fa, plantId, userId }: { fa: boolean;
             <select
               className={crudInputCls}
               value={draft}
-              disabled={loading || saving || !canEdit}
+              disabled={loading || saving || !canView}
               onChange={(event) => onIndustryChange(event.target.value)}
               aria-label={tr("نوع صنعت", "Industry type")}
             >
@@ -398,13 +418,14 @@ export function MesIndustrySettingsPanel({ fa, plantId, userId }: { fa: boolean;
               {tr(`پیش‌نمایش (ذخیره‌نشده): ${industryTypeLabel(fa, draft)}`, `Preview (not saved): ${industryTypeLabel(false, draft)}`)}
             </span>
           )}
-          {!canEdit && !loading && (
-            <span
-              className="tx3"
-              dir="ltr"
-              title={tr("برای تغییر نوع صنعت، مجوز mfg.plant.edit لازم است", "Changing the industry type requires mfg.plant.edit")}
-            >
-              requires mfg.plant.edit
+          {!canView && !loading && (
+            <span className="tx3" dir="ltr" title={tr("برای مشاهدهٔ نوع صنعت، مجوز mfg.plant.view لازم است", "Viewing industry settings requires mfg.plant.view")}>
+              requires mfg.plant.view
+            </span>
+          )}
+          {canView && !canEdit && !loading && (
+            <span className="tx3" title={tr("انتخاب صنعت فقط پیش‌نمایش است؛ ذخیرهٔ تغییر به مجوز mfg.plant.edit نیاز دارد", "Industry selection is preview-only; saving requires mfg.plant.edit")}>
+              {tr("پیش‌نمایش فقط‌خواندنی · ذخیره نیازمند mfg.plant.edit", "Read-only preview · saving requires mfg.plant.edit")}
             </span>
           )}
         </div>
