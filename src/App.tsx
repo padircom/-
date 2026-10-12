@@ -1,5 +1,4 @@
 import { lazy, Suspense, useEffect, useState } from "react";
-import LeftSidebar from "./components/LeftSidebar";
 import RightSidebar, { type EnterpriseSystemView, type ModuleNavTarget } from "./components/RightSidebar";
 import PmbokRing from "./components/PmbokRing";
 import PortfolioPanel from "./components/PortfolioPanel";
@@ -146,7 +145,6 @@ export default function App() {
   const [quickAction, setQuickAction] = useState<string>("home");
   const [node, setNode] = useState<string | null>(null);
   const [cluster, setCluster] = useState<string | null>("c1");
-  const [source, setSource] = useState<string | null>("p6");
   const [moduleNav, setModuleNav] = useState<ModuleNavTarget | null>(null);
   const [activeSystemView, setActiveSystemView] = useState<EnterpriseSystemView>({ system: "pmis" });
   const [standaloneMes, setStandaloneMes] = useState<boolean>(() => {
@@ -211,9 +209,9 @@ export default function App() {
     if (projectId) changeScope(clusterId, projectId);
   };
 
-  /* The primary navigation belongs to the PMIS home view only. Its detailed
-   * pages and the MES/CMMS/SCM/IIoT workspaces each provide their own back
-   * button, so the main sidebars must not compete with their local navigation. */
+  /* ناوبری چارچوب فقط در نمای خانهٔ PMIS می‌ماند. صفحات جزئی و ماژول‌های
+   * MES/CMMS/SCM/IIoT دکمهٔ بازگشت خودشان را دارند، پس سایدبار چارچوب
+   * نباید با ناوبری محلی آن‌ها رقابت کند. */
   const showPrimarySidebars = moduleNav === null && activeSystemView.system === "pmis";
 
   return (
@@ -295,19 +293,15 @@ export default function App() {
 
       </header>
 
-      {/* ═══ Three fixed pillars (left sources / workspace / right navigation) ═══ */}
+      {/* ═══ Two fixed pillars (workspace / right navigation) ═══
+        *
+        * پنل مجزای «منابع داده» حذف شد. دکمه‌های اتصال و ورود دادهٔ همان
+        * پنل اکنون داخل صفحات مرتبط خودشان هستند: ورود برنامه در
+        * «برنامه‌ریزی ← زمان‌بندی/گانت»، همگام‌سازی مالی در «پایش و کنترل ←
+        * کنترل هزینه» و خروجی/اتصال Power BI در «پایش و کنترل ← داشبوردها و
+        * گزارشات». بنابراین ستون ۲۴۸ پیکسلی چپ دیگر وجود ندارد و فضای کاری
+        * از همان ابتدا تمام عرض را می‌گیرد. */}
       <main className="app-main flex min-h-0 flex-1 gap-3 p-3">
-        {/* سایدبار منابع داده هم مثل سایدبار چارچوب فقط در صفحهٔ اصلی
-          * می‌ماند. در صفحهٔ حوزه، فضای کاری به پنل تخصصی می‌رسد و
-          * ۲۴۸ پیکسل دیگر آزاد می‌شود. */}
-        {showPrimarySidebars && (
-          <LeftSidebar
-            lang={lang}
-            activeSource={source}
-            onPick={(id) => setSource(id === source ? null : id)}
-          />
-        )}
-
         <section className="flex min-w-0 flex-1 flex-col gap-3 overflow-hidden">
           {activeSystemView.system === "mes" ? (
             <Suspense fallback={<div className="glass flex flex-1 items-center justify-center rounded-2xl text-[11px] tx3">…</div>}>

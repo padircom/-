@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Lang } from "../data/framework";
+import { ErpSyncAction } from "./ConnectorActions";
 import { logAudit } from "../services/auditLogger";
 import { useAuth } from "../context/AuthContext";
 import { useCurrentProjectId } from "../context/SystemContext";
@@ -337,6 +338,11 @@ export default function CostSupplyWorkspace({
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden" dir={rtl ? "rtl" : "ltr"}>
       {header(independent ? null : view)}
+      {/* همگام‌سازی مالی از پنل حذف‌شدهٔ «منابع داده» به همین میز کار (گروه
+        * «پایش و کنترل» ➔ کنترل هزینه) منتقل شد. بیرون از تب‌ها می‌نشیند تا در
+        * حالت «دادهٔ خالی/بارگذاری» هم دیده شود و علت را صریح بگوید؛ تب‌های
+        * زنجیره تأمین همان دکمه را لازم ندارند. */}
+      {!tab.startsWith("scm-") && <ErpSyncAction lang={lang} />}
       {tabsNav}
       <div className="thin-scroll min-h-0 flex-1 space-y-3 overflow-y-auto pe-1">{body}</div>
     </div>

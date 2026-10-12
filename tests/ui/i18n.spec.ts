@@ -16,9 +16,8 @@ async function dimensions(page: Page) {
       return { x: r.x, y: r.y, width: r.width, height: r.height };
     };
     return {
-      header: box('.app-header'), sources: box('.sources-sidebar'),
+      header: box('.app-header'),
       nav: box('.context-sidebar'), workspace: box('.app-main > section'),
-      sourceCard: box('.sources-sidebar .source-row'),
       langButton: box('.header-controls > .toggle-shell button'),
       clock: box('.wchip:last-child'),
     };
@@ -56,9 +55,7 @@ for (const width of [1440, 1024, 390]) {
     }
     expect(fa.nav.x).toBeGreaterThan(fa.workspace.x);
     expect(en.nav.x).toBeGreaterThan(en.workspace.x);
-    expect(fa.sources.x).toBeLessThan(fa.workspace.x);
-    expect(en.sources.x).toBeLessThan(en.workspace.x);
-    for (const key of ['sources', 'workspace', 'nav'] as const) {
+    for (const key of ['workspace', 'nav'] as const) {
       expect(en[key].x, `${key} must not move when switching language`).toBe(fa[key].x);
     }
     await expect(page.locator('.context-sidebar aside')).toHaveCSS('direction', 'ltr');
@@ -70,12 +67,11 @@ for (const width of [1440, 1024, 390]) {
       await page.locator('.app-main').evaluate(e => { e.scrollLeft = e.scrollWidth; });
       await expect(page.locator('.context-sidebar')).toBeInViewport();
       await page.locator('.app-main').evaluate(e => { e.scrollLeft = 0; });
-      await expect(page.locator('.sources-sidebar')).toBeInViewport();
+      await expect(page.locator('.app-main > section')).toBeInViewport();
     }
     await locale(page, 'fa');
     const again = await dimensions(page);
     expect(again.header.height).toBe(fa.header.height);
-    expect(again.sourceCard.height).toBe(fa.sourceCard.height);
     await expect(page.locator('main')).toHaveCSS('direction', 'ltr');
     await expect(page.locator('.context-sidebar aside')).toHaveCSS('direction', 'rtl');
     await expect(page.locator('.app-main > section')).toHaveCSS('direction', 'rtl');
@@ -84,26 +80,19 @@ for (const width of [1440, 1024, 390]) {
   });
 }
 
-test('fixed left sidebar collapse/expand; theme does not reset locale', async ({ page }) => {
+test('the removed left panel leaves the theme and locale switch independent', async ({ page }) => {
+  // کشوی «منابع داده» حذف شده است؛ آنچه می‌ماند این قرارداد است که تعویض
+  // پوسته و زبان به هم قفل نیستند.
+  await expect(page.locator('.sources-sidebar')).toHaveCount(0);
+  await expect(page.locator('.sidebar-toggle')).toHaveCount(0);
   for (const lang of ['en', 'fa'] as const) {
     await locale(page, lang);
-    const hide = page.getByRole('button', { name: lang === 'fa' ? 'پنهان کردن سایدبار منابع داده' : 'Hide data sources sidebar' });
-    await expect(hide.locator('svg')).toHaveCSS('rotate', 'none');
-    await hide.click();
-    const show = page.getByRole('button', { name: lang === 'fa' ? 'نمایش سایدبار منابع داده' : 'Show data sources sidebar' });
-    await expect(show).toBeInViewport();
-    await expect(show.locator('svg')).toHaveCSS('rotate', 'none');
-    const handleX = (await show.boundingBox())!.x;
-    await locale(page, lang === 'fa' ? 'en' : 'fa');
-    expect((await page.locator('.sources-sidebar > button').boundingBox())!.x).toBe(handleX);
-    await expect(page.locator('.sources-sidebar > button')).toBeInViewport();
-    await locale(page, lang);
-    await show.click();
-    await expect(page.locator('.sources-sidebar')).toHaveCSS('width', '248px');
     await page.getByRole('button', { name: 'Light theme', exact: true }).click();
     await expect(page.locator('html')).toHaveAttribute('lang', lang);
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
     await page.getByRole('button', { name: 'Dark theme', exact: true }).click();
+    await expect(page.locator('html')).toHaveAttribute('lang', lang);
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   }
 });
 

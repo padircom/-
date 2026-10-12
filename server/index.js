@@ -1438,14 +1438,141 @@ app.get("/api/diagnostics/readiness", async (req, res) => {
   });
 });
 
+/**
+ * همگام‌سازی ورودی هزینه با ERP / SAP.
+ *
+ * قواعد صادقانه (همان قاعدهٔ کانکتورهای ITG):
+ *  - نبود تنظیمات = ۴۰۹ صریح؛ هیچ «موفق»ی جعل نمی‌شود.
+ *  - درخواست فقط GET خواندنی به endpoint پیکربندی‌شده می‌فرستد (هدف از محیط
+ *    می‌آید، نه از ورودی کاربر) و هر تلاش یک ردیف AuditLog می‌گیرد.
+ *  - شمارش رکورد فقط از پاسخ واقعی می‌آید؛ شکل ناشناختهٔ پاسخ «نامعلوم»
+ *    گزارش می‌شود، نه صفر یا عدد حدسی.
+ *  - نگاشت خودکار به دفتر هزینهٔ FIN در این نسخه تعریف نشده و ادعا نمی‌شود.
+ */
+const sapSyncConfig = (env = process.env) => {
+  const baseUrl = String(env.SAP_API_URL || "").trim().replace(/\/+$/, "");
+  const costPath = String(env.SAP_COST_PATH || "").trim();
+  const timeoutRaw = Number(env.SAP_TIMEOUT_MS || 8000);
+  return {
+    configured: Boolean(baseUrl),
+    baseUrl,
+    costPath: costPath || "/api/costs",
+    token: String(env.SAP_API_TOKEN || "").trim(),
+    timeoutMs: Number.isFinite(timeoutRaw) && timeoutRaw >= 1000 && timeoutRaw <= 30000 ? Math.round(timeoutRaw) : 8000,
+  };
+};
+
+const countSapRecords = (payload) => {
+  if (Array.isArray(payload)) return payload.length;
+  if (payload && typeof payload === "object") {
+    for (const key of ["value", "d", "results", "items", "data"]) {
+      const candidate = payload[key];
+      if (Array.isArray(candidate)) return candidate.length;
+      if (candidate && typeof candidate === "object" && Array.isArray(candidate.results)) return candidate.results.length;
+    }
+  }
+  return null;
+};
+
+app.get("/api/integrations/sap/status", (req, res) => {
+  const config = sapSyncConfig();
+  res.json({
+    ok: true,
+    data: { configured: config.configured, endpoint: config.configured ? `${config.baseUrl}${config.costPath}` : null, authMode: config.token ? "bearer" : "none", timeoutMs: config.timeoutMs },
+    meta: { traceId: req.requestId, timestamp: new Date().toISOString() },
+  });
+});
+
+app.post("/api/integrations/sap/sync", async (req, res) => {
+  const config = sapSyncConfig();
+  const projectId = String(req.body?.projectId || "").slice(0, 50) || null;
+  if (!config.configured) {
+    return res.status(409).json({
+      ok: false,
+      error: {
+        code: "E-SAP-NOT-CONFIGURED",
+        message: "اتصال ERP / SAP تنظیم نشده است؛ پیکربندی SAP_API_URL و SAP_API_TOKEN در مدیریت سامانه انجام می‌شود.",
+        missing: ["SAP_API_URL"],
+        traceId: req.requestId,
+      },
+    });
+  }
+  const endpoint = `${config.baseUrl}${config.costPath}`;
+  const started = Date.now();
+  let httpStatus = 0;
+  let payload = null;
+  let failure = null;
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), config.timeoutMs);
+    try {
+      const response = await fetch(endpoint, {
+        method: "GET",
+        headers: { accept: "application/json", ...(config.token ? { authorization: `Bearer ${config.token}` } : {}) },
+        signal: controller.signal,
+      });
+      httpStatus = response.status;
+      const text = await response.text();
+      try {
+        payload = text ? JSON.parse(text) : null;
+      } catch {
+        payload = null;
+      }
+      if (!response.ok) failure = { code: response.status === 401 || response.status === 403 ? "E-SAP-UNAUTHORIZED" : response.status === 404 ? "E-SAP-NOT-FOUND" : "E-SAP-UPSTREAM", message: `ERP / SAP پاسخ ${response.status} داد` };
+    } finally {
+      clearTimeout(timer);
+    }
+  } catch (error) {
+    httpStatus = error?.name === "AbortError" ? 408 : 0;
+    failure = { code: httpStatus === 408 ? "E-SAP-TIMEOUT" : "E-SAP-UNREACHABLE", message: httpStatus === 408 ? "پاسخ ERP / SAP در مهلت تعیین‌شده نرسید" : "دسترسی به ERP / SAP برقرار نشد" };
+  }
+  const recordCount = failure ? null : countSapRecords(payload);
+  const durationMs = Date.now() - started;
+  // ثبت رکورد از همان لایهٔ ماندگاری (JSON/SQL) که بقیهٔ ماژول‌ها استفاده می‌کنند؛
+  // با SQL در دسترس، همان Audit_Log و در حالت فایل، فروشگاه JSON.
+  try {
+    const r = await repo();
+    const actor = String(req.headers["x-user-id"] || "system").slice(0, 60);
+    await r.create("AuditLog", {
+      At: new Date().toISOString(),
+      SubjectId: actor,
+      Action: "SYNC_SAP_COSTS",
+      ProjectCode: projectId,
+      EntityName: "Integration",
+      EntityId: "sap",
+      Severity: failure ? "warning" : "info",
+      Details: { traceId: req.requestId, endpoint, httpStatus, recordCount, durationMs, status: failure ? failure.code : "OK" },
+    }, actor);
+  } catch (error) {
+    // شکست دفتر نباید نتیجهٔ همگام‌سازی را پنهان کند، ولی در لاگ دیده می‌شود.
+    console.error("[%s] sap sync audit failed:", req.requestId, error?.message ?? error);
+  }
+  if (failure) {
+    return res.status(502).json({ ok: false, error: { ...failure, httpStatus, durationMs, traceId: req.requestId } });
+  }
+  return res.json({
+    ok: true,
+    data: {
+      source: "sap",
+      endpoint,
+      httpStatus,
+      recordCount,
+      shape: recordCount === null ? "unknown" : Array.isArray(payload) ? "array" : "envelope",
+      durationMs,
+      note: recordCount === null ? "شکل پاسخ با فهرست رکوردها تطبیق داده نشد؛ عددی گزارش نمی‌شود." : null,
+      runAt: new Date().toISOString(),
+    },
+    meta: { traceId: req.requestId, timestamp: new Date().toISOString() },
+  });
+});
+
 app.get("/api/integrations/status", (req, res) => {
+  // فقط اتصالات بیرونی؛ CMMS و IIoT/DAS ماژول داخلی‌اند و کانکتور خارجی ندارند.
   const items = [
     { id: "p6", name: "Primavera P6", configured: Boolean(process.env.P6_API_URL), mode: process.env.P6_API_URL ? "api" : "file-import" },
     { id: "msp", name: "Microsoft Project", configured: true, mode: "file-import" },
     { id: "sap", name: "ERP / SAP", configured: Boolean(process.env.SAP_API_URL), mode: "rest-odata" },
     { id: "powerbi", name: "Power BI", configured: Boolean(process.env.POWERBI_WORKSPACE_ID), mode: "embedded" },
-    { id: "cmms", name: "CMMS", configured: Boolean(process.env.CMMS_API_URL), mode: "rest" },
-    { id: "iot", name: "IoT Sensors", configured: Boolean(process.env.MQTT_BROKER_URL), mode: "mqtt" },
     { id: "dms", name: "DMS", configured: Boolean(process.env.DMS_API_URL), mode: "rest" },
   ];
   res.json({ ok: true, data: items, meta: { traceId: req.requestId, timestamp: new Date().toISOString() } });

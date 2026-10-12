@@ -135,7 +135,6 @@ function buildLinks(): Link[] {
   L.push({ a: "src-msp", b: "d2-p2", dash: true });
   L.push({ a: "src-sap", b: "d5-p2", dash: true });
   L.push({ a: "src-dms", b: "d1-p1", dash: true });
-  L.push({ a: "src-iot", b: "d2-p4", dash: true });
   L.push({ a: "src-pbi", b: "d3-p6", dash: true });
   L.push({ a: "d7-p2", b: "d1", dash: true });
   L.push({ a: "d7-p2", b: "d2", dash: true });

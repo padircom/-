@@ -27,11 +27,11 @@ for (const theme of ['dark', 'light']) {
       await expect(page.locator('html')).toHaveAttribute('dir', lang === 'fa' ? 'rtl' : 'ltr');
       await expect(page.locator('.app-main > section')).toHaveCSS('direction', lang === 'fa' ? 'rtl' : 'ltr');
       await expect(page.locator('body')).toHaveCSS('font-family', lang === 'fa' ? /^Vazirmatn,/ : /^Inter,/);
-      await expect(page.locator('.context-sidebar .sidebar-toggle')).toHaveCount(0);
-      await expect(page.locator('.sources-sidebar .sidebar-toggle')).toBeVisible();
-      const sources = (await page.locator('.sources-sidebar').boundingBox())!;
+      await expect(page.locator('.sidebar-toggle')).toHaveCount(0);
+      await expect(page.locator('.sources-sidebar')).toHaveCount(0);
+      const workspace = (await page.locator('.app-main > section').boundingBox())!;
       const context = (await page.locator('.context-sidebar').boundingBox())!;
-      expect(sources.x).toBeLessThan(context.x);
+      expect(context.x).toBeGreaterThanOrEqual(workspace.x + workspace.width - 1);
     }
   });
 }

@@ -35,7 +35,6 @@ for (const domain of [
     await expect(list).toHaveCount(0);
     await domainButton.click();
     await expectFlat(list);
-    await expect(page.locator('.sources-sidebar .sidebar-toggle')).toBeVisible();
     await right.getByRole('button', { name: /Enter domain page/ }).click();
     const nav = page.locator('.workspace-columns > aside');
     await expect(nav).toBeVisible();

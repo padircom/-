@@ -147,9 +147,6 @@ table:dir(ltr) :is(td, th)[dir="ltr"].text-end { text-align: end; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .sources-sidebar,
-  .sources-sidebar > aside,
-  .sources-sidebar svg { transition: none; }
   .fade-rise,
   .ring-dashed-spin,
   .ring-dashed-spin-rev,
