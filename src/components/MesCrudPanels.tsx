@@ -9,16 +9,21 @@
  * ۳) PATCH همیشه RowVersion را می‌فرستد (If-Match)؛ تضاد نسخه به کاربر نشان داده می‌شود.
  * ۴) هر تغییر موفق با `onChanged` بخش‌های دیگر تب را هم تازه می‌کند.
  */
-import { useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import CrudResource, { type ResourceAction } from "./crud/CrudResource";
 import type { GridColumnDef } from "./crud/gridLogic";
 import type { FormFieldDef, FormValues } from "./crud/formLogic";
-import { crudInputCls, crudLabelCls } from "./crud/styles";
+import { crudInputCls, crudLabelCls, crudPrimaryBtnCls } from "./crud/styles";
 import { useAsyncList } from "./crud/useAsyncList";
 import {
+  MFG_INDUSTRY_TYPES,
   MfgClient,
   MfgRequestError,
   canMfgAccess,
+  type MfgIndustryCapabilityMap,
+  type MfgIndustryType,
+  type MfgPlantSettingsPatch,
+  type MfgPlantSettingsResponse,
   type MfgBomHeader,
   type MfgBomItem,
   type MfgDemandForecast,
@@ -163,6 +168,305 @@ function statusAction<T extends { RowVersion: number }>(
 }
 
 /* ═══════════════════════ ۱. مهندسی ساخت ═══════════════════════ */
+
+/**
+ * گزینه‌های منوی «نوع صنعت / الگوی تولید» — دقیقاً هفت IndustryType موجود در
+ * سرویس (MFG_INDUSTRY_TYPES) با برچسب فارسی ماژول MES. کد value همان مقدار
+ * `IndustryType` است که API تنظیمات کارخانه ذخیره می‌کند.
+ */
+const INDUSTRY_TYPE_OPTIONS: ReadonlyArray<{ code: MfgIndustryType; fa: string; en: string }> = [
+  { code: "discrete", fa: "صنایع قطعه‌سازی و مونتاژ", en: "Discrete & assembly" },
+  { code: "process", fa: "صنایع فرآیندی و شیمیایی", en: "Process & chemical" },
+  { code: "food", fa: "صنایع غذایی و آشامیدنی", en: "Food & beverage" },
+  { code: "pharma", fa: "صنایع دارویی و بهداشتی", en: "Pharmaceutical & medical" },
+  { code: "automotive", fa: "صنایع خودروسازی و قطعات", en: "Automotive & parts" },
+  { code: "metal", fa: "صنایع فلزی و فولاد", en: "Metals & steel" },
+  { code: "drilling_energy", fa: "صنایع نفت، گاز و حفاری", en: "Oil, gas & drilling" },
+];
+
+function industryTypeLabel(fa: boolean, code: MfgIndustryType | null | undefined): string {
+  const option = INDUSTRY_TYPE_OPTIONS.find((entry) => entry.code === code);
+  if (!option) return code ?? "—";
+  return fa ? option.fa : option.en;
+}
+
+/**
+ * منوی «نوع صنعت / الگوی تولید» — بالای تب «مهندسی ساخت».
+ *
+ * اتصال به APIهای موجود `/api/mfg/plants/:plantId/settings`:
+ *  - با ورود به تب، تنظیمات ذخیره‌شده کارخانه خوانده می‌شود؛ اگر رکورد نباشد
+ *    (۴۰ صادقانه از سرور)، کارخانه «هنوز پیکربندی نشده» است و ساخت رکورد
+ *    جدید NameFa را الزامی می‌داند.
+ *  - تغییر صنعت: اگر رکورد وجود داشته باشد با If-Match (RowVersion) ذخیره
+ *    می‌شود؛ اگر نه، رکورد جدید ساخته می‌شود. در هر دو حالت پاسخ سرور همان
+ *    نگاشت قابلیت‌های صنعت (فیلدهای اختصاصی) است که بلافاصله اینجا رندر می‌شود.
+ *  - پیش از ساخت (بدون رکورد) از مسیر preview سرور (GET /capabilities) برای
+ *    دیدن فیلدهای صنعتِ انتخابی بدون ذخیره استفاده می‌شود.
+ */
+export function MesIndustrySettingsPanel({ fa, plantId, userId }: { fa: boolean; plantId: string; userId: string }) {
+  const tr = (faText: string, enText: string) => (fa ? faText : enText);
+  const canEdit = canMfgAccess(userId, "mfg.plant.edit", plantId);
+
+  const [settings, setSettings] = useState<MfgPlantSettingsResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [draft, setDraft] = useState<MfgIndustryType | "">("");
+  const [nameFa, setNameFa] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [saveMessage, setSaveMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  const [preview, setPreview] = useState<MfgIndustryCapabilityMap | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setLoadError("");
+    setSaveMessage(null);
+    setPreview(null);
+    try {
+      const res = await MfgClient.getPlantSettings(plantId, userId);
+      setSettings(res);
+      setDraft(res.plant.industryType);
+    } catch (err) {
+      // ۴۰۴ = رکورد تنظیمات ندارد؛ IndustryType هنوز تصمیم گرفته نشده (نه پیش‌فرض ساختگی).
+      if (err instanceof MfgRequestError && err.status === 404) {
+        setSettings(null);
+        setDraft("");
+      } else {
+        setSettings(null);
+        setDraft("");
+        setLoadError(describeMesError(err));
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [plantId, userId]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  /* پیش‌نمایش قابلیت‌های صنعتِ انتخابی وقتی هنوز رکوردی ذخیره نشده.
+   * اگر رکورد وجود داشته باشد، پاسخ همین PATCH جدید نگاشت به‌روز را برمی‌گرداند. */
+  useEffect(() => {
+    if (settings !== null || draft === "") {
+      setPreview(null);
+      return;
+    }
+    let cancelled = false;
+    MfgClient.getIndustryCapabilities(plantId, draft, userId)
+      .then((res) => {
+        if (!cancelled) setPreview(res);
+      })
+      .catch(() => {
+        if (!cancelled) setPreview(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [settings, draft, plantId, userId]);
+
+  const committed = settings?.plant.industryType ?? null;
+  const effectiveMap = preview ?? settings?.capabilities ?? null;
+
+  const save = async (next: MfgIndustryType) => {
+    if (!next || saving) return;
+    setSaving(true);
+    setSaveMessage(null);
+    try {
+      const body: MfgPlantSettingsPatch = { IndustryType: next };
+      if (settings === null) {
+        // ساخت نخست: سرور NameFa را الزامی می‌داند.
+        const trimmed = nameFa.trim();
+        if (!trimmed) {
+          setSaveMessage({
+            ok: false,
+            text: tr("برای ساخت نخستین رکورد، نام کارخانه (NameFa) را وارد کنید.", "Enter the plant name (NameFa) to create the record."),
+          });
+          return;
+        }
+        body.NameFa = trimmed;
+      }
+      const res = await MfgClient.updatePlantSettings(plantId, body, settings?.plant.rowVersion ?? null, userId);
+      setSettings(res);
+      setDraft(res.plant.industryType);
+      setSaveMessage({
+        ok: true,
+        text: tr(
+          `نوع صنعت به «${industryTypeLabel(fa, res.plant.industryType)}» ذخیره شد (v${res.plant.rowVersion}).`,
+          `Industry type saved as "${industryTypeLabel(false, res.plant.industryType)}" (v${res.plant.rowVersion}).`,
+        ),
+      });
+    } catch (err) {
+      if (err instanceof MfgRequestError && err.status === 409) {
+        setSaveMessage({ ok: false, text: tr("تنظیمات کارخانه از زمان خواندن تغییر کرده؛ تازه‌خوانی شد.", "Plant settings changed elsewhere; reloaded.") });
+        void load();
+      } else {
+        setSaveMessage({ ok: false, text: describeMesError(err) });
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const onIndustryChange = (value: string) => {
+    const next = (MFG_INDUSTRY_TYPES as readonly string[]).includes(value) ? (value as MfgIndustryType) : "";
+    setDraft(next);
+    setSaveMessage(null);
+    // اگر کارخانه پیکربندی شده باشد، تغییر بلافاصله ذخیره می‌شود (PATCH با If-Match).
+    if (next !== "" && settings !== null && next !== committed && canEdit) {
+      void save(next);
+    }
+  };
+
+  return (
+    <Section
+      title={tr("نوع صنعت / الگوی تولید", "Industry Type / Production Pattern")}
+      hint={tr(
+        "الگوی تولید کارخانه؛ با ذخیرهٔ تغییر، فیلدهای اختصاصی همان صنعت فعال و نمایش داده می‌شوند",
+        "The plant's production pattern; saving a change activates and shows that industry's dedicated fields",
+      )}
+    >
+      <div className="space-y-2.5">
+        <div className="flex flex-wrap items-end gap-3">
+          <label className={`${crudLabelCls} min-w-[260px] flex-1 max-w-md`}>
+            {tr("نوع صنعت / الگوی تولید", "Industry type / production pattern")}
+            <select
+              className={crudInputCls}
+              value={draft}
+              disabled={loading || saving || !canEdit}
+              onChange={(event) => onIndustryChange(event.target.value)}
+              aria-label={tr("نوع صنعت", "Industry type")}
+            >
+              <option value="">
+                {loading
+                  ? tr("در حال خواندن تنظیمات کارخانه…", "Loading plant settings…")
+                  : tr("— انتخاب نوع صنعت —", "— select an industry —")}
+              </option>
+              {INDUSTRY_TYPE_OPTIONS.map((option) => (
+                <option key={option.code} value={option.code}>
+                  {fa ? option.fa : option.en} ({option.code})
+                </option>
+              ))}
+            </select>
+          </label>
+
+          {settings === null && draft !== "" && (
+            <>
+              <label className={`${crudLabelCls} min-w-[220px] flex-1 max-w-xs`}>
+                {tr("نام کارخانه — در ساخت نخست الزامی است (NameFa)", "Plant name — required on first creation (NameFa)")}
+                <input
+                  className={crudInputCls}
+                  dir="rtl"
+                  maxLength={240}
+                  value={nameFa}
+                  onChange={(event) => setNameFa(event.target.value)}
+                  placeholder={tr("مثلاً کارخانهٔ موتور دیزل تبریز", "e.g. Tabriz Diesel Engine Plant")}
+                />
+              </label>
+              {canEdit && (
+                <button
+                  type="button"
+                  className={`${crudPrimaryBtnCls} h-[30px] shrink-0`}
+                  disabled={saving || !nameFa.trim()}
+                  onClick={() => void save(draft)}
+                >
+                  {saving ? tr("در حال ذخیره…", "Saving…") : tr("ساخت رکورد و ذخیره", "Create & save")}
+                </button>
+              )}
+            </>
+          )}
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 text-[11px]">
+          {loading ? (
+            <span className="rounded-md border b-line-soft px-2 py-0.5 tx3">{tr("در حال بارگذاری تنظیمات…", "Loading settings…")}</span>
+          ) : (
+            <span
+              className={`rounded-md border px-2 py-0.5 ${
+                committed ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-200" : "border-amber-500/40 bg-amber-500/10 text-amber-200"
+              }`}
+            >
+              {committed
+                ? tr(
+                    `ذخیره‌شده: ${industryTypeLabel(fa, committed)} (v${settings?.plant.rowVersion ?? "?"})`,
+                    `Saved: ${industryTypeLabel(false, committed)} (v${settings?.plant.rowVersion ?? "?"})`,
+                  )
+                : tr("این کارخانه هنوز پیکربندی نشده (رکورد تنظیمات ندارد)", "This plant is not configured yet (no settings record)")}
+            </span>
+          )}
+          {preview && draft !== "" && (
+            <span className="rounded-md border border-sky-500/40 bg-sky-500/10 px-2 py-0.5 text-sky-200">
+              {tr(`پیش‌نمایش (ذخیره‌نشده): ${industryTypeLabel(fa, draft)}`, `Preview (not saved): ${industryTypeLabel(false, draft)}`)}
+            </span>
+          )}
+          {!canEdit && !loading && (
+            <span
+              className="tx3"
+              dir="ltr"
+              title={tr("برای تغییر نوع صنعت، مجوز mfg.plant.edit لازم است", "Changing the industry type requires mfg.plant.edit")}
+            >
+              requires mfg.plant.edit
+            </span>
+          )}
+        </div>
+
+        {loadError && <p className="text-[11px] text-rose-300">{loadError}</p>}
+        {saveMessage && (
+          <p className={`text-[11px] ${saveMessage.ok ? "text-emerald-300" : "text-rose-300"}`}>{saveMessage.text}</p>
+        )}
+
+        {effectiveMap ? (
+          <div className="space-y-1.5">
+            <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] tx3">
+              <span>
+                {tr(
+                  `فیلدهای اختصاصی فعال برای صنعت «${effectiveMap.industryTitleFa}»: ${effectiveMap.totals.enabledCount} از ${effectiveMap.totals.capabilityCount}`,
+                  `Dedicated fields enabled for "${effectiveMap.industryTitleEn}": ${effectiveMap.totals.enabledCount} of ${effectiveMap.totals.capabilityCount}`,
+                )}
+              </span>
+              {effectiveMap.characteristicFa && <span className="tx3">({effectiveMap.characteristicFa})</span>}
+            </div>
+            <div className="grid max-h-64 grid-cols-1 gap-1.5 overflow-y-auto pr-1 md:grid-cols-2 xl:grid-cols-3">
+              {effectiveMap.capabilities.map((cap) => (
+                <div
+                  key={cap.code}
+                  className={`rounded-lg border px-2 py-1.5 text-[11px] ${
+                    cap.enabled ? "border-emerald-500/30 bg-emerald-500/[0.07]" : "border b-line-soft opacity-60"
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="tx1 font-medium">{fa ? cap.titleFa : cap.titleEn}</span>
+                    <span dir="ltr" className="tx3 font-mono text-[10px]">
+                      {cap.code}
+                    </span>
+                  </div>
+                  <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                    <span className={cap.enabled ? "text-emerald-300" : "tx3"}>
+                      {cap.enabled ? tr("فعال برای این صنعت", "enabled for this industry") : tr("نامرتبط", "not relevant")}
+                    </span>
+                    <span className={cap.implemented ? "text-sky-300" : "text-amber-300"}>
+                      {cap.implemented ? tr("در سامانه پیاده شده", "implemented in this system") : tr("هنوز پیاده نشده", "not implemented yet")}
+                    </span>
+                  </div>
+                  {fa && <p className="mt-0.5 leading-relaxed tx3">{cap.reasonFa}</p>}
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          !loading &&
+          draft === "" && (
+            <p className="text-[11px] tx3">
+              {tr(
+                "نوع صنعت را از منوی بالا انتخاب کنید تا فیلدهای اختصاصی آن صنعت اینجا فعال و نمایش داده شود.",
+                "Pick an industry type from the dropdown to activate and show its dedicated fields here.",
+              )}
+            </p>
+          )
+        )}
+      </div>
+    </Section>
+  );
+}
 
 export function MesPartsPanel({ fa, plantId, userId, onChanged }: MesPanelProps) {
   const tr = (faText: string, enText: string) => (fa ? faText : enText);
@@ -1330,6 +1634,7 @@ export function MesEngineeringCrudSection(props: MesSectionProps) {
   const t = (faText: string, enText: string) => (props.fa ? faText : enText);
   return (
     <div className="space-y-3">
+      <MesIndustrySettingsPanel fa={props.fa} plantId={props.plantId} userId={props.userId} />
       <Section title={t("قطعات", "Parts")} hint={t("ثبت، ویرایش و فعال/غیرفعال‌سازی قطعه", "Create, edit and activate/deactivate parts")}>
         <MesPartsPanel {...props} />
       </Section>
