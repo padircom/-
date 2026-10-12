@@ -1,189 +1,56 @@
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Lang } from "../data/framework";
+import { useAuth } from "../context/AuthContext";
+import { useCurrentProjectId } from "../context/SystemContext";
+import { ScmClient, type ScmWorkspacePayload } from "../services/scmApi";
 
-export type ScmSubModuleId =
-  | "inventory"
-  | "purchasing"
-  | "crm"
-  | "movements"
-  | "finance";
+export type ScmSubModuleId = "inventory" | "purchasing" | "crm" | "movements" | "finance";
+type Row = Record<string, any>;
+type Field = { key: string; fa: string; en: string; required?: boolean; type?: "number" | "select"; options?: string[] };
+type Config = { id: ScmSubModuleId; icon: string; fa: string; en: string; descFa: string; descEn: string; source: keyof ScmWorkspacePayload; fields: Field[] };
 
-export const SCM_SUBMODULES: Array<{
-  id: ScmSubModuleId;
-  icon: string;
-  fa: string;
-  en: string;
-  descFa: string;
-  descEn: string;
-  plannedEntities: string[];
-}> = [
-  {
-    id: "inventory",
-    icon: "🏬",
-    fa: "مدیریت انبارها و موجودی",
-    en: "Warehouses & Inventory Management",
-    descFa: "مدیریت انبارهای مرکزی و پای‌خط، جانمایی قفسه/سلول، کنترل بچ/لات، انبارگردانی و نقطهٔ سفارش.",
-    descEn: "Central and line-side warehouses, bin locations, lot tracking, cycle counts, and reorder points.",
-    plannedEntities: ["ScmWarehouse", "ScmBinLocation", "ScmStockBalance"],
-  },
-  {
-    id: "purchasing",
-    icon: "🧾",
-    fa: "درخواست و سفارشات خرید",
-    en: "Purchase Requisitions & Orders",
-    descFa: "تبدیل پیشنهادهای تأمین MRP به درخواست خرید (PR)، استعلام بها (RFQ)، ارزیابی تأمین‌کنندگان و صدور سفارش خرید (PO).",
-    descEn: "Convert MRP procurement proposals into Purchase Requisitions (PR), RFQs, vendor evaluation, and Purchase Orders (PO).",
-    plannedEntities: ["ScmPurchaseRequisition", "ScmPurchaseOrder", "ScmVendor"],
-  },
-  {
-    id: "crm",
-    icon: "🤝",
-    fa: "فروش و مدیریت مشتریان (CRM)",
-    en: "Sales & Customer Relationship Management (CRM)",
-    descFa: "مدیریت پروندهٔ مشتریان، پیش‌فاکتورها، قراردادهای فروش، سفارش‌های مشتری (Sales Orders) و پیگیری تعهدات تحویل.",
-    descEn: "Customer accounts, quotations, sales contracts, customer sales orders, and delivery commitment tracking.",
-    plannedEntities: ["CrmCustomer", "CrmQuotation", "ScmSalesOrder"],
-  },
-  {
-    id: "movements",
-    icon: "🚚",
-    fa: "ورود و خروج کالا (رسید / حواله)",
-    en: "Goods Receipt & Issue (GRN / GIN)",
-    descFa: "ثبت رسید موقت و قطعی انبار، قرنطینهٔ کنترل کیفیت ورودی (IQC)، حوالهٔ مصرف به خطوط تولید و ارسال به مشتری.",
-    descEn: "Goods Receipt Notes (GRN), incoming QC quarantine, shop-floor Goods Issue Notes (GIN), and customer shipments.",
-    plannedEntities: ["ScmGoodsReceipt", "ScmGoodsIssue", "ScmStockTransfer"],
-  },
-  {
-    id: "finance",
-    icon: "💳",
-    fa: "حسابداری و هزینه‌یابی مالی",
-    en: "Financial Accounting & Costing",
-    descFa: "دفتر کل و اسناد حسابداری، تطبیق بهای تمام‌شدهٔ تولید و موجودی انبار، حساب‌های دریافتنی/پرداختنی (AR/AP) و صورت‌های مالی.",
-    descEn: "General ledger, manufacturing & inventory cost reconciliation, accounts receivable/payable (AR/AP), and financial statements.",
-    plannedEntities: ["FinLedgerEntry", "FinInvoice", "FinCostCenterSnapshot"],
-  },
+export const SCM_SUBMODULES: Config[] = [
+  { id:"inventory", icon:"🏬", fa:"مدیریت انبارها و موجودی", en:"Warehouses & Inventory", descFa:"انبارها، کاتالوگ و موجودی لحظه‌ای", descEn:"Warehouses, catalog and live balances", source:"warehouses", fields:[{key:"WarehouseCode",fa:"کد انبار",en:"Warehouse code",required:true},{key:"NameFa",fa:"نام انبار",en:"Warehouse name",required:true},{key:"Location",fa:"موقعیت",en:"Location"},{key:"Status",fa:"وضعیت",en:"Status",type:"select",options:["active","inactive"]}] },
+  { id:"purchasing", icon:"🧾", fa:"درخواست و سفارشات خرید", en:"Purchasing", descFa:"مدیریت تأمین‌کنندگان و چرخه خرید", descEn:"Vendor and procurement lifecycle", source:"vendors", fields:[{key:"VendorCode",fa:"کد تأمین‌کننده",en:"Vendor code",required:true},{key:"NameFa",fa:"نام",en:"Name",required:true},{key:"Email",fa:"ایمیل",en:"Email"},{key:"Status",fa:"وضعیت",en:"Status",type:"select",options:["active","blocked","inactive"]}] },
+  { id:"crm", icon:"🤝", fa:"فروش و مدیریت مشتریان (CRM)", en:"Sales & CRM", descFa:"درخواست‌های مواد و تعهدات مشتری", descEn:"Material requests and customer commitments", source:"mrs", fields:[{key:"MrNo",fa:"شماره درخواست",en:"Request no.",required:true},{key:"TitleFa",fa:"عنوان",en:"Title",required:true},{key:"RequiredDate",fa:"تاریخ نیاز",en:"Required date"},{key:"Status",fa:"وضعیت",en:"Status",type:"select",options:["draft","open","approved"]}] },
+  { id:"movements", icon:"🚚", fa:"ورود و خروج کالا", en:"Goods Movements", descFa:"رسید، حواله و انتقال کالا", descEn:"Receipts, issues and transfers", source:"mivs", fields:[{key:"MivNo",fa:"شماره حواله",en:"Issue no.",required:true},{key:"WarehouseCode",fa:"کد انبار",en:"Warehouse",required:true},{key:"PurposeFa",fa:"شرح مصرف",en:"Purpose",required:true},{key:"Status",fa:"وضعیت",en:"Status",type:"select",options:["draft","issued","cancelled"]}] },
+  { id:"finance", icon:"💳", fa:"حسابداری و هزینه‌یابی مالی", en:"Financial Costing", descFa:"مانده موجودی و ارزش مالی کالا", descEn:"Stock balances and inventory valuation", source:"balances", fields:[{key:"WarehouseCode",fa:"کد انبار",en:"Warehouse",required:true},{key:"ItemCode",fa:"کد کالا",en:"Item code",required:true},{key:"Quantity",fa:"مقدار",en:"Quantity",required:true,type:"number"},{key:"UnitCost",fa:"بهای واحد",en:"Unit cost",type:"number"}] },
 ];
 
-interface Props {
-  lang: Lang;
-  activeSub: ScmSubModuleId;
-  onSelectSub: (sub: ScmSubModuleId) => void;
-  onBackHome?: () => void;
-}
+interface Props { lang: Lang; activeSub: ScmSubModuleId; onSelectSub: (sub: ScmSubModuleId) => void; onBackHome?: () => void }
+const cell = (v: unknown) => typeof v === "boolean" ? (v ? "✓" : "—") : v == null ? "—" : String(v);
 
 export default function ScmWorkspaceShell({ lang, activeSub, onSelectSub, onBackHome }: Props) {
-  const fa = lang === "fa";
-  const tr = (faText: string, enText: string) => (fa ? faText : enText);
-  const current = SCM_SUBMODULES.find((s) => s.id === activeSub) ?? SCM_SUBMODULES[0];
-
-  return (
-    <div dir={fa ? "rtl" : "ltr"} className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-1">
-      <header className="glass-dark rounded-xl p-3.5 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <span className="grid h-10 w-10 place-items-center rounded-xl border border-teal-500/40 bg-teal-500/10 text-lg">
-            📦
-          </span>
-          <div>
-            <div className="flex items-center gap-2">
-              <h2 className="tx1 font-semibold text-sm">
-                {tr(
-                  "سامانهٔ زنجیره تأمین، بازرگانی و مالی (SCM & Finance)",
-                  "Supply Chain, Commercial & Financial System (SCM & Finance)",
-                )}
-              </h2>
-              <span className="rounded-md border border-teal-500/40 bg-teal-500/10 px-2 py-0.5 text-[10px] text-teal-300">
-                {tr("پوستهٔ اولیه (Workspace Shell)", "Workspace Shell")}
-              </span>
-            </div>
-            <p className="tx3 text-xs mt-0.5">
-              {tr(
-                "سرگروه چهارم سازمان · مدیریت یکپارچهٔ انبار، تدارکات، فروش (CRM) و حسابداری مالی",
-                "Organizational Pillar #4 · Integrated warehousing, procurement, CRM sales, and financial accounting",
-              )}
-            </p>
-          </div>
-        </div>
-        {onBackHome && (
-          <button
-            type="button"
-            onClick={onBackHome}
-            className="rounded-lg border b-line-soft px-3 py-1.5 text-xs tx2 hover:tx1"
-          >
-            {tr("بازگشت به نمای اصلی", "Back to Hub")}
-          </button>
-        )}
-      </header>
-
-      {/* نوار تب‌های ۵گانهٔ SCM & Finance */}
-      <nav className="flex flex-wrap gap-1.5">
-        {SCM_SUBMODULES.map((item) => {
-          const active = item.id === current.id;
-          return (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => onSelectSub(item.id)}
-              className={`rounded-lg border b-line-soft px-3 py-1.5 text-xs transition flex items-center gap-1.5 ${
-                active ? "toggle-on tx1 font-medium" : "tx2 hover:tx1"
-              }`}
-            >
-              <span>{item.icon}</span>
-              <span>{fa ? item.fa : item.en}</span>
-            </button>
-          );
-        })}
-      </nav>
-
-      {/* نمای پوستهٔ زیرماژول انتخاب‌شده */}
-      <section className="glass-dark rounded-2xl p-5 space-y-4 flex-1">
-        <div className="flex flex-wrap items-start justify-between gap-3 border-b b-line-soft pb-3">
-          <div className="flex items-center gap-2.5">
-            <span className="text-2xl">{current.icon}</span>
-            <div>
-              <h3 className="tx1 font-semibold text-base">{fa ? current.fa : current.en}</h3>
-              <p className="tx3 text-xs mt-0.5">{fa ? current.descFa : current.descEn}</p>
-            </div>
-          </div>
-          <span className="rounded-lg border b-line-soft bg-black/20 px-2.5 py-1 text-[11px] tx3" dir="ltr">
-            module: scm-finance / {current.id}
-          </span>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <div className="rounded-xl border b-line-soft bg-black/15 p-3.5 space-y-1">
-            <div className="tx3 text-xs">{tr("وضعیت زیرماژول", "Submodule Status")}</div>
-            <div className="tx1 font-semibold text-sm text-teal-300">
-              {tr("پوستهٔ آماده (Placeholder Shell)", "Placeholder Shell Ready")}
-            </div>
-            <p className="tx3 text-[11px]">
-              {tr(
-                "ساختار ناوبری و رابط کاربری اولیه ایجاد شده است و منطق دامنه و API در فازهای آتی متصل می‌شود.",
-                "UI shell and navigation are wired; domain logic and APIs will be connected in upcoming phases.",
-              )}
-            </p>
-          </div>
-
-          <div className="rounded-xl border b-line-soft bg-black/15 p-3.5 space-y-1">
-            <div className="tx3 text-xs">{tr("موجودیت‌های هدف در دیتابیس", "Target Domain Entities")}</div>
-            <div className="flex flex-wrap gap-1.5 pt-1" dir="ltr">
-              {current.plannedEntities.map((ent) => (
-                <span key={ent} className="rounded border b-line-soft bg-black/25 px-2 py-0.5 text-xs tx2">
-                  {ent}
-                </span>
-              ))}
-            </div>
-          </div>
-
-          <div className="rounded-xl border b-line-soft bg-black/15 p-3.5 space-y-1">
-            <div className="tx3 text-xs">{tr("یکپارچگی با سایر بخش‌های سازمان", "Cross-System Integration")}</div>
-            <div className="tx2 text-xs leading-5">
-              {tr(
-                "تبدیل سفارش‌های فروش CRM به سفارش تولید (MES)، دریافت پیشنهادهای خرید MRP و تطبیق سند مالی بهای تمام‌شده.",
-                "Feeds CRM sales orders into MES production orders, processes MRP purchase proposals, and reconciles financial cost ledgers.",
-              )}
-            </div>
-          </div>
-        </div>
-      </section>
-    </div>
-  );
+  const fa = lang === "fa", tr = (a:string,b:string) => fa ? a : b;
+  const projectId = useCurrentProjectId(); const { user } = useAuth();
+  const client = useMemo(() => new ScmClient(projectId, user?.id ?? null), [projectId, user?.id]);
+  const current = SCM_SUBMODULES.find(x => x.id === activeSub) ?? SCM_SUBMODULES[0];
+  const [data,setData] = useState<ScmWorkspacePayload|null>(null), [loading,setLoading]=useState(false), [error,setError]=useState("");
+  const [query,setQuery]=useState(""), [status,setStatus]=useState("all"), [sort,setSort]=useState(""), [desc,setDesc]=useState(false), [page,setPage]=useState(1), [size,setSize]=useState(10);
+  const [editing,setEditing]=useState<Row|null|undefined>(undefined), [detail,setDetail]=useState<Row|null>(null), [form,setForm]=useState<Row>({}), [errors,setErrors]=useState<Record<string,string>>({}), [notice,setNotice]=useState("");
+  const load=useCallback(async()=>{setLoading(true);setError("");const r=await client.workspace();if(r.ok)setData(r.data);else setError(r.message);setLoading(false)},[client]);
+  useEffect(()=>{void load()},[load]); useEffect(()=>{setPage(1);setQuery("");setStatus("all")},[activeSub]);
+  const rows=(data?.[current.source] as Row[]|undefined)??[];
+  const statusValues=useMemo(()=>Array.from(new Set(rows.map(r=>r.Status??r.status).filter(Boolean).map(String))),[rows]);
+  const filtered=useMemo(()=>{let a=rows.filter(r=>!query||Object.values(r).some(v=>cell(v).toLowerCase().includes(query.toLowerCase()))).filter(r=>status==="all"||String(r.Status??r.status)===status);if(sort)a=[...a].sort((x,y)=>cell(x[sort]).localeCompare(cell(y[sort]),fa?"fa":"en",{numeric:true})*(desc?-1:1));return a},[rows,query,status,sort,desc,fa]);
+  const pages=Math.max(1,Math.ceil(filtered.length/size)), shown=filtered.slice((Math.min(page,pages)-1)*size,Math.min(page,pages)*size);
+  const columns=useMemo(()=>{const preferred=current.fields.map(f=>f.key);const discovered=rows.flatMap(r=>Object.keys(r)).filter(k=>!preferred.includes(k)&&!k.toLowerCase().includes("project"));return [...preferred,...new Set(discovered)].slice(0,6)},[current,rows]);
+  const open=(row?:Row)=>{setEditing(row??null);setForm(row?{...row}:{});setErrors({});setNotice("")};
+  const save=async()=>{const e:Record<string,string>={};current.fields.forEach(f=>{if(f.required&&!String(form[f.key]??"").trim())e[f.key]=tr("این فیلد الزامی است","Required field")});if(Object.keys(e).length){setErrors(e);return}setLoading(true);let r:any;
+    if(current.id==="purchasing") r=editing?await client.updateVendor(String(editing.VendorCode),form):await client.createVendor(form);
+    else if(editing){setError(tr("API ویرایش برای این موجودیت ارائه نشده است.","The REST API does not expose update for this entity."));setLoading(false);return}
+    else if(current.id==="inventory")r=await client.createWarehouse(form);else if(current.id==="crm")r=await client.createMr(form);else if(current.id==="movements")r=await client.createMiv(form);else r=await client.upsertBalance(form);
+    if(r.ok){setEditing(undefined);setNotice(tr("اطلاعات با موفقیت ذخیره شد.","Saved successfully."));await load()}else setError(r.message);setLoading(false)};
+  const remove=async(row:Row)=>{if(current.id!=="purchasing"){setError(tr("حذف این موجودیت در API مجاز نیست.","Delete is not supported by this entity API."));return}if(!confirm(tr("رکورد حذف شود؟","Delete this record?")))return;const r=await client.deleteVendor(String(row.VendorCode));if(r.ok)void load();else setError(r.message)};
+  return <div dir={fa?"rtl":"ltr"} className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-1">
+    <header className="glass-dark rounded-xl p-3.5 flex flex-wrap items-center justify-between gap-3"><div><h2 className="tx1 font-semibold text-sm">📦 {tr("سامانهٔ زنجیره تأمین، بازرگانی و مالی","Supply Chain, Commercial & Finance")}</h2><p className="tx3 text-xs mt-1">{tr("مدیریت برخط داده‌ها با اتصال مستقیم REST","Live data management with direct REST binding")}</p></div>{onBackHome&&<button onClick={onBackHome} className="rounded-lg border b-line-soft px-3 py-1.5 text-xs tx2">{tr("بازگشت","Back")}</button>}</header>
+    <nav className="flex flex-wrap gap-1.5">{SCM_SUBMODULES.map(x=><button key={x.id} onClick={()=>onSelectSub(x.id)} className={`rounded-lg border b-line-soft px-3 py-1.5 text-xs ${x.id===current.id?"toggle-on tx1":"tx2"}`}>{x.icon} {fa?x.fa:x.en}</button>)}</nav>
+    <section className="glass-dark rounded-2xl p-4 space-y-4 flex-1"><div className="flex flex-wrap justify-between gap-3"><div><h3 className="tx1 font-semibold">{current.icon} {fa?current.fa:current.en}</h3><p className="tx3 text-xs">{fa?current.descFa:current.descEn}</p></div><button onClick={()=>open()} className="rounded-lg bg-teal-600 px-4 py-2 text-xs text-white">＋ {tr("ثبت رکورد جدید","New record")}</button></div>
+    {(error||notice)&&<div className={`rounded-lg border p-2 text-xs ${error?"border-red-500/40 text-red-300":"border-emerald-500/40 text-emerald-300"}`}>{error||notice}<button className="mx-2" onClick={()=>{setError("");setNotice("")}}>×</button></div>}
+    <div className="flex flex-wrap gap-2"><input value={query} onChange={e=>{setQuery(e.target.value);setPage(1)}} placeholder={tr("جستجو در همه ستون‌ها…","Search all columns…")} className="min-w-56 rounded-lg border b-line-soft bg-black/20 px-3 py-2 text-xs tx1"/><select value={status} onChange={e=>setStatus(e.target.value)} className="rounded-lg border b-line-soft bg-black/20 px-3 text-xs tx1"><option value="all">{tr("همه وضعیت‌ها","All statuses")}</option>{statusValues.map(s=><option key={s}>{s}</option>)}</select><button onClick={()=>void load()} className="rounded-lg border b-line-soft px-3 text-xs tx2">↻ {tr("بازخوانی","Refresh")}</button></div>
+    <div className="overflow-x-auto rounded-xl border b-line-soft"><table className="w-full text-xs"><thead className="bg-black/25"><tr>{columns.map(c=><th key={c} onClick={()=>{if(sort===c)setDesc(!desc);else{setSort(c);setDesc(false)}}} className="cursor-pointer p-2 text-start tx2">{current.fields.find(f=>f.key===c)?.[fa?"fa":"en"]??c} {sort===c?(desc?"↓":"↑"):"↕"}</th>)}<th className="p-2">{tr("عملیات","Actions")}</th></tr></thead><tbody>{shown.map((r,i)=><tr key={String(r.Id??r.VendorCode??i)} className="border-t b-line-soft hover:bg-white/5">{columns.map(c=><td key={c} className="p-2 tx2 max-w-52 truncate">{cell(r[c])}</td>)}<td className="p-2 whitespace-nowrap"><button onClick={()=>setDetail(r)} className="px-1 text-cyan-300">◉</button><button onClick={()=>open(r)} className="px-1 text-amber-300">✎</button><button onClick={()=>open({...r,Status:r.Status==="active"?"inactive":"active"})} className="px-1 text-violet-300">⇄</button><button onClick={()=>void remove(r)} className="px-1 text-red-300">⌫</button></td></tr>)}{!shown.length&&<tr><td colSpan={columns.length+1} className="p-8 text-center tx3">{loading?tr("در حال دریافت…","Loading…"):tr("رکوردی یافت نشد","No records found")}</td></tr>}</tbody></table></div>
+    <div className="flex flex-wrap items-center justify-between text-xs tx3"><span>{tr("تعداد","Total")}: {filtered.length}</span><div className="flex items-center gap-2"><select value={size} onChange={e=>{setSize(Number(e.target.value));setPage(1)}} className="bg-black/20 border b-line-soft rounded p-1"><option>10</option><option>25</option><option>50</option></select><button disabled={page<=1} onClick={()=>setPage(p=>p-1)}>‹</button><span>{Math.min(page,pages)} / {pages}</span><button disabled={page>=pages} onClick={()=>setPage(p=>p+1)}>›</button></div></div></section>
+    {editing!==undefined&&<div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4" onMouseDown={()=>setEditing(undefined)}><div onMouseDown={e=>e.stopPropagation()} className="glass-dark w-full max-w-xl rounded-2xl border b-line-soft p-5"><h3 className="tx1 font-semibold mb-4">{editing?tr("ویرایش رکورد","Edit record"):tr("ثبت رکورد جدید","Create record")}</h3><div className="grid sm:grid-cols-2 gap-3">{current.fields.map(f=><label key={f.key} className="text-xs tx2">{fa?f.fa:f.en}{f.required&&" *"}{f.type==="select"?<select value={form[f.key]??""} onChange={e=>setForm({...form,[f.key]:e.target.value})} className="mt-1 w-full rounded-lg border b-line-soft bg-black/30 p-2 tx1"><option value="">—</option>{f.options?.map(o=><option key={o}>{o}</option>)}</select>:<input type={f.type==="number"?"number":"text"} value={form[f.key]??""} onChange={e=>setForm({...form,[f.key]:f.type==="number"?Number(e.target.value):e.target.value})} className="mt-1 w-full rounded-lg border b-line-soft bg-black/30 p-2 tx1"/>}{errors[f.key]&&<span className="text-red-300 block mt-1">{errors[f.key]}</span>}</label>)}</div><div className="flex justify-end gap-2 mt-5"><button onClick={()=>setEditing(undefined)} className="border b-line-soft rounded-lg px-4 py-2 text-xs tx2">{tr("انصراف","Cancel")}</button><button disabled={loading} onClick={()=>void save()} className="bg-teal-600 rounded-lg px-4 py-2 text-xs text-white">{tr("ذخیره","Save")}</button></div></div></div>}
+    {detail&&<div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4" onClick={()=>setDetail(null)}><div onClick={e=>e.stopPropagation()} className="glass-dark max-h-[80vh] w-full max-w-2xl overflow-auto rounded-2xl p-5"><h3 className="tx1 font-semibold mb-3">{tr("جزئیات رکورد","Record details")}</h3><dl className="grid sm:grid-cols-2 gap-2">{Object.entries(detail).map(([k,v])=><div key={k} className="border-b b-line-soft p-2"><dt className="tx3 text-[10px]">{k}</dt><dd className="tx1 text-xs break-all">{cell(v)}</dd></div>)}</dl><button onClick={()=>setDetail(null)} className="mt-4 border b-line-soft rounded-lg px-4 py-2 text-xs">{tr("بستن","Close")}</button></div></div>}
+  </div>;
 }
