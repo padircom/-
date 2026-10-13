@@ -383,21 +383,30 @@ export default function RightSidebar({
     <div className="sidebar-dock context-sidebar">
     <div className="sidebar-panel">
     <aside dir={rtl ? "rtl" : "ltr"} className="glass-dark flex h-full min-h-0 w-full flex-col rounded-2xl">
-      <header className="b-line border-b px-4 py-3.5">
-        <div className="flex items-center gap-2">
-          <span className="chip-bg grid h-7 w-7 place-items-center rounded-lg text-[13px]">🧩</span>
-          <div className="min-w-0 flex-1">
-            <h2 className="truncate text-[12.5px] font-normal tx1">{t(ui.frameworkTitle, lang)}</h2>
-            <p className="mt-0.5 truncate text-[9.5px] font-extralight tx3">
-{rtl
-                ? `${faDigits(domainCount)} حوزه · ${faDigits(processCount)} فرآیند · ${faDigits(subCount)} زیرفرآیند`
-                : `${domainCount} Domains · ${processCount} Processes · ${subCount} Sub-processes`}
-            </p>
-          </div>
+      <header className="b-line border-b px-4 pb-3 pt-3.5">
+        {/* لوگوتایپ خلوت بالای جست‌وجو: فقط نشان کوچک + عنوان کوتاه رسمی برند،
+            وسط‌چین و در یک خط. آمار حوزه/فرآیند از نمای اصلی حذف شده (شلوغی
+            بصری) و فقط در tooltip نشان می‌ماند تا اطلاعات از دست نرود. */}
+        <div
+          className="flex items-center justify-center gap-2"
+          title={rtl
+            ? `${faDigits(domainCount)} حوزه · ${faDigits(processCount)} فرآیند · ${faDigits(subCount)} زیرفرآیند`
+            : `${domainCount} Domains · ${processCount} Processes · ${subCount} Sub-processes`}
+        >
+          <span
+            aria-hidden="true"
+            className="accent-t grid h-6 w-6 shrink-0 select-none place-items-center rounded-[7px] text-[11px] font-bold leading-none"
+            style={{ background: "var(--accent-soft)", boxShadow: "inset 0 0 0 1px var(--line-soft)" }}
+          >
+            A
+          </span>
+          <h2 className="whitespace-nowrap text-[12.5px] font-semibold leading-6 tracking-tight tx1">
+            {t(ui.frameworkTitle, lang)}
+          </h2>
         </div>
 
         {/* جست‌وجوی زندهٔ حوزه / فرآیند / زیرفرآیند */}
-        <div className="relative mt-2.5">
+        <div className="relative mt-3">
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}

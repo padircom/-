@@ -20,6 +20,15 @@ export const PLATFORM_BRAND = {
     fa: "سامانه جامع مدیریت یکپارچه سازمان، پروژه و عملیات صنعتی",
     en: "Enterprise ERP, Project & Operations Platform",
   } as Bi,
+  /**
+   * عنوان کوتاه و رسمی برای فضاهای خلوت — لوگوتایپ بالای کادر جست‌وجوی
+   * سایدبار اصلی. عنوان بلند `name` آنجا شلوغی بصری می‌ساخت؛ این‌جا فقط
+   * نام برند می‌نشیند و بقیهٔ فضا به جست‌وجو و ناوبری می‌رسد.
+   */
+  shortName: {
+    fa: "آرنا | Arena Enterprise",
+    en: "Arena Enterprise",
+  } as Bi,
 } as const;
 
 export type SuiteId = "gov" | "eng" | "exe" | "cst" | "rqs" | "plt";

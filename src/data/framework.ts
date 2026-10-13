@@ -1798,8 +1798,10 @@ export const ui = {
   /* NAM-2: عنوان اصلی از کاتالوگ نام‌گذاری (منبع واحد برند). */
   hubTitle: PLATFORM_BRAND.name,
   hubSub: { fa: "رینگ ۵ فرآیندی PMBOK — بتا ۱.۱.۰", en: "PMBOK 5-Process Ring — Beta 1.1.0" },
-  /* عنوان چارچوب هم همان عنوان رسمی پلتفرم است (منبع واحد برند). */
-  frameworkTitle: PLATFORM_BRAND.name,
+  /* عنوان چارچوب (بالای جست‌وجوی سایدبار) عنوان کوتاه رسمی برند است، نه
+   * عنوان بلند پلتفرم؛ آن متن طولانی بالای کادر جست‌وجو شلوغی بصری می‌ساخت.
+   * عنوان بلند فقط در سربرگ اصلی و حلقهٔ PMBOK (`hubTitle`) می‌ماند. */
+  frameworkTitle: PLATFORM_BRAND.shortName,
   frameworkSub: { fa: "۵ ماژول · نمای سرتیترها", en: "5 Modules · Header Overview" },
   sourcesTitle: { fa: "منابع داده", en: "Data Sources" },
   sourcesSub: { fa: "وضعیت اتصال منابع", en: "Source connection status" },
