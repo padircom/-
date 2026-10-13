@@ -240,9 +240,9 @@ export default function ModuleWorkspaceShell<T extends string>({
                   className="flex items-center gap-1.5 px-2 pb-0.5 pt-3 text-[9px] font-semibold tracking-wide tx3 first:pt-1"
                   role="presentation"
                 >
-                  <span className="h-px flex-1" style={{ background: `${accent}44` }} aria-hidden="true" />
+                  <span className="h-px flex-1" style={{ background: "var(--line-soft)" }} aria-hidden="true" />
                   <span>{item.group}</span>
-                  <span className="h-px flex-1" style={{ background: `${accent}44` }} aria-hidden="true" />
+                  <span className="h-px flex-1" style={{ background: "var(--line-soft)" }} aria-hidden="true" />
                 </div>
               ) : null;
               return (
@@ -260,7 +260,6 @@ export default function ModuleWorkspaceShell<T extends string>({
                     {(index + 1).toLocaleString(fa ? "fa-IR" : "en-US")}
                   </span>
                   {item.icon && <span className="shrink-0 text-[12px]" aria-hidden="true">{item.icon}</span>}
-                  <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: accent }} aria-hidden="true" />
                   <span className="min-w-0 flex-1 truncate text-[10px] font-light tx1">{item.label}</span>
                   {item.trailing}
                 </button>
