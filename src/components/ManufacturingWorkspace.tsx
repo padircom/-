@@ -45,7 +45,7 @@ import {
   type MfgWorkCenterResource,
 } from "../services/manufacturingApi";
 import type { DispatchRule } from "../services/manufacturingModel";
-import ModuleWorkspaceShell, { ModuleTabs, moduleChipCls, moduleSelectCls } from "./ModuleWorkspaceShell";
+import ModuleWorkspaceShell, { ModuleTabs, moduleSelectCls } from "./ModuleWorkspaceShell";
 import {
   MesEngineeringCrudSection,
   MesExecutionCrudSection,
@@ -1714,15 +1714,6 @@ export default function ManufacturingWorkspace({
          حالت standalone تغییر نمی‌کند (دکمهٔ «بازگشت به پورتال» در actions). */
       onBack={standalone ? undefined : onExit}
       title={tr("سامانهٔ مستقل برنامه‌ریزی و کنترل تولید (Standalone MES)", "Standalone Manufacturing Execution System (MES)")}
-      subtitle={tr(
-        "دیتابیس مستقل (۲۶ جدول Mfg*) · بک‌اند مستقل کارخانه‌محور · فرانت‌اند مستقل · ارتباط با سامانه‌های دیگر فقط از طریق REST API",
-        "Independent DB (26 Mfg* tables) · Plant-scoped backend · Standalone frontend · External integration via REST API only",
-      )}
-      badges={
-        <span className="rounded-md border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[10px] text-emerald-300" dir="ltr">
-          mfg-api-v1 · 65 REST Routes
-        </span>
-      }
       actions={
         <>
           <label className="tx3 text-xs flex items-center gap-1.5">
@@ -1802,7 +1793,6 @@ export default function ManufacturingWorkspace({
         const activeTab = TABS.find((tItem) => tItem.id === tab);
         return activeTab ? (fa ? activeTab.fa : activeTab.en) : undefined;
       })()}
-      panelMeta={<span className={moduleChipCls} dir="ltr">{mfgUserId}</span>}
     >
       <div className="flex flex-col gap-3">
       {/* ── وضعیت نقش فعال و بازهٔ زمانی ── */}
