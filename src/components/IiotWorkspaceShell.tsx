@@ -22,7 +22,7 @@
  * آزمون‌ها را از راه REST می‌سازد (دکل + گیت‌وی لبه + جریان + ۶ کانال + ۴ قاعده
  * + ۱۰ دقیقه نمونهٔ تله‌متری) — نه با اسکریپت seed.
  */
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useState, type ReactNode } from "react";
 import type { Lang } from "../data/framework";
 import { IiotAlertsView, IiotConditionView, IiotDevicesView } from "./IiotOpsViews";
 import {
@@ -67,6 +67,7 @@ import {
 import ModuleWorkspaceShell, { moduleCardCls, moduleChipCls, moduleSelectCls } from "./ModuleWorkspaceShell";
 
 export type IiotSubModuleId =
+  | "dashboard"
   | "drilling-das"
   | "iot-devices"
   | "condition-monitoring"
@@ -83,6 +84,16 @@ export const IIOT_SUBMODULES: Array<{
   /** مجوز دیدن این بخش؛ کاربر بی‌مجوز، تب غیرفعال می‌گیرد. */
   viewPermission: string;
 }> = [
+  {
+    id: "dashboard",
+    icon: "📊",
+    fa: "داشبورد IIoT",
+    en: "IIoT Dashboard",
+    descFa: "نمای یکپارچهٔ دکل، کانال‌های DAS، گیت‌وی‌ها، هشدارها، بافر لبه، NPT و یکپارچگی — کلیک روی هر کارت، زیرماژول مربوطه را باز می‌کند.",
+    descEn: "Unified view of the rig, DAS channels, gateways, alerts, edge buffer, NPT and integration — click any card to open its submodule.",
+    plannedEntities: ["IiotDashboard", "IiotTelemetryAlert", "IotEdgeGateway"],
+    viewPermission: "iiot.dashboard.view",
+  },
   {
     id: "drilling-das",
     icon: "📡",
@@ -303,6 +314,18 @@ export default function IiotWorkspaceShell({ lang, activeSub, onSelectSub, onBac
       );
     }
 
+    if (activeSub === "dashboard") {
+      return (
+        <IiotOverviewDashboard
+          fa={fa}
+          dash={dash}
+          loading={dashboard.state.kind === "loading" || dashboard.state.kind === "idle"}
+          rigCount={rigRows.length}
+          onNavigate={onSelectSub}
+        />
+      );
+    }
+
     if (activeSub === "drilling-das") {
       return (
         <IiotLiveDashboard
@@ -421,6 +444,143 @@ export default function IiotWorkspaceShell({ lang, activeSub, onSelectSub, onBac
     >
       {renderBody()}
     </ModuleWorkspaceShell>
+  );
+}
+
+/* ═══════════════════════ داشبورد یکپارچهٔ IIoT ═══════════════════════
+ * نمای اول ماژول: خلاصهٔ همهٔ زیرسیستم‌ها از همان پاسخ `GET /dashboard`
+ * که پوسته از قبل می‌گیرد؛ دادهٔ تازه‌ای ساخته نمی‌شود. هر کارت/ردیف
+ * کلیک‌پذیر است و زیرماژول تخصصی خودش را باز می‌کند. */
+function IiotOverviewDashboard({
+  fa, dash, loading, rigCount, onNavigate,
+}: {
+  fa: boolean;
+  dash: IiotDashboard | null;
+  loading: boolean;
+  rigCount: number;
+  onNavigate: (sub: IiotSubModuleId) => void;
+}) {
+  const tr = (faText: string, enText: string) => (fa ? faText : enText);
+  const gauges = dash?.gauges ?? [];
+  const counts = summarizeGaugeStatuses(gauges);
+  const onlineGateways = (dash?.gateways ?? []).filter((g) => (g.connectionState ?? "").toLowerCase().includes("online") || (g.connectionState ?? "").toLowerCase().includes("connected")).length;
+  const alertEntries = Object.entries(dash?.alertCounts ?? {}).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
+  const alertMax = Math.max(1, ...alertEntries.map(([, v]) => v));
+  const statusTotal = Math.max(1, counts.ok + counts.warn + counts.danger + counts.idle);
+
+  const navCard = (sub: IiotSubModuleId, label: string, value: ReactNode, hint?: string, tone?: "ok" | "warn" | "danger" | "idle") => (
+    <button key={sub + label} type="button" onClick={() => onNavigate(sub)} className="text-start transition hover:-translate-y-px" aria-label={label}>
+      <StatCard label={label} value={value} hint={hint} tone={tone} />
+    </button>
+  );
+
+  if (!dash) {
+    return <Muted text={loading ? tr("در حال دریافت داشبورد…", "Loading dashboard…") : tr("داده‌ای برای داشبورد نیست.", "No dashboard data.")} />;
+  }
+
+  return (
+    <div className="space-y-3">
+      {/* کارت‌های ناوبری/شمارشی */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
+        {navCard("drilling-das", tr("کانال‌های DAS", "DAS channels"), gauges.length, tr(`${counts.danger} بحرانی · ${counts.warn} هشدار`, `${counts.danger} critical · ${counts.warn} warning`), counts.danger ? "danger" : counts.warn ? "warn" : "ok")}
+        {navCard("sensor-alerts", tr("هشدارهای فعال", "Active alerts"), dash.alertCounts.active ?? 0, tr(`${dash.alertCounts.critical ?? 0} بحرانی`, `${dash.alertCounts.critical ?? 0} critical`), (dash.alertCounts.active ?? 0) ? "danger" : "idle")}
+        {navCard("iot-devices", tr("گیت‌وی‌های لبه", "Edge gateways"), dash.gateways.length, tr(`${onlineGateways} برخط · ${rigCount} دکل در دامنه`, `${onlineGateways} online · ${rigCount} rigs in scope`))}
+        {navCard("iot-devices", tr("بافر Store-&-Forward", "Store-&-forward buffer"), dash.storeAndForward.pendingBatches, tr(
+          dash.storeAndForward.connectivityOnline ? "اتصال برقرار" : "اتصال قطع",
+          dash.storeAndForward.connectivityOnline ? "Connectivity online" : "Connectivity offline",
+        ), dash.storeAndForward.deadLetterBatches ? "danger" : dash.storeAndForward.pendingBatches ? "warn" : "ok")}
+      </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
+        {/* توزیع وضعیت کانال‌ها: نوار انباشته */}
+        <SectionCard title={tr("توزیع وضعیت کانال‌ها", "Channel status mix")} hint={tr("سبز/زرد/قرمز همان قرارداد تُن داشبورد زنده است", "Green/amber/red follow the live dashboard tone contract")}>
+          <div className="flex h-3 w-full overflow-hidden rounded-full bg-black/30" dir="ltr">
+            <div className="bg-emerald-400 h-full" style={{ width: `${(counts.ok / statusTotal) * 100}%` }} />
+            <div className="bg-amber-400 h-full" style={{ width: `${(counts.warn / statusTotal) * 100}%` }} />
+            <div className="bg-rose-500 h-full" style={{ width: `${(counts.danger / statusTotal) * 100}%` }} />
+            <div className="bg-slate-500 h-full" style={{ width: `${(counts.idle / statusTotal) * 100}%` }} />
+          </div>
+          <div className="flex flex-wrap gap-x-4 gap-y-1 pt-1 text-[10.5px] tx2">
+            <span>🟢 {tr("سالم", "Normal")}: <b className="tx1" dir="ltr">{counts.ok}</b></span>
+            <span>🟡 {tr("هشدار", "Warning")}: <b className="tx1" dir="ltr">{counts.warn}</b></span>
+            <span>🔴 {tr("بحرانی", "Critical")}: <b className="tx1" dir="ltr">{counts.danger}</b></span>
+            <span>⚪ {tr("بی‌داده/کهنه", "Idle/stale")}: <b className="tx1" dir="ltr">{counts.idle}</b></span>
+          </div>
+          {/* کانال‌ها در یک نگاه */}
+          <div className="space-y-1.5 pt-1">
+            {gauges.length === 0 && <Muted text={tr("کانال فعالی برای این دکل نیست.", "No active channel for this rig.")} />}
+            {[...gauges].sort((a, b) => toneWeight(toneForStatus(b.status)) - toneWeight(toneForStatus(a.status))).slice(0, 6).map((g) => {
+              const range = displayRangeFor(g.signalType, g.displayMin, g.displayMax);
+              const tone = toneForStatus(g.status);
+              return (
+                <button key={g.channelId} type="button" onClick={() => onNavigate("drilling-das")} className="flex w-full items-center gap-2 rounded-lg border b-line-soft bg-black/15 px-2.5 py-1.5 text-start transition hover:bg-black/25">
+                  <span className="min-w-0 flex-1">
+                    <span className="tx1 block truncate text-[11px]">{g.nameFa}</span>
+                    <span className="tx3 block text-[9.5px]" dir="ltr">{g.channelCode} · {g.unit}</span>
+                  </span>
+                  <span className="tx1 text-[12px] font-semibold" dir="ltr">{formatMeasure(g.value, { uom: g.unit, decimals: decimalsForSignal(g.signalType) })}</span>
+                  <span className="hidden w-24 sm:block"><Meter pct={gaugeFillPct(g.value, range.min, range.max)} tone={tone} /></span>
+                  <StatusChip status={g.status} fa={fa} />
+                </button>
+              );
+            })}
+          </div>
+        </SectionCard>
+
+        <div className="space-y-3">
+          {/* هشدارها بر پایهٔ وضعیت/سطح */}
+          <SectionCard title={tr("هشدارها در یک نگاه", "Alerts at a glance")} hint={tr("برای تأیید و رفع، به «هشدار سنسورها» بروید", "Acknowledge and resolve in Sensor Alerts")}>
+            {alertEntries.length === 0
+              ? <Muted text={tr("هشدار بازی ثبت نشده است.", "No open alerts recorded.")} />
+              : (
+                <div className="space-y-2">
+                  {alertEntries.map(([key, value]) => (
+                    <div key={key} className="space-y-0.5">
+                      <div className="flex items-center justify-between text-[10.5px]">
+                        <span className="tx2" dir="ltr">{key}</span>
+                        <span className="tx3 tabular-nums" dir="ltr">{value}</span>
+                      </div>
+                      <div className="h-2 overflow-hidden rounded-full bg-black/30">
+                        <div className="h-full rounded-full bg-rose-400" style={{ width: `${(value / alertMax) * 100}%` }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            {dash.activeAlerts.slice(0, 3).map((alert) => (
+              <button key={alert.Id} type="button" onClick={() => onNavigate("sensor-alerts")} className="block w-full rounded-lg border b-line-soft bg-black/15 px-2.5 py-1.5 text-start transition hover:bg-black/25">
+                <span className="tx1 text-[11px]">{alert.TitleFa ?? alert.AlertCode}</span>
+                <span className="tx3 ms-2 text-[9.5px]" dir="ltr">{alert.AlertCode} · {alert.Level}</span>
+              </button>
+            ))}
+          </SectionCard>
+
+          {/* گیت‌وی‌ها، NPT و یکپارچگی */}
+          <SectionCard title={tr("گیت‌وی، NPT و یکپارچگی", "Gateways, NPT & integration")}>
+            <div className="space-y-1.5">
+              {dash.gateways.length === 0 && <Muted text={tr("گیت‌وی ثبت نشده است.", "No gateway registered.")} />}
+              {dash.gateways.map((g) => (
+                <button key={g.id} type="button" onClick={() => onNavigate("iot-devices")} className="flex w-full items-center gap-2 rounded-lg border b-line-soft bg-black/15 px-2.5 py-1.5 text-start transition hover:bg-black/25">
+                  <span className="min-w-0 flex-1">
+                    <span className="tx1 block truncate text-[11px]">{g.nameFa}</span>
+                    <span className="tx3 block text-[9.5px]" dir="ltr">{g.code} · {g.connectionState ?? "—"}</span>
+                  </span>
+                  <span className="hidden w-24 sm:block"><Meter pct={g.fillPct} tone={g.fillPct > 85 ? "danger" : g.fillPct > 65 ? "warn" : "ok"} /></span>
+                  <span className="tx3 text-[10px]" dir="ltr">{Math.round(g.fillPct)}%</span>
+                </button>
+              ))}
+            </div>
+            <div className="flex flex-wrap gap-1.5 pt-1">
+              {dash.npt && <Chip dir="ltr" text={`NPT: ${dash.npt.nptMinutes} min · ${Math.round(dash.npt.nptPct)}% · open ${dash.npt.openCount}`} tone={dash.npt.openCount ? "warn" : "ok"} />}
+              <Chip dir="ltr" text={`integration pending: ${dash.integration.pending}`} tone={dash.integration.pending ? "warn" : "ok"} />
+              <Chip dir="ltr" text={`dispatched: ${dash.integration.dispatched}`} tone="ok" />
+              <Chip dir="ltr" text={`failed: ${dash.integration.failed}`} tone={dash.integration.failed ? "danger" : "idle"} />
+              <Chip dir="ltr" text={`dead-letter: ${dash.storeAndForward.deadLetterBatches}`} tone={dash.storeAndForward.deadLetterBatches ? "danger" : "idle"} />
+            </div>
+          </SectionCard>
+        </div>
+      </div>
+    </div>
   );
 }
 

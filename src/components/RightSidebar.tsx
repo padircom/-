@@ -80,6 +80,7 @@ const SCM_SIDEBAR_ITEMS: Array<{ id: ScmSubModuleId; icon: string; label: Bi }> 
 
 /* زیرماژول‌های سرگروه پنجم: پایش میدانی و اینترنت اشیاء (IIoT & DAS) */
 const IIOT_SIDEBAR_ITEMS: Array<{ id: IiotSubModuleId; icon: string; label: Bi }> = [
+  { id: "dashboard", icon: "📊", label: { fa: "داشبورد IIoT", en: "IIoT Dashboard" } },
   { id: "drilling-das", icon: "📡", label: { fa: "پایش زنده حفاری و عملیات (Drilling DAS)", en: "Live Drilling & Operations (Drilling DAS)" } },
   { id: "iot-devices", icon: "🛰️", label: { fa: "مدیریت سنسورها و تجهیزات IoT", en: "IoT Sensors & Devices Management" } },
   { id: "condition-monitoring", icon: "🌡️", label: { fa: "پایش آنلاین شرایط محیطی و تجهیزات", en: "Online Environmental & Condition Monitoring" } },
