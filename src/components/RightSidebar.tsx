@@ -57,21 +57,16 @@ const MES_SIDEBAR_ITEMS: Array<{ id: MfgTab; icon: string; label: Bi }> = [
   { id: "overview", icon: "📊", label: { fa: "داشبورد و OEE", en: "Dashboard & OEE" } },
 ];
 
-/* زیرماژول‌های سرگروه سوم: نگهداری و تعمیرات (CMMS) — هم‌راستا با
- * CMMS_SUBMODULES در CmmsWorkspaceShell تا نوار کناری و تب‌ها یکی بمانند. */
+/* سرگروه سوم: نگهداری و تعمیرات (CMMS) — در سایدبار اصلی فقط ۵ ماژول
+ * اصلی و روزمره می‌نشیند تا زیرمنو خلوت بماند. باقی زیرماژول‌ها حذف
+ * نشده‌اند؛ در سایدبار داخلی خود ماژول CMMS، دسته‌بندی‌شده زیر
+ * CMMS_GROUPS در CmmsWorkspaceShell در دسترس‌اند. */
 const CMMS_SIDEBAR_ITEMS: Array<{ id: CmmsSubModuleId; icon: string; label: Bi }> = [
   { id: "dashboard", icon: "📊", label: { fa: "داشبورد مدیریت نت", en: "Maintenance Dashboard" } },
   { id: "workflow", icon: "🗺️", label: { fa: "نقشهٔ گردش‌کار نت", en: "Maintenance Workflow Map" } },
   { id: "assets", icon: "🏷️", label: { fa: "شناسنامه تجهیزات و دارایی‌ها", en: "Equipment & Asset Registry" } },
-  { id: "families", icon: "🧬", label: { fa: "خانوادهٔ تجهیز (PMworks)", en: "Equipment Family (PMworks)" } },
   { id: "pm", icon: "🗓️", label: { fa: "برنامه‌ریزی نت پیشگیرانه", en: "Preventive Maintenance Planning" } },
   { id: "work-orders", icon: "🛠️", label: { fa: "درخواست‌کار و دستورکار", en: "Work Requests & Orders" } },
-  { id: "spares", icon: "⚙️", label: { fa: "انبار قطعات یدکی", en: "MRO Spare Parts" } },
-  { id: "condition", icon: "🌡️", label: { fa: "پایش وضعیت و هشدارها", en: "Condition Monitoring & Alerts" } },
-  { id: "analytics", icon: "📈", label: { fa: "قابلیت اطمینان و هزینهٔ چرخهٔ عمر", en: "Reliability & LCC Analytics" } },
-  { id: "rcfa", icon: "🧩", label: { fa: "تحلیل ریشه‌ای (RCFA)", en: "Root Cause Analysis (RCFA)" } },
-  { id: "integration", icon: "🔗", label: { fa: "یکپارچگی با تولید (MES)", en: "Cross-module Integration (MES)" } },
-  { id: "ai", icon: "🤖", label: { fa: "هوش مصنوعی نت", en: "Maintenance AI" } },
 ];
 
 /* زیرماژول‌های سرگروه چهارم: زنجیره تأمین، بازرگانی و مالی (SCM & Finance) */

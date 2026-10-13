@@ -37,6 +37,21 @@ export type CmmsSubModuleId =
   | "integration"
   | "ai";
 
+/**
+ * دسته‌بندی سایدبار داخلی CMMS. سایدبار اصلی فقط ۵ ماژول اصلی را نشان
+ * می‌دهد (`CMMS_SIDEBAR_ITEMS` در RightSidebar) و باقی زیرماژول‌ها
+ * این‌جا، زیر این دسته‌ها می‌نشینند تا فهرست داخلی بلند ولی خوانا بماند.
+ */
+export type CmmsGroupId = "overview" | "assets" | "execution" | "reliability" | "smart";
+
+export const CMMS_GROUPS: Record<CmmsGroupId, { fa: string; en: string }> = {
+  overview: { fa: "نمای کلی و فرآیند", en: "Overview & Process" },
+  assets: { fa: "دارایی و ساختار تجهیز", en: "Assets & Equipment Structure" },
+  execution: { fa: "برنامه‌ریزی، اجرا و پشتیبانی کار", en: "Planning, Execution & Support" },
+  reliability: { fa: "پایش وضعیت و قابلیت اطمینان", en: "Condition Monitoring & Reliability" },
+  smart: { fa: "یکپارچگی و هوشمندی", en: "Integration & Intelligence" },
+};
+
 export const CMMS_SUBMODULES: Array<{
   id: CmmsSubModuleId;
   icon: string;
@@ -44,6 +59,8 @@ export const CMMS_SUBMODULES: Array<{
   en: string;
   descFa: string;
   descEn: string;
+  /** دستهٔ این زیرماژول در سایدبار داخلی CMMS. */
+  group: CmmsGroupId;
   /** مجوز لازم برای دیدن این بخش؛ اگر کاربر نداشته باشد تب غیرفعال می‌شود. */
   viewPermission: string;
 }> = [
@@ -51,72 +68,84 @@ export const CMMS_SUBMODULES: Array<{
     id: "dashboard", icon: "📊", fa: "داشبورد مدیریت نت", en: "Maintenance Dashboard",
     descFa: "نمای یکپارچهٔ دارایی‌ها، دستورکارها، هشدارها، قابلیت اطمینان و پیشنهادهای هوشمند.",
     descEn: "Unified view of assets, work orders, alerts, reliability and AI recommendations.",
+    group: "overview",
     viewPermission: "cmms.dashboard.view",
   },
   {
     id: "workflow", icon: "🗺️", fa: "نقشهٔ گردش‌کار نت", en: "Maintenance Workflow Map",
     descFa: "نقشهٔ تعاملی جریان فرآیند نت (الگوی PMworks): سه ورودی PM/CBM/خرابی، چرخهٔ پنج‌گامی و حلقهٔ بازخورد CAPA — کلیک روی هر گام بخش مربوطه را باز می‌کند.",
     descEn: "Interactive maintenance process flow (PMworks pattern): PM/CBM/breakdown inputs, the five-step cycle and the CAPA feedback loop — click any step to open its section.",
+    group: "overview",
     viewPermission: "cmms.dashboard.view",
   },
   {
     id: "assets", icon: "⚙️", fa: "شناسنامه تجهیزات و دارایی‌ها", en: "Equipment & Asset Registry",
     descFa: "درخت تجهیزات، مشخصات فنی، محل استقرار، وضعیت بهره‌برداری و تاریخچهٔ کارکرد.",
     descEn: "Asset hierarchy, technical specs, location, operational state and runtime history.",
+    group: "assets",
     viewPermission: "cmms.asset.view",
   },
   {
     id: "families", icon: "🧬", fa: "خانوادهٔ تجهیز (PMworks)", en: "Equipment Family (PMworks)",
     descFa: "الگوی خانواده، درخت ساختاری، حالات خرابی ISO 14224، فعالیت‌های PM و چک‌لیست استاندارد.",
     descEn: "Family template, boundary tree, ISO 14224 failure modes, PM tasks and standard checklists.",
+    group: "assets",
     viewPermission: "cmms.family.view",
   },
   {
     id: "pm", icon: "🗓️", fa: "برنامه‌ریزی نت پیشگیرانه", en: "Preventive Maintenance Planning",
     descFa: "زمان‌بندی سرویس‌های دوره‌ای بر پایهٔ زمان یا کارکرد و بهینه‌سازی فاصلهٔ سرویس.",
     descEn: "Time-based and meter-based PM schedules plus interval optimization.",
+    group: "execution",
     viewPermission: "cmms.pm.view",
   },
   {
     id: "work-orders", icon: "🛠️", fa: "درخواست‌کار و دستورکار", en: "Work Requests & Orders",
     descFa: "ثبت درخواست، آزادسازی، اجرا با چک‌لیست، ثبت نفرساعت و هزینه، اتمام و بستن.",
     descEn: "Request, release, execute with checklists, post labor and cost, complete and close.",
+    group: "execution",
     viewPermission: "cmms.wo.view",
   },
   {
     id: "spares", icon: "🔩", fa: "انبار قطعات یدکی", en: "MRO Spare Parts",
     descFa: "فهرست قطعات، نقطهٔ سفارش، رسید و حواله و کنترل کسری موجودی.",
     descEn: "Parts catalog, reorder points, receipts and issues, shortage control.",
+    group: "execution",
     viewPermission: "cmms.spare.view",
   },
   {
     id: "condition", icon: "🌡️", fa: "پایش وضعیت و هشدارها", en: "Condition Monitoring & Alerts",
     descFa: "قرائت ارتعاش و دما بر پایهٔ ISO 10816، آستانه‌ها و هشدارهای بلادرنگ.",
     descEn: "Vibration and temperature readings per ISO 10816, thresholds and live alerts.",
+    group: "reliability",
     viewPermission: "cmms.alert.view",
   },
   {
     id: "analytics", icon: "📈", fa: "قابلیت اطمینان و هزینهٔ چرخهٔ عمر", en: "Reliability & LCC Analytics",
     descFa: "MTBF/MTTR/دسترس‌پذیری، OEE، شاخص‌های IEEE 1366 و NPV چرخهٔ عمر.",
     descEn: "MTBF/MTTR/availability, OEE, IEEE 1366 indices and life-cycle NPV.",
+    group: "reliability",
     viewPermission: "cmms.reliability.view",
   },
   {
     id: "rcfa", icon: "🧩", fa: "تحلیل ریشه‌ای (RCFA)", en: "Root Cause Analysis (RCFA)",
     descFa: "۵ چرا و استخوان‌ماهی ۶M با پارتو وزنی، و CAPA با ارجاع به مالک یا تبدیل به دستورکار.",
     descEn: "5-Why and 6M fishbone with weighted Pareto, plus CAPA referred to an owner or a new work order.",
+    group: "reliability",
     viewPermission: "cmms.rca.view",
   },
   {
     id: "integration", icon: "🔗", fa: "یکپارچگی با تولید (MES)", en: "Cross-module Integration (MES)",
     descFa: "صف رویداد توقف/ظرفیت و رزرو نرم ظرفیت مراکز کاری — بدون کلید خارجی بین دو ماژول.",
     descEn: "Downtime/capacity event outbox and soft work-center reservations — no foreign key across modules.",
+    group: "smart",
     viewPermission: "cmms.integration.view",
   },
   {
     id: "ai", icon: "🤖", fa: "هوش مصنوعی نت", en: "Maintenance AI",
     descFa: "تحلیل خرابی، بهینه‌سازی PM، راهنمای تعمیر، تولید درخت و زمان‌بند هوشمند.",
     descEn: "Failure analysis, PM optimization, repair guidance, tree generation and smart scheduling.",
+    group: "smart",
     viewPermission: "cmms.ai.view",
   },
 ];
@@ -383,6 +412,7 @@ export default function CmmsWorkspaceShell({ lang, activeSub, onSelectSub, onBac
           id: item.id,
           label: fa ? item.fa : item.en,
           icon: item.icon,
+          group: fa ? CMMS_GROUPS[item.group].fa : CMMS_GROUPS[item.group].en,
           disabled: !allowed,
           disabledHint: tr("مجوز این بخش را ندارید", "No permission for this section"),
         };

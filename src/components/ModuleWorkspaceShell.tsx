@@ -14,6 +14,7 @@
  * این کامپوننت فقط نمایش است؛ هیچ API، داده یا منطق دامنه‌ای ندارد.
  */
 
+import { Fragment } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import type { Lang } from "../data/framework";
 
@@ -26,6 +27,12 @@ export type ModuleNavItem<T extends string = string> = {
   disabledHint?: string;
   /** عنصر دلخواه در انتهای ردیف، مثل نقطهٔ وضعیت مجوز. */
   trailing?: ReactNode;
+  /**
+   * عنوان دستهٔ سایدبار داخلی (اختیاری). هرجا مقدارش نسبت به آیتم قبلی
+   * عوض شود، یک سربند دسته چاپ می‌شود؛ ماژول‌هایی که دسته نمی‌گذارند
+   * (MES/SCM/…) همان فهرست تخت قبلی را می‌بینند.
+   */
+  group?: string;
 };
 
 /** کلاس‌های مشترک؛ هم‌خوان با سطوح PMIS. */
@@ -226,9 +233,22 @@ export default function ModuleWorkspaceShell<T extends string>({
           <div className="thin-scroll flex-1 space-y-1 overflow-y-auto p-2">
             {navItems.map((item, index) => {
               const active = item.id === activeId;
+              /* سربند دسته: فقط وقتی این آیتم دسته دارد و دسته‌اش با قبلی فرق می‌کند. */
+              const groupHeader = item.group && item.group !== navItems[index - 1]?.group ? (
+                <div
+                  key={`group:${item.group}`}
+                  className="flex items-center gap-1.5 px-2 pb-0.5 pt-3 text-[9px] font-semibold tracking-wide tx3 first:pt-1"
+                  role="presentation"
+                >
+                  <span className="h-px flex-1" style={{ background: `${accent}44` }} aria-hidden="true" />
+                  <span>{item.group}</span>
+                  <span className="h-px flex-1" style={{ background: `${accent}44` }} aria-hidden="true" />
+                </div>
+              ) : null;
               return (
+                <Fragment key={item.id}>
+                {groupHeader}
                 <button
-                  key={item.id}
                   type="button"
                   disabled={item.disabled}
                   title={item.disabled ? item.disabledHint : undefined}
@@ -244,6 +264,7 @@ export default function ModuleWorkspaceShell<T extends string>({
                   <span className="min-w-0 flex-1 truncate text-[10px] font-light tx1">{item.label}</span>
                   {item.trailing}
                 </button>
+                </Fragment>
               );
             })}
           </div>
