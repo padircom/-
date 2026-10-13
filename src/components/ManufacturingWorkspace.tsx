@@ -1793,23 +1793,36 @@ export default function ManufacturingWorkspace({
           {/* شناسهٔ فنی کاربر (u-…) نمایشی نیست و فقط مقدار داخلی انتخاب است؛ این‌جا فقط نام نقش می‌آید. */}
           <strong className="tx1">{activeUserMeta ? (fa ? activeUserMeta.fa : activeUserMeta.en) : "—"}</strong>
         </div>
-        <div className="flex flex-wrap items-center gap-2" dir="ltr">
-          <span>Window:</span>
-          <input
-            type="text"
-            aria-label="From ISO"
-            className="rounded border b-line-soft bg-[var(--row)] px-2 py-0.5 text-xs tx1 w-44"
-            value={fromIso}
-            onChange={(e) => setFromIso(e.target.value)}
-          />
-          <span>→</span>
-          <input
-            type="text"
-            aria-label="To ISO"
-            className="rounded border b-line-soft bg-[var(--row)] px-2 py-0.5 text-xs tx1 w-44"
-            value={toIso}
-            onChange={(e) => setToIso(e.target.value)}
-          />
+        <div className="flex flex-wrap items-center gap-2">
+          <span>{tr("بازهٔ زمانی:", "Time window:")}</span>
+          <label className="flex items-center gap-1">
+            <span>{tr("از", "From")}</span>
+            <input
+              type="date"
+              aria-label={tr("تاریخ شروع بازه", "Window start date")}
+              dir="ltr"
+              className="rounded border b-line-soft bg-[var(--row)] px-2 py-0.5 text-xs tx1 w-40"
+              value={fromIso.slice(0, 10)}
+              onChange={(e) => {
+                if (!e.target.value) return;
+                setFromIso(`${e.target.value}T${fromIso.slice(11) || "00:00:00.000Z"}`);
+              }}
+            />
+          </label>
+          <label className="flex items-center gap-1">
+            <span>{tr("تا", "To")}</span>
+            <input
+              type="date"
+              aria-label={tr("تاریخ پایان بازه", "Window end date")}
+              dir="ltr"
+              className="rounded border b-line-soft bg-[var(--row)] px-2 py-0.5 text-xs tx1 w-40"
+              value={toIso.slice(0, 10)}
+              onChange={(e) => {
+                if (!e.target.value) return;
+                setToIso(`${e.target.value}T${toIso.slice(11) || "23:59:59.000Z"}`);
+              }}
+            />
+          </label>
         </div>
       </div>
 
