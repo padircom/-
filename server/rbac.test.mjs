@@ -97,7 +97,10 @@ test("کاتالوگ: نسخه موتور و اندازه‌ها", () => {
      dispatch)، گیت‌وی، بافر لبه، سنسور و کالیبراسیون، پایش وضعیت، توقف و
      NPT، صف یکپارچگی، داشبورد و تحلیل. دامنهٔ آن دکل‌محور است و مانند CMMS
      از طریق plantIds ارزیابی می‌شود. */
-  assert.equal(PERMISSION_CATALOG.length, 413);
+  /* بخش ۶ (HRM) سیزده مجوز `hrm.*` افزود (org/skill/attendance/payroll/
+     training/performance) و بخش ۷ (EDMS/KMS) یازده مجوز `edms.*`
+     (document/revision/workflow/transmittal/archive/kms) — ۴۱۳ + ۲۴. */
+  assert.equal(PERMISSION_CATALOG.length, 437);
   /* ۲۸ نقش پیشین + ۷ نقش نت: maintenance_manager، maintenance_planner،
      reliability_engineer، maintenance_engineer، maintenance_technician،
      maintenance_storekeeper و condition_monitoring_analyst. تفکیک وظایف

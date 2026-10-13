@@ -63,11 +63,16 @@ test("همهٔ سامانه‌ها نام دوزبانه و مجموعهٔ مع�
 });
 
 test("NAM-2: برند واحد — سربرگ، عنوان مرورگر و بنر سرور", () => {
-  assert.equal(mod.PLATFORM_BRAND.code, "Arena PMIS");
+  assert.equal(mod.PLATFORM_BRAND.code, "Arena Enterprise");
+  assert.deepEqual(mod.PLATFORM_BRAND.name, {
+    fa: "سامانه جامع مدیریت یکپارچه سازمان، پروژه و عملیات صنعتی",
+    en: "Enterprise ERP, Project & Operations Platform",
+  });
   assert.deepEqual(mod.ui.hubTitle, mod.PLATFORM_BRAND.name, "سربرگ باید از کاتالوگ خوانده شود");
+  assert.deepEqual(mod.ui.frameworkTitle, mod.PLATFORM_BRAND.name, "عنوان چارچوب باید از کاتالوگ خوانده شود");
   const html = readFileSync(path.join(root, "index.html"), "utf8");
-  assert.match(html, /<title>Arena PMIS \| سامانهٔ جامع مدیریت و کنترل پروژه آرنا<\/title>/);
+  assert.match(html, /<title>Arena Enterprise \| سامانه جامع مدیریت یکپارچه سازمان، پروژه و عملیات صنعتی<\/title>/);
   assert.doesNotMatch(html, /PM Control Platform/);
   const server = readFileSync(path.join(root, "server/index.js"), "utf8");
-  assert.match(server, /Arena PMIS REST API Service running/);
+  assert.match(server, /Arena Enterprise REST API Service running/);
 });

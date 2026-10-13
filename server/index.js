@@ -20175,7 +20175,7 @@ app.use((err, req, res, next) => {
 
 const server = app.listen(PORT, () => {
   console.log("=======================================================");
-  console.log(`  Arena PMIS REST API Service running on http://localhost:${PORT}`);
+  console.log(`  Arena Enterprise REST API Service running on http://localhost:${PORT}`);
   console.log(`  SQL Server Target: ${process.env.SQL_SERVER || ".\\SQL2008EXPRESS"} (${process.env.SQL_DATABASE || "PMIS_MASTER_DB"})`);
   console.log("=======================================================");
 });

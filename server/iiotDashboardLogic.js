@@ -677,7 +677,33 @@ var PERMISSION_CATALOG = [
   P("iiot.integration.view", "iiot", "\u0645\u0634\u0627\u0647\u062F\u0647\u0654 \u0635\u0641 \u0631\u0648\u06CC\u062F\u0627\u062F \u06CC\u06A9\u067E\u0627\u0631\u0686\u06AF\u06CC \u0628\u06CC\u0646\u200C\u0628\u062E\u0634\u06CC", "View cross-module event outbox", "internal"),
   P("iiot.integration.dispatch", "iiot", "\u0627\u0631\u0633\u0627\u0644 \u0631\u0648\u06CC\u062F\u0627\u062F \u06CC\u06A9\u067E\u0627\u0631\u0686\u06AF\u06CC \u0628\u0647 \u0633\u0627\u0645\u0627\u0646\u0647\u0654 \u0645\u0642\u0635\u062F", "Dispatch cross-module event", "confidential", true),
   P("iiot.dashboard.view", "iiot", "\u0645\u0634\u0627\u0647\u062F\u0647\u0654 \u062F\u0627\u0634\u0628\u0648\u0631\u062F \u0632\u0646\u062F\u0647\u0654 \u067E\u0627\u06CC\u0634 \u0645\u06CC\u062F\u0627\u0646\u06CC", "View live field monitoring dashboard", "internal"),
-  P("iiot.analytics.view", "iiot", "\u0645\u0634\u0627\u0647\u062F\u0647\u0654 \u062A\u062D\u0644\u06CC\u0644 \u0648 \u062A\u062C\u0645\u06CC\u0639 \u0633\u0631\u06CC \u0632\u0645\u0627\u0646\u06CC", "View telemetry analytics and rollups", "internal")
+  P("iiot.analytics.view", "iiot", "\u0645\u0634\u0627\u0647\u062F\u0647\u0654 \u062A\u062D\u0644\u06CC\u0644 \u0648 \u062A\u062C\u0645\u06CC\u0639 \u0633\u0631\u06CC \u0632\u0645\u0627\u0646\u06CC", "View telemetry analytics and rollups", "internal"),
+  /* ── بخش ۶: مدیریت جامع منابع انسانی (HRM — ISO 30414 & قوانین کار و تأمین اجتماعی) ── */
+  P("hrm.org.view", "hrm", "\u0645\u0634\u0627\u0647\u062F\u0647\u0654 \u0686\u0627\u0631\u062A \u0633\u0627\u0632\u0645\u0627\u0646\u06CC\u060C \u0627\u062D\u06A9\u0627\u0645 \u0648 \u0642\u0631\u0627\u0631\u062F\u0627\u062F\u0647\u0627\u06CC \u06A9\u0627\u0631", "View org chart, decrees and contracts", "internal"),
+  P("hrm.org.manage", "hrm", "\u0645\u062F\u06CC\u0631\u06CC\u062A \u0686\u0627\u0631\u062A \u0633\u0627\u0632\u0645\u0627\u0646\u06CC\u060C \u0627\u062D\u06A9\u0627\u0645 \u06A9\u0627\u0631\u06AF\u0632\u06CC\u0646\u06CC \u0648 \u0642\u0631\u0627\u0631\u062F\u0627\u062F\u0647\u0627", "Manage org chart, decrees and contracts", "confidential", true),
+  P("hrm.skill.view", "hrm", "\u0645\u0634\u0627\u0647\u062F\u0647\u0654 \u0645\u0627\u062A\u0631\u06CC\u0633 \u0645\u0647\u0627\u0631\u062A\u200C\u0647\u0627 \u0648 \u06AF\u0648\u0627\u0647\u06CC\u200C\u0646\u0627\u0645\u0647\u200C\u0647\u0627\u06CC \u0641\u0646\u06CC", "View skill matrix and technical certificates", "internal"),
+  P("hrm.skill.manage", "hrm", "\u0645\u062F\u06CC\u0631\u06CC\u062A \u0645\u0627\u062A\u0631\u06CC\u0633 \u0645\u0647\u0627\u0631\u062A\u200C\u0647\u0627 \u0648 \u06AF\u0648\u0627\u0647\u06CC\u200C\u0646\u0627\u0645\u0647\u200C\u0647\u0627\u06CC \u0645\u062A\u0635\u0644 \u0628\u0647 CMMS/MES", "Manage skill matrix and technical certificates", "confidential", true),
+  P("hrm.attendance.view", "hrm", "\u0645\u0634\u0627\u0647\u062F\u0647\u0654 \u062A\u0642\u0648\u06CC\u0645 \u06A9\u0627\u0631\u06CC\u060C \u0634\u06CC\u0641\u062A\u200C\u0647\u0627\u060C \u0645\u0631\u062E\u0635\u06CC \u0648 \u0645\u0623\u0645\u0648\u0631\u06CC\u062A", "View shift calendars, attendance, leaves and missions", "internal"),
+  P("hrm.attendance.manage", "hrm", "\u062B\u0628\u062A \u0648 \u0645\u062F\u06CC\u0631\u06CC\u062A \u0634\u06CC\u0641\u062A\u200C\u0628\u0646\u062F\u06CC\u060C \u06A9\u0627\u0631\u06A9\u0631\u062F\u060C \u0645\u0631\u062E\u0635\u06CC \u0648 \u0645\u0623\u0645\u0648\u0631\u06CC\u062A", "Manage shifts, attendance roster, leaves and missions", "confidential", true),
+  P("hrm.payroll.view", "hrm", "\u0645\u0634\u0627\u0647\u062F\u0647\u0654 \u0645\u062D\u0627\u0633\u0628\u0627\u062A \u062D\u0642\u0648\u0642 \u0648 \u062F\u0633\u062A\u0645\u0632\u062F \u0648 \u0641\u06CC\u0634 \u062D\u0642\u0648\u0642\u06CC", "View payroll runs and payslips", "confidential"),
+  P("hrm.payroll.run", "hrm", "\u0627\u062C\u0631\u0627\u06CC \u0645\u062D\u0627\u0633\u0628\u0647\u0654 \u062D\u0642\u0648\u0642\u060C \u0628\u06CC\u0645\u0647\u060C \u0645\u0627\u0644\u06CC\u0627\u062A \u0648 \u0635\u062F\u0648\u0631 \u0641\u06CC\u0634", "Run payroll calculation and issue payslips", "restricted", true),
+  P("hrm.payroll.approve", "hrm", "\u062A\u0635\u0648\u06CC\u0628 \u0646\u0647\u0627\u06CC\u06CC \u062D\u0642\u0648\u0642 \u0648 \u0627\u0631\u0633\u0627\u0644 \u0633\u0646\u062F \u0647\u0632\u06CC\u0646\u0647 \u0628\u0647 \u0645\u0627\u0644\u06CC", "Approve payroll and dispatch cost voucher to finance", "restricted", true),
+  P("hrm.training.view", "hrm", "\u0645\u0634\u0627\u0647\u062F\u0647\u0654 \u0646\u06CC\u0627\u0632\u0633\u0646\u062C\u06CC\u060C \u062F\u0648\u0631\u0647\u200C\u0647\u0627\u06CC \u0622\u0645\u0648\u0632\u0634\u06CC \u0648 \u0627\u062B\u0631\u0628\u062E\u0634\u06CC", "View training needs, courses and effectiveness", "internal"),
+  P("hrm.training.manage", "hrm", "\u0645\u062F\u06CC\u0631\u06CC\u062A \u0646\u06CC\u0627\u0632\u0633\u0646\u062C\u06CC \u0622\u0645\u0648\u0632\u0634\u06CC\u060C \u062F\u0648\u0631\u0647\u200C\u0647\u0627 \u0648 \u0627\u0631\u0632\u06CC\u0627\u0628\u06CC \u0627\u062B\u0631\u0628\u062E\u0634\u06CC", "Manage training needs, courses and Kirkpatrick evaluation", "confidential", true),
+  P("hrm.performance.view", "hrm", "\u0645\u0634\u0627\u0647\u062F\u0647\u0654 \u0627\u0647\u062F\u0627\u0641 KPI/OKR \u0648 \u0627\u0631\u0632\u06CC\u0627\u0628\u06CC \u0639\u0645\u0644\u06A9\u0631\u062F \u06F3\u06F6\u06F0 \u062F\u0631\u062C\u0647", "View KPIs/OKRs and 360-degree performance reviews", "internal"),
+  P("hrm.performance.manage", "hrm", "\u062A\u0639\u0631\u06CC\u0641 KPI/OKR \u0648 \u062B\u0628\u062A \u0627\u0631\u0632\u06CC\u0627\u0628\u06CC \u0639\u0645\u0644\u06A9\u0631\u062F \u06F3\u06F6\u06F0 \u062F\u0631\u062C\u0647", "Define KPIs/OKRs and manage 360-degree reviews", "confidential", true),
+  /* ── بخش ۷: مدیریت اسناد، بایگانی دیجیتال و مدیریت دانش (EDMS / KMS — ISO 15489 / 30301 / 9001) ── */
+  P("edms.document.view", "edms", "\u0645\u0634\u0627\u0647\u062F\u0647\u0654 \u0634\u0646\u0627\u0633\u0646\u0627\u0645\u0647\u0654 \u0627\u0633\u0646\u0627\u062F (DMI) \u0648 \u0627\u0644\u06AF\u0648\u0647\u0627\u06CC \u0634\u0645\u0627\u0631\u0647\u200C\u06AF\u0630\u0627\u0631\u06CC", "View Document Master Index (DMI) and numbering rules", "internal"),
+  P("edms.document.manage", "edms", "\u062B\u0628\u062A \u0648 \u0645\u062F\u06CC\u0631\u06CC\u062A \u0634\u0646\u0627\u0633\u0646\u0627\u0645\u0647\u0654 \u0627\u0633\u0646\u0627\u062F \u0648 \u06A9\u062F\u06CC\u0646\u06AF \u062E\u0648\u062F\u06A9\u0627\u0631", "Manage DMI documents and auto-numbering rules", "confidential", true),
+  P("edms.revision.view", "edms", "\u0645\u0634\u0627\u0647\u062F\u0647\u0654 \u0646\u0633\u062E\u0647\u200C\u0647\u0627\u06CC \u0627\u0633\u0646\u0627\u062F\u060C \u062A\u063A\u06CC\u06CC\u0631\u0627\u062A \u0648 \u0648\u0636\u0639\u06CC\u062A \u0642\u0641\u0644", "View document revisions, diffs and check-out locks", "internal"),
+  P("edms.revision.manage", "edms", "\u0635\u062F\u0648\u0631 \u0648\u06CC\u0631\u0627\u06CC\u0634 \u062C\u062F\u06CC\u062F\u060C Check-Out / Check-In \u0648 \u0645\u0642\u0627\u06CC\u0633\u0647\u0654 \u0646\u0633\u062E\u0647", "Issue revisions, check-out/check-in and compare diffs", "confidential", true),
+  P("edms.workflow.view", "edms", "\u0645\u0634\u0627\u0647\u062F\u0647\u0654 \u06AF\u0631\u062F\u0634\u200C\u06A9\u0627\u0631 \u0628\u0631\u0631\u0633\u06CC/\u062A\u0623\u06CC\u06CC\u062F \u0648 \u062A\u0631\u0627\u0646\u0633\u0645\u06CC\u062A\u0627\u0644\u200C\u0647\u0627", "View review/approval workflows and transmittals", "internal"),
+  P("edms.workflow.approve", "edms", "\u0628\u0631\u0631\u0633\u06CC \u0641\u0646\u06CC \u0648 \u062A\u0623\u06CC\u06CC\u062F \u06AF\u0631\u062F\u0634\u200C\u06A9\u0627\u0631 \u0627\u0633\u0646\u0627\u062F", "Review and approve document workflow steps", "confidential", true),
+  P("edms.transmittal.manage", "edms", "\u0635\u062F\u0648\u0631 \u0648 \u062B\u0628\u062A \u0628\u0631\u06AF\u0647\u0654 \u0627\u0631\u0633\u0627\u0644 \u0645\u062F\u0627\u0631\u06A9 (Transmittal)", "Issue and manage official transmittals", "confidential", true),
+  P("edms.archive.view", "edms", "\u0645\u0634\u0627\u0647\u062F\u0647\u0654 \u0632\u0648\u0646\u200C\u0628\u0646\u062F\u06CC \u0628\u0627\u06CC\u06AF\u0627\u0646\u06CC \u062F\u06CC\u062C\u06CC\u062A\u0627\u0644\u060C OCR \u0648 \u062C\u0633\u062A\u062C\u0648\u06CC \u0645\u062A\u0646\u06CC", "View digital archive zones, OCR records and search", "internal"),
+  P("edms.archive.manage", "edms", "\u0645\u062F\u06CC\u0631\u06CC\u062A \u0628\u0627\u06CC\u06AF\u0627\u0646\u06CC \u062F\u06CC\u062C\u06CC\u062A\u0627\u0644\u060C \u0627\u0633\u06A9\u0646 \u0648 \u0646\u0645\u0627\u06CC\u0647\u200C\u0633\u0627\u0632\u06CC OCR", "Manage digital archive zones, scanning and OCR indexing", "confidential", true),
+  P("edms.kms.view", "edms", "\u0645\u0634\u0627\u0647\u062F\u0647\u0654 \u067E\u0627\u06CC\u06AF\u0627\u0647 \u062F\u0627\u0646\u0634 (Wiki) \u0648 \u062F\u0631\u0648\u0633 \u0622\u0645\u0648\u062E\u062A\u0647\u200C\u0634\u062F\u0647 (KMS)", "View Knowledge Base Wiki and Lessons Learned", "internal"),
+  P("edms.kms.manage", "edms", "\u062B\u0628\u062A \u0648 \u0627\u0646\u062A\u0634\u0627\u0631 \u062F\u0631\u0648\u0633 \u0622\u0645\u0648\u062E\u062A\u0647\u200C\u0634\u062F\u0647 \u0648 \u0645\u0642\u0627\u0644\u0627\u062A \u067E\u0627\u06CC\u06AF\u0627\u0647 \u062F\u0627\u0646\u0634", "Author and publish KMS lessons learned and wiki articles", "confidential", true)
 ];
 var PERMISSION_CODES = PERMISSION_CATALOG.map((p) => p.code);
 var PERM_BY_CODE = new Map(PERMISSION_CATALOG.map((p) => [p.code, p]));
@@ -703,7 +729,17 @@ var ROLE_CATALOG = [
        * ابزار برای هر منبع داده مجوز پایه را دوباره می‌سنجد و بخش بسته را
        * «بسته» اعلام می‌کند، نه صفر. تاریخچه و خروجی سند این‌طور نیستند. */
       "ai.assistant.ask",
-      "ai.insight.view"
+      "ai.insight.view",
+      "hrm.org.view",
+      "hrm.skill.view",
+      "hrm.attendance.view",
+      "hrm.training.view",
+      "hrm.performance.view",
+      "edms.document.view",
+      "edms.revision.view",
+      "edms.workflow.view",
+      "edms.archive.view",
+      "edms.kms.view"
     ]
   },
   {
@@ -877,7 +913,8 @@ var ROLE_CATALOG = [
       "cnt.ipctemplate.edit",
       "cnt.ipc.prepare",
       "pmo.health.view",
-      "pmo.form.view"
+      "pmo.form.view",
+      "hrm.payroll.view"
     ]
   },
   {
@@ -935,7 +972,11 @@ var ROLE_CATALOG = [
       "pmo.form.view",
       "pmo.form.submit",
       "pmo.health.view",
-      "pmo.health.record"
+      "pmo.health.record",
+      "hrm.training.manage",
+      "edms.workflow.approve",
+      "edms.archive.manage",
+      "edms.kms.manage"
     ]
   },
   {
@@ -988,7 +1029,16 @@ var ROLE_CATALOG = [
       "hrm.person.activate",
       "hrm.person.demobilize",
       "hrm.doc.verify",
-      "hrm.skill.assess"
+      "hrm.skill.assess",
+      "hrm.org.manage",
+      "hrm.skill.manage",
+      "hrm.attendance.manage",
+      "hrm.payroll.view",
+      "hrm.payroll.run",
+      "hrm.payroll.approve",
+      "hrm.training.manage",
+      "hrm.performance.manage",
+      "edms.kms.manage"
     ]
   },
   {
@@ -997,7 +1047,22 @@ var ROLE_CATALOG = [
     inherits: ["viewer"],
     clearance: "confidential",
     party: "contractor",
-    grants: ["doc.document.upload", "doc.transmittal.issue", "ckm.letter.view", "ckm.letter.draft", "ckm.meeting.record", "ckm.lesson.publish", "ckm.notify.manage", "eng.mdr.edit", "eng.revision.issue"]
+    grants: [
+      "doc.document.upload",
+      "doc.transmittal.issue",
+      "ckm.letter.view",
+      "ckm.letter.draft",
+      "ckm.meeting.record",
+      "ckm.lesson.publish",
+      "ckm.notify.manage",
+      "eng.mdr.edit",
+      "eng.revision.issue",
+      "edms.document.manage",
+      "edms.revision.manage",
+      "edms.transmittal.manage",
+      "edms.archive.manage",
+      "edms.kms.manage"
+    ]
   },
   {
     code: "contracts_manager",
@@ -1205,7 +1270,18 @@ var ROLE_CATALOG = [
       "report.custom.publish",
       "itg.connector.view",
       "itg.export.run",
-      "itg.calendar.sync"
+      "itg.calendar.sync",
+      "hrm.org.manage",
+      "hrm.skill.manage",
+      "hrm.attendance.manage",
+      "hrm.payroll.view",
+      "hrm.payroll.approve",
+      "hrm.training.manage",
+      "hrm.performance.manage",
+      "edms.document.manage",
+      "edms.workflow.approve",
+      "edms.transmittal.manage",
+      "edms.kms.manage"
     ]
   },
   {
@@ -1309,7 +1385,11 @@ var ROLE_CATALOG = [
       "core.ai.run",
       "report.internal.generate",
       "report.custom.edit",
-      "itg.connector.view"
+      "itg.connector.view",
+      "edms.document.manage",
+      "edms.revision.manage",
+      "edms.workflow.approve",
+      "edms.kms.manage"
     ]
   },
   {
@@ -1391,7 +1471,14 @@ var ROLE_CATALOG = [
       "itg.calendar.sync",
       /* P10: تاریخچهٔ پرسش‌وپاسخ و خروجی سند، کار گزارش‌دهی PMO است. */
       "ai.history.view",
-      "ai.export.run"
+      "ai.export.run",
+      "hrm.payroll.view",
+      "hrm.payroll.approve",
+      "hrm.performance.manage",
+      "edms.document.manage",
+      "edms.workflow.approve",
+      "edms.archive.manage",
+      "edms.kms.manage"
     ]
   },
   {
@@ -2244,6 +2331,30 @@ var ROLE_CATALOG = [
       "scm.mr.view",
       "scm.mrr.view",
       "scm.mrr.post",
+      "hrm.org.view",
+      "hrm.org.manage",
+      "hrm.skill.view",
+      "hrm.skill.manage",
+      "hrm.attendance.view",
+      "hrm.attendance.manage",
+      "hrm.payroll.view",
+      "hrm.payroll.run",
+      "hrm.payroll.approve",
+      "hrm.training.view",
+      "hrm.training.manage",
+      "hrm.performance.view",
+      "hrm.performance.manage",
+      "edms.document.view",
+      "edms.document.manage",
+      "edms.revision.view",
+      "edms.revision.manage",
+      "edms.workflow.view",
+      "edms.workflow.approve",
+      "edms.transmittal.manage",
+      "edms.archive.view",
+      "edms.archive.manage",
+      "edms.kms.view",
+      "edms.kms.manage",
       /* P10: مدیر سامانه سرویس هوش مصنوعی را پیکربندی و می‌آزماید، ولی
        * تاریخچهٔ پرسش کسب‌وکار و خروجی سند به او داده نمی‌شود. */
       "ai.assistant.ask",
