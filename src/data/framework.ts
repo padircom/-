@@ -5,7 +5,7 @@ export type Bi = { fa: string; en: string };
 export const t = (v: Bi, lang: Lang) => v[lang];
 
 /* ============================================================
-   RIGHT SIDEBAR — Comprehensive Project Management Framework
+   RIGHT SIDEBAR — Enterprise ERP, Project & Operations Platform
    Flat rows, ZERO dropdowns, ZERO numeric prefixes.
    ============================================================ */
 /* ============================================================
@@ -1798,7 +1798,8 @@ export const ui = {
   /* NAM-2: عنوان اصلی از کاتالوگ نام‌گذاری (منبع واحد برند). */
   hubTitle: PLATFORM_BRAND.name,
   hubSub: { fa: "رینگ ۵ فرآیندی PMBOK — بتا ۱.۱.۰", en: "PMBOK 5-Process Ring — Beta 1.1.0" },
-  frameworkTitle: { fa: "چارچوب جامع مدیریت پروژه", en: "Comprehensive Project Management Framework" },
+  /* عنوان چارچوب هم همان عنوان رسمی پلتفرم است (منبع واحد برند). */
+  frameworkTitle: PLATFORM_BRAND.name,
   frameworkSub: { fa: "۵ ماژول · نمای سرتیترها", en: "5 Modules · Header Overview" },
   sourcesTitle: { fa: "منابع داده", en: "Data Sources" },
   sourcesSub: { fa: "وضعیت اتصال منابع", en: "Source connection status" },
