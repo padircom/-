@@ -3,6 +3,7 @@ import type { Lang } from "../data/framework";
 import ModuleWorkspaceShell, { moduleCardCls, moduleChipCls, moduleSelectCls } from "./ModuleWorkspaceShell";
 import CmmsRcfaPanel from "./CmmsRcfaPanel";
 import CmmsIntegrationPanel from "./CmmsIntegrationPanel";
+import CmmsWorkflowMap from "./CmmsWorkflowMap";
 import {
   CmmsAiPanel,
   CmmsAlertsPanel,
@@ -24,6 +25,7 @@ import {
 
 export type CmmsSubModuleId =
   | "dashboard"
+  | "workflow"
   | "assets"
   | "families"
   | "pm"
@@ -49,6 +51,12 @@ export const CMMS_SUBMODULES: Array<{
     id: "dashboard", icon: "📊", fa: "داشبورد مدیریت نت", en: "Maintenance Dashboard",
     descFa: "نمای یکپارچهٔ دارایی‌ها، دستورکارها، هشدارها، قابلیت اطمینان و پیشنهادهای هوشمند.",
     descEn: "Unified view of assets, work orders, alerts, reliability and AI recommendations.",
+    viewPermission: "cmms.dashboard.view",
+  },
+  {
+    id: "workflow", icon: "🗺️", fa: "نقشهٔ گردش‌کار نت", en: "Maintenance Workflow Map",
+    descFa: "نقشهٔ تعاملی جریان فرآیند نت (الگوی PMworks): سه ورودی PM/CBM/خرابی، چرخهٔ پنج‌گامی و حلقهٔ بازخورد CAPA — کلیک روی هر گام بخش مربوطه را باز می‌کند.",
+    descEn: "Interactive maintenance process flow (PMworks pattern): PM/CBM/breakdown inputs, the five-step cycle and the CAPA feedback loop — click any step to open its section.",
     viewPermission: "cmms.dashboard.view",
   },
   {
@@ -297,6 +305,9 @@ export default function CmmsWorkspaceShell({ lang, activeSub, onSelectSub, onBac
           </div>
         );
       }
+
+      case "workflow":
+        return <CmmsWorkflowMap fa={fa} onNavigate={onSelectSub} />;
 
       case "assets":
         return <CmmsAssetsPanel fa={fa} siteId={siteId} userId={userId} />;

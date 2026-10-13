@@ -61,6 +61,7 @@ const MES_SIDEBAR_ITEMS: Array<{ id: MfgTab; icon: string; label: Bi }> = [
  * CMMS_SUBMODULES در CmmsWorkspaceShell تا نوار کناری و تب‌ها یکی بمانند. */
 const CMMS_SIDEBAR_ITEMS: Array<{ id: CmmsSubModuleId; icon: string; label: Bi }> = [
   { id: "dashboard", icon: "📊", label: { fa: "داشبورد مدیریت نت", en: "Maintenance Dashboard" } },
+  { id: "workflow", icon: "🗺️", label: { fa: "نقشهٔ گردش‌کار نت", en: "Maintenance Workflow Map" } },
   { id: "assets", icon: "🏷️", label: { fa: "شناسنامه تجهیزات و دارایی‌ها", en: "Equipment & Asset Registry" } },
   { id: "families", icon: "🧬", label: { fa: "خانوادهٔ تجهیز (PMworks)", en: "Equipment Family (PMworks)" } },
   { id: "pm", icon: "🗓️", label: { fa: "برنامه‌ریزی نت پیشگیرانه", en: "Preventive Maintenance Planning" } },
