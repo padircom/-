@@ -1740,7 +1740,7 @@ export default function ManufacturingWorkspace({
             >
               {MFG_DEMO_USERS.map((u) => (
                 <option key={u.id} value={u.id}>
-                  {u.id} — {fa ? u.fa : u.en}
+                  {fa ? u.fa : u.en}
                 </option>
               ))}
             </select>
@@ -1799,8 +1799,8 @@ export default function ManufacturingWorkspace({
       <div className="glass rounded-xl px-3 py-2 flex flex-wrap items-center justify-between gap-2 text-xs tx3">
         <div>
           <span>{tr("کاربر فعال MES:", "Active MES Subject:")} </span>
-          <strong className="tx1" dir="ltr">{mfgUserId}</strong>
-          {activeUserMeta && <span> — {fa ? activeUserMeta.fa : activeUserMeta.en}</span>}
+          {/* شناسهٔ فنی کاربر (u-…) نمایشی نیست و فقط مقدار داخلی انتخاب است؛ این‌جا فقط نام نقش می‌آید. */}
+          <strong className="tx1">{activeUserMeta ? (fa ? activeUserMeta.fa : activeUserMeta.en) : "—"}</strong>
         </div>
         <div className="flex flex-wrap items-center gap-2" dir="ltr">
           <span>Window:</span>
