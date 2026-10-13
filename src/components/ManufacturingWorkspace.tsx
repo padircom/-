@@ -1789,19 +1789,10 @@ export default function ManufacturingWorkspace({
       }
       navTitle={tr("ماژول‌های MES", "MES Modules")}
       navIcon="🏭"
-      navItems={TABS.map((tItem) => {
-        const allowed = canMfgAccess(mfgUserId, tItem.permission, plantId);
-        return {
-          id: tItem.id,
-          label: fa ? tItem.fa : tItem.en,
-          trailing: (
-            <span
-              className={`h-2 w-2 shrink-0 rounded-full ${allowed ? "bg-emerald-400" : "bg-amber-400"}`}
-              title={allowed ? tr("مجوز فعال", "Permitted") : tr(`نیازمند ${tItem.permission}`, `Requires ${tItem.permission}`)}
-            />
-          ),
-        };
-      })}
+      navItems={TABS.map((tItem) => ({
+        id: tItem.id,
+        label: fa ? tItem.fa : tItem.en,
+      }))}
       activeId={tab}
       onSelect={(nextTab) => {
         setTab(nextTab);
