@@ -15,6 +15,8 @@
 import { MANUFACTURING_TABLES } from "./manufacturingSchema";
 import { CMMS_EXTENSION_TABLES, CMMS_FOUNDATION_TABLES, CMMS_TABLES } from "./cmmsSchema";
 import { IIOT_TABLES } from "./iiotSchema";
+import { HRM_ENTERPRISE_TABLES } from "./hrmEnterpriseSchema";
+import { EDMS_ENTERPRISE_TABLES } from "./edmsEnterpriseSchema";
 
 export const PERSISTENCE_VERSION = "sql-v1";
 
@@ -5341,6 +5343,14 @@ export const SCHEMA: TableDef[] = [
    * وجود ندارد؛ یکپارچگی بین‌بخشی با ارجاع نرم و صف `IotIntegrationEvent`
    * انجام می‌شود (آزمون iiot.schema.test.mjs این قید را قفل می‌کند). */
   ...IIOT_TABLES,
+
+  /* HRM — بخش ۶ سازمان: مدیریت جامع منابع انسانی (ISO 30414 + قوانین کار و تأمین اجتماعی).
+   * همهٔ جداول با پیشوند Hrm و بدون کلید خارجی فیزیکی به جداول بیرونی تعریف شده‌اند. */
+  ...HRM_ENTERPRISE_TABLES,
+
+  /* EDMS / KMS — بخش ۷ سازمان: مدیریت اسناد، بایگانی دیجیتال و مدیریت دانش
+   * (ISO 15489 + ISO 30301 + ISO 9001 + ISO 30401). */
+  ...EDMS_ENTERPRISE_TABLES,
 ];
 
 
@@ -6383,6 +6393,26 @@ export const MIGRATIONS: Migration[] = [
   {
     version: "0059", name: "iiot_field_monitoring_das_telemetry",
     statements: IIOT_TABLES.flatMap((table) => [
+      tableDdl(table, "mssql"),
+      ...(table.indexes ?? []).map((index) => indexDdl(table, index, "mssql")),
+    ]),
+  },
+
+  /* بخش ۶ — مدیریت جامع منابع انسانی (HRM — ISO 30414 & Labor Law / Social Security).
+   * ۱۷ جدول با پیشوند Hrm و module = "hrm"، کاملاً افزودنی و مستقل از جداول بیرونی. */
+  {
+    version: "0060", name: "hrm_enterprise_workforce_payroll_training_performance",
+    statements: HRM_ENTERPRISE_TABLES.flatMap((table) => [
+      tableDdl(table, "mssql"),
+      ...(table.indexes ?? []).map((index) => indexDdl(table, index, "mssql")),
+    ]),
+  },
+
+  /* بخش ۷ — مدیریت اسناد، بایگانی دیجیتال و مدیریت دانش (EDMS / KMS — ISO 15489 / 30301 / 9001).
+   * ۱۰ جدول با پیشوند Edms / Kms و module = "edms"، کاملاً افزودنی و مستقل از جداول بیرونی. */
+  {
+    version: "0061", name: "edms_kms_document_control_archive_knowledge_base",
+    statements: EDMS_ENTERPRISE_TABLES.flatMap((table) => [
       tableDdl(table, "mssql"),
       ...(table.indexes ?? []).map((index) => indexDdl(table, index, "mssql")),
     ]),
