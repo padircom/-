@@ -173,7 +173,10 @@ export default function ModuleWorkspaceShell<T extends string>({
 
         <ModuleIconTile accent={accent}>{icon}</ModuleIconTile>
 
-        <div className="min-w-0 flex-1">
+        {/* بلوک عنوان حداقل عرض خوانا دارد؛ اگر انتخاب‌گرهای ماژول (مثل IIoT)
+            جا را تنگ کنند، به‌جای له‌شدن عنوان و کلمه‌کلمه‌شدن متن، کل بخش
+            اکشن‌ها به خط بعد می‌رود و عنوان با ellipsis کوتاه می‌شود. */}
+        <div className="min-w-60 flex-1">
           <nav aria-label={fa ? "مسیر" : "Breadcrumb"} className="flex flex-wrap items-center gap-1 text-[9px] font-extralight tx3">
             {onBack ? (
               <button type="button" onClick={onBack} className="hover:tx1 transition">{homeLabel}</button>
@@ -194,7 +197,7 @@ export default function ModuleWorkspaceShell<T extends string>({
         </div>
 
         {(badges || actions) && (
-          <div className="flex min-w-0 max-w-full flex-wrap items-center justify-end gap-2 text-end">
+          <div className="ms-auto flex min-w-0 max-w-full flex-wrap items-center justify-end gap-2 text-end [&_input]:max-w-52 [&_select]:max-w-52">
             {badges}
             {actions}
           </div>
