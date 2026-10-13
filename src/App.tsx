@@ -311,6 +311,12 @@ export default function App() {
                 lang={lang}
                 initialTab={activeSystemView.tab}
                 onTabChange={(nextTab) => setActiveSystemView({ system: "mes", tab: nextTab })}
+                onEnterStandalone={() => {
+                  const url = new URL(window.location.href);
+                  url.searchParams.set("app", "mes");
+                  window.history.pushState({}, "", url.toString());
+                  setStandaloneMes(true);
+                }}
                 onExit={() => setActiveSystemView({ system: "pmis" })}
               />
             </Suspense>

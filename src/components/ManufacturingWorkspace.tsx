@@ -72,6 +72,14 @@ export interface ManufacturingWorkspaceProps {
   standalone?: boolean;
   onExitStandalone?: () => void;
   /**
+   * ورود به حالت مستقل از داخل اپ میزبان، بدون بازکردن تب جدید — چون
+   * پنجرهٔ تازه (`target=_blank`) داخل آی‌فریم پیش‌نمایش مسدود می‌شود و
+   * دکمه عملاً کار نمی‌کرد. میزبان با این کال‌بک همان نمای تمام‌صفحه را
+   * در همین تب فعال می‌کند؛ اگر داده نشود، دکمه با بارگذاری `?app=mes`
+   * در همین تب همان کار را می‌کند.
+   */
+  onEnterStandalone?: () => void;
+  /**
    * خروج به نمای اصلی اپ میزبان (حالت غیر-standalone). وقتی این مقدار بده شود
    * دکمهٔ «بازگشت به نمای اصلی» در سربرگ پوستهٔ ماژول رندر می‌شود — همان
    * رفتار CMMS/SCM/IIoT و ModuleDetail. قبل از این، MES داخل اپ اصلی هیچ
@@ -107,6 +115,7 @@ export default function ManufacturingWorkspace({
   onTabChange,
   standalone = false,
   onExitStandalone,
+  onEnterStandalone,
   onExit,
 }: ManufacturingWorkspaceProps) {
   const { user: authUser } = useAuth();
@@ -1771,7 +1780,15 @@ export default function ManufacturingWorkspace({
               target="_blank"
               rel="noreferrer"
               className={btnCls}
-              title={tr("باز کردن در پنجرهٔ کاملاً مستقل MES", "Open in standalone MES window")}
+              title={tr("باز کردن نمای کاملاً مستقل MES (در پیش‌نمایش: همین تب؛ با Ctrl/⌘+کلیک: تب جدید)", "Open the standalone MES view (in preview: same tab; Ctrl/⌘+click: new tab)")}
+              onClick={(event) => {
+                /* تب جدید داخل آی‌فریم پیش‌نمایش مسدود است؛ کلیک عادی حالت
+                   مستقل را همین‌جا فعال می‌کند و فقط Ctrl/⌘+کلیک تب تازه باز می‌کند. */
+                if (event.metaKey || event.ctrlKey) return;
+                event.preventDefault();
+                if (onEnterStandalone) onEnterStandalone();
+                else window.location.assign("?app=mes");
+              }}
             >
               {tr("پنجرهٔ مستقل MES ↗", "Standalone MES ↗")}
             </a>
