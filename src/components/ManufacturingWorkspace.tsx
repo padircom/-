@@ -2403,15 +2403,15 @@ export default function ManufacturingWorkspace({
           <section className="glass-dark rounded-xl p-3 space-y-2.5">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex flex-wrap items-center gap-2 text-xs">
-                <strong className="tx1">{tr("موتور زمان‌بندی ظرفیت محدود (Finite Capacity Scheduler):", "Finite Capacity Scheduler:")}</strong>
+                <strong className="tx1">{tr("موتور زمان‌بندی ظرفیت محدود:", "Finite Capacity Scheduler:")}</strong>
                 <select
                   aria-label="Direction"
                   className="rounded border b-line-soft bg-[var(--row)] px-2 py-1 text-xs tx1"
                   value={scheduleForm.Direction}
                   onChange={(e) => setScheduleForm((f) => ({ ...f, Direction: e.target.value as "forward" | "backward" }))}
                 >
-                  <option value="forward">forward (رو به جلو)</option>
-                  <option value="backward">backward (رو به عقب از DueAt)</option>
+                  <option value="forward">{tr("رو به جلو", "Forward")}</option>
+                  <option value="backward">{tr("رو به عقب از سررسید", "Backward from due date")}</option>
                 </select>
                 <select
                   aria-label="CapacityMode"
@@ -2419,8 +2419,8 @@ export default function ManufacturingWorkspace({
                   value={scheduleForm.CapacityMode}
                   onChange={(e) => setScheduleForm((f) => ({ ...f, CapacityMode: e.target.value as "finite" | "semi-finite" }))}
                 >
-                  <option value="finite">finite (ظرفیت محدود بدون هم‌پوشانی)</option>
-                  <option value="semi-finite">semi-finite (ثبت اضافه‌بار)</option>
+                  <option value="finite">{tr("ظرفیت محدود، بدون هم‌پوشانی", "Finite, no overlap")}</option>
+                  <option value="semi-finite">{tr("ظرفیت نیمه‌محدود، ثبت اضافه‌بار", "Semi-finite, record overload")}</option>
                 </select>
                 <select
                   aria-label="DispatchRule"
@@ -2428,22 +2428,22 @@ export default function ManufacturingWorkspace({
                   value={scheduleForm.DispatchRule}
                   onChange={(e) => setScheduleForm((f) => ({ ...f, DispatchRule: e.target.value as DispatchRule }))}
                 >
-                  <option value="WSPT">WSPT (نسبت DispatchWeight به زمان)</option>
-                  <option value="EDD">EDD (زودترین سررسید)</option>
-                  <option value="SPT">SPT (کوتاه‌ترین زمان پردازش)</option>
-                  <option value="CR">CR (نسبت بحرانی)</option>
-                  <option value="FIFO">FIFO (نوبت ورود)</option>
-                  <option value="MANUAL">MANUAL (رتبهٔ دستی)</option>
+                  <option value="WSPT">{tr("نسبت وزن اعزام به زمان پردازش", "Weighted shortest processing time")}</option>
+                  <option value="EDD">{tr("زودترین سررسید", "Earliest due date")}</option>
+                  <option value="SPT">{tr("کوتاه‌ترین زمان پردازش", "Shortest processing time")}</option>
+                  <option value="CR">{tr("نسبت بحرانی", "Critical ratio")}</option>
+                  <option value="FIFO">{tr("نوبت ورود", "First in, first out")}</option>
+                  <option value="MANUAL">{tr("رتبهٔ دستی", "Manual rank")}</option>
                 </select>
                 {canMfgAccess(mfgUserId, "mfg.schedule.run", plantId) && (
                   <button className={btnCls} disabled={busy} onClick={() => void handleRunSchedule()}>
-                    {tr("اجرای زمان‌بندی جدید (POST /scheduling/runs)", "Run Schedule")}
+                    {tr("اجرای زمان‌بندی جدید", "Run New Schedule")}
                   </button>
                 )}
               </div>
-              <div className="flex items-center gap-2 text-xs" dir="ltr">
+              <div className="flex items-center gap-2 text-xs">
                 <span className="rounded bg-sky-500/15 border border-sky-500/40 px-2 py-0.5 text-sky-200 font-semibold">
-                  ScheduleVersion: v{gantt?.scheduleVersion ?? lastScheduleResult?.ScheduleVersion ?? 0}
+                  {tr("نسخهٔ زمان‌بندی:", "Schedule version:")} <span dir="ltr">v{gantt?.scheduleVersion ?? lastScheduleResult?.ScheduleVersion ?? 0}</span>
                 </span>
               </div>
             </div>
@@ -2451,7 +2451,7 @@ export default function ManufacturingWorkspace({
             {/* فیلترهای گانت، سطل ظرفیت و آستانهٔ گلوگاه */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-2 pt-2 border-t b-line-soft text-xs">
               <div>
-                <label className="tx3 block mb-1">{tr("فیلتر مرکز کاری (workCenterId)", "Filter Work Center")}</label>
+                <label className="tx3 block mb-1">{tr("فیلتر مرکز کاری", "Filter Work Center")}</label>
                 <select
                   className={inputCls}
                   value={schedFilterWorkCenterId}
@@ -2466,7 +2466,7 @@ export default function ManufacturingWorkspace({
                 </select>
               </div>
               <div>
-                <label className="tx3 block mb-1">{tr("فیلتر سفارش تولید (orderId)", "Filter Order")}</label>
+                <label className="tx3 block mb-1">{tr("فیلتر سفارش تولید", "Filter Order")}</label>
                 <select
                   className={inputCls}
                   value={schedFilterOrderId}
@@ -2481,14 +2481,14 @@ export default function ManufacturingWorkspace({
                 </select>
               </div>
               <div>
-                <label className="tx3 block mb-1">{tr("سطل گزارش ظرفیت (bucket)", "Capacity Bucket")}</label>
+                <label className="tx3 block mb-1">{tr("سطل گزارش ظرفیت", "Capacity Bucket")}</label>
                 <select
                   className={inputCls}
                   value={capacityBucketMode}
                   onChange={(e) => setCapacityBucketMode(e.target.value as "day" | "week")}
                 >
-                  <option value="day">{tr("روزانه (day)", "Daily (day)")}</option>
-                  <option value="week">{tr("هفتگی (week)", "Weekly (week)")}</option>
+                  <option value="day">{tr("روزانه", "Daily")}</option>
+                  <option value="week">{tr("هفتگی", "Weekly")}</option>
                 </select>
               </div>
               <div>
@@ -2510,9 +2510,9 @@ export default function ManufacturingWorkspace({
             {/* گانت خطوط مراکز کاری همراه با نوار زمانی نسبی و انتخاب عملیات برای باززمان‌بندی */}
             <section className="glass-dark rounded-xl p-3 space-y-2.5">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <h4 className="tx1 font-semibold">{tr("نمای گانت مراکز کاری و قطعات چندتکه (GET /scheduling/gantt)", "Work Center Gantt Lanes")}</h4>
+                <h4 className="tx1 font-semibold">{tr("نمای گانت مراکز کاری و قطعات چندتکه", "Work Center Gantt")}</h4>
                 <span className="tx3 text-[11px]">
-                  {tr("شکست خودکار روی استراحت صریح (BreakStartMinuteOfDay) و توقف‌ها", "Splits across explicit breaks & downtime")}
+                  {tr("شکست خودکار روی زمان‌های استراحت و توقف‌ها", "Splits across explicit breaks & downtime")}
                 </span>
               </div>
               {!gantt?.lanes?.length ? (
@@ -2530,8 +2530,9 @@ export default function ManufacturingWorkspace({
                             {lane.workCenter.Code} — {lane.workCenter.NameFa}
                             <span className="tx3 mx-1.5 text-[11px]">({lane.workCenter.Kind})</span>
                           </span>
-                          <span className="tx3" dir="ltr">
-                            TZ: {lane.workCenter.TimeZoneId} · Cap: {lane.workCenter.NominalCapacityMinutesPerDay}m/d · Eff: {lane.workCenter.EfficiencyPct}%
+                          <span className="tx3">
+                            {tr("منطقهٔ زمانی:", "Time zone:")} <span dir="ltr">{lane.workCenter.TimeZoneId}</span> · {tr("ظرفیت روزانه:", "Daily capacity:")}{" "}
+                            {lane.workCenter.NominalCapacityMinutesPerDay} {tr("دقیقه", "min")} · {tr("بازده:", "Efficiency:")} {lane.workCenter.EfficiencyPct}٪
                           </span>
                         </div>
                         <div className="space-y-1.5">
@@ -2568,7 +2569,7 @@ export default function ManufacturingWorkspace({
                                     )}
                                     <strong>{seg.OrderNo}</strong> · #{seg.SequenceNo} {seg.OperationCode}
                                     <span className="rounded bg-black/30 px-1.5 py-0.5 text-[10px]">
-                                      Seg #{seg.SegmentNo}
+                                      {tr("قطعهٔ", "Segment")} {seg.SegmentNo}
                                     </span>
                                     <span
                                       className={`rounded px-1.5 py-0.5 text-[10px] ${
@@ -2577,11 +2578,11 @@ export default function ManufacturingWorkspace({
                                           : "bg-sky-500/20 text-sky-200"
                                       }`}
                                     >
-                                      {seg.Status}
+                                      {seg.Status === "firm" ? tr("قطعی", "Firm") : tr("برنامه‌ای", "Planned")}
                                     </span>
                                   </label>
                                   <span className="text-[11px]">
-                                    {seg.PlannedStartAt.slice(0, 16).replace("T", " ")} → {seg.PlannedEndAt.slice(0, 16).replace("T", " ")} ({seg.PlannedCapacityMinutes}m · {seg.DispatchRule})
+                                    {seg.PlannedStartAt.slice(0, 16).replace("T", " ")} → {seg.PlannedEndAt.slice(0, 16).replace("T", " ")} ({seg.PlannedCapacityMinutes} {tr("دقیقه", "min")} · {seg.DispatchRule === "WSPT" ? tr("نسبت وزن به زمان", "Weighted SPT") : seg.DispatchRule === "EDD" ? tr("زودترین سررسید", "Earliest due date") : seg.DispatchRule === "SPT" ? tr("کوتاه‌ترین زمان", "Shortest time") : seg.DispatchRule === "CR" ? tr("نسبت بحرانی", "Critical ratio") : seg.DispatchRule === "FIFO" ? tr("نوبت ورود", "First in, first out") : tr("رتبهٔ دستی", "Manual rank")})
                                   </span>
                                 </div>
                                 {/* نوار موقعیت زمانی در پنجره */}
@@ -2604,7 +2605,7 @@ export default function ManufacturingWorkspace({
 
             {/* بار ظرفیت و گلوگاه‌ها */}
             <section className="glass-dark rounded-xl p-3 space-y-2.5">
-              <h4 className="tx1 font-semibold">{tr("بار ظرفیت و گلوگاه‌ها (GET /capacity/load & bottlenecks)", "Capacity Load & Bottlenecks")}</h4>
+              <h4 className="tx1 font-semibold">{tr("بار ظرفیت و گلوگاه‌ها", "Capacity Load & Bottlenecks")}</h4>
               <div className="space-y-1.5 max-h-64 overflow-y-auto">
                 {capacityBuckets.map((b, i) => {
                   const util = b.UtilizationPct ?? 0;
@@ -2618,7 +2619,7 @@ export default function ManufacturingWorkspace({
                           <strong>{wcName}</strong> · {b.PeriodStart.slice(0, 10)}
                         </span>
                         <span>
-                          Load: <strong>{b.PlannedLoadMinutes}</strong> / Avail: {b.AvailableMinutes}m ({util}%)
+                          {tr("بار:", "Load:")} <strong>{b.PlannedLoadMinutes}</strong> / {tr("ظرفیت در دسترس:", "Available:")} {b.AvailableMinutes} {tr("دقیقه", "min")} ({util}٪)
                         </span>
                       </div>
                       <div className="h-1.5 w-full rounded bg-black/30 overflow-hidden">
@@ -2638,7 +2639,7 @@ export default function ManufacturingWorkspace({
                     return (
                       <div key={idx} className="flex justify-between" dir="ltr">
                         <span>{wcName} · {bn.PeriodStart.slice(0, 10)}</span>
-                        <span>Util: {bn.UtilizationPct}% · Overload: {bn.OverloadMinutes}m</span>
+                        <span>{tr("بهره‌وری:", "Utilization:")} {bn.UtilizationPct}٪ · {tr("اضافه‌بار:", "Overload:")} {bn.OverloadMinutes} {tr("دقیقه", "min")}</span>
                       </div>
                     );
                   })}
@@ -2656,12 +2657,12 @@ export default function ManufacturingWorkspace({
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h4 className="tx1 font-semibold">
                 {tr(
-                  "باززمان‌بندی انتخابی عملیات و زنجیرهٔ پس‌نیاز با حفظ بلوک‌های Firm (POST /scheduling/reschedules)",
+                  "باززمان‌بندی انتخابی عملیات و زنجیرهٔ پس‌نیاز با حفظ بلوک‌های قطعی",
                   "Selective Operation Rescheduling & Schedule Diff",
                 )}
               </h4>
-              <span className="tx3 text-xs" dir="ltr">
-                ExpectedScheduleVersion: v{gantt?.scheduleVersion ?? lastScheduleResult?.ScheduleVersion ?? 0} · Selected: {selectedRescheduleOpIds.length}
+              <span className="tx3 text-xs">
+                {tr("نسخهٔ مورد انتظار زمان‌بندی:", "Expected schedule version:")} <span dir="ltr">v{gantt?.scheduleVersion ?? lastScheduleResult?.ScheduleVersion ?? 0}</span> · {tr("انتخاب‌شده:", "Selected:")} {selectedRescheduleOpIds.length}
               </span>
             </div>
 
@@ -2680,7 +2681,7 @@ export default function ManufacturingWorkspace({
                     >
                       <span dir="ltr">
                         {checked ? "☑ " : "☐ "}
-                        {op.OrderNo ?? op.ProductionOrderId} · #{op.SequenceNo} {op.OperationCode} ({op.Status})
+                        {op.OrderNo ?? op.ProductionOrderId} · #{op.SequenceNo} {op.OperationCode} ({op.Status === "pending" ? tr("در انتظار", "pending") : op.Status === "queued" ? tr("در صف", "queued") : tr("آمادهٔ اعزام", "ready")})
                       </span>
                     </button>
                   );
@@ -2690,7 +2691,7 @@ export default function ManufacturingWorkspace({
             {canMfgAccess(mfgUserId, "mfg.schedule.resequence", plantId) && (
               <form onSubmit={handleRescheduleSelected} className="grid grid-cols-1 md:grid-cols-4 gap-2 items-end">
                 <div className="md:col-span-2">
-                  <label className="tx3 text-xs block mb-1">{tr("علت باززمان‌بندی (Reason)", "Reschedule Reason")}</label>
+                  <label className="tx3 text-xs block mb-1">{tr("علت باززمان‌بندی", "Reschedule Reason")}</label>
                   <input
                     className={inputCls}
                     value={rescheduleReason}
@@ -2699,22 +2700,22 @@ export default function ManufacturingWorkspace({
                   />
                 </div>
                 <div>
-                  <label className="tx3 text-xs block mb-1">{tr("قاعدهٔ اعزام جدید (DispatchRule)", "New DispatchRule")}</label>
+                  <label className="tx3 text-xs block mb-1">{tr("قاعدهٔ اعزام جدید", "New Dispatch Rule")}</label>
                   <select
                     className={inputCls}
                     value={rescheduleDispatchRule}
                     onChange={(e) => setRescheduleDispatchRule(e.target.value as DispatchRule)}
                   >
-                    <option value="WSPT">WSPT</option>
-                    <option value="EDD">EDD</option>
-                    <option value="SPT">SPT</option>
-                    <option value="CR">CR</option>
-                    <option value="FIFO">FIFO</option>
-                    <option value="MANUAL">MANUAL</option>
+                    <option value="WSPT">{tr("نسبت وزن اعزام به زمان پردازش", "Weighted shortest processing time")}</option>
+                    <option value="EDD">{tr("زودترین سررسید", "Earliest due date")}</option>
+                    <option value="SPT">{tr("کوتاه‌ترین زمان پردازش", "Shortest processing time")}</option>
+                    <option value="CR">{tr("نسبت بحرانی", "Critical ratio")}</option>
+                    <option value="FIFO">{tr("نوبت ورود", "First in, first out")}</option>
+                    <option value="MANUAL">{tr("رتبهٔ دستی", "Manual rank")}</option>
                   </select>
                 </div>
                 <button type="submit" className={btnCls} disabled={busy || !selectedRescheduleOpIds.length}>
-                  {tr("اجرای باززمان‌بندی انتخابی (Reschedule)", "Run Selective Reschedule")}
+                  {tr("اجرای باززمان‌بندی انتخابی", "Run Selective Reschedule")}
                 </button>
               </form>
             )}
@@ -2723,15 +2724,15 @@ export default function ManufacturingWorkspace({
               <div className="rounded-lg border border-sky-500/40 bg-sky-500/10 p-2.5 text-xs tx2 space-y-1.5" dir="ltr">
                 <div className="flex flex-wrap justify-between font-semibold text-sky-200">
                   <span>
-                    Schedule Diff: v{lastRescheduleResult.diff.fromScheduleVersion} → v{lastRescheduleResult.diff.toScheduleVersion}
+                    {tr("گزارش تغییرات زمان‌بندی:", "Schedule changes:")} <span dir="ltr">v{lastRescheduleResult.diff.fromScheduleVersion} → v{lastRescheduleResult.diff.toScheduleVersion}</span>
                   </span>
                   <span>
-                    Changed Ops: {lastRescheduleResult.diff.changedOperationCount} · Moved: {lastRescheduleResult.diff.movedCount} · Unchanged (Firm/Frozen): {lastRescheduleResult.diff.unchangedOperationCount}
+                    {tr("عملیات تغییریافته:", "Changed operations:")} {lastRescheduleResult.diff.changedOperationCount} · {tr("جابه‌جاشده:", "Moved:")} {lastRescheduleResult.diff.movedCount} · {tr("بدون تغییر (قطعی/قفل‌شده):", "Unchanged (firm/frozen):")} {lastRescheduleResult.diff.unchangedOperationCount}
                   </span>
                 </div>
                 {(lastRescheduleResult.diff.changedOperations ?? []).map((ch: any, idx: number) => (
                   <div key={idx} className="rounded bg-black/25 px-2 py-1 flex flex-wrap justify-between gap-2">
-                    <span>Op: <strong>{ch.operationId}</strong> ({ch.changeType ?? "rescheduled"})</span>
+                    <span>{tr("عملیات:", "Operation:")} <strong>{ch.operationId}</strong> ({ch.changeType ?? tr("باززمان‌بندی‌شده", "rescheduled")})</span>
                     <span>
                       {ch.previousStartAt ? `${ch.previousStartAt.slice(0, 16).replace("T", " ")} → ` : ""}
                       <strong>{ch.newStartAt?.slice(0, 16).replace("T", " ") ?? "—"}</strong> .. <strong>{ch.newEndAt?.slice(0, 16).replace("T", " ") ?? "—"}</strong>
