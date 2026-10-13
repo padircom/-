@@ -1651,26 +1651,39 @@ export interface MesSectionProps {
   onChanged: () => void;
 }
 
-export function MesEngineeringCrudSection(props: MesSectionProps) {
+export type MesEngineeringSectionId = "industry" | "parts" | "bom" | "routings" | "workcenters";
+
+export function MesEngineeringCrudSection(props: MesSectionProps & { section?: MesEngineeringSectionId }) {
   const t = (faText: string, enText: string) => (props.fa ? faText : enText);
+  /* بدون `section` همهٔ بخش‌ها (رفتار قبلی)؛ با آن فقط همان زیرتب فعال
+   * رندر می‌شود تا صفحهٔ مهندسی ساخت اسکرول طولانی نداشته باشد. */
+  const show = (id: MesEngineeringSectionId) => !props.section || props.section === id;
   return (
     <div className="space-y-3">
-      <MesIndustrySettingsPanel fa={props.fa} plantId={props.plantId} userId={props.userId} />
-      <Section title={t("قطعات", "Parts")} hint={t("ثبت، ویرایش و فعال/غیرفعال‌سازی قطعه", "Create, edit and activate/deactivate parts")}>
-        <MesPartsPanel {...props} />
-      </Section>
-      <Section title={t("BOM (فهرست مواد)", "Bills of material")} hint={t("BOM پیش‌نویس قابل ویرایش و حذف ردیف است؛ آزادسازی آن را قفل می‌کند", "Draft BOMs are editable; release locks them")}>
-        <MesBomHeadersPanel {...props} />
-        <MesBomItemsPanel {...props} />
-      </Section>
-      <Section title={t("مسیرهای ساخت", "Routings")} hint={t("عملیات مسیر پیش‌نویس را می‌توان افزود، ویرایش و حذف کرد", "Draft routing operations can be added, edited and deleted")}>
-        <MesRoutingsPanel {...props} />
-        <MesRoutingOperationsPanel {...props} />
-      </Section>
-      <Section title={t("مراکز کاری و منابع", "Work centers & resources")} hint={t("ظرفیت و وضعیت خطوط تولید", "Capacity and status of production lines")}>
-        <MesWorkCentersPanel {...props} />
-        <MesResourcesPanel {...props} />
-      </Section>
+      {show("industry") && <MesIndustrySettingsPanel fa={props.fa} plantId={props.plantId} userId={props.userId} />}
+      {show("parts") && (
+        <Section title={t("قطعات", "Parts")} hint={t("ثبت، ویرایش و فعال/غیرفعال‌سازی قطعه", "Create, edit and activate/deactivate parts")}>
+          <MesPartsPanel {...props} />
+        </Section>
+      )}
+      {show("bom") && (
+        <Section title={t("BOM (فهرست مواد)", "Bills of material")} hint={t("BOM پیش‌نویس قابل ویرایش و حذف ردیف است؛ آزادسازی آن را قفل می‌کند", "Draft BOMs are editable; release locks them")}>
+          <MesBomHeadersPanel {...props} />
+          <MesBomItemsPanel {...props} />
+        </Section>
+      )}
+      {show("routings") && (
+        <Section title={t("مسیرهای ساخت", "Routings")} hint={t("عملیات مسیر پیش‌نویس را می‌توان افزود، ویرایش و حذف کرد", "Draft routing operations can be added, edited and deleted")}>
+          <MesRoutingsPanel {...props} />
+          <MesRoutingOperationsPanel {...props} />
+        </Section>
+      )}
+      {show("workcenters") && (
+        <Section title={t("مراکز کاری و منابع", "Work centers & resources")} hint={t("ظرفیت و وضعیت خطوط تولید", "Capacity and status of production lines")}>
+          <MesWorkCentersPanel {...props} />
+          <MesResourcesPanel {...props} />
+        </Section>
+      )}
     </div>
   );
 }
@@ -1684,20 +1697,32 @@ export function MesOrdersCrudSection(props: MesSectionProps) {
   );
 }
 
-export function MesPlanningCrudSection(props: MesSectionProps) {
+export type MesPlanningSectionId = "demand" | "lotsize" | "planned" | "none";
+
+export function MesPlanningCrudSection(props: MesSectionProps & { section?: MesPlanningSectionId }) {
   const t = (faText: string, enText: string) => (props.fa ? faText : enText);
+  /* هر بخش CRUD فقط در زیرتب هم‌نام خودش در برنامه‌ریزی پیشرفته می‌آید؛
+   * در بقیهٔ زیرتب‌ها چیزی رندر نمی‌شود تا بالای صفحه بی‌دلیل بلند نشود. */
+  const show = (id: MesPlanningSectionId) => !props.section || props.section === id;
+  if (props.section === "none") return null;
   return (
     <div className="space-y-3">
-      <Section title={t("تقاضا و پیش‌بینی", "Demand & forecast")} hint={t("ردیف‌های پیش‌نویس مصرف‌نشده حذف می‌شوند؛ بقیه لغو می‌شوند", "Unused drafts can be deleted; others are cancelled")}>
-        <MesDemandPanel {...props} />
-      </Section>
-      <Section title={t("لات‌سایزینگ و نسخه‌های تولید", "Lot sizing & production versions")}>
-        <MesLotSizingPanel {...props} />
-        <MesProductionVersionsPanel {...props} />
-      </Section>
-      <Section title={t("سفارش‌های برنامه‌ریزی‌شده", "Planned orders")} hint={t("تأیید، رد و تبدیل به سفارش تولید", "Approve, reject and convert to production orders")}>
-        <MesPlannedOrdersPanel {...props} />
-      </Section>
+      {show("demand") && (
+        <Section title={t("تقاضا و پیش‌بینی", "Demand & forecast")} hint={t("ردیف‌های پیش‌نویس مصرف‌نشده حذف می‌شوند؛ بقیه لغو می‌شوند", "Unused drafts can be deleted; others are cancelled")}>
+          <MesDemandPanel {...props} />
+        </Section>
+      )}
+      {show("lotsize") && (
+        <Section title={t("لات‌سایزینگ و نسخه‌های تولید", "Lot sizing & production versions")}>
+          <MesLotSizingPanel {...props} />
+          <MesProductionVersionsPanel {...props} />
+        </Section>
+      )}
+      {show("planned") && (
+        <Section title={t("سفارش‌های برنامه‌ریزی‌شده", "Planned orders")} hint={t("تأیید، رد و تبدیل به سفارش تولید", "Approve, reject and convert to production orders")}>
+          <MesPlannedOrdersPanel {...props} />
+        </Section>
+      )}
     </div>
   );
 }

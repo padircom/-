@@ -52,6 +52,7 @@ import {
   MesMrpCrudSection,
   MesOrdersCrudSection,
   MesPlanningCrudSection,
+  type MesEngineeringSectionId,
 } from "./MesCrudPanels";
 
 export type MfgTab =
@@ -230,6 +231,9 @@ export default function ManufacturingWorkspace({
     NoteFa: "تکمیل عملیات و تحویل به ایستگاه بعدی",
   });
   const [execEventSubTab, setExecEventSubTab] = useState<"downtime" | "scrap" | "rework">("downtime");
+  /* زیرتب‌های مهندسی ساخت: هر لحظه فقط یک بخش دیده می‌شود تا صفحه اسکرول
+   * طولانی نداشته باشد (همان الگوی زیرتب‌های برنامه‌ریزی پیشرفته). */
+  const [engSubTab, setEngSubTab] = useState<MesEngineeringSectionId>("industry");
   const [downtimeForm, setDowntimeForm] = useState({
     WorkCenterId: "",
     DowntimeType: "unplanned" as "planned" | "unplanned",
@@ -366,6 +370,13 @@ export default function ManufacturingWorkspace({
       aliveRef.current = false;
     };
   }, []);
+
+  /* با عوض‌شدن زیرتب (مهندسی/برنامه‌ریزی) اسکرول پنل به بالا برمی‌گردد تا
+   * کاربر وسط صفحهٔ قبلی جا نماند. */
+  const contentRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    contentRef.current?.closest(".thin-scroll")?.scrollTo({ top: 0 });
+  }, [engSubTab, planSubTab, tab]);
 
   useEffect(() => {
     setTab(initialTab);
@@ -1811,7 +1822,7 @@ export default function ManufacturingWorkspace({
         return activeTab ? (fa ? activeTab.fa : activeTab.en) : undefined;
       })()}
     >
-      <div className="flex flex-col gap-3">
+      <div ref={contentRef} className="flex flex-col gap-3">
       {/* ── وضعیت نقش فعال و بازهٔ زمانی ── */}
       <div className="glass rounded-xl px-3 py-2 flex flex-wrap items-center justify-between gap-2 text-xs tx3">
         <div>
@@ -2054,13 +2065,30 @@ export default function ManufacturingWorkspace({
 
       {/* ══════════════════════ ۲) تب مهندسی ساخت ══════════════════════ */}
       {tab === "engineering" && (
-        <MesEngineeringCrudSection fa={fa} plantId={plantId} userId={mfgUserId} onChanged={() => void loadActiveTab()} />
+        <section className="glass-dark sticky top-0 z-10 rounded-xl p-3 flex flex-wrap items-center gap-2 text-xs">
+          <span className="tx1 font-semibold">{tr("زیربخش مهندسی:", "Engineering area:")}</span>
+          <ModuleTabs
+            ariaLabel={tr("زیربخش‌های مهندسی ساخت", "Manufacturing engineering areas")}
+            items={([
+              ["industry", "نوع صنعت / الگوی تولید", "Industry Type / Production Pattern"],
+              ["parts", "قطعات", "Parts"],
+              ["bom", "ساختار محصول (BOM)", "BOM"],
+              ["routings", "مسیر ساخت", "Routings"],
+              ["workcenters", "مراکز کاری و منابع", "Work Centers & Resources"],
+            ] as const).map(([id, faLabel, enLabel]) => ({ id, label: tr(faLabel, enLabel) }))}
+            activeId={engSubTab}
+            onSelect={setEngSubTab}
+          />
+        </section>
+      )}
+      {tab === "engineering" && (
+        <MesEngineeringCrudSection fa={fa} plantId={plantId} userId={mfgUserId} onChanged={() => void loadActiveTab()} section={engSubTab} />
       )}
       {!loading && tab === "engineering" && (
         <div className="space-y-3">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
             {/* فهرست قطعات + فرم ساخت قطعه با بلوک Planning */}
-            <section className="glass-dark rounded-xl p-3 space-y-3">
+            <section className={`glass-dark rounded-xl p-3 space-y-3 ${engSubTab === "parts" ? "" : "hidden"}`}>
               <h4 className="tx1 font-semibold">{tr("قطعات و محصولات (MfgPart + Planning)", "Parts & Master Planning")}</h4>
               <div className="space-y-1.5 max-h-60 overflow-y-auto">
                 {parts.map((p) => (
@@ -2200,7 +2228,7 @@ export default function ManufacturingWorkspace({
             </section>
 
             {/* مسیر ساخت و عملیات */}
-            <section className="glass-dark rounded-xl p-3 space-y-2">
+            <section className={`glass-dark rounded-xl p-3 space-y-2 ${engSubTab === "routings" ? "" : "hidden"}`}>
               <h4 className="tx1 font-semibold">{tr("مسیر ساخت و توالی عملیات (MfgRouting)", "Routings & Operations")}</h4>
               <div className="flex flex-wrap gap-1.5">
                 {routings.map((r) => (
@@ -3767,7 +3795,21 @@ export default function ManufacturingWorkspace({
 
       {/* ══════════════════════ ۷) تب بهای تمام‌شده و تطبیق مالی ══════════════════════ */}
       {tab === "planning" && (
-        <MesPlanningCrudSection fa={fa} plantId={plantId} userId={mfgUserId} onChanged={() => void loadActiveTab()} />
+        <MesPlanningCrudSection
+          fa={fa}
+          plantId={plantId}
+          userId={mfgUserId}
+          onChanged={() => void loadActiveTab()}
+          section={
+            planSubTab === "demand"
+              ? "demand"
+              : planSubTab === "lotsize" || planSubTab === "version"
+                ? "lotsize"
+                : planSubTab === "planned"
+                  ? "planned"
+                  : "none"
+          }
+        />
       )}
       {!loading && tab === "planning" && (
         <div className="space-y-3">
