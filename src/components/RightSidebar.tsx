@@ -242,14 +242,6 @@ export default function RightSidebar({
     .filter((d) => d.id !== "d7" || can("system.manage"))
     .map((d) => taxonomyOverrides[d.id] ? { ...d, processes: taxonomyOverrides[d.id] } : d);
 
-  /* شمارندهٔ چارچوب از خودِ داده مشتق می‌شود، نه متن ثابت — و فقط همانی را
-   * می‌شمارد که کاربر اجازهٔ دیدنش را دارد تا عدد با فهرست یکی باشد. */
-  const domainCount = visibleDomains.length;
-  const processCount = visibleDomains.reduce((n, d) => n + d.processes.length, 0);
-  const subCount = visibleDomains.reduce(
-    (n, d) => n + d.processes.reduce((m, p) => m + p.subs.length, 0),
-    0,
-  );
   const faDigits = (n: number) => n.toLocaleString("fa-IR", { useGrouping: false });
 
 
@@ -384,15 +376,10 @@ export default function RightSidebar({
     <div className="sidebar-panel">
     <aside dir={rtl ? "rtl" : "ltr"} className="glass-dark flex h-full min-h-0 w-full flex-col rounded-2xl">
       <header className="b-line border-b px-4 pb-3 pt-3.5">
-        {/* لوگوتایپ خلوت بالای جست‌وجو: فقط نشان کوچک + عنوان کوتاه رسمی برند،
-            وسط‌چین و در یک خط. آمار حوزه/فرآیند از نمای اصلی حذف شده (شلوغی
-            بصری) و فقط در tooltip نشان می‌ماند تا اطلاعات از دست نرود. */}
-        <div
-          className="flex items-center justify-center gap-2"
-          title={rtl
-            ? `${faDigits(domainCount)} حوزه · ${faDigits(processCount)} فرآیند · ${faDigits(subCount)} زیرفرآیند`
-            : `${domainCount} Domains · ${processCount} Processes · ${subCount} Sub-processes`}
-        >
+        {/* لوگوتایپ خلوت بالای جست‌وجو: فقط نشان کوچک + نام برند، صرفاً انگلیسی،
+            هم‌تراز با ابتدای سایدبار (نه وسط‌چین) و بدون هیچ tooltip/باکس
+            شناوری روی هاور — آمار حوزه/فرآیند این‌جا نمایش داده نمی‌شود. */}
+        <div className="flex items-center gap-2">
           <span
             aria-hidden="true"
             className="accent-t grid h-6 w-6 shrink-0 select-none place-items-center rounded-[7px] text-[11px] font-bold leading-none"
@@ -400,7 +387,7 @@ export default function RightSidebar({
           >
             A
           </span>
-          <h2 className="whitespace-nowrap text-[12.5px] font-semibold leading-6 tracking-tight tx1">
+          <h2 dir="ltr" className="whitespace-nowrap text-[12.5px] font-semibold leading-6 tracking-tight tx1">
             {t(ui.frameworkTitle, lang)}
           </h2>
         </div>
