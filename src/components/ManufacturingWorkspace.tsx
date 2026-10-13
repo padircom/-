@@ -46,8 +46,7 @@ import {
 } from "../services/manufacturingApi";
 import type { DispatchRule } from "../services/manufacturingModel";
 import ModuleWorkspaceShell, { ModuleTabs, moduleSelectCls } from "./ModuleWorkspaceShell";
-import { WeeklyReportDatePicker } from "./WeeklyReportWorkspace";
-import { toGregorian, toJalaali } from "jalaali-js";
+import { jalaaliMonthLength, toGregorian, toJalaali } from "jalaali-js";
 import {
   MesEngineeringCrudSection,
   MesExecutionCrudSection,
@@ -111,21 +110,50 @@ const TABS: Array<{
 /** رنگ تأکیدی MES (نارنجی گرم). */
 const MES_ACCENT = "#fb923c";
 
-/** تبدیل تاریخ ISO میلادی (مقدار داخلی بازه) به رشتهٔ شمسی برای نمایش و برعکس.
- * مقدار ذخیره‌شده همان ISO میلادی می‌ماند؛ فقط نمایش و انتخاب، شمسی است. */
-function isoDateToJalali(iso: string): string {
-  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso ?? "");
-  if (!match) return "";
-  const converted = toJalaali(Number(match[1]), Number(match[2]), Number(match[3]));
-  return `${converted.jy}/${String(converted.jm).padStart(2, "0")}/${String(converted.jd).padStart(2, "0")}`;
-}
+/** انتخابگر تاریخ شمسی برای بازه‌های زمانی MES: سه فهرست روز/ماه/سال
+ * هم‌رنگ خود صفحه (بدون پنجرهٔ بازشونده). مقدار ردوبدل‌شده با بیرون همان
+ * ISO میلادی است و تبدیل شمسی↔میلادی فقط در همین‌جا انجام می‌شود. */
+const JALALI_MONTH_NAMES: ReadonlyArray<{ fa: string; en: string }> = [
+  { fa: "فروردین", en: "Farvardin" }, { fa: "اردیبهشت", en: "Ordibehesht" },
+  { fa: "خرداد", en: "Khordad" }, { fa: "تیر", en: "Tir" },
+  { fa: "مرداد", en: "Mordad" }, { fa: "شهریور", en: "Shahrivar" },
+  { fa: "مهر", en: "Mehr" }, { fa: "آبان", en: "Aban" },
+  { fa: "آذر", en: "Azar" }, { fa: "دی", en: "Dey" },
+  { fa: "بهمن", en: "Bahman" }, { fa: "اسفند", en: "Esfand" },
+];
 
-function jalaliDateToIso(jalali: string, timePart: string): string {
-  const match = /^(\d{4})\/(\d{1,2})\/(\d{1,2})$/.exec((jalali ?? "").trim());
-  if (!match) return "";
-  const converted = toGregorian(Number(match[1]), Number(match[2]), Number(match[3]));
-  const date = `${converted.gy}-${String(converted.gm).padStart(2, "0")}-${String(converted.gd).padStart(2, "0")}`;
-  return `${date}T${timePart}`;
+function MesJalaliDateSelect({ iso, fa, onChange }: { iso: string; fa: boolean; onChange: (iso: string) => void }) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso ?? "");
+  const today = toJalaali(new Date());
+  const parts = match ? toJalaali(Number(match[1]), Number(match[2]), Number(match[3])) : today;
+  const timePart = iso.slice(11) || "00:00:00.000Z";
+  const digits = (value: number | string) => (fa ? String(value).replace(/[0-9]/g, (d) => "۰۱۲۳۴۵۶۷۸۹"[Number(d)]) : String(value));
+  const selectCls = "rounded border b-line-soft bg-[var(--row)] px-1 py-0.5 text-xs tx1";
+  const commit = (jy: number, jm: number, jd: number) => {
+    const day = Math.min(Math.max(1, jd), jalaaliMonthLength(jy, jm));
+    const g = toGregorian(jy, jm, day);
+    onChange(`${g.gy}-${String(g.gm).padStart(2, "0")}-${String(g.gd).padStart(2, "0")}T${timePart}`);
+  };
+  const years = Array.from({ length: 9 }, (_, i) => parts.jy - 4 + i);
+  return (
+    <div className="flex items-center gap-1" dir="ltr">
+      <select aria-label={fa ? "روز" : "Day"} className={selectCls} value={parts.jd} onChange={(e) => commit(parts.jy, parts.jm, Number(e.target.value))}>
+        {Array.from({ length: jalaaliMonthLength(parts.jy, parts.jm) }, (_, i) => i + 1).map((day) => (
+          <option key={day} value={day}>{digits(day)}</option>
+        ))}
+      </select>
+      <select aria-label={fa ? "ماه" : "Month"} className={selectCls} value={parts.jm} onChange={(e) => commit(parts.jy, Number(e.target.value), parts.jd)}>
+        {JALALI_MONTH_NAMES.map((month, i) => (
+          <option key={month.en} value={i + 1}>{fa ? month.fa : month.en}</option>
+        ))}
+      </select>
+      <select aria-label={fa ? "سال" : "Year"} className={selectCls} value={parts.jy} onChange={(e) => commit(Number(e.target.value), parts.jm, parts.jd)}>
+        {years.map((year) => (
+          <option key={year} value={year}>{digits(year)}</option>
+        ))}
+      </select>
+    </div>
+  );
 }
 
 export default function ManufacturingWorkspace({
@@ -1816,25 +1844,11 @@ export default function ManufacturingWorkspace({
           <span>{tr("بازهٔ زمانی:", "Time window:")}</span>
           <div className="flex items-center gap-1">
             <span>{tr("از", "From")}</span>
-            <WeeklyReportDatePicker
-              value={isoDateToJalali(fromIso)}
-              rtl={fa}
-              onChange={(jalali) => {
-                const iso = jalaliDateToIso(jalali, fromIso.slice(11) || "00:00:00.000Z");
-                if (iso) setFromIso(iso);
-              }}
-            />
+            <MesJalaliDateSelect iso={fromIso} fa={fa} onChange={setFromIso} />
           </div>
           <div className="flex items-center gap-1">
             <span>{tr("تا", "To")}</span>
-            <WeeklyReportDatePicker
-              value={isoDateToJalali(toIso)}
-              rtl={fa}
-              onChange={(jalali) => {
-                const iso = jalaliDateToIso(jalali, toIso.slice(11) || "23:59:59.000Z");
-                if (iso) setToIso(iso);
-              }}
-            />
+            <MesJalaliDateSelect iso={toIso} fa={fa} onChange={setToIso} />
           </div>
         </div>
       </div>
@@ -3371,14 +3385,7 @@ export default function ManufacturingWorkspace({
             <div className="grid grid-cols-1 md:grid-cols-3 gap-2 pt-2 border-t b-line-soft text-xs">
               <div>
                 <label className="tx3 block mb-1">{tr("افق زمانی محاسبهٔ برنامه‌ریزی مواد", "Materials Planning Horizon")}</label>
-                <WeeklyReportDatePicker
-                  value={isoDateToJalali(mrpHorizonIso)}
-                  rtl={fa}
-                  onChange={(jalali) => {
-                    const iso = jalaliDateToIso(jalali, mrpHorizonIso.slice(11) || "23:59:59.000Z");
-                    if (iso) setMrpHorizonIso(iso);
-                  }}
-                />
+                <MesJalaliDateSelect iso={mrpHorizonIso} fa={fa} onChange={setMrpHorizonIso} />
               </div>
               <div>
                 <label className="tx3 block mb-1">{tr("محدودسازی محاسبه به سفارش خاص (اختیاری)", "Target Order (Optional)")}</label>
