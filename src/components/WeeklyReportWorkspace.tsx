@@ -898,7 +898,7 @@ function CoverText({
   );
 }
 
-function WeeklyReportDatePicker({
+export function WeeklyReportDatePicker({
   value,
   rtl,
   onChange,

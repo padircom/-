@@ -46,6 +46,8 @@ import {
 } from "../services/manufacturingApi";
 import type { DispatchRule } from "../services/manufacturingModel";
 import ModuleWorkspaceShell, { ModuleTabs, moduleSelectCls } from "./ModuleWorkspaceShell";
+import { WeeklyReportDatePicker } from "./WeeklyReportWorkspace";
+import { toGregorian, toJalaali } from "jalaali-js";
 import {
   MesEngineeringCrudSection,
   MesExecutionCrudSection,
@@ -108,6 +110,23 @@ const TABS: Array<{
 
 /** رنگ تأکیدی MES (نارنجی گرم). */
 const MES_ACCENT = "#fb923c";
+
+/** تبدیل تاریخ ISO میلادی (مقدار داخلی بازه) به رشتهٔ شمسی برای نمایش و برعکس.
+ * مقدار ذخیره‌شده همان ISO میلادی می‌ماند؛ فقط نمایش و انتخاب، شمسی است. */
+function isoDateToJalali(iso: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso ?? "");
+  if (!match) return "";
+  const converted = toJalaali(Number(match[1]), Number(match[2]), Number(match[3]));
+  return `${converted.jy}/${String(converted.jm).padStart(2, "0")}/${String(converted.jd).padStart(2, "0")}`;
+}
+
+function jalaliDateToIso(jalali: string, timePart: string): string {
+  const match = /^(\d{4})\/(\d{1,2})\/(\d{1,2})$/.exec((jalali ?? "").trim());
+  if (!match) return "";
+  const converted = toGregorian(Number(match[1]), Number(match[2]), Number(match[3]));
+  const date = `${converted.gy}-${String(converted.gm).padStart(2, "0")}-${String(converted.gd).padStart(2, "0")}`;
+  return `${date}T${timePart}`;
+}
 
 export default function ManufacturingWorkspace({
   lang,
@@ -1795,34 +1814,28 @@ export default function ManufacturingWorkspace({
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <span>{tr("بازهٔ زمانی:", "Time window:")}</span>
-          <label className="flex items-center gap-1">
+          <div className="flex items-center gap-1">
             <span>{tr("از", "From")}</span>
-            <input
-              type="date"
-              aria-label={tr("تاریخ شروع بازه", "Window start date")}
-              dir="ltr"
-              className="rounded border b-line-soft bg-[var(--row)] px-2 py-0.5 text-xs tx1 w-40"
-              value={fromIso.slice(0, 10)}
-              onChange={(e) => {
-                if (!e.target.value) return;
-                setFromIso(`${e.target.value}T${fromIso.slice(11) || "00:00:00.000Z"}`);
+            <WeeklyReportDatePicker
+              value={isoDateToJalali(fromIso)}
+              rtl={fa}
+              onChange={(jalali) => {
+                const iso = jalaliDateToIso(jalali, fromIso.slice(11) || "00:00:00.000Z");
+                if (iso) setFromIso(iso);
               }}
             />
-          </label>
-          <label className="flex items-center gap-1">
+          </div>
+          <div className="flex items-center gap-1">
             <span>{tr("تا", "To")}</span>
-            <input
-              type="date"
-              aria-label={tr("تاریخ پایان بازه", "Window end date")}
-              dir="ltr"
-              className="rounded border b-line-soft bg-[var(--row)] px-2 py-0.5 text-xs tx1 w-40"
-              value={toIso.slice(0, 10)}
-              onChange={(e) => {
-                if (!e.target.value) return;
-                setToIso(`${e.target.value}T${toIso.slice(11) || "23:59:59.000Z"}`);
+            <WeeklyReportDatePicker
+              value={isoDateToJalali(toIso)}
+              rtl={fa}
+              onChange={(jalali) => {
+                const iso = jalaliDateToIso(jalali, toIso.slice(11) || "23:59:59.000Z");
+                if (iso) setToIso(iso);
               }}
             />
-          </label>
+          </div>
         </div>
       </div>
 
