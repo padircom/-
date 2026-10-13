@@ -1711,7 +1711,7 @@ export function MesMaterialsPanel({ fa, plantId, userId }: Omit<MesPanelProps, "
   const columns: GridColumnDef<MfgMaterial>[] = [
     { key: "PartNo", header: tr("شمارهٔ قطعه", "Part no."), ltr: true, mono: true, accessor: (row) => row.PartNo ?? "—" },
     { key: "PartNameFa", header: tr("نام", "Name"), accessor: (row) => row.PartNameFa ?? "—" },
-    { key: "ProcurementType", header: tr("تأمین", "Procurement"), filter: "auto" },
+    { key: "ProcurementType", header: tr("نوع تأمین", "Procurement type"), accessor: (row) => row.ProcurementType, render: (row) => (row.ProcurementType === "buy" ? tr("خریدنی", "Purchased") : tr("ساختنی", "Manufactured")), filter: [{ value: "buy", label: tr("خریدنی", "Purchased") }, { value: "make", label: tr("ساختنی", "Manufactured") }] },
     { key: "LeadTimeDays", header: tr("زمان تحویل (روز)", "Lead time (days)"), align: "end", ltr: true },
     { key: "SafetyStockQty", header: tr("موجودی اطمینان", "Safety stock"), align: "end", ltr: true },
     { key: "LotSize", header: tr("اندازهٔ لات", "Lot size"), align: "end", ltr: true },
@@ -1722,7 +1722,7 @@ export function MesMaterialsPanel({ fa, plantId, userId }: Omit<MesPanelProps, "
   return (
     <CrudResource<MfgMaterial>
       fa={fa}
-      caption={tr("مواد و تنظیمات MRP", "Materials & MRP settings")}
+      caption={tr("مواد و تنظیمات برنامه‌ریزی", "Materials & planning settings")}
       rows={rows}
       columns={columns}
       rowKey={(row) => row.Id}
@@ -1833,7 +1833,7 @@ export function MesExecutionCrudSection(props: MesSectionProps) {
 export function MesMrpCrudSection(props: Omit<MesSectionProps, "onChanged">) {
   const t = (faText: string, enText: string) => (props.fa ? faText : enText);
   return (
-    <Section title={t("فهرست مواد و MRP", "Materials & MRP")} hint={t("نمایش فقط‌خواندنی؛ تغییر مواد از مسیر ثبت قطعه انجام می‌شود", "Read-only; material changes go through part registration")}>
+    <Section title={t("فهرست مواد و برنامه‌ریزی نیازمندی‌ها", "Materials & requirements planning")} hint={t("نمایش فقط‌خواندنی؛ تغییر مواد از مسیر ثبت قطعه انجام می‌شود", "Read-only; material changes go through part registration")}>
       <MesMaterialsPanel {...props} />
     </Section>
   );

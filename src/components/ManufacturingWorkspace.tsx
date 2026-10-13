@@ -104,7 +104,7 @@ const TABS: Array<{
   { id: "orders", fa: "سفارش‌های تولید", en: "Production Orders", defaultUser: "u-mfg-plan", permission: "mfg.order.view" },
   { id: "scheduling", fa: "زمان‌بندی ظرفیت، گانت و گلوگاه", en: "Scheduling, Gantt & Capacity", defaultUser: "u-mfg-plan", permission: "mfg.schedule.view" },
   { id: "execution", fa: "اجرای کارگاهی، توقف و ضایعات", en: "Shop-Floor Execution", defaultUser: "u-mfg-supervisor", permission: "mfg.execution.view" },
-  { id: "mrp", fa: "مواد، MRP، کمبود و مصرف", en: "Materials & MRP", defaultUser: "u-mfg-material", permission: "mfg.material.view" },
+  { id: "mrp", fa: "برنامه‌ریزی مواد، کمبود و مصرف", en: "Materials & MRP", defaultUser: "u-mfg-material", permission: "mfg.material.view" },
   { id: "cost", fa: "رول‌آپ هزینه و تطبیق مالی", en: "Cost Roll-up & Reconcile", defaultUser: "u-mfg-cost", permission: "mfg.cost.view" },
 ];
 
@@ -3341,7 +3341,7 @@ export default function ManufacturingWorkspace({
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="text-xs tx1 font-semibold">
                 {tr(
-                  "برنامه‌ریزی نیازمندی‌های مواد (MRP)، مدیریت موجودی/بچ، پیشنهاد تأمین و هشدارهای کمبود",
+                  "برنامه‌ریزی نیازمندی‌های مواد، مدیریت موجودی و بچ، پیشنهاد تأمین و هشدارهای کمبود",
                   "Material Requirements Planning (MRP), Inventory/Lot, Proposals & Alerts",
                 )}
               </div>
@@ -3349,10 +3349,10 @@ export default function ManufacturingWorkspace({
                 {canMfgAccess(mfgUserId, "mfg.mrp.run", plantId) && (
                   <>
                     <button className={btnCls} disabled={busy} onClick={() => void handleRunMrp(true)}>
-                      {tr("اجرای پیش‌نمایش MRP (PreviewOnly)", "Run MRP Preview")}
+                      {tr("اجرای پیش‌نمایش برنامه‌ریزی مواد", "Run Materials Planning Preview")}
                     </button>
                     <button className={btnCls} disabled={busy} onClick={() => void handleRunMrp(false)}>
-                      {tr("محاسبه و ثبت اتمیک MRP + صدور هشدار کمبود", "Commit MRP + Auto Alerts")}
+                      {tr("محاسبه و ثبت نهایی برنامه‌ریزی مواد و صدور هشدار کمبود", "Commit Materials Plan + Auto Alerts")}
                     </button>
                   </>
                 )}
@@ -3370,16 +3370,18 @@ export default function ManufacturingWorkspace({
             {/* پارامترهای افق زمانی MRP، سفارش هدف و یادداشت پیشنهاد تأمین */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-2 pt-2 border-t b-line-soft text-xs">
               <div>
-                <label className="tx3 block mb-1">{tr("افق زمانی محاسبهٔ MRP (ThroughDate)", "MRP Horizon (ThroughDate)")}</label>
-                <input
-                  className={inputCls}
-                  dir="ltr"
-                  value={mrpHorizonIso}
-                  onChange={(e) => setMrpHorizonIso(e.target.value)}
+                <label className="tx3 block mb-1">{tr("افق زمانی محاسبهٔ برنامه‌ریزی مواد", "Materials Planning Horizon")}</label>
+                <WeeklyReportDatePicker
+                  value={isoDateToJalali(mrpHorizonIso)}
+                  rtl={fa}
+                  onChange={(jalali) => {
+                    const iso = jalaliDateToIso(jalali, mrpHorizonIso.slice(11) || "23:59:59.000Z");
+                    if (iso) setMrpHorizonIso(iso);
+                  }}
                 />
               </div>
               <div>
-                <label className="tx3 block mb-1">{tr("محدودسازی MRP به سفارش خاص (اختیاری)", "Target Order (Optional)")}</label>
+                <label className="tx3 block mb-1">{tr("محدودسازی محاسبه به سفارش خاص (اختیاری)", "Target Order (Optional)")}</label>
                 <select
                   className={inputCls}
                   value={mrpTargetOrderId}
@@ -3390,13 +3392,13 @@ export default function ManufacturingWorkspace({
                     .filter((o) => ["released", "in-progress"].includes(o.Status))
                     .map((o) => (
                       <option key={o.Id} value={o.Id}>
-                        {o.OrderNo} ({o.Status} · Qty: {o.OrderQuantity})
+                        {o.OrderNo} ({o.Status === "released" ? tr("آزادشده", "released") : tr("در حال اجرا", "in progress")} · {tr("مقدار:", "Qty:")} {o.OrderQuantity})
                       </option>
                     ))}
                 </select>
               </div>
               <div>
-                <label className="tx3 block mb-1">{tr("یادداشت پیشنهاد تأمین (NoteFa)", "Proposal Note")}</label>
+                <label className="tx3 block mb-1">{tr("یادداشت پیشنهاد تأمین", "Proposal Note")}</label>
                 <input
                   className={inputCls}
                   value={proposalNoteFa}
@@ -3410,7 +3412,7 @@ export default function ManufacturingWorkspace({
             {/* ستون راست: مواد برنامه‌ریزی‌شده، موجودی آزاد انبار و جزئیات بچ/لات */}
             <section className="glass-dark rounded-xl p-3 space-y-2.5">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <h4 className="tx1 font-semibold">{tr("مواد برنامه‌ریزی‌شده و موجودی انبار (GET /materials)", "Planned Materials & Live Inventory")}</h4>
+                <h4 className="tx1 font-semibold">{tr("مواد برنامه‌ریزی‌شده و موجودی انبار", "Planned Materials & Live Inventory")}</h4>
                 <span className="tx3 text-xs">{tr(`${materials.length} ماده`, `${materials.length} materials`)}</span>
               </div>
 
@@ -3418,7 +3420,7 @@ export default function ManufacturingWorkspace({
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
                 <input
                   className={inputCls}
-                  placeholder={tr("جستجوی کد/نام قطعه یا انبار (q)...", "Search PartNo / Name / Warehouse...")}
+                  placeholder={tr("جستجوی کد یا نام قطعه یا انبار...", "Search part code / name / warehouse...")}
                   value={matFilterQuery}
                   onChange={(e) => setMatFilterQuery(e.target.value)}
                 />
@@ -3428,9 +3430,9 @@ export default function ManufacturingWorkspace({
                   value={matFilterProcurement}
                   onChange={(e) => setMatFilterProcurement(e.target.value as "" | "buy" | "make")}
                 >
-                  <option value="">{tr("همهٔ انواع تأمین (buy & make)", "All Procurement Types")}</option>
-                  <option value="buy">buy (خریدنی)</option>
-                  <option value="make">make (ساختنی)</option>
+                  <option value="">{tr("همهٔ انواع تأمین", "All Procurement Types")}</option>
+                  <option value="buy">{tr("خریدنی", "Purchased")}</option>
+                  <option value="make">{tr("ساختنی", "Manufactured")}</option>
                 </select>
               </div>
 
@@ -3441,12 +3443,12 @@ export default function ManufacturingWorkspace({
                       <div>
                         <strong className="tx1" dir="ltr">{m.PartNo ?? m.Id}</strong>
                         {m.PartNameFa && <span> — {m.PartNameFa}</span>}
-                        <span className="mx-1.5 rounded bg-black/30 px-1.5 py-0.5 text-[10px] uppercase" dir="ltr">
-                          {m.ProcurementType}
+                        <span className="mx-1.5 rounded bg-black/30 px-1.5 py-0.5 text-[10px]">
+                          {m.ProcurementType === "buy" ? tr("خریدنی", "Purchased") : tr("ساختنی", "Manufactured")}
                         </span>
                         {m.IsLotTracked && (
                           <span className="rounded bg-amber-500/20 border border-amber-500/40 px-1.5 py-0.5 text-[10px] text-amber-200" dir="ltr">
-                            Lot-Tracked
+                            {tr("ردیابی بچ/لات", "Lot-tracked")}
                           </span>
                         )}
                       </div>
@@ -3459,35 +3461,35 @@ export default function ManufacturingWorkspace({
                       </button>
                     </div>
 
-                    <div className="grid grid-cols-2 md:grid-cols-5 gap-1.5 text-center" dir="ltr">
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-1.5 text-center">
                       <div className="rounded bg-black/25 p-1">
-                        <span className="tx3 text-[10px] block">OnHand</span>
+                        <span className="tx3 text-[10px] block">{tr("موجودی فعلی", "On hand")}</span>
                         <strong>{m.OnHandQty ?? 0} {m.BaseUom ?? ""}</strong>
                       </div>
                       <div className="rounded bg-black/25 p-1">
-                        <span className="tx3 text-[10px] block">Reserved</span>
+                        <span className="tx3 text-[10px] block">{tr("رزروشده", "Reserved")}</span>
                         <strong>{m.ReservedQty ?? 0}</strong>
                       </div>
                       <div className="rounded bg-black/25 p-1">
-                        <span className="tx3 text-[10px] block">Safety</span>
+                        <span className="tx3 text-[10px] block">{tr("ذخیرهٔ اطمینان", "Safety stock")}</span>
                         <strong>{m.SafetyStockQty}</strong>
                       </div>
                       <div className="rounded bg-black/25 p-1 text-emerald-300">
-                        <span className="tx3 text-[10px] block">Free Avail</span>
+                        <span className="tx3 text-[10px] block">{tr("موجودی آزاد", "Free available")}</span>
                         <strong>{m.FreeAvailableQty ?? 0}</strong>
                       </div>
                       <div className="rounded bg-black/25 p-1 text-sky-300">
-                        <span className="tx3 text-[10px] block">Consumed</span>
+                        <span className="tx3 text-[10px] block">{tr("مصرف‌شده", "Consumed")}</span>
                         <strong>{m.TotalConsumedQty ?? 0}</strong>
                       </div>
                     </div>
 
-                    <div className="flex flex-wrap justify-between gap-2 tx3 text-[11px]" dir="ltr">
+                    <div className="flex flex-wrap justify-between gap-2 tx3 text-[11px]">
                       <span>
-                        Lead: {m.LeadTimeDays}d · LotSize: {m.LotSize} · Mult: {m.OrderMultiple}
+                        {tr("زمان تأمین:", "Lead time:")} {m.LeadTimeDays} {tr("روز", "days")} · {tr("اندازهٔ دسته:", "Lot size:")} {m.LotSize} · {tr("مضرب سفارش:", "Order multiple:")} {m.OrderMultiple}
                       </span>
                       <span>
-                        Std Cost: {m.StandardUnitCost?.toLocaleString() ?? 0} {m.Currency}
+                        {tr("بهای استاندارد:", "Standard cost:")} {m.StandardUnitCost?.toLocaleString() ?? 0} {m.Currency}
                       </span>
                     </div>
 
@@ -3497,7 +3499,7 @@ export default function ManufacturingWorkspace({
                           <span key={loc.Id} className="rounded border b-line-soft bg-black/20 px-2 py-0.5 text-[10px] tx3">
                             {loc.WarehouseCode}
                             {loc.LocationCode ? `/${loc.LocationCode}` : ""}
-                            {loc.LotNo ? ` · Lot: ${loc.LotNo}` : ""} — OnHand: <strong className="tx2">{loc.OnHandQty}</strong>
+                            {loc.LotNo ? ` · ${tr("بچ:", "Lot:")} ${loc.LotNo}` : ""} — {tr("موجودی:", "On hand:")} <strong className="tx2">{loc.OnHandQty}</strong>
                           </span>
                         ))}
                       </div>
@@ -3510,7 +3512,7 @@ export default function ManufacturingWorkspace({
             {/* ستون چپ: کمبودهای مواد (GET /mrp/shortages)، خروجی اجرای MRP و پیشنهادهای تأمین */}
             <section className="glass-dark rounded-xl p-3 space-y-2.5">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <h4 className="tx1 font-semibold">{tr("کمبودهای باز مواد (GET /mrp/shortages)", "Open Material Shortages")}</h4>
+                <h4 className="tx1 font-semibold">{tr("کمبودهای باز مواد", "Open Material Shortages")}</h4>
                 <span className="tx3 text-xs">
                   {tr(`${shortages.length} کمبود فعال`, `${shortages.length} shortages`)}
                 </span>
@@ -3556,7 +3558,6 @@ export default function ManufacturingWorkspace({
                       <div
                         key={s.Id}
                         className="rounded-lg border border-rose-500/30 bg-rose-500/5 p-2 text-xs tx2 space-y-1"
-                        dir="ltr"
                       >
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <label className="flex items-center gap-1.5 cursor-pointer">
@@ -3565,9 +3566,9 @@ export default function ManufacturingWorkspace({
                               checked={checked}
                               onChange={() => handleToggleShortage(s.Id)}
                             />
-                            <strong className="tx1">{s.PartNo ?? s.MaterialId}</strong>
-                            {s.OrderNo && <span className="tx3">· Order: {s.OrderNo}</span>}
-                            {s.OperationCode && <span className="tx3">· Op: {s.OperationCode}</span>}
+                            <strong className="tx1" dir="ltr">{s.PartNo ?? s.MaterialId}</strong>
+                            {s.OrderNo && <span className="tx3">· {tr("سفارش:", "Order:")} <span dir="ltr">{s.OrderNo}</span></span>}
+                            {s.OperationCode && <span className="tx3">· {tr("عملیات:", "Operation:")} <span dir="ltr">{s.OperationCode}</span></span>}
                           </label>
                           <button
                             type="button"
@@ -3579,10 +3580,10 @@ export default function ManufacturingWorkspace({
                         </div>
                         <div className="flex flex-wrap justify-between gap-2 text-[11px]">
                           <span className="tx3">
-                            Gross: {s.GrossQuantity} + Scrap: {s.ScrapAllowanceQty} = Net: <strong>{s.NetQuantity}</strong> · Avail: {s.AvailableQuantity}
+                            {tr("نیاز ناخالص:", "Gross:")} {s.GrossQuantity} + {tr("ضایعات:", "Scrap:")} {s.ScrapAllowanceQty} = {tr("نیاز خالص:", "Net:")} <strong>{s.NetQuantity}</strong> · {tr("موجود:", "Available:")} {s.AvailableQuantity}
                           </span>
                           <span className="text-rose-300">
-                            Shortage: <strong>{s.ShortageQuantity} {s.Uom}</strong> (Need: {s.RequiredAt.slice(0, 10)})
+                            {tr("کمبود:", "Shortage:")} <strong>{s.ShortageQuantity} {s.Uom}</strong> ({tr("تاریخ نیاز:", "Needed on:")} <span dir="ltr">{s.RequiredAt.slice(0, 10)}</span>)
                           </span>
                         </div>
                       </div>
@@ -3592,12 +3593,12 @@ export default function ManufacturingWorkspace({
               )}
 
               {mrpResult && (
-                <div className="rounded-lg border border-sky-500/30 bg-sky-500/10 p-2.5 text-xs text-sky-200 space-y-1" dir="ltr">
+                <div className="rounded-lg border border-sky-500/30 bg-sky-500/10 p-2.5 text-xs text-sky-200 space-y-1">
                   <div className="font-semibold">
-                    MRP Calculation @ {mrpResult.calculationAt?.slice(0, 19).replace("T", " ")} · PreviewOnly: {String(mrpResult.previewOnly)} · Schedule: v{mrpResult.scheduleVersion ?? 1}
+                    {tr("نتیجهٔ محاسبهٔ برنامه‌ریزی مواد", "Materials planning result")} · <span dir="ltr">{mrpResult.calculationAt?.slice(0, 19).replace("T", " ")}</span> · {tr("پیش‌نمایش:", "Preview:")} {mrpResult.previewOnly ? tr("بله", "Yes") : tr("خیر", "No")} · {tr("نسخهٔ زمان‌بندی:", "Schedule version:")} <span dir="ltr">v{mrpResult.scheduleVersion ?? 1}</span>
                   </div>
                   <div>
-                    Total Requirements: <strong>{mrpResult.requirements?.length ?? 0}</strong> · Shortages: <strong>{mrpResult.shortages?.length ?? 0}</strong> · Auto-Suggested Proposals: <strong>{mrpResult.proposals?.length ?? 0}</strong>
+                    {tr("کل نیازها:", "Total requirements:")} <strong>{mrpResult.requirements?.length ?? 0}</strong> · {tr("کمبودها:", "Shortages:")} <strong>{mrpResult.shortages?.length ?? 0}</strong> · {tr("پیشنهادهای خودکار تأمین:", "Auto-suggested proposals:")} <strong>{mrpResult.proposals?.length ?? 0}</strong>
                   </div>
                 </div>
               )}
@@ -3605,15 +3606,15 @@ export default function ManufacturingWorkspace({
               {proposalResult?.proposals && (
                 <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-2.5 text-xs text-emerald-200 space-y-1.5" dir="ltr">
                   <div className="font-semibold">
-                    Procurement Proposals Created ({proposalResult.proposalsCount ?? proposalResult.proposals.length}):
+                    {tr("پیشنهادهای تأمین صادرشده", "Procurement proposals created")} ({proposalResult.proposalsCount ?? proposalResult.proposals.length}):
                   </div>
                   {proposalResult.proposals.map((prp: any, idx: number) => (
                     <div key={idx} className="rounded bg-black/25 px-2 py-1 flex flex-wrap justify-between gap-2">
                       <span>
-                        <strong>{prp.ProposalNo}</strong> · {prp.PartNo ?? prp.MaterialId} ({prp.ProcurementType})
+                        <strong>{prp.ProposalNo}</strong> · {prp.PartNo ?? prp.MaterialId} ({prp.ProcurementType === "buy" ? tr("خریدنی", "Purchased") : tr("ساختنی", "Manufactured")})
                       </span>
                       <span>
-                        Shortage: {prp.ShortageQuantity} → Suggested: <strong>{prp.SuggestedQuantity} {prp.Uom}</strong> · OrderBy: {prp.OrderBy?.slice(0, 10)} · Est: {prp.EstimatedTotalCost?.toLocaleString() ?? "—"} {prp.Currency}
+                        {tr("کمبود:", "Shortage:")} {prp.ShortageQuantity} ← {tr("مقدار پیشنهادی:", "Suggested:")} <strong>{prp.SuggestedQuantity} {prp.Uom}</strong> · {tr("مهلت سفارش:", "Order by:")} <span dir="ltr">{prp.OrderBy?.slice(0, 10)}</span> · {tr("برآورد هزینه:", "Estimated:")} {prp.EstimatedTotalCost?.toLocaleString() ?? "—"} {prp.Currency}
                       </span>
                     </div>
                   ))}
@@ -3628,18 +3629,18 @@ export default function ManufacturingWorkspace({
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <h4 className="tx1 font-semibold">
                   {tr(
-                    "ثبت مصرف واقعی مواد و کسر اتمیک موجودی انبار (POST /material-consumptions)",
+                    "ثبت مصرف واقعی مواد و کسر خودکار موجودی انبار",
                     "Record Actual Material Consumption (Atomic Inventory Deduction)",
                   )}
                 </h4>
-                <span className="tx3 text-[11px]" dir="ltr">Idempotency-Key + LotNo Check</span>
+                <span className="tx3 text-[11px]">{tr("با کنترل یکتایی ثبت و شمارهٔ بچ", "With duplicate-posting & lot checks")}</span>
               </div>
 
               {canMfgAccess(mfgUserId, "mfg.material.consume", plantId) ? (
                 <form onSubmit={handleConsumeMaterial} className="space-y-2 text-xs">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                     <div>
-                      <label className="tx3 block mb-1">{tr("عملیات سفارش (OperationId)", "Operation")}</label>
+                      <label className="tx3 block mb-1">{tr("عملیات سفارش", "Operation")}</label>
                       <select
                         aria-label="Consumption Operation"
                         className={inputCls}
@@ -3649,13 +3650,13 @@ export default function ManufacturingWorkspace({
                         <option value="">{tr("انتخاب عملیات...", "Select Operation...")}</option>
                         {queueOps.map((op) => (
                           <option key={op.Id} value={op.Id}>
-                            {op.OrderNo ?? op.ProductionOrderId} · #{op.SequenceNo} {op.OperationCode} ({op.Status})
+                            {op.OrderNo ?? op.ProductionOrderId} · #{op.SequenceNo} {op.OperationCode} ({op.Status === "pending" ? tr("در انتظار", "pending") : op.Status === "queued" ? tr("در صف", "queued") : op.Status === "ready" ? tr("آماده", "ready") : op.Status === "running" ? tr("در حال اجرا", "running") : op.Status === "setup" ? tr("در حال آماده‌سازی", "setup") : op.Status === "completed" ? tr("تکمیل‌شده", "completed") : tr("مسدود", "blocked")})
                           </option>
                         ))}
                       </select>
                     </div>
                     <div>
-                      <label className="tx3 block mb-1">{tr("مادهٔ مصرفی (MaterialId)", "Material")}</label>
+                      <label className="tx3 block mb-1">{tr("مادهٔ مصرفی", "Material")}</label>
                       <select
                         aria-label="Consumption Material"
                         className={inputCls}
@@ -3669,13 +3670,13 @@ export default function ManufacturingWorkspace({
                         <option value="">{tr("انتخاب ماده...", "Select Material...")}</option>
                         {materials.map((m) => (
                           <option key={m.Id} value={m.Id}>
-                            {m.PartNo ?? m.Id} — {m.PartNameFa ?? ""} (OnHand: {m.OnHandQty ?? 0} {m.BaseUom ?? ""})
+                            {m.PartNo ?? m.Id} — {m.PartNameFa ?? ""} ({tr("موجودی:", "On hand:")} {m.OnHandQty ?? 0} {m.BaseUom ?? ""})
                           </option>
                         ))}
                       </select>
                     </div>
                     <div>
-                      <label className="tx3 block mb-1">{tr("مقدار مصرف (Quantity)", "Quantity")}</label>
+                      <label className="tx3 block mb-1">{tr("مقدار مصرف", "Quantity")}</label>
                       <input
                         type="number"
                         step="0.1"
@@ -3686,7 +3687,7 @@ export default function ManufacturingWorkspace({
                       />
                     </div>
                     <div>
-                      <label className="tx3 block mb-1">{tr("روش ثبت مصرف (ConsumptionMethod)", "Consumption Method")}</label>
+                      <label className="tx3 block mb-1">{tr("روش ثبت مصرف", "Consumption Method")}</label>
                       <select
                         aria-label="Consumption Method"
                         className={inputCls}
@@ -3698,14 +3699,14 @@ export default function ManufacturingWorkspace({
                           }))
                         }
                       >
-                        <option value="manual">manual (ثبت دستی کارگاهی)</option>
-                        <option value="issue">issue (حوالهٔ انبار)</option>
-                        <option value="backflush">backflush (کسر خودکار پسینی)</option>
+                        <option value="manual">{tr("ثبت دستی کارگاهی", "Manual shop-floor posting")}</option>
+                        <option value="issue">{tr("حوالهٔ انبار", "Warehouse issue")}</option>
+                        <option value="backflush">{tr("کسر خودکار پس از تولید", "Automatic backflush")}</option>
                       </select>
                     </div>
                     <div>
                       <label className="tx3 block mb-1">
-                        {tr("شماره بچ / لات (LotNo)", "LotNo")}
+                        {tr("شماره بچ / لات", "Lot / batch no.")}
                         {materials.find((m) => m.Id === consumeForm.MaterialId)?.IsLotTracked && (
                           <strong className="text-amber-300 mx-1">{tr("(الزامی)", "(Required)")}</strong>
                         )}
@@ -3719,7 +3720,7 @@ export default function ManufacturingWorkspace({
                       />
                     </div>
                     <div>
-                      <label className="tx3 block mb-1">{tr("بهای واحد مصرف (UnitCost - IRR)", "Unit Cost (IRR)")}</label>
+                      <label className="tx3 block mb-1">{tr("بهای واحد مصرف (ریال)", "Unit cost")}</label>
                       <input
                         type="number"
                         className={inputCls}
@@ -3730,9 +3731,9 @@ export default function ManufacturingWorkspace({
                     </div>
                   </div>
                   <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
-                    <span className="tx3 text-[11px]" dir="ltr">
-                      Warehouse: {consumeForm.WarehouseCode} · UoM: {consumeForm.Uom}
-                      {consumeForm.RequirementId ? ` · Linked Req: ${consumeForm.RequirementId}` : ""}
+                    <span className="tx3 text-[11px]">
+                      {tr("انبار:", "Warehouse:")} <span dir="ltr">{consumeForm.WarehouseCode}</span> · {tr("واحد:", "Unit:")} {consumeForm.Uom}
+                      {consumeForm.RequirementId ? ` · ${tr("نیاز مرتبط:", "Linked requirement:")} ${consumeForm.RequirementId}` : ""}
                     </span>
                     <button type="submit" className={btnCls} disabled={busy}>
                       {tr("ثبت مصرف واقعی و کسر موجودی انبار", "Post Material Consumption")}
@@ -3740,7 +3741,7 @@ export default function ManufacturingWorkspace({
                   </div>
                 </form>
               ) : (
-                <p className="tx3 text-xs">{tr("نقش فعلی مجوز mfg.material.consume ندارد.", "Requires mfg.material.consume permission.")}</p>
+                <p className="tx3 text-xs">{tr("نقش فعلی مجوز ثبت مصرف مواد ندارد.", "The active role cannot post material consumption.")}</p>
               )}
             </section>
 
@@ -3748,10 +3749,10 @@ export default function ManufacturingWorkspace({
             <section className="glass-dark rounded-xl p-3 space-y-2.5">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <h4 className="tx1 font-semibold">
-                  {tr("هشدارهای کمبود مواد و کارگاه (GET /alerts)", "Material Shortage & Plant Alerts")}
+                  {tr("هشدارهای کمبود مواد و کارگاه", "Material Shortage & Plant Alerts")}
                 </h4>
-                <span className="tx3 text-xs" dir="ltr">
-                  Open: {alerts.filter((a) => a.Status === "open").length} / Total: {alerts.length}
+                <span className="tx3 text-xs">
+                  {tr("باز:", "Open:")} {alerts.filter((a) => a.Status === "open").length} / {tr("کل:", "Total:")} {alerts.length}
                 </span>
               </div>
               {!alerts.length ? (
@@ -3763,13 +3764,13 @@ export default function ManufacturingWorkspace({
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div>
                           <strong className="tx1">{al.TitleFa}</strong>
-                          <span className="mx-1.5 tx3" dir="ltr">
-                            [{al.AlertCode} · {al.Severity} · {al.Status} · v{al.RowVersion}]
+                          <span className="mx-1.5 tx3">
+                            [<span dir="ltr">{al.AlertCode}</span> · {al.Severity === "critical" ? tr("بحرانی", "critical") : al.Severity === "high" ? tr("زیاد", "high") : al.Severity === "medium" ? tr("متوسط", "medium") : tr("کم", "low")} · {al.Status === "open" ? tr("باز", "open") : al.Status === "acknowledged" ? tr("تأیید دریافت‌شده", "acknowledged") : tr("بسته", "closed")} · {tr("نسخه", "v")}{al.RowVersion}]
                           </span>
                         </div>
                         {al.Status === "open" && canMfgAccess(mfgUserId, "mfg.alert.ack", plantId) && (
                           <button className={btnCls} disabled={busy} onClick={() => void handleAckAlert(al)}>
-                            {tr("تأیید دریافت (Ack)", "Acknowledge")}
+                            {tr("تأیید دریافت", "Acknowledge")}
                           </button>
                         )}
                       </div>
