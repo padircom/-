@@ -55,6 +55,17 @@ const PRIORITY_RULES = ["EDD", "CR", "MANUAL"] as const;
 const DEMAND_SOURCES = ["manual", "sales-order", "contract", "forecast"] as const;
 const DEMAND_TYPES = ["sales-order", "forecast", "contract", "manual"] as const;
 const DEMAND_STATUSES = ["draft", "confirmed", "cancelled"] as const;
+const DEMAND_TYPE_LABELS: Record<string, { fa: string; en: string }> = {
+  "sales-order": { fa: "سفارش فروش", en: "Sales order" },
+  forecast: { fa: "پیش‌بینی فروش", en: "Forecast" },
+  contract: { fa: "قرارداد", en: "Contract" },
+  manual: { fa: "ثبت دستی", en: "Manual" },
+};
+const DEMAND_STATUS_LABELS: Record<string, { fa: string; en: string }> = {
+  draft: { fa: "پیش‌نویس", en: "Draft" },
+  confirmed: { fa: "تأییدشده", en: "Confirmed" },
+  cancelled: { fa: "لغوشده", en: "Cancelled" },
+};
 const LOT_RULES = ["L4L", "FOQ", "EOQ", "POQ"] as const;
 
 function opts(values: readonly string[]) {
@@ -1217,31 +1228,95 @@ export function MesOrdersPanel({ fa, plantId, userId, onChanged }: MesPanelProps
 export function MesDemandPanel({ fa, plantId, userId, onChanged }: MesPanelProps) {
   const tr = (faText: string, enText: string) => (fa ? faText : enText);
   const allowed = canMfgAccess(userId, "mfg.demand.edit", plantId);
+  const deniedText = tr("نقش فعال مجوز ویرایش تقاضا ندارد", "The active role cannot edit demand");
   const list = useMesRows((offset) => MfgClient.listDemandForecasts(plantId, userId, { limit: PAGE, offset }), [plantId, userId]);
   const parts = useMesRows((offset) => MfgClient.listParts(plantId, userId, { limit: PAGE, offset }), [plantId, userId]);
   const rows = list.rows as MfgDemandForecast[];
   const partList = parts.rows as MfgPart[];
   const partOptions = partList.map((p) => ({ value: p.Id, label: `${p.PartNo} — ${p.NameFa}` }));
-  const partLabel = (id: string) => partList.find((p) => p.Id === id)?.PartNo ?? id;
+  const partLabel = (id: string) => {
+    const part = partList.find((p) => p.Id === id);
+    return part ? `${part.PartNo} — ${part.NameFa}` : id;
+  };
+  const typeLabel = (code: string) => {
+    const label = DEMAND_TYPE_LABELS[code];
+    return label ? (fa ? label.fa : label.en) : code;
+  };
+  const statusLabel = (code: string) => {
+    const label = DEMAND_STATUS_LABELS[code];
+    return label ? (fa ? label.fa : label.en) : code;
+  };
+  const typeOptions = DEMAND_TYPES.map((value) => ({ value, label: typeLabel(value) }));
+  const statusOptions = DEMAND_STATUSES.map((value) => ({ value, label: statusLabel(value) }));
 
   const fields: FormFieldDef[] = [
     { name: "RequiredAt", label: tr("تاریخ نیاز", "Required on"), type: "date", required: true },
     { name: "Quantity", label: tr("مقدار", "Quantity"), type: "number", required: true, min: 0.000001 },
-    { name: "Uom", label: tr("واحد", "UoM"), maxLength: 16, ltr: true },
-    { name: "ConfidencePct", label: tr("اطمینان %", "Confidence %"), type: "number", min: 0, max: 100 },
+    {
+      name: "Uom",
+      label: tr("واحد", "UoM"),
+      maxLength: 16,
+      ltr: true,
+      hint: tr("خالی بماند، واحد پایهٔ قطعه استفاده می‌شود", "Leave blank to use the part's base unit"),
+    },
+    {
+      name: "ConfidencePct",
+      label: tr("درصد اطمینان", "Confidence %"),
+      type: "number",
+      min: 0,
+      max: 100,
+      hint: tr("برای ردیف «پیش‌بینی فروش» الزامی است", "Required for a sales-forecast row"),
+    },
     { name: "CustomerRef", label: tr("ارجاع مشتری", "Customer ref."), maxLength: 80, ltr: true },
     { name: "CustomerNameSnapshot", label: tr("نام مشتری", "Customer name"), maxLength: 240 },
-    { name: "NoteFa", label: tr("یادداشت", "Note"), type: "textarea", maxLength: 1000, fullWidth: true },
+    { name: "NoteFa", label: tr("یادداشت", "Note"), type: "textarea", maxLength: 800, fullWidth: true },
   ];
 
   const columns: GridColumnDef<MfgDemandForecast>[] = [
-    { key: "DemandRef", header: tr("ارجاع", "Reference"), ltr: true, mono: true },
-    { key: "PartId", header: tr("قطعه", "Part"), accessor: (row) => partLabel(row.PartId), ltr: true, mono: true },
-    { key: "DemandType", header: tr("نوع", "Type"), filter: "auto" },
+    { key: "DemandRef", header: tr("ارجاع تقاضا", "Demand reference"), ltr: true, mono: true },
+    { key: "PartId", header: tr("قطعه", "Part"), accessor: (row) => partLabel(row.PartId) },
+    {
+      key: "DemandType",
+      header: tr("نوع تقاضا", "Demand type"),
+      accessor: (row) => row.DemandType,
+      render: (row) => typeLabel(row.DemandType),
+      filter: typeOptions.map((option) => ({ value: option.value, label: option.label })),
+    },
     { key: "RequiredAt", header: tr("تاریخ نیاز", "Required on"), accessor: (row) => shortDate(row.RequiredAt), ltr: true },
-    { key: "Quantity", header: tr("مقدار", "Qty"), align: "end", ltr: true },
-    { key: "ConsumedQuantity", header: tr("مصرف‌شده", "Consumed"), align: "end", ltr: true },
-    { key: "Status", header: tr("وضعیت", "Status"), filter: "auto" },
+    {
+      key: "Quantity",
+      header: tr("مقدار", "Quantity"),
+      accessor: (row) => row.Quantity,
+      render: (row) => `${row.Quantity.toLocaleString()} ${row.Uom}`,
+      align: "end",
+      ltr: true,
+    },
+    {
+      key: "ConsumedQuantity",
+      header: tr("مصرف‌شده", "Consumed"),
+      accessor: (row) => row.ConsumedQuantity ?? 0,
+      render: (row) => {
+        const consumed = row.ConsumedQuantity ?? 0;
+        const pct = row.Quantity > 0 ? Math.round((consumed / row.Quantity) * 100) : 0;
+        return `${consumed.toLocaleString()} (${pct}${fa ? "٪" : "%"})`;
+      },
+      align: "end",
+      ltr: true,
+    },
+    {
+      key: "RemainingQuantity",
+      header: tr("باقی‌مانده", "Remaining"),
+      accessor: (row) => Math.max(0, (row.Quantity ?? 0) - (row.ConsumedQuantity ?? 0)),
+      align: "end",
+      ltr: true,
+    },
+    {
+      key: "Status",
+      header: tr("وضعیت", "Status"),
+      accessor: (row) => row.Status,
+      render: (row) => statusLabel(row.Status),
+      filter: statusOptions.map((option) => ({ value: option.value, label: option.label })),
+    },
   ];
 
   return (
@@ -1256,26 +1331,41 @@ export function MesDemandPanel({ fa, plantId, userId, onChanged }: MesPanelProps
       onRetry={() => { list.reload(); parts.reload(); }}
       onChanged={() => { list.reload(); onChanged(); }}
       describeError={describeMesError}
-      emptyText={tr("تقاضایی ثبت نشده است", "No demand recorded")}
+      emptyText={tr("تقاضایی ثبت نشده است؛ با «ثبت جدید» اولین ردیف را بسازید", "No demand recorded yet; create the first row with New")}
+      defaultSort={{ key: "RequiredAt", dir: "asc" }}
+      viewFields={[
+        { name: "DemandRef", label: tr("ارجاع تقاضا", "Demand reference"), ltr: true },
+        { name: "PartId", label: tr("قطعه", "Part"), type: "select", options: partOptions },
+        { name: "DemandType", label: tr("نوع تقاضا", "Demand type"), type: "select", options: typeOptions },
+        ...fields,
+        { name: "Status", label: tr("وضعیت", "Status"), type: "select", options: statusOptions },
+        { name: "ConsumedQuantity", label: tr("مقدار مصرف‌شده", "Consumed quantity"), type: "number" },
+      ]}
       create={{
         title: tr("تقاضای جدید", "New demand"),
         fields: [
           { name: "PartId", label: tr("قطعه", "Part"), type: "select", required: true, options: partOptions },
-          { name: "DemandType", label: tr("نوع تقاضا", "Demand type"), type: "select", required: true, options: opts(DEMAND_TYPES) },
-          { name: "DemandRef", label: tr("ارجاع تقاضا", "Demand ref."), required: true, maxLength: 80, ltr: true },
+          { name: "DemandType", label: tr("نوع تقاضا", "Demand type"), type: "select", required: true, options: typeOptions },
+          { name: "DemandRef", label: tr("ارجاع تقاضا", "Demand ref."), required: true, maxLength: 60, ltr: true },
           ...fields,
         ],
-        defaults: { DemandType: "forecast", Uom: "ea" },
+        defaults: { DemandType: "forecast" },
         allowed,
-        deniedTitle: "mfg.demand.edit",
-        submit: (payload) => MfgClient.createDemandForecast(plantId, userId, asBody(payload)),
+        deniedTitle: deniedText,
+        submit: (payload) => {
+          // سرور پیش‌بینی بدون درصد اطمینان را رد می‌کند؛ همان‌جا در فرم به کاربر بگو، نه بعد از خطای سرور.
+          if (payload.DemandType === "forecast" && (payload.ConfidencePct === null || payload.ConfidencePct === undefined)) {
+            throw new Error(tr("برای ردیف «پیش‌بینی فروش»، درصد اطمینان الزامی است", "Confidence % is required for a sales-forecast row"));
+          }
+          return MfgClient.createDemandForecast(plantId, userId, asBody(payload));
+        },
         successText: tr("تقاضا ثبت شد.", "Demand created."),
       }}
       edit={{
         title: tr("ویرایش تقاضا", "Edit demand"),
-        fields: [...fields, { name: "Status", label: tr("وضعیت", "Status"), type: "select", required: true, options: opts(DEMAND_STATUSES) }],
+        fields: [...fields, { name: "Status", label: tr("وضعیت", "Status"), type: "select", required: true, options: statusOptions }],
         allowed,
-        deniedTitle: "mfg.demand.edit",
+        deniedTitle: deniedText,
         submit: (row, payload) => MfgClient.patchDemandForecast(plantId, userId, row.Id, row.RowVersion, asBody(payload)),
         successText: tr("تقاضا ذخیره شد.", "Demand updated."),
       }}
@@ -1287,7 +1377,11 @@ export function MesDemandPanel({ fa, plantId, userId, onChanged }: MesPanelProps
           (r) => MfgClient.patchDemandForecast(plantId, userId, r.Id, r.RowVersion, { Status: "cancelled" }),
           tr("تقاضا لغو شد.", "Demand cancelled."),
           tr("ردیف لغوشده در سابقه می‌ماند.", "The cancelled row stays in history."),
-          { hidden: () => row.Status === "cancelled", disabled: () => !allowed, title: allowed ? undefined : "mfg.demand.edit" },
+          {
+            hidden: () => row.Status === "cancelled" || (row.ConsumedQuantity ?? 0) > 0,
+            disabled: () => !allowed,
+            title: allowed ? undefined : deniedText,
+          },
         ),
         statusAction<MfgDemandForecast>(
           "delete",
@@ -1299,7 +1393,7 @@ export function MesDemandPanel({ fa, plantId, userId, onChanged }: MesPanelProps
           {
             hidden: () => !(row.Status === "draft" && !row.MpsRunId),
             disabled: () => !allowed,
-            title: allowed ? undefined : "mfg.demand.edit",
+            title: allowed ? undefined : deniedText,
           },
         ),
       ]}

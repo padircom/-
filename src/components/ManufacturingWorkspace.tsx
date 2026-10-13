@@ -939,43 +939,6 @@ export default function ManufacturingWorkspace({
     }
   }
 
-  async function handleCreateDemand() {
-    setBusy(true);
-    setError("");
-    setNotice("");
-    try {
-      const row = await MfgClient.createDemandForecast(plantId, mfgUserId, {
-        PartId: demandForm.PartId,
-        DemandType: demandForm.DemandType,
-        DemandRef: demandForm.DemandRef,
-        RequiredAt: demandForm.RequiredAt,
-        Quantity: Number(demandForm.Quantity),
-        ...(demandForm.ConfidencePct.trim() === "" ? {} : { ConfidencePct: Number(demandForm.ConfidencePct) }),
-      });
-      setNotice(tr(`تقاضای ${row.DemandRef} با مقدار ${row.Quantity} ثبت شد.`, `Demand ${row.DemandRef} for ${row.Quantity} created.`));
-      await loadActiveTab();
-    } catch (err) {
-      setError(formatError(err));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function handleDeleteDemand(demand: MfgDemandForecast) {
-    setBusy(true);
-    setError("");
-    setNotice("");
-    try {
-      await MfgClient.deleteDemandForecast(plantId, mfgUserId, demand.Id);
-      setNotice(tr(`تقاضای ${demand.DemandRef} حذف شد.`, `Demand ${demand.DemandRef} deleted.`));
-      await loadActiveTab();
-    } catch (err) {
-      setError(formatError(err));
-    } finally {
-      setBusy(false);
-    }
-  }
-
   async function handleLoadTimePhased() {
     setBusy(true);
     setError("");
@@ -3794,24 +3757,7 @@ export default function ManufacturingWorkspace({
         </div>
       )}
 
-      {/* ══════════════════════ ۷) تب بهای تمام‌شده و تطبیق مالی ══════════════════════ */}
-      {tab === "planning" && (
-        <MesPlanningCrudSection
-          fa={fa}
-          plantId={plantId}
-          userId={mfgUserId}
-          onChanged={() => void loadActiveTab()}
-          section={
-            planSubTab === "demand"
-              ? "demand"
-              : planSubTab === "lotsize" || planSubTab === "version"
-                ? "lotsize"
-                : planSubTab === "planned"
-                  ? "planned"
-                  : "none"
-          }
-        />
-      )}
+      {/* ══════════════════════ ۷) تب برنامه‌ریزی پیشرفته ══════════════════════ */}
       {!loading && tab === "planning" && (
         <div className="space-y-3">
           <section className="glass-dark rounded-xl p-3 flex flex-wrap items-center gap-2 text-xs">
@@ -3834,6 +3780,23 @@ export default function ManufacturingWorkspace({
               onSelect={setPlanSubTab}
             />
           </section>
+
+          {/* پنل ویرایشی هر زیرتب دقیقاً زیر نوار آن می‌آید؛ نه بالای صفحه. */}
+          <MesPlanningCrudSection
+            fa={fa}
+            plantId={plantId}
+            userId={mfgUserId}
+            onChanged={() => void loadActiveTab()}
+            section={
+              planSubTab === "demand"
+                ? "demand"
+                : planSubTab === "lotsize" || planSubTab === "version"
+                  ? "lotsize"
+                  : planSubTab === "planned"
+                    ? "planned"
+                    : "none"
+            }
+          />
 
           {/* ═══ MPS ═══ */}
           {planSubTab === "mps" && (
@@ -3929,73 +3892,72 @@ export default function ManufacturingWorkspace({
 
           {/* ═══ Demand & Forecast ═══ */}
           {planSubTab === "demand" && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-              <section className="glass-dark rounded-xl p-3 space-y-2">
-                <h4 className="tx1 font-semibold">{tr("ثبت تقاضا / پیش‌بینی", "Create Demand / Forecast")}</h4>
-                <form className="space-y-2" onSubmit={(e) => { e.preventDefault(); void handleCreateDemand(); }}>
-                  <select aria-label="PartId" className={inputCls} value={demandForm.PartId} onChange={(e) => setDemandForm((f) => ({ ...f, PartId: e.target.value }))}>
-                    <option value="">{tr("— انتخاب قطعه —", "— select part —")}</option>
-                    {parts.map((part) => (
-                      <option key={part.Id} value={part.Id}>{part.PartNo} · {part.NameFa}</option>
-                    ))}
-                  </select>
-                  <div className="grid grid-cols-2 gap-2">
-                    <select aria-label="DemandType" className={inputCls} value={demandForm.DemandType} onChange={(e) => setDemandForm((f) => ({ ...f, DemandType: e.target.value as MfgDemandType }))}>
-                      <option value="sales-order">sales-order</option>
-                      <option value="forecast">forecast</option>
-                      <option value="contract">contract</option>
-                      <option value="manual">manual</option>
-                    </select>
-                    <input placeholder="DemandRef" className={inputCls} dir="ltr" value={demandForm.DemandRef} onChange={(e) => setDemandForm((f) => ({ ...f, DemandRef: e.target.value }))} />
-                    <input type="date" className={inputCls} dir="ltr" value={demandForm.RequiredAt} onChange={(e) => setDemandForm((f) => ({ ...f, RequiredAt: e.target.value }))} />
-                    <input type="number" min={0} placeholder="Quantity" className={inputCls} value={demandForm.Quantity} onChange={(e) => setDemandForm((f) => ({ ...f, Quantity: e.target.value }))} />
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                {[
+                  { label: tr("ردیف‌های تقاضا", "Demand rows"), value: demandRows.length.toLocaleString() },
+                  {
+                    label: tr("تقاضای باز (مصرف‌نشده)", "Open demand (unconsumed)"),
+                    value: demandRows
+                      .filter((row) => row.Status !== "cancelled")
+                      .reduce((sum, row) => sum + Math.max(0, (row.Quantity ?? 0) - (row.ConsumedQuantity ?? 0)), 0)
+                      .toLocaleString(),
+                  },
+                  { label: tr("ردیف‌های پیش‌بینی", "Forecast rows"), value: demandRows.filter((row) => row.DemandType === "forecast").length.toLocaleString() },
+                  { label: tr("ردیف‌های تأییدشده", "Confirmed rows"), value: demandRows.filter((row) => row.Status === "confirmed").length.toLocaleString() },
+                ].map((card) => (
+                  <div key={card.label} className="glass-dark rounded-xl p-3">
+                    <div className="tx3 text-[11px]">{card.label}</div>
+                    <div className="tx1 mt-1 text-lg font-semibold">{card.value}</div>
                   </div>
-                  <input type="number" min={0} max={100} placeholder={tr("درصد اطمینان (برای forecast الزامی)", "ConfidencePct (required for forecast)")} className={inputCls} value={demandForm.ConfidencePct} onChange={(e) => setDemandForm((f) => ({ ...f, ConfidencePct: e.target.value }))} />
-                  <button type="submit" className={btnCls} disabled={busy || !demandForm.PartId || !canMfgAccess(mfgUserId, "mfg.demand.edit", plantId)}>
-                    {tr("ثبت تقاضا (POST /demand-forecasts)", "Create Demand")}
+                ))}
+              </div>
+
+              <section className="glass-dark rounded-xl p-3 space-y-3">
+                <div className="space-y-1">
+                  <h4 className="tx1 font-semibold">{tr("تحلیل زمان‌بندی تقاضا", "Time-Phased Demand Analysis")}</h4>
+                  <p className="tx3 text-[11px]">
+                    {tr(
+                      "تقاضا در سطل‌های زمانی افق برنامه‌ریزی جمع‌بندی می‌شود؛ اندازهٔ سطل و افق از تنظیمات «برنامهٔ اصلی تولید» خوانده می‌شود.",
+                      "Demand is summarized into the planning-horizon time buckets; bucket size and horizon come from the MPS settings.",
+                    )}
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-end gap-2">
+                  <label className="min-w-56 flex-1 space-y-1 text-[11px] tx3">
+                    <span>{tr("قطعه", "Part")}</span>
+                    <select aria-label="PartId" className={inputCls} value={demandForm.PartId} onChange={(e) => setDemandForm((f) => ({ ...f, PartId: e.target.value }))}>
+                      <option value="">{tr("همهٔ قطعات", "All parts")}</option>
+                      {parts.map((part) => (
+                        <option key={part.Id} value={part.Id}>{part.PartNo} · {part.NameFa}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <button type="button" className={btnCls} disabled={busy || !canMfgAccess(mfgUserId, "mfg.demand.view", plantId)} onClick={() => void handleLoadTimePhased()}>
+                    {tr("نمایش زمان‌بندی‌شدهٔ تقاضا", "Show Time-Phased Demand")}
                   </button>
-                </form>
-                <button className={btnCls} disabled={busy} onClick={() => void handleLoadTimePhased()}>
-                  {tr("نمایش زمان‌بندی‌شدهٔ تقاضا", "Show Time-Phased Demand")}
-                </button>
+                </div>
                 {timePhased && (
                   <div className="space-y-1.5 pt-1">
-                    <div className="text-[11px] tx3" dir="ltr">
-                      {timePhased.bucketUnit} × {timePhased.bucketCount} · {timePhased.horizonStart} → {timePhased.horizonEnd}
-                      {timePhased.outsideHorizonQty > 0 ? ` · ${tr("خارج از افق", "outside horizon")}: ${timePhased.outsideHorizonQty}` : ""}
+                    <div className="text-[11px] tx3">
+                      {(timePhased.bucketUnit === "week" ? tr("هفتگی", "Weekly") : timePhased.bucketUnit === "month" ? tr("ماهانه", "Monthly") : tr("روزانه", "Daily"))}
+                      {` × ${timePhased.bucketCount} · `}
+                      <span dir="ltr">{timePhased.horizonStart} → {timePhased.horizonEnd}</span>
+                      {timePhased.outsideHorizonQty > 0 ? ` · ${tr("خارج از افق", "Outside horizon")}: ${timePhased.outsideHorizonQty}` : ""}
                     </div>
                     {(timePhased.parts ?? []).map((part: any) => (
-                      <div key={part.partId} className="rounded border b-line-soft p-2 text-[11px] tx2" dir="ltr">
-                        <strong>{part.partNo ?? part.partId}</strong> · total {part.totalQty} {part.uom ?? ""}
-                        <div className="flex flex-wrap gap-1 pt-1">
+                      <div key={part.partId} className="rounded border b-line-soft p-2 text-[11px] tx2">
+                        <strong className="tx1" dir="ltr">{part.partNo ?? part.partId}</strong> · {tr("مجموع", "Total")}: {part.totalQty} {part.uom ?? ""}
+                        <div className="flex flex-wrap gap-1 pt-1" dir="ltr">
                           {(part.lines ?? []).map((line: any, idx: number) => (
                             <span key={idx} className="rounded border b-line-soft px-1.5 py-0.5">{line.bucketStart}: {line.totalQty}</span>
                           ))}
                         </div>
                       </div>
                     ))}
+                    {(timePhased.parts ?? []).length === 0 && <div className="text-[11px] tx3">{tr("برای این انتخاب، تقاضایی در افق برنامه‌ریزی نیست.", "No demand falls inside the planning horizon for this selection.")}</div>}
                   </div>
                 )}
-              </section>
-
-              <section className="glass-dark rounded-xl p-3 space-y-2">
-                <h4 className="tx1 font-semibold">{tr("فهرست تقاضا", "Demand Register")}</h4>
-                <div className="space-y-1.5 max-h-[420px] overflow-y-auto">
-                  {demandRows.map((row) => (
-                    <div key={row.Id} className="rounded border b-line-soft p-2 text-[11px] tx2 flex flex-wrap items-center justify-between gap-2">
-                      <span dir="ltr">
-                        <strong>{row.DemandRef}</strong> · {row.DemandType} · {row.RequiredAt} · <strong>{row.Quantity}</strong> {row.Uom}
-                        {row.ConfidencePct != null ? ` · ${row.ConfidencePct}%` : ""} · {row.Status}
-                      </span>
-                      {canMfgAccess(mfgUserId, "mfg.demand.edit", plantId) && row.Status !== "consumed" && (
-                        <button className={btnCls} disabled={busy} onClick={() => void handleDeleteDemand(row)}>
-                          {tr("حذف", "Delete")}
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                  {demandRows.length === 0 && <div className="text-[11px] tx3">{tr("تقاضایی ثبت نشده است.", "No demand rows.")}</div>}
-                </div>
               </section>
             </div>
           )}
