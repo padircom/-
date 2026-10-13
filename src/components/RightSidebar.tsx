@@ -17,6 +17,8 @@ import type { MfgTab } from "./ManufacturingWorkspace";
 import type { CmmsSubModuleId } from "./CmmsWorkspaceShell";
 import type { ScmSubModuleId } from "./ScmWorkspaceShell";
 import type { IiotSubModuleId } from "./IiotWorkspaceShell";
+import type { HrmTabId } from "./HrmWorkspaceShell";
+import type { EdmsTabId } from "./EdmsWorkspaceShell";
 
 export type ModuleNavTarget = {
   moduleId: string;
@@ -31,7 +33,9 @@ export type EnterpriseSystemView =
   | { system: "mes"; tab: MfgTab }
   | { system: "cmms"; sub: CmmsSubModuleId }
   | { system: "scm"; sub: ScmSubModuleId }
-  | { system: "iiot"; sub: IiotSubModuleId };
+  | { system: "iiot"; sub: IiotSubModuleId }
+  | { system: "hrm"; sub: HrmTabId }
+  | { system: "edms"; sub: EdmsTabId };
 
 type Props = {
   lang: Lang;
@@ -86,6 +90,24 @@ const IIOT_SIDEBAR_ITEMS: Array<{ id: IiotSubModuleId; icon: string; label: Bi }
   { id: "sensor-alerts", icon: "🚨", label: { fa: "سیستم هشدار بلادرنگ سنسورها", en: "Real-Time Sensor Alert System" } },
 ];
 
+/* زیرماژول‌های سرگروه ششم: مدیریت جامع منابع انسانی (HRM — ISO 30414 & قوانین کار) */
+const HRM_SIDEBAR_ITEMS: Array<{ id: HrmTabId; icon: string; label: Bi }> = [
+  { id: "personnel", icon: "👥", label: { fa: "پرسنلی، چارت و ماتریس مهارت", en: "Personnel, Org Chart & Skill Matrix" } },
+  { id: "attendance", icon: "⏱️", label: { fa: "حضور و غیاب و شیفت‌بندی", en: "Attendance & Shift Rosters" } },
+  { id: "payroll", icon: "💵", label: { fa: "حقوق و دستمزد و تسهیم هزینه", en: "Payroll & Cost Allocation" } },
+  { id: "training", icon: "🎓", label: { fa: "آموزش و توسعه صلاحیت (ISO 10015)", en: "Training & Competency" } },
+  { id: "performance", icon: "🎯", label: { fa: "ارزیابی عملکرد ۳۶۰ درجه (KPI/OKR)", en: "360° Performance Management" } },
+];
+
+/* زیرماژول‌های سرگروه هفتم: مدیریت اسناد، بایگانی دیجیتال و مدیریت دانش (EDMS / KMS) */
+const EDMS_SIDEBAR_ITEMS: Array<{ id: EdmsTabId; icon: string; label: Bi }> = [
+  { id: "dmi", icon: "🗂️", label: { fa: "شناسنامه اسناد (DMI) و کدینگ", en: "Document Master Index & Coding" } },
+  { id: "revisions", icon: "🔒", label: { fa: "کنترل نسخه‌ها و Check-In/Out", en: "Revision Control & Check-In/Out" } },
+  { id: "workflows", icon: "📨", label: { fa: "گردش‌کار تأیید و ترانسمیتال", en: "Approval Workflows & Transmittals" } },
+  { id: "archive", icon: "🔍", label: { fa: "بایگانی دیجیتال، OCR و جستجو", en: "Digital Archive, OCR & Search" } },
+  { id: "kms", icon: "🧠", label: { fa: "مدیریت دانش و ویکی (KMS)", en: "Knowledge Management & Wiki" } },
+];
+
 type QuickAction = { id: string; label: Bi; alert?: string; icon: ReactNode };
 
 const iconClass = "h-4 w-4";
@@ -134,15 +156,19 @@ export default function RightSidebar({
     cmms: boolean;
     scm: boolean;
     iiot: boolean;
+    hrm: boolean;
+    edms: boolean;
   }>({
     pmis: false,
     mes: false,
     cmms: false,
     scm: false,
     iiot: false,
+    hrm: false,
+    edms: false,
   });
 
-  const toggleSection = (key: "pmis" | "mes" | "cmms" | "scm" | "iiot") => {
+  const toggleSection = (key: "pmis" | "mes" | "cmms" | "scm" | "iiot" | "hrm" | "edms") => {
     setSectionsOpen((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
@@ -694,6 +720,120 @@ export default function RightSidebar({
                         className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-start text-[10.5px] transition ${
                           active
                             ? "row-on font-medium text-purple-300"
+                            : "tx2 hover:bg-[var(--row-hover)] hover:tx1"
+                        }`}
+                      >
+                        <span className="text-[11px]">{item.icon}</span>
+                        <span className="min-w-0 flex-1 truncate">{t(item.label, lang)}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+
+            {/* ── خط جداکنندهٔ بصری (Divider) بین بخش ۵ و ۶ (لایهٔ ۲ ستون پشتیبان ۵+۲) ── */}
+            <div role="separator" aria-orientation="horizontal" className="my-2 flex items-center gap-2 px-1">
+              <span className="hair h-px flex-1" />
+              <span className="hair h-px flex-1" />
+            </div>
+
+            {/* ── ۶. سرگروه اصلی ششم: مدیریت جامع منابع انسانی (HRM — ISO 30414 & قوانین کار) ── */}
+            <section className="space-y-1">
+              <button
+                type="button"
+                onClick={() => toggleSection("hrm")}
+                aria-expanded={sectionsOpen.hrm}
+                className={`sidebar-group-title flex w-full items-center gap-2 px-2 py-2 text-start transition ${
+                  activeSystemView.system === "hrm" ? "is-active" : "tx2 hover:tx1"
+                }`}
+              >
+                <span className="text-[12px]">👥</span>
+                <span className="min-w-0 flex-1 truncate text-[11px] font-semibold">
+                  {rtl ? "مدیریت منابع انسانی و کارکرد (HRM)" : "Human Resource Management (HRM)"}
+                </span>
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className={`h-3 w-3 shrink-0 tx4 transition-transform ${sectionsOpen.hrm ? "rotate-180" : ""}`}
+                >
+                  <path d="m6 9 6 6 6-6" />
+                </svg>
+              </button>
+
+              {sectionsOpen.hrm && (
+                <div className="fade-rise space-y-0.5 border-s-2 border-teal-500/30 ps-2 pt-0.5">
+                  {HRM_SIDEBAR_ITEMS.map((item) => {
+                    const active = activeSystemView.system === "hrm" && activeSystemView.sub === item.id;
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => onSelectSystemView?.({ system: "hrm", sub: item.id })}
+                        className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-start text-[10.5px] transition ${
+                          active
+                            ? "row-on font-medium text-teal-300"
+                            : "tx2 hover:bg-[var(--row-hover)] hover:tx1"
+                        }`}
+                      >
+                        <span className="text-[11px]">{item.icon}</span>
+                        <span className="min-w-0 flex-1 truncate">{t(item.label, lang)}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+
+            {/* ── خط جداکنندهٔ بصری (Divider) بین بخش ۶ و ۷ ── */}
+            <div role="separator" aria-orientation="horizontal" className="my-2 flex items-center gap-2 px-1">
+              <span className="hair h-px flex-1" />
+              <span className="hair h-px flex-1" />
+            </div>
+
+            {/* ── ۷. سرگروه اصلی هفتم: مدیریت اسناد، بایگانی دیجیتال و مدیریت دانش (EDMS / KMS) ── */}
+            <section className="space-y-1">
+              <button
+                type="button"
+                onClick={() => toggleSection("edms")}
+                aria-expanded={sectionsOpen.edms}
+                className={`sidebar-group-title flex w-full items-center gap-2 px-2 py-2 text-start transition ${
+                  activeSystemView.system === "edms" ? "is-active" : "tx2 hover:tx1"
+                }`}
+              >
+                <span className="text-[12px]">🗂️</span>
+                <span className="min-w-0 flex-1 truncate text-[11px] font-semibold">
+                  {rtl ? "مدیریت اسناد و دانش سازمانی (EDMS/KMS)" : "Document & Knowledge Management (EDMS/KMS)"}
+                </span>
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className={`h-3 w-3 shrink-0 tx4 transition-transform ${sectionsOpen.edms ? "rotate-180" : ""}`}
+                >
+                  <path d="m6 9 6 6 6-6" />
+                </svg>
+              </button>
+
+              {sectionsOpen.edms && (
+                <div className="fade-rise space-y-0.5 border-s-2 border-indigo-500/30 ps-2 pt-0.5">
+                  {EDMS_SIDEBAR_ITEMS.map((item) => {
+                    const active = activeSystemView.system === "edms" && activeSystemView.sub === item.id;
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => onSelectSystemView?.({ system: "edms", sub: item.id })}
+                        className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-start text-[10.5px] transition ${
+                          active
+                            ? "row-on font-medium text-indigo-300"
                             : "tx2 hover:bg-[var(--row-hover)] hover:tx1"
                         }`}
                       >

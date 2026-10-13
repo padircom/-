@@ -753,6 +753,34 @@ export const PERMISSION_CATALOG: PermissionDef[] = [
   P("iiot.integration.dispatch", "iiot", "ارسال رویداد یکپارچگی به سامانهٔ مقصد", "Dispatch cross-module event", "confidential", true),
   P("iiot.dashboard.view", "iiot", "مشاهدهٔ داشبورد زندهٔ پایش میدانی", "View live field monitoring dashboard", "internal"),
   P("iiot.analytics.view", "iiot", "مشاهدهٔ تحلیل و تجمیع سری زمانی", "View telemetry analytics and rollups", "internal"),
+
+  /* ── بخش ۶: مدیریت جامع منابع انسانی (HRM — ISO 30414 & قوانین کار و تأمین اجتماعی) ── */
+  P("hrm.org.view", "hrm", "مشاهدهٔ چارت سازمانی، احکام و قراردادهای کار", "View org chart, decrees and contracts", "internal"),
+  P("hrm.org.manage", "hrm", "مدیریت چارت سازمانی، احکام کارگزینی و قراردادها", "Manage org chart, decrees and contracts", "confidential", true),
+  P("hrm.skill.view", "hrm", "مشاهدهٔ ماتریس مهارت‌ها و گواهی‌نامه‌های فنی", "View skill matrix and technical certificates", "internal"),
+  P("hrm.skill.manage", "hrm", "مدیریت ماتریس مهارت‌ها و گواهی‌نامه‌های متصل به CMMS/MES", "Manage skill matrix and technical certificates", "confidential", true),
+  P("hrm.attendance.view", "hrm", "مشاهدهٔ تقویم کاری، شیفت‌ها، مرخصی و مأموریت", "View shift calendars, attendance, leaves and missions", "internal"),
+  P("hrm.attendance.manage", "hrm", "ثبت و مدیریت شیفت‌بندی، کارکرد، مرخصی و مأموریت", "Manage shifts, attendance roster, leaves and missions", "confidential", true),
+  P("hrm.payroll.view", "hrm", "مشاهدهٔ محاسبات حقوق و دستمزد و فیش حقوقی", "View payroll runs and payslips", "confidential"),
+  P("hrm.payroll.run", "hrm", "اجرای محاسبهٔ حقوق، بیمه، مالیات و صدور فیش", "Run payroll calculation and issue payslips", "restricted", true),
+  P("hrm.payroll.approve", "hrm", "تصویب نهایی حقوق و ارسال سند هزینه به مالی", "Approve payroll and dispatch cost voucher to finance", "restricted", true),
+  P("hrm.training.view", "hrm", "مشاهدهٔ نیازسنجی، دوره‌های آموزشی و اثربخشی", "View training needs, courses and effectiveness", "internal"),
+  P("hrm.training.manage", "hrm", "مدیریت نیازسنجی آموزشی، دوره‌ها و ارزیابی اثربخشی", "Manage training needs, courses and Kirkpatrick evaluation", "confidential", true),
+  P("hrm.performance.view", "hrm", "مشاهدهٔ اهداف KPI/OKR و ارزیابی عملکرد ۳۶۰ درجه", "View KPIs/OKRs and 360-degree performance reviews", "internal"),
+  P("hrm.performance.manage", "hrm", "تعریف KPI/OKR و ثبت ارزیابی عملکرد ۳۶۰ درجه", "Define KPIs/OKRs and manage 360-degree reviews", "confidential", true),
+
+  /* ── بخش ۷: مدیریت اسناد، بایگانی دیجیتال و مدیریت دانش (EDMS / KMS — ISO 15489 / 30301 / 9001) ── */
+  P("edms.document.view", "edms", "مشاهدهٔ شناسنامهٔ اسناد (DMI) و الگوهای شماره‌گذاری", "View Document Master Index (DMI) and numbering rules", "internal"),
+  P("edms.document.manage", "edms", "ثبت و مدیریت شناسنامهٔ اسناد و کدینگ خودکار", "Manage DMI documents and auto-numbering rules", "confidential", true),
+  P("edms.revision.view", "edms", "مشاهدهٔ نسخه‌های اسناد، تغییرات و وضعیت قفل", "View document revisions, diffs and check-out locks", "internal"),
+  P("edms.revision.manage", "edms", "صدور ویرایش جدید، Check-Out / Check-In و مقایسهٔ نسخه", "Issue revisions, check-out/check-in and compare diffs", "confidential", true),
+  P("edms.workflow.view", "edms", "مشاهدهٔ گردش‌کار بررسی/تأیید و ترانسمیتال‌ها", "View review/approval workflows and transmittals", "internal"),
+  P("edms.workflow.approve", "edms", "بررسی فنی و تأیید گردش‌کار اسناد", "Review and approve document workflow steps", "confidential", true),
+  P("edms.transmittal.manage", "edms", "صدور و ثبت برگهٔ ارسال مدارک (Transmittal)", "Issue and manage official transmittals", "confidential", true),
+  P("edms.archive.view", "edms", "مشاهدهٔ زون‌بندی بایگانی دیجیتال، OCR و جستجوی متنی", "View digital archive zones, OCR records and search", "internal"),
+  P("edms.archive.manage", "edms", "مدیریت بایگانی دیجیتال، اسکن و نمایه‌سازی OCR", "Manage digital archive zones, scanning and OCR indexing", "confidential", true),
+  P("edms.kms.view", "edms", "مشاهدهٔ پایگاه دانش (Wiki) و دروس آموخته‌شده (KMS)", "View Knowledge Base Wiki and Lessons Learned", "internal"),
+  P("edms.kms.manage", "edms", "ثبت و انتشار دروس آموخته‌شده و مقالات پایگاه دانش", "Author and publish KMS lessons learned and wiki articles", "confidential", true),
 ];
 
 export const PERMISSION_CODES: string[] = PERMISSION_CATALOG.map((p) => p.code);
@@ -794,6 +822,8 @@ export const ROLE_CATALOG: RoleDef[] = [
        * ابزار برای هر منبع داده مجوز پایه را دوباره می‌سنجد و بخش بسته را
        * «بسته» اعلام می‌کند، نه صفر. تاریخچه و خروجی سند این‌طور نیستند. */
       "ai.assistant.ask", "ai.insight.view",
+      "hrm.org.view", "hrm.skill.view", "hrm.attendance.view", "hrm.training.view", "hrm.performance.view",
+      "edms.document.view", "edms.revision.view", "edms.workflow.view", "edms.archive.view", "edms.kms.view",
     ],
   },
   {
@@ -893,6 +923,7 @@ export const ROLE_CATALOG: RoleDef[] = [
       "cnt.ipc.prepare",
       "pmo.health.view",
       "pmo.form.view",
+      "hrm.payroll.view",
     ],
   },
   {
@@ -937,6 +968,8 @@ export const ROLE_CATALOG: RoleDef[] = [
       "pmo.form.submit",
       "pmo.health.view",
       "pmo.health.record",
+      "hrm.training.manage",
+      "edms.workflow.approve", "edms.archive.manage", "edms.kms.manage",
     ],
   },
   {
@@ -970,7 +1003,12 @@ export const ROLE_CATALOG: RoleDef[] = [
       /* پروندهٔ پرسنلی خانهٔ اصلی این نقش است: ثبت، تأیید اصالت مدرک،
        * فعال‌سازی پس از گیت‌ها و تخلیه. */
       "hrm.person.view", "hrm.person.manage", "hrm.person.activate",
-      "hrm.person.demobilize", "hrm.doc.verify", "hrm.skill.assess",],
+      "hrm.person.demobilize", "hrm.doc.verify", "hrm.skill.assess",
+      "hrm.org.manage", "hrm.skill.manage", "hrm.attendance.manage",
+      "hrm.payroll.view", "hrm.payroll.run", "hrm.payroll.approve",
+      "hrm.training.manage", "hrm.performance.manage",
+      "edms.kms.manage",
+    ],
   },
   {
     code: "doc_controller",
@@ -978,7 +1016,9 @@ export const ROLE_CATALOG: RoleDef[] = [
     inherits: ["viewer"],
     clearance: "confidential",
     party: "contractor",
-    grants: ["doc.document.upload", "doc.transmittal.issue", "ckm.letter.view", "ckm.letter.draft", "ckm.meeting.record", "ckm.lesson.publish", "ckm.notify.manage", "eng.mdr.edit", "eng.revision.issue"],
+    grants: ["doc.document.upload", "doc.transmittal.issue", "ckm.letter.view", "ckm.letter.draft", "ckm.meeting.record", "ckm.lesson.publish", "ckm.notify.manage", "eng.mdr.edit", "eng.revision.issue",
+      "edms.document.manage", "edms.revision.manage", "edms.transmittal.manage", "edms.archive.manage", "edms.kms.manage",
+    ],
   },
   {
     code: "contracts_manager",
@@ -1100,7 +1140,9 @@ export const ROLE_CATALOG: RoleDef[] = [
       "cnt.contract.view",
       "cnt.ipc.approve",
       "gov.process.edit",
-    "report.custom.publish", "itg.connector.view", "itg.export.run", "itg.calendar.sync"
+    "report.custom.publish", "itg.connector.view", "itg.export.run", "itg.calendar.sync",
+      "hrm.org.manage", "hrm.skill.manage", "hrm.attendance.manage", "hrm.payroll.view", "hrm.payroll.approve", "hrm.training.manage", "hrm.performance.manage",
+      "edms.document.manage", "edms.workflow.approve", "edms.transmittal.manage", "edms.kms.manage",
     ],
   },
   {
@@ -1167,7 +1209,8 @@ export const ROLE_CATALOG: RoleDef[] = [
       "eng.mdr.view", "eng.mdr.edit", "eng.review.code", "eng.crs.resolve",
       "eng.tq.answer", "eng.vpr.review", "eng.ifc.release", "eng.mr.approve",
       "doc.document.approve", "core.ai.run", "report.internal.generate",
-    "report.custom.edit", "itg.connector.view"
+      "report.custom.edit", "itg.connector.view",
+      "edms.document.manage", "edms.revision.manage", "edms.workflow.approve", "edms.kms.manage",
     ],
   },
   {
@@ -1220,6 +1263,8 @@ export const ROLE_CATALOG: RoleDef[] = [
       "itg.connector.view", "itg.export.run", "itg.primavera.push", "itg.calendar.sync",
       /* P10: تاریخچهٔ پرسش‌وپاسخ و خروجی سند، کار گزارش‌دهی PMO است. */
       "ai.history.view", "ai.export.run",
+      "hrm.payroll.view", "hrm.payroll.approve", "hrm.performance.manage",
+      "edms.document.manage", "edms.workflow.approve", "edms.archive.manage", "edms.kms.manage",
     ],
   },
   {
@@ -1668,6 +1713,12 @@ export const ROLE_CATALOG: RoleDef[] = [
     // آزمودنش را نداشت و پنل دانش پروژه برایش قفل می‌ماند.
     grants: ["sys.config.manage", "sys.user.manage", "sys.audit.purge", "sys.backup.export", "sys.backup.restore", "report.export.bulk", "core.portfolio.view", "core.project.view", "plan.progress.report", "core.ai.run",
       "scm.vendor.view", "scm.vendor.manage", "scm.package.view", "scm.package.edit", "scm.bidder.view", "scm.bidder.manage", "scm.mr.view", "scm.mrr.view", "scm.mrr.post",
+      "hrm.org.view", "hrm.org.manage", "hrm.skill.view", "hrm.skill.manage",
+      "hrm.attendance.view", "hrm.attendance.manage", "hrm.payroll.view", "hrm.payroll.run", "hrm.payroll.approve",
+      "hrm.training.view", "hrm.training.manage", "hrm.performance.view", "hrm.performance.manage",
+      "edms.document.view", "edms.document.manage", "edms.revision.view", "edms.revision.manage",
+      "edms.workflow.view", "edms.workflow.approve", "edms.transmittal.manage",
+      "edms.archive.view", "edms.archive.manage", "edms.kms.view", "edms.kms.manage",
       /* P10: مدیر سامانه سرویس هوش مصنوعی را پیکربندی و می‌آزماید، ولی
        * تاریخچهٔ پرسش کسب‌وکار و خروجی سند به او داده نمی‌شود. */
       "ai.assistant.ask", "ai.insight.view"],

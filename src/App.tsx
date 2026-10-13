@@ -11,6 +11,8 @@ import NotificationOpsPanel from "./components/NotificationOpsPanel";
 import CmmsWorkspaceShell from "./components/CmmsWorkspaceShell";
 import ScmWorkspaceShell from "./components/ScmWorkspaceShell";
 import IiotWorkspaceShell from "./components/IiotWorkspaceShell";
+import HrmWorkspaceShell from "./components/HrmWorkspaceShell";
+import EdmsWorkspaceShell from "./components/EdmsWorkspaceShell";
 import { useSystem } from "./context/SystemContext";
 import {
   ui,
@@ -331,6 +333,20 @@ export default function App() {
               lang={lang}
               activeSub={activeSystemView.sub}
               onSelectSub={(nextSub) => setActiveSystemView({ system: "iiot", sub: nextSub })}
+              onBackHome={() => setActiveSystemView({ system: "pmis" })}
+            />
+          ) : activeSystemView.system === "hrm" ? (
+            <HrmWorkspaceShell
+              lang={lang}
+              activeSub={activeSystemView.sub}
+              onSelectSub={(nextSub) => setActiveSystemView({ system: "hrm", sub: nextSub })}
+              onBackHome={() => setActiveSystemView({ system: "pmis" })}
+            />
+          ) : activeSystemView.system === "edms" ? (
+            <EdmsWorkspaceShell
+              lang={lang}
+              activeSub={activeSystemView.sub}
+              onSelectSub={(nextSub) => setActiveSystemView({ system: "edms", sub: nextSub })}
               onBackHome={() => setActiveSystemView({ system: "pmis" })}
             />
           ) : moduleNav ? (
