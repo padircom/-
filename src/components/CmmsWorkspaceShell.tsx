@@ -225,6 +225,115 @@ function SectionTitle({ fa, en, children }: { fa: boolean; en: string; children:
   return <h4 className="tx2 text-xs font-medium">{fa ? children : en}</h4>;
 }
 
+/* ── نمودارهای داشبورد (SVG/دیو خالص، بدون وابستگی؛ رنگ از پالت ثابت و
+ * سطح‌ها از متغیرهای تم تا هر دو حالت Dark/Light خوانا بماند) ─────── */
+const CHART_COLORS = ["#38bdf8", "#34d399", "#a78bfa", "#fb7185", "#fbbf24", "#f472b6", "#94a3b8", "#2dd4bf"];
+const SEVERITY_COLORS: Record<string, string> = {
+  critical: "#fb7185", high: "#fbbf24", medium: "#38bdf8", low: "#34d399", info: "#94a3b8",
+};
+
+function sortedEntries(data: Record<string, number>): Array<[string, number]> {
+  return Object.entries(data).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
+}
+
+function ChartEmpty({ fa }: { fa: boolean }) {
+  return <div className="tx3 py-4 text-center text-[11px]">{fa ? "داده‌ای برای نمودار نیست" : "No data to chart"}</div>;
+}
+
+/** نمودار میله‌ای افقی برای توزیع‌های دسته‌ای (شدت هشدار، حالت خرابی…). */
+function BarList({ data, fa, colorByKey }: { data: Record<string, number>; fa: boolean; colorByKey?: Record<string, string> }) {
+  const entries = sortedEntries(data);
+  if (entries.length === 0) return <ChartEmpty fa={fa} />;
+  const max = Math.max(...entries.map(([, v]) => v));
+  const total = entries.reduce((sum, [, v]) => sum + v, 0);
+  return (
+    <div className="space-y-2">
+      {entries.map(([key, value], index) => (
+        <div key={key} className="space-y-0.5">
+          <div className="flex items-center justify-between gap-2 text-[10.5px]">
+            <span className="tx2 min-w-0 truncate" dir="ltr">{key}</span>
+            <span className="tx3 shrink-0 tabular-nums" dir="ltr">{value} · {total ? Math.round((value / total) * 100) : 0}%</span>
+          </div>
+          <div className="h-2 overflow-hidden rounded-full" style={{ background: "var(--row)" }}>
+            <div
+              className="h-full rounded-full transition-[width] duration-500"
+              style={{ width: `${max ? (value / max) * 100 : 0}%`, background: colorByKey?.[key] ?? CHART_COLORS[index % CHART_COLORS.length] }}
+            />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** نمودار دونات وضعیت‌ها با راهنمای رنگی و مجموع در مرکز. */
+function DonutChart({ data, fa, centerLabel }: { data: Record<string, number>; fa: boolean; centerLabel: string }) {
+  const entries = sortedEntries(data);
+  if (entries.length === 0) return <ChartEmpty fa={fa} />;
+  const total = entries.reduce((sum, [, v]) => sum + v, 0);
+  const radius = 42;
+  const circumference = 2 * Math.PI * radius;
+  let offset = 0;
+  const segments = entries.map(([key, value], index) => {
+    const fraction = total ? value / total : 0;
+    const segment = { key, value, color: CHART_COLORS[index % CHART_COLORS.length], dash: fraction * circumference, offset };
+    offset += fraction * circumference;
+    return segment;
+  });
+  return (
+    <div className="flex flex-wrap items-center gap-4">
+      <svg viewBox="0 0 120 120" className="h-[110px] w-[110px] shrink-0 -rotate-90" role="img" aria-label={centerLabel}>
+        <circle cx={60} cy={60} r={radius} fill="none" strokeWidth={13} style={{ stroke: "var(--row)" }} />
+        {segments.map((segment) => (
+          <circle
+            key={segment.key}
+            cx={60} cy={60} r={radius} fill="none"
+            stroke={segment.color} strokeWidth={13}
+            strokeDasharray={`${Math.max(segment.dash - 1.5, 0)} ${circumference}`}
+            strokeDashoffset={-segment.offset}
+          />
+        ))}
+        <text x={60} y={57} textAnchor="middle" fontSize={19} fontWeight={700} fill="var(--ink)" transform="rotate(90 60 60)">{total}</text>
+        <text x={60} y={72} textAnchor="middle" fontSize={8} fill="var(--ink3)" transform="rotate(90 60 60)">{centerLabel}</text>
+      </svg>
+      <ul className="min-w-[130px] flex-1 space-y-1">
+        {segments.map((segment) => (
+          <li key={segment.key} className="flex items-center gap-1.5 text-[10.5px]">
+            <span className="h-2 w-2 shrink-0 rounded-sm" style={{ background: segment.color }} aria-hidden="true" />
+            <span className="tx2 min-w-0 flex-1 truncate" dir="ltr">{segment.key}</span>
+            <span className="tx3 tabular-nums" dir="ltr">{segment.value} · {total ? Math.round((segment.value / total) * 100) : 0}%</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/** کارت شاخص درصدی با حلقهٔ پیشرفت (دسترس‌پذیری، OEE). */
+function RingKpiCard({ label, pct, fa }: { label: string; pct: number | null; fa: boolean }) {
+  const radius = 24;
+  const circumference = 2 * Math.PI * radius;
+  const clamped = pct == null ? 0 : Math.min(Math.max(pct, 0), 100);
+  return (
+    <div className={`${moduleCardCls} flex items-center gap-3 p-3`}>
+      <svg viewBox="0 0 64 64" className="h-14 w-14 shrink-0 -rotate-90" role="img" aria-label={label}>
+        <circle cx={32} cy={32} r={radius} fill="none" strokeWidth={6} style={{ stroke: "var(--row)" }} />
+        {pct != null && (
+          <circle cx={32} cy={32} r={radius} fill="none" stroke={CMMS_ACCENT} strokeWidth={6} strokeLinecap="round"
+            strokeDasharray={`${(clamped / 100) * circumference} ${circumference}`} />
+        )}
+        <text x={32} y={36} textAnchor="middle" fontSize={12} fontWeight={700} fill="var(--ink)" transform="rotate(90 32 32)">
+          {pct == null ? "—" : `${Math.round(clamped)}%`}
+        </text>
+      </svg>
+      <div className="min-w-0">
+        <div className="tx3 text-[11px]">{label}</div>
+        <div className="tx2 mt-0.5 text-[10px]">{fa ? "آخرین snapshot قابلیت اطمینان" : "Latest reliability snapshot"}</div>
+      </div>
+    </div>
+  );
+}
+
 /** رنگ تأکیدی CMMS (هم‌خوان با کاشی کهربایی قبلی). */
 const CMMS_ACCENT = "#fbbf24";
 
@@ -282,8 +391,11 @@ export default function CmmsWorkspaceShell({ lang, activeSub, onSelectSub, onBac
         if (dashboard.state.kind === "error") return <ErrorBox {...pick(dashboard.state)} onRetry={dashboard.reload} fa={fa} />;
         if (dashboard.state.kind !== "ready") return <Empty fa={fa} />;
         const d = dashboard.state.data;
+        const healthySpares = Math.max(d.counts.spareParts - d.spares.belowReorder, 0);
+        const lowSpares = Math.max(d.spares.belowReorder - d.spares.outOfStock, 0);
         return (
           <div className="space-y-4">
+            {/* کارت‌های شمارشی اصلی */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <StatCard fa={fa} label={tr("تجهیزات ثبت‌شده", "Registered assets")} value={d.counts.assets} hint={tr(`${d.counts.criticalAssets} تجهیز بحرانی (رتبهٔ A)`, `${d.counts.criticalAssets} critical (rank A)`)} />
               <StatCard fa={fa} label={tr("خانوادهٔ تجهیز", "Equipment families")} value={d.counts.families} />
@@ -291,28 +403,51 @@ export default function CmmsWorkspaceShell({ lang, activeSub, onSelectSub, onBac
               <StatCard fa={fa} label={tr("قطعات یدکی", "Spare parts")} value={d.counts.spareParts} hint={tr(`${d.spares.belowReorder} زیر نقطهٔ سفارش`, `${d.spares.belowReorder} below reorder`)} />
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div className={`${moduleCardCls} p-3.5 space-y-2`}>
+            {/* کارت‌های شاخص قابلیت اطمینان */}
+            <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
+              <RingKpiCard fa={fa} label={tr("دسترس‌پذیری", "Availability")} pct={d.highlights.latestAvailabilityPct} />
+              <RingKpiCard fa={fa} label={tr("میانگین OEE", "Average OEE")} pct={d.highlights.averageOeePct} />
+              <StatCard fa={fa} label="MTBF" value={d.highlights.latestMtbfHours != null ? `${d.highlights.latestMtbfHours} h` : "—"} hint={tr("میانگین زمان بین دو خرابی", "Mean time between failures")} />
+              <StatCard fa={fa} label="MTTR" value={d.highlights.latestMttrHours != null ? `${d.highlights.latestMttrHours} h` : "—"} hint={tr("میانگین زمان تعمیر", "Mean time to repair")} />
+            </div>
+
+            {/* نمودارهای توزیعی */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-3">
+              <div className={`${moduleCardCls} p-3.5 space-y-3`}>
                 <SectionTitle fa={fa} en="Work orders by status">{tr("دستورکارها بر پایهٔ وضعیت", "Work orders by status")}</SectionTitle>
-                <div className="flex flex-wrap gap-1.5">
-                  {Object.entries(d.workOrdersByStatus).map(([status, count]) => (
-                    <span key={status} className="rounded border b-line-soft bg-black/25 px-2 py-0.5 text-[11px] tx2" dir="ltr">
-                      {status}: {count}
-                    </span>
-                  ))}
-                  {Object.keys(d.workOrdersByStatus).length === 0 && <span className="tx3 text-[11px]">{tr("داده‌ای نیست", "No data")}</span>}
-                </div>
+                <DonutChart fa={fa} data={d.workOrdersByStatus} centerLabel={fa ? "دستورکار" : "orders"} />
               </div>
-              <div className={`${moduleCardCls} p-3.5 space-y-2`}>
-                <SectionTitle fa={fa} en="Reliability highlights">{tr("نمای قابلیت اطمینان", "Reliability highlights")}</SectionTitle>
-                <div className="grid grid-cols-2 gap-2 text-[11px] tx2">
-                  <div>{tr("دسترس‌پذیری", "Availability")}: <span dir="ltr">{d.highlights.latestAvailabilityPct != null ? `${d.highlights.latestAvailabilityPct}%` : "—"}</span></div>
-                  <div>MTBF: <span dir="ltr">{d.highlights.latestMtbfHours != null ? `${d.highlights.latestMtbfHours} h` : "—"}</span></div>
-                  <div>MTTR: <span dir="ltr">{d.highlights.latestMttrHours != null ? `${d.highlights.latestMttrHours} h` : "—"}</span></div>
-                  <div>{tr("میانگین OEE", "Average OEE")}: <span dir="ltr">{d.highlights.averageOeePct != null ? `${d.highlights.averageOeePct}%` : "—"}</span></div>
-                </div>
-                <div className="tx3 text-[10px]" dir="ltr">model: {d.modelVersion}</div>
+              <div className={`${moduleCardCls} p-3.5 space-y-3`}>
+                <SectionTitle fa={fa} en="Open alerts by severity">{tr("هشدارهای باز بر پایهٔ شدت", "Open alerts by severity")}</SectionTitle>
+                <BarList fa={fa} data={d.openAlertsBySeverity} colorByKey={SEVERITY_COLORS} />
               </div>
+              <div className={`${moduleCardCls} p-3.5 space-y-3`}>
+                <SectionTitle fa={fa} en="Failures by mode">{tr("خرابی‌ها بر پایهٔ حالت خرابی", "Failures by mode")}</SectionTitle>
+                <BarList fa={fa} data={d.failuresByMode} />
+              </div>
+            </div>
+
+            {/* وضعیت موجودی قطعات: نوار انباشتهٔ سالم / کم‌موجودی / تمام‌شده */}
+            <div className={`${moduleCardCls} p-3.5 space-y-3`}>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <SectionTitle fa={fa} en="Spare-parts stock health">{tr("سلامت موجودی قطعات یدکی", "Spare-parts stock health")}</SectionTitle>
+                <span className="tx3 text-[10px]" dir="ltr">model: {d.modelVersion}</span>
+              </div>
+              {d.counts.spareParts > 0 ? (
+                <>
+                  <div className="flex h-3 w-full overflow-hidden rounded-full" style={{ background: "var(--row)" }} dir="ltr">
+                    <div style={{ width: `${(healthySpares / d.counts.spareParts) * 100}%`, background: "#34d399" }} />
+                    <div style={{ width: `${(lowSpares / d.counts.spareParts) * 100}%`, background: "#fbbf24" }} />
+                    <div style={{ width: `${(d.spares.outOfStock / d.counts.spareParts) * 100}%`, background: "#fb7185" }} />
+                  </div>
+                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-[10.5px] tx2">
+                    <span>🟢 {tr("موجودی سالم", "Healthy")}: <b className="tx1" dir="ltr">{healthySpares}</b></span>
+                    <span>🟡 {tr("زیر نقطهٔ سفارش", "Below reorder")}: <b className="tx1" dir="ltr">{lowSpares}</b></span>
+                    <span>🔴 {tr("تمام‌شده", "Out of stock")}: <b className="tx1" dir="ltr">{d.spares.outOfStock}</b></span>
+                    <span>⚠️ {tr("خرابی‌های ثبت‌شده", "Recorded failures")}: <b className="tx1" dir="ltr">{d.counts.failures}</b></span>
+                  </div>
+                </>
+              ) : <ChartEmpty fa={fa} />}
             </div>
 
             {d.counts.proposedAiRecommendations > 0 && (
