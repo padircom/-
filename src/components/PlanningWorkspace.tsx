@@ -358,6 +358,24 @@ export default function PlanningWorkspace({
       )}
 
       <div className="thin-scroll min-h-0 flex-1 overflow-y-auto pe-1">
+        {/* در حالت بدون نوار تب (ورود از مسیر پروژه)، بعد از پرش از روی نقشه
+            به یک زیربخش، راه برگشت فقط همین دکمه است. */}
+        {hideTabs && tab !== "workshop" && (
+          <div className="fade-rise mb-2 flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setTab("workshop")}
+              className="glass-row flex items-center gap-1.5 rounded-lg px-3 py-2 text-[10.5px] font-light tx2 transition hover:tx1"
+            >
+              <span aria-hidden="true">{rtl ? "→" : "←"}</span>
+              {rtl ? "بازگشت به نقشهٔ گردش‌کار" : "Back to workflow map"}
+            </button>
+            <span className="text-[10px] tx3">
+              {rtl ? "برای دیدن دوبارهٔ نقشهٔ فرایند و انتخاب گرهٔ دیگر" : "To see the process map again and pick another node"}
+            </span>
+          </div>
+        )}
+
         {tab === "dashboard" && (
           <div className="fade-rise space-y-2">
             {/* نقشهٔ گردش‌کار برنامه‌ریزی و کنترل (EPC) — کلیک روی گره‌ها به زیربخش مربوط می‌رود */}
