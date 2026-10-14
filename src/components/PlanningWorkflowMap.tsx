@@ -35,6 +35,10 @@ const CYCLE: MapNode[] = [
 ];
 
 const OUTPUTS: MapNode[] = [
+  /* نمای خلاصهٔ ماژول: KPI، WBS، انحراف و پیش‌بینی روی یک صفحه. اول از
+   * همه می‌آید چون نقطهٔ ورود ماژول همین نقشه است و کاربر پیش از هر
+   * چیز وضعیت کل را می‌خواهد. */
+  { titleFa: "داشبورد کنترل پیشرفت", titleEn: "Progress control dashboard", subFa: "KPI، WBS، انحراف و پیش‌بینی", subEn: "KPIs, WBS, variance & forecast", tab: "dashboard", kind: "io" },
   { titleFa: "گزارش روزانه", titleEn: "Daily report", tab: "dpr", kind: "io" },
   { titleFa: "گزارش هفتگی", titleEn: "Weekly report", tab: "weekly", kind: "io" },
   { titleFa: "برنامهٔ نگاه‌به‌جلو (3WLA)", titleEn: "3WLA schedule", tab: "baseline", kind: "io" },
