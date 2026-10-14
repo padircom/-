@@ -116,7 +116,9 @@ export default function PlanningWorkspace({
     setTab(initialTab);
   }, [initialTab]);
 
-  const [live, setLive] = useState<ApiSchedule | null>(null);
+  /* نشان «زنده/محلی» حذف شد؛ خواندن از سرور برای گرم‌شدن مسیر API می‌ماند
+   * ولی مقدارش دیگر جایی نمایش داده نمی‌شود. */
+  const [, setLive] = useState<ApiSchedule | null>(null);
 
   /* خواندن برنامه از سرور؛ بازخوانی پس از ورود فایل هم از همین مسیر می‌آید تا
    * نمودار و اعداد همان دادهٔ سرور باشند، نه محاسبهٔ محلی. */
@@ -328,13 +330,6 @@ export default function PlanningWorkspace({
           </div>
           <span className="rounded-lg border b-line-soft px-2 py-1 text-[10px] tx3" dir="ltr">{m.project.code} · DataDate {dataDate}</span>
           <span className="rounded-lg border border-emerald-400/30 bg-emerald-400/10 px-2 py-1 text-[10px] text-emerald-200" dir="ltr">{m.cpm.formulaVersion}</span>
-          <span
-            className="rounded-lg px-2 py-1 text-[10px]"
-            style={live ? { background: "#8FE3C822", color: "#8FE3C8" } : { background: "#FFD48A22", color: "#FFD48A" }}
-            title={live ? "/api/pex/schedule" : rtl ? "بک‌اند در دسترس نیست؛ محاسبه محلی با همان موتور" : "backend unavailable; local engine"}
-          >
-            {live ? (rtl ? "داده زنده" : "live") : rtl ? "محاسبه محلی" : "local"}
-          </span>
         </div>
       </section>
 
