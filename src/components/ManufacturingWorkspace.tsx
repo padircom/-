@@ -1730,10 +1730,11 @@ export default function ManufacturingWorkspace({
           </label>
 
           <label className="tx3 text-xs flex items-center gap-1.5">
-            <span>{tr("نقش کارگاهی (RBAC):", "MES Role:")}</span>
+            <span>{tr("نقش کارگاهی:", "MES Role:")}</span>
             <select
               aria-label="MES User"
-              className={moduleSelectCls}
+              className={`${moduleSelectCls} w-72 sm:w-[22rem]`}
+              style={{ maxWidth: "min(22rem, 85vw)" }}
               value={mfgUserId}
               onChange={(e) => {
                 setAutoRoleFollow(false);
