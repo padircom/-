@@ -7,6 +7,7 @@ import ReportBuilderPanel from './ReportBuilderPanel';
 import DrillDownPanel from './DrillDownPanel';
 import AiAssistantPanel from './AiAssistantPanel';
 import { PowerBiAction } from './ConnectorActions';
+import { ProgressDonut, SpiDial, TriBar, VarianceTrend, jalaliLabel } from './ControlCharts';
 
 export type MonitorTab = 'dash' | 'wpd' | 'evm' | 'kpi' | 'phi' | 'var' | 'ews' | 'action' | 'forecast' | 'reports' | 'builder' | 'drill' | 'ai' | 'scurve' | 'exec';
 type Props = { lang: Lang; projectId: string; initialTab?: MonitorTab; subId?: string; hideTabs?: boolean };
@@ -24,12 +25,22 @@ function LiveMonitoring({lang,projectId,initialTab,subId,hideTabs,userId}:Props 
   const [horizon,setHorizon]=useState(30);
   const [auto,setAuto]=useState(false);
   const [revision,setRevision]=useState(0);
+  /** تصویر EVM انتخاب‌شده برای ویجت‌های کنترل؛ خالی = آخرین تصویر. */
+  const [snapId,setSnapId]=useState('');
   const [data,setData]=useState<MonitoringData|null>(null);
   const [error,setError]=useState('');
   const [loading,setLoading]=useState(false);
   const [receivedHorizon,setReceivedHorizon]=useState<number|null>(null);
   const generation=useRef(0);
   useEffect(()=>setTab(initialTab??SUB[subId??'']??'dash'),[initialTab,subId]);
+  /* اگر تصویر انتخاب‌شده دیگر در فهرست نبود (تصویر تازه رسید یا حذف شد)،
+   * انتخاب به آخرین تصویر برمی‌گردد — نه به حالت خالی که ویجت‌ها را
+   * بی‌داده می‌گذارد. */
+  useEffect(()=>{
+    const h=data?.evm.history??[];
+    if(!h.length){ if(snapId) setSnapId(''); return; }
+    if(!h.some(x=>x.id===snapId)) setSnapId(h[h.length-1].id);
+  },[data,snapId]);
   useEffect(()=>{
     let cancelled=false; let timer:ReturnType<typeof setTimeout>|undefined;
     const seq=++generation.current;
@@ -53,7 +64,9 @@ function LiveMonitoring({lang,projectId,initialTab,subId,hideTabs,userId}:Props 
   const state=(s:string)=>{const label=STATES[s];return label?text(...label):s;};
   const sourceName=(s:string)=>SOURCE_LABELS[s]?text(...SOURCE_LABELS[s]):s;
   const button='rounded-lg border b-line-soft px-3 py-2 text-xs tx1 disabled:opacity-40';
-  const p=current?.evm.latest;
+  /* تصویر انتخاب‌شده مرجع ویجت‌های کنترل و بخش EVM است؛ پیش‌فرض آخرین. */
+  const snapHistory=current?.evm.history??[];
+  const p=(snapHistory.find(h=>h.id===snapId)??current?.evm.latest)??null;
   const showEvm=['dash','evm','var','forecast','exec'].includes(tab);
   const showSummary=['dash','kpi','exec'].includes(tab);
   const exportData=()=>{
@@ -65,6 +78,21 @@ function LiveMonitoring({lang,projectId,initialTab,subId,hideTabs,userId}:Props 
     <header className="glass-dark rounded-xl p-3 flex flex-wrap items-center gap-3">
       <div className="flex-1"><h3 className="tx1 font-semibold">{text('پایش و کنترل — دادهٔ واقعی پروژه','Monitoring — persisted project data')}</h3><p className="text-xs tx3" dir="ltr">{projectId}</p></div>
       <button className={button} disabled={loading} onClick={()=>setRevision(v=>v+1)}>{text('تازه‌سازی','Refresh')}</button>
+      {/* انتخابگر تاریخ داده: هر گزینه یک تصویر EVM ثبت‌شده و سازگاراست.
+       * فهرست خالی یا تک‌گزینه‌ای یعنی سوییچ معنا ندارد. */}
+      <label className="text-xs tx3 flex items-center gap-2">
+        {text('تاریخ داده','Data date')}
+        <select className="bg-[var(--row)] tx1 rounded-lg border b-line-soft p-2" value={snapId}
+          disabled={loading||snapHistory.length<2}
+          onChange={e=>setSnapId(e.target.value)}
+          title={text('تصاویر EVM ثبت‌شدهٔ این پروژه','Stored EVM snapshots of this project')}>
+          {[...snapHistory].reverse().map(h=>(
+            <option key={h.id} value={h.id}>
+              {jalaliLabel(h.dataDate,lang)}{h.integrity==='verified'?'':' ⚠'}
+            </option>
+          ))}
+        </select>
+      </label>
       {/* خروجی/اتصال Power BI از پنل حذف‌شدهٔ «منابع داده» به صفحهٔ داشبوردها و
         * گزارشات منتقل شد؛ وضعیت اتصال از همان قرارداد سلامت سرور می‌آید. */}
       <PowerBiAction lang={lang} canExport={Boolean(current)} onExport={exportData} />
@@ -86,6 +114,10 @@ function LiveMonitoring({lang,projectId,initialTab,subId,hideTabs,userId}:Props 
         <p>{text('این نما فقط‌خواندنی است. شاخص‌های جاری حوزه‌ها لزوماً هم‌تاریخ با تصویر EVM نیستند؛ بازخوانی، تاریخ داده را جلو نمی‌برد.','Read-only. Domain counts and the EVM snapshot can have different data dates; refresh does not advance the source data date.')}</p>
         <p>{text('ارقام فقط محدودهٔ مجاز شما را پوشش می‌دهند؛ نبود مجوز با صفر برابر نیست.','Figures cover only your authorized scope; restricted is not zero.')}</p>
       </section>
+      {/* داشبورد کنترل: سنجهٔ SPI، دونات پیشرفت، مقایسهٔ PV/EV/AC و روند
+          انحراف — همه از تصویر EVM انتخاب‌شده بالای صفحه. نبود تصویر
+          یعنی ویجت خالی، نه مقدار ساختگی. */}
+      {tab==='dash'&&<ControlDashboard p={p} history={snapHistory} lang={lang}/>}
       {showEvm&&<section className="glass-dark rounded-xl p-3 space-y-3">
         <div className="flex flex-wrap gap-3 text-xs tx2"><h4>EVM · {state(current.evm.state)}</h4><span>{text('تاریخ داده: ','Data date: ')}{p?.dataDate??'—'}</span><span dir="ltr">{p?.formulaVersion??'—'} · {p?.id??'—'}</span></div>
         <p className="text-xs tx3">{text('سازگاری تصویر: ','Snapshot integrity: ')}{p?.integrity??'—'} · {text('ردیف بی‌تاریخ / آینده کنارگذاشته‌شده: ','Undated / future rows excluded: ')}{fmt(current.evm.excludedUndatedOrFuture)}</p>
@@ -104,8 +136,44 @@ function LiveMonitoring({lang,projectId,initialTab,subId,hideTabs,userId}:Props 
     </>}
   </div>;
 }
-function Items({title,items,lang}:{title:string;items:MonitoringItem[];lang:Lang}) {
-  return <section className="glass-dark rounded-xl p-3 space-y-2"><h4 className="text-sm tx1">{title}</h4>{!items.length&&<p className="tx3 text-xs">{lang==='fa'?'مورد قابل مشاهده‌ای در این افق نیست؛ وضعیت منبع را در جدول پوشش بررسی کنید.':'No visible items in this horizon; check source coverage.'}</p>}{items.map(i=><article key={`${i.table}:${i.id}`} className="rounded-lg border b-line-soft p-2 flex flex-wrap gap-3 text-xs tx2"><strong>{i.code} — {i.title}</strong><span dir="ltr">{i.dueDate??'—'}</span><span className={i.status==='overdue'||i.critical?'text-amber-300':''}>{i.status}{i.critical?' · !':''}</span>{i.table==='Activity'&&<span>{lang==='fa'?'پیشرفت مصوب: ':'Approved: '}{i.approvedPct===null?'—':`${i.approvedPct}%`}</span>}<small className="tx3" dir="ltr">{i.table} · {i.id}</small></article>)}</section>;
+/** نقطهٔ EVM ثبت‌شده — همان چیزی که evmPoint برمی‌گرداند. */
+type EvmPoint = MonitoringData['evm']['history'][number];
+
+/**
+ * داشبورد کنترل — نمای یک‌نگاهِ همان اعدادی که در بخش‌های پایین همین
+ * صفحه به‌صورت خام می‌آیند. عمداً موتور تازه ندارد: اگر فردا محاسبهٔ SPI
+ * در سرویس عوض شود، اینجا هم عوض می‌شود.
+ */
+function ControlDashboard({p,history,lang}:{p:EvmPoint|null;history:EvmPoint[];lang:Lang}) {
+  const fa=lang==='fa'; const text=(a:string,b:string)=>fa?a:b;
+  return (
+    <section className="space-y-3">
+      <div className="grid gap-3 md:grid-cols-3">
+        <article className="glass-dark rounded-xl p-3">
+          <h4 className="text-sm tx1 mb-1">{text('شاخص عملکرد زمان‌بندی','Schedule performance')}</h4>
+          <SpiDial value={p?.spi??null} lang={lang}/>
+          <p className="text-[10px] tx3 mt-1">{text('SPI = EV ÷ PV از تصویر انتخاب‌شده. آستانهٔ هشدار: کمتر از ۰٫۹۵.','SPI = EV ÷ PV of the selected snapshot. Alert threshold: below 0.95.')}</p>
+        </article>
+        <article className="glass-dark rounded-xl p-3">
+          <h4 className="text-sm tx1 mb-1">{text('پیشرفت کسب‌شده در مقابل برنامه‌ای','Earned vs planned')}</h4>
+          <ProgressDonut pv={p?.pv??null} ev={p?.ev??null} bac={p?.bac??null} lang={lang}/>
+          <p className="text-[10px] tx3 mt-1">{text('حلقهٔ سبز نسبت به کل BAC؛ حلقهٔ آبی برنامهٔ همان بازه.','Green ring against total BAC; blue ring is the planned share.')}</p>
+        </article>
+        <article className="glass-dark rounded-xl p-3">
+          <h4 className="text-sm tx1 mb-1">{text('مقایسهٔ برنامه‌ای / کسب‌شده / واقعی','Planned / earned / actual')}</h4>
+          <TriBar pv={p?.pv??null} ev={p?.ev??null} ac={p?.ac??null} lang={lang}/>
+        </article>
+      </div>
+      <article className="glass-dark rounded-xl p-3">
+        <h4 className="text-sm tx1 mb-2">{text('روند انحراف زمان‌بندی','Schedule variance trend')}</h4>
+        <VarianceTrend history={history} lang={lang}/>
+      </article>
+      {!p&&<p className="text-xs tx3">{text('تصویر EVM ثبت‌شده‌ای برای این پروژه نیست؛ ویجت‌ها خالی‌اند و هیچ مقدار ساختگی نمایش داده نمی‌شود.','No stored EVM snapshot for this project; widgets stay empty and no synthetic value is shown.')}</p>}
+    </section>
+  );
+}
+
+function Items({title,items,lang}:{title:string;items:MonitoringItem[];lang:Lang}) {  return <section className="glass-dark rounded-xl p-3 space-y-2"><h4 className="text-sm tx1">{title}</h4>{!items.length&&<p className="tx3 text-xs">{lang==='fa'?'مورد قابل مشاهده‌ای در این افق نیست؛ وضعیت منبع را در جدول پوشش بررسی کنید.':'No visible items in this horizon; check source coverage.'}</p>}{items.map(i=><article key={`${i.table}:${i.id}`} className="rounded-lg border b-line-soft p-2 flex flex-wrap gap-3 text-xs tx2"><strong>{i.code} — {i.title}</strong><span dir="ltr">{i.dueDate??'—'}</span><span className={i.status==='overdue'||i.critical?'text-amber-300':''}>{i.status}{i.critical?' · !':''}</span>{i.table==='Activity'&&<span>{lang==='fa'?'پیشرفت مصوب: ':'Approved: '}{i.approvedPct===null?'—':`${i.approvedPct}%`}</span>}<small className="tx3" dir="ltr">{i.table} · {i.id}</small></article>)}</section>;
 }
 function SnapshotTrend({data,lang}:{data:MonitoringData;lang:Lang}) {
   const points=data.evm.history.slice(-60);

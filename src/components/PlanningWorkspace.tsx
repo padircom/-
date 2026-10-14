@@ -225,16 +225,23 @@ export default function PlanningWorkspace({
     return c;
   }, [m]);
 
+  /* SPI زمان‌بندی از پیشرفت وزنی موتور: واقعی ÷ برنامه‌ای در Data Date.
+   * آستانه‌ها همان آستانهٔ EVM برنامه‌اند (کمتر از ۰٫۹۵ هشدار). مخرج
+   * صفر یعنی نامعلوم — عدد ساختگی گذاشته نمی‌شود. */
+  const spi = m.plannedPct > 0 ? Math.round((m.overallPct / m.plannedPct) * 1000) / 1000 : null;
+  const spiColor = spi === null ? undefined : spi < 0.95 ? "#FF9F9F" : spi < 1 ? "#FFD48A" : "#8FE3C8";
+
   const kpis = useMemo(
     () => [
       { k: rtl ? "پیشرفت واقعی" : "Actual", v: `${m.overallPct}%`, c: "#8FE3C8" },
       { k: rtl ? "برنامه‌ای" : "Planned", v: `${m.plannedPct}%`, c: "#7FB2FF" },
       { k: rtl ? "انحراف" : "Variance", v: `${m.variance.deltaPct > 0 ? "+" : ""}${m.variance.deltaPct}`, c: m.variance.status === "behind" ? "#FF9F9F" : "#8FE3C8" },
+      ...(spi === null ? [] : [{ k: "SPI", v: `${(spi * 100).toFixed(0)}%`, c: spiColor }]),
       { k: "PPC", v: `${m.ppcPct}%`, c: "#C9A7FF" },
       { k: rtl ? "سلامت زمان‌بندی" : "Health", v: String(m.dcma.healthScore), c: m.dcma.healthScore < 80 ? "#FFD48A" : "#8FE3C8" },
       { k: rtl ? "جریمه برآوردی" : "Penalty est.", v: `${Math.round(m.totalPenalty / 1000)}k`, c: "#FF9F9F" },
     ],
-    [rtl, m]
+    [rtl, m, spi, spiColor]
   );
 
   /** قالب مقدار بر پایهٔ واحد؛ بدون آن عدد بی‌معناست. */
@@ -288,6 +295,19 @@ export default function PlanningWorkspace({
     ahead: blAll.filter((r) => r.slip < 0).length,
     worst: blAll.reduce((w, r) => Math.max(w, r.slip), 0),
   }), [blAll]);
+
+  /** بیشترین لغزش (روز کاری) فعالیت‌های هر بسته WBS — نشانگر تأخیر روی
+   * میله. همان فرمول ردیف «لغزش» جدول انطباق با پایه تا دو عدد از یک
+   * محاسبه واگرا نشوند. */
+  const wbsSlip = useMemo(() => {
+    const out: Record<string, number> = {};
+    for (const w of m.wbsRollup) {
+      out[w.id] = m.rows
+        .filter((r) => r.wbs === w.id && r.baselineFinish)
+        .reduce((mx, r) => Math.max(mx, workingDaysBetween(r.baselineFinish as string, r.ef) - 1), 0);
+    }
+    return out;
+  }, [m]);
 
   /* ردیابی مایلستون: فیلتر، مرتب‌سازی و جمع‌بندی. */
   const [msFilter, setMsFilter] = useState<"all" | "AtRisk" | "Delayed" | "Achieved">("all");
@@ -383,7 +403,7 @@ export default function PlanningWorkspace({
 
         {tab === "dashboard" && (
           <div className="fade-rise space-y-2">
-            <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-6">
+            <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
               {kpis.map((c) => (
                 <div key={c.k} className="glass-dark rounded-2xl p-3">
                   <div className="text-[9.5px] font-extralight tx3">{c.k}</div>
@@ -392,7 +412,7 @@ export default function PlanningWorkspace({
               ))}
             </div>
 
-            <div className="grid gap-2 md:grid-cols-3">
+            <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
               <div className="glass-dark rounded-2xl p-3">
                 <div className="text-[11.5px] font-normal tx1">{rtl ? "ویجت مایلستون" : "Milestone widget"}</div>
                 <div className="mt-2 flex flex-wrap gap-1.5">
@@ -419,6 +439,20 @@ export default function PlanningWorkspace({
               </div>
 
               <div className="glass-dark rounded-2xl p-3">
+                <div className="text-[11.5px] font-normal tx1">{rtl ? "پیش‌بینی پایان" : "Finish forecast"}</div>
+                <p className="mt-2 text-[15px] font-semibold tabular-nums tx1" dir="ltr" style={{ color: m.snapshot.drift > 0 ? "#FF9F9F" : m.snapshot.drift < 0 ? "#8FE3C8" : undefined }}>
+                  {m.cpm.projectFinish}
+                </p>
+                <p className="mt-1 text-[10px] tx3">
+                  {rtl ? "پایان پایه" : "Baseline finish"} <span dir="ltr" className="tabular-nums">{m.baseline.projectFinish}</span>
+                </p>
+                <p className="mt-1 text-[11px] tabular-nums" dir="ltr" style={{ color: m.snapshot.drift > 0 ? "#FF9F9F" : m.snapshot.drift < 0 ? "#8FE3C8" : undefined }}>
+                  {rtl ? "رانش" : "Drift"} {m.snapshot.drift > 0 ? "+" : ""}{m.snapshot.drift} {rtl ? "روز کاری" : "wd"}
+                </p>
+                <p className="mt-1 text-[9.5px] tx4">{rtl ? "از CPM جاری در Data Date — نه عدد دستی" : "From current CPM at data date — not hand-entered"}</p>
+              </div>
+
+              <div className="glass-dark rounded-2xl p-3">
                 <div className="text-[11.5px] font-normal tx1">{rtl ? "منحنی S" : "S-curve"}</div>
                 <div className="mt-2 flex h-12 items-end gap-1">
                   {PEX_SCURVE.map((p) => (
@@ -431,18 +465,52 @@ export default function PlanningWorkspace({
             </div>
 
             <div className="glass-dark rounded-2xl p-3">
-              <div className="mb-2 text-[11.5px] tx1">{rtl ? "پیشرفت بسته‌های کاری" : "Work package progress"}</div>
-              {m.wbsRollup.map((w) => (
-                <div key={w.id} className="mb-2 last:mb-0">
-                  <div className="flex justify-between text-[10.5px] tx2">
-                    <span>{w.id} · {rtl ? w.nameFa : w.nameEn} · {rtl ? "وزن" : "w"} {(w.weight * 100).toFixed(1)}%</span>
-                    <span dir="ltr">{w.actualPct}% / {w.plannedPct}%</span>
+              <div className="mb-2 flex flex-wrap items-center gap-2">
+                <span className="text-[11.5px] tx1">{rtl ? "پیشرفت بسته‌های کاری" : "Work package progress"}</span>
+                <span className="ms-auto flex flex-wrap items-center gap-2.5 text-[9px] tx3">
+                  <span className="flex items-center gap-1"><i className="h-2 w-2 rounded-full" style={{ background: "#8FE3C8" }} />{rtl ? "واقعی" : "Actual"}</span>
+                  <span className="flex items-center gap-1"><i className="h-3 w-0 border-s-2 border-dashed" style={{ borderColor: "#7FB2FF" }} />{rtl ? "برنامه‌ای" : "Planned"}</span>
+                </span>
+              </div>
+              {m.wbsRollup.map((w) => {
+                /* انحراف یک بار حساب می‌شود و همان عدد، رنگ و نشانگر
+                 * تأخیر را تعیین می‌کند؛ دو محاسبهٔ جدا می‌تواند واگرا شود. */
+                const variance = Math.round((w.actualPct - w.plannedPct) * 10) / 10;
+                const behind = variance < -3;
+                const slip = wbsSlip[w.id] ?? 0;
+                return (
+                  <div key={w.id} className="mb-2.5 last:mb-0">
+                    <div className="flex items-center gap-2 text-[10.5px] tx2">
+                      <span className="min-w-0 flex-1 truncate">
+                        {w.id} · {rtl ? w.nameFa : w.nameEn} · {rtl ? "وزن" : "w"} {(w.weight * 100).toFixed(1)}%
+                      </span>
+                      {slip > 0 && (
+                        <span className="shrink-0 rounded-md px-1.5 py-0.5 text-[9px] tabular-nums" style={{ background: "#FF9F9F22", color: "#FF9F9F" }} dir="ltr">
+                          {rtl ? "تأخیر" : "slip"} +{slip}d
+                        </span>
+                      )}
+                      <span className="w-14 shrink-0 text-end tabular-nums" dir="ltr"
+                        style={{ color: behind ? "#FF9F9F" : variance > 3 ? "#8FE3C8" : undefined }}>
+                        {variance > 0 ? "+" : ""}
+                        {variance}%
+                      </span>
+                    </div>
+                    {/* میله روی محور ۰ تا ۱۰۰؛ نشانگر خط‌چین جای هدف است. */}
+                    <div className="relative mt-1 h-2.5 w-full rounded bg-white/10">
+                      <div className="h-2.5 rounded" style={{ width: `${w.actualPct}%`, background: behind ? "#FFD48A" : "#8FE3C8" }} />
+                      <span className="absolute top-[-2px] h-3.5 w-0 border-s-2 border-dashed" style={{ insetInlineStart: `${w.plannedPct}%`, borderColor: "#7FB2FF" }} />
+                    </div>
                   </div>
-                  <div className="mt-1 h-2 w-full rounded bg-white/10">
-                    <div className="h-2 rounded" style={{ width: `${w.actualPct}%`, background: w.actualPct + 3 < w.plannedPct ? "#FFD48A" : "#8FE3C8" }} />
-                  </div>
-                </div>
-              ))}
+                );
+              })}
+              <div className="mt-1 flex justify-between text-[8.5px] tx4 tabular-nums" dir="ltr">
+                <span>۰</span><span>۲۰</span><span>۴۰</span><span>۶۰</span><span>۸۰</span><span>۱۰۰</span>
+              </div>
+              <p className="mt-1.5 text-[9px] tx4">
+                {rtl
+                  ? "واقعی ÷ برنامه‌ای در Data Date · انحراف کمتر از ۳ واحد منفی = عقب‌افتاده"
+                  : "Actual vs planned at data date · variance below −3 units = behind plan"}
+              </p>
             </div>
           </div>
         )}
