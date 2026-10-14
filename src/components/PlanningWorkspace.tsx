@@ -20,6 +20,7 @@ import DprProgressFallback from "./DprProgressFallback";
 import DprSupportTables from "./DprSupportTables";
 import { isDprFormatActive, isDprSupportBoxActive } from "../data/dprScope";
 import MspAnalysisPanel from "./MspAnalysisPanel";
+import PlanningWorkflowMap from "./PlanningWorkflowMap";
 import { ScheduleImportActions } from "./ConnectorActions";
 
 export type PexTab =
@@ -359,6 +360,8 @@ export default function PlanningWorkspace({
       <div className="thin-scroll min-h-0 flex-1 overflow-y-auto pe-1">
         {tab === "dashboard" && (
           <div className="fade-rise space-y-2">
+            {/* نقشهٔ گردش‌کار برنامه‌ریزی و کنترل (EPC) — کلیک روی گره‌ها به زیربخش مربوط می‌رود */}
+            <PlanningWorkflowMap rtl={rtl} onNavigate={(next) => setTab(next)} />
             <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-6">
               {kpis.map((c) => (
                 <div key={c.k} className="glass-dark rounded-2xl p-3">
