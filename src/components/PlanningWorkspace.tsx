@@ -299,6 +299,47 @@ export default function PlanningWorkspace({
   /** بیشترین لغزش (روز کاری) فعالیت‌های هر بسته WBS — نشانگر تأخیر روی
    * میله. همان فرمول ردیف «لغزش» جدول انطباق با پایه تا دو عدد از یک
    * محاسبه واگرا نشوند. */
+  /* فهرست فعالیت‌های نمای پیشرفت: جستجوی متنی + بازهٔ دورهٔ باز.
+   * بازه یک فیلتر حوزه است، نه تاریخچهٔ پیشرفت — ثبت پیشرفت تاریخ ندارد
+   * و «پیشرفت دوره‌ای» بدون آن، عدد ساختگی می‌شود. */
+  const [actQuery, setActQuery] = useState("");
+  const [actScope, setActScope] = useState<"all" | "period">("all");
+
+  /** لغزش هر فعالیت (روز کاری) — یک محاسبه برای همهٔ نمای‌ها. */
+  const rowSlip = useMemo(
+    () =>
+      Object.fromEntries(
+        m.rows
+          .filter((r) => r.baselineFinish)
+          .map((r) => [r.id, workingDaysBetween(r.baselineFinish as string, r.ef) - 1]),
+      ) as Record<string, number>,
+    [m],
+  );
+
+  /** فعالیت‌های نمای پیشرفت: جستجو + بازهٔ دورهٔ باز، عقب‌افتاده‌ها اول. */
+  const actVisible = useMemo(() => {
+    const q = actQuery.trim().toLowerCase();
+    const period = m.openPeriod;
+    return m.rows
+      .filter((r) => {
+        if (actScope === "period" && period && !(r.es <= period.to && r.ef >= period.from)) return false;
+        if (!q) return true;
+        return (
+          r.id.toLowerCase().includes(q) ||
+          r.nameFa.includes(actQuery.trim()) ||
+          r.nameEn.toLowerCase().includes(q) ||
+          r.wbs.includes(q)
+        );
+      })
+      .map((r) => {
+        const variance = Math.round((r.physicalPct - r.plannedPct) * 10) / 10;
+        return { ...r, variance, slip: rowSlip[r.id] ?? 0 };
+      })
+      /* عقب‌افتاده‌ها اول — همان قاعدهٔ فهرست مایلستون (بیشترین لغزش
+       * بالا). کاربر برای پیدا کردن مشکل می‌آید، نه برای دیدن ردیف سالم. */
+      .sort((a, b) => a.variance - b.variance || a.id.localeCompare(b.id));
+  }, [m, actQuery, actScope, rowSlip]);
+
   const wbsSlip = useMemo(() => {
     const out: Record<string, number> = {};
     for (const w of m.wbsRollup) {
@@ -311,6 +352,7 @@ export default function PlanningWorkspace({
 
   /* ردیابی مایلستون: فیلتر، مرتب‌سازی و جمع‌بندی. */
   const [msFilter, setMsFilter] = useState<"all" | "AtRisk" | "Delayed" | "Achieved">("all");
+
 
   const msVisible = useMemo(() => {
     const list = msFilter === "all"
@@ -512,6 +554,114 @@ export default function PlanningWorkspace({
                   : "Actual vs planned at data date · variance below −3 units = behind plan"}
               </p>
             </div>
+
+            {/* نمای پیشرفت فعالیت‌ها — همان دادهٔ WBS بالا، یک سطح ریزتر.
+                عقب‌افتاده‌ها اول: کاربر برای پیدا کردن مشکل می‌آید، نه
+                برای خواندن چهل ردیف سالم. */}
+            <details className="glass-dark rounded-2xl p-3">
+              <summary className="cursor-pointer text-[11.5px] tx1">
+                {rtl ? "وضعیت پیشرفت فعالیت‌ها" : "Activity progress status"}
+                <span className="ms-2 text-[9.5px] tx4">
+                  {actVisible.length} / {m.rows.length}
+                  {actVisible.filter((r) => r.variance < -3).length > 0 &&
+                    ` · ${rtl ? "عقب‌افتاده" : "behind"} ${actVisible.filter((r) => r.variance < -3).length}`}
+                </span>
+              </summary>
+
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <input
+                  type="search"
+                  value={actQuery}
+                  onChange={(e) => setActQuery(e.target.value)}
+                  placeholder={rtl ? "جستجوی کد، نام یا WBS…" : "Search code, name or WBS…"}
+                  className="min-w-[180px] flex-1 rounded-lg border b-line-soft bg-[var(--chip-bg)] px-2 py-1 text-[11px] tx1"
+                />
+                <div className="flex items-center gap-1">
+                  {([
+                    { id: "all" as const, fa: "همه", en: "All" },
+                    { id: "period" as const, fa: "بازهٔ دورهٔ باز", en: "Open period" },
+                  ] as const).map((v) => (
+                    <button
+                      key={v.id}
+                      type="button"
+                      onClick={() => setActScope(v.id)}
+                      className={`rounded-lg px-2 py-1 text-[10px] transition ${
+                        actScope === v.id ? "toggle-on tx1" : "border b-line-soft tx3"
+                      }`}
+                    >
+                      {rtl ? v.fa : v.en}
+                    </button>
+                  ))}
+                </div>
+                {m.openPeriod && (
+                  <span className="rounded-lg border b-line-soft px-2 py-1 text-[9.5px] tx3" dir="ltr">
+                    {rtl ? "دورهٔ باز" : "Open period"} {m.openPeriod.code} · {m.openPeriod.from} → {m.openPeriod.to}
+                  </span>
+                )}
+              </div>
+
+              {actVisible.length === 0 ? (
+                <p className="py-5 text-center text-[10.5px] tx4">
+                  {rtl ? "فعالیتی با این فیلتر نیست." : "No activity matches this filter."}
+                </p>
+              ) : (
+                <div className="thin-scroll mt-2 max-h-[380px] overflow-y-auto">
+                  <table className="w-full min-w-[620px] border-collapse text-[10.5px]">
+                    <thead className="sticky top-0 z-10 bg-[var(--bg-c)]">
+                      <tr className="border-b b-line text-[9.5px] tx3">
+                        <th className="px-2 py-1.5 text-start" style={{ width: 74 }}>{rtl ? "کد" : "Code"}</th>
+                        <th className="px-2 py-1.5 text-start">{rtl ? "فعالیت" : "Activity"}</th>
+                        <th className="px-2 py-1.5 text-center" style={{ width: 54 }}>{rtl ? "برنامه‌ای" : "Plan"}</th>
+                        <th className="px-2 py-1.5 text-center" style={{ width: 54 }}>{rtl ? "واقعی" : "Actual"}</th>
+                        <th className="px-2 py-1.5 text-center" style={{ width: 56 }}>{rtl ? "انحراف" : "Var"}</th>
+                        <th className="px-2 py-1.5 text-center" style={{ width: 48 }}>{rtl ? "لغزش" : "Slip"}</th>
+                        <th className="px-2 py-1.5 text-center" style={{ width: 104 }}>{rtl ? "نمودار" : "Bar"}</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y b-line-soft">
+                      {actVisible.map((r) => {
+                        const behind = r.variance < -3;
+                        return (
+                          <tr key={r.id} className="glass-row">
+                            <td className="px-2 py-1.5 font-mono tx3" dir="ltr">{r.id}</td>
+                            <td className="px-2 py-1.5 tx1">
+                              <span className="flex items-center gap-1.5">
+                                {r.critical && <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: "#FF9F9F" }} />}
+                                <span className="truncate">{rtl ? r.nameFa : r.nameEn}</span>
+                                <span className="shrink-0 text-[9px] tx4" dir="ltr">WBS {r.wbs}</span>
+                              </span>
+                            </td>
+                            <td className="px-2 py-1.5 text-center tabular-nums tx3" dir="ltr">{r.plannedPct}%</td>
+                            <td className="px-2 py-1.5 text-center tabular-nums tx1" dir="ltr">{r.physicalPct}%</td>
+                            <td className="px-2 py-1.5 text-center tabular-nums" dir="ltr"
+                              style={{ color: behind ? "#FF9F9F" : r.variance > 3 ? "#8FE3C8" : undefined }}>
+                              {r.variance > 0 ? "+" : ""}
+                              {r.variance}
+                            </td>
+                            <td className="px-2 py-1.5 text-center tabular-nums" dir="ltr"
+                              style={{ color: r.slip > 0 ? "#FF9F9F" : r.slip < 0 ? "#8FE3C8" : undefined }}>
+                              {r.slip > 0 ? `+${r.slip}` : r.slip}
+                            </td>
+                            <td className="px-2 py-1.5">
+                              <span className="relative block h-2 w-full rounded bg-white/10">
+                                <span className="absolute inset-y-0 start-0 rounded" style={{ width: `${r.physicalPct}%`, background: behind ? "#FFD48A" : "#8FE3C8" }} />
+                                <span className="absolute top-[-2px] h-3 w-0 border-s-2 border-dashed" style={{ insetInlineStart: `${r.plannedPct}%`, borderColor: "#7FB2FF" }} />
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              <p className="mt-2 text-[9px] tx4">
+                {rtl
+                  ? "همهٔ مقادیر تجمعی تا Data Date هستند؛ «بازهٔ دورهٔ باز» فقط حوزهٔ نمایش را محدود می‌کند، چون ثبت پیشرفت تاریخ ندارد و پیشرفت دوره‌ای بدون تاریخ، عدد ساختگی است."
+                  : "All values are cumulative to the data date; the open-period filter only narrows the scope — progress entries carry no date, so a period cut would be a fabricated number."}
+              </p>
+            </details>
           </div>
         )}
 
