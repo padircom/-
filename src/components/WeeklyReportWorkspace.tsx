@@ -1020,7 +1020,7 @@ export function WeeklyReportDatePicker({
           role="dialog"
           aria-label={rtl ? "تقویم انتخاب تاریخ گزارش" : "Report date calendar"}
           dir={rtl ? "rtl" : "ltr"}
-          className={`absolute top-full z-[80] mt-1 w-[264px] rounded-xl border b-line-soft bg-[#101827] p-2.5 text-[10px] shadow-2xl ${rtl ? "right-0" : "left-0"}`}
+          className={`absolute top-full z-[200] mt-1 w-[264px] rounded-xl border b-line bg-[var(--bg-c)] p-2.5 text-[10px] shadow-2xl ${rtl ? "right-0" : "left-0"}`}
         >
           <div className="mb-1.5 flex items-center justify-between gap-2">
             <button type="button" aria-label={rtl ? "ماه قبل" : "Previous month"} disabled={calendarYear === 1300 && calendarMonth === 1} onClick={() => shiftCalendarMonth(-1)} className="grid h-7 w-7 place-items-center rounded-lg border b-line-soft tx2 transition hover:bg-white/10 disabled:opacity-30">{rtl ? "›" : "‹"}</button>
