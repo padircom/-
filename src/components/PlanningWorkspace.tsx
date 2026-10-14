@@ -325,11 +325,6 @@ export default function PlanningWorkspace({
             <h3 className="text-[13px] font-semibold tx1">
               {rtl ? "برنامه‌ریزی و اجرای عملیات (PEX)" : "Planning & Execution (PEX)"}
             </h3>
-            <p className="text-[9.5px] font-extralight tx3">
-              {rtl
-                ? "WBS ستون فقرات · Baseline قفل · Excel/XER ظرف · پیشرفت فقط Approved · Forecast مایلستون = CPM EF"
-                : "WBS backbone · locked baseline · Excel/XER vessel · EV from Approved only · MS forecast = CPM EF"}
-            </p>
           </div>
           <span className="rounded-lg border b-line-soft px-2 py-1 text-[10px] tx3" dir="ltr">{m.project.code} · DataDate {dataDate}</span>
           <span className="rounded-lg border border-emerald-400/30 bg-emerald-400/10 px-2 py-1 text-[10px] text-emerald-200" dir="ltr">{m.cpm.formulaVersion}</span>

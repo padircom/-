@@ -621,9 +621,6 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
           <div className="shrink-0 text-end">
             <SystemBadge domainId={dom.id} lang={lang} className="mb-1 justify-end" />
             <div className="text-[9px] font-extralight tx3">{t(dom.title, lang)}</div>
-            <div className="text-[11px] font-light tx1">
-              {rtl ? "PEX — Excel/XER ظرف است" : "PEX — Excel/XER is a vessel"}
-            </div>
           </div>
         </div>
 
