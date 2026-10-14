@@ -22,8 +22,10 @@ const num = (v: number, lang: Lang, digits = 1) =>
     maximumFractionDigits: digits,
   });
 
-/** مبلغ به واحد منبع — بدون تبدیل ارز و بدون جمع دوباره با هزینهٔ جاری. */
-const money = (v: number, lang: Lang) => num(v, lang, 0);
+/** مبلغ به واحد منبع — بدون تبدیل ارز و بدون جمع دوباره با هزینهٔ جاری.
+ * سقف سه رقم اعشار، همان قاعدهٔ فرمت‌کنندهٔ تب EVM تا اعداد میله‌ها و
+ * جدول KPI یک زبان داشته باشند. */
+const money = (v: number, lang: Lang) => num(v, lang, 3);
 
 /**
  * تاریخ ISO → شمسی خواندنی. اگر تبدیل شکست خورد، خود ISO برمی‌گردد تا

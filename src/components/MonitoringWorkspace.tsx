@@ -87,7 +87,7 @@ function LiveMonitoring({lang,projectId,initialTab,subId,hideTabs,userId}:Props 
           onChange={e=>setSnapId(e.target.value)}
           title={text('تصاویر EVM ثبت‌شدهٔ این پروژه','Stored EVM snapshots of this project')}>
           {[...snapHistory].reverse().map(h=>(
-            <option key={h.id} value={h.id}>
+            <option key={h.id} value={h.id} dir="ltr">
               {jalaliLabel(h.dataDate,lang)}{h.integrity==='verified'?'':' ⚠'}
             </option>
           ))}
@@ -119,7 +119,7 @@ function LiveMonitoring({lang,projectId,initialTab,subId,hideTabs,userId}:Props 
           یعنی ویجت خالی، نه مقدار ساختگی. */}
       {tab==='dash'&&<ControlDashboard p={p} history={snapHistory} lang={lang} fmt={fmt}/>}
       {showEvm&&<section className="glass-dark rounded-xl p-3 space-y-3">
-        <div className="flex flex-wrap gap-3 text-xs tx2"><h4>EVM · {state(current.evm.state)}</h4><span>{text('تاریخ داده: ','Data date: ')}{p?.dataDate??'—'}</span><span dir="ltr">{p?.formulaVersion??'—'} · {p?.id??'—'}</span></div>
+        <div className="flex flex-wrap gap-3 text-xs tx2"><h4>EVM · {state(current.evm.state)}</h4><span>{text('تاریخ داده: ','Data date: ')}{jalaliLabel(p?.dataDate??null,lang)}</span><span dir="ltr">{p?.formulaVersion??'—'} · {p?.id??'—'}</span></div>
         <p className="text-xs tx3">{text('سازگاری تصویر: ','Snapshot integrity: ')}{p?.integrity??'—'} · {text('ردیف بی‌تاریخ / آینده کنارگذاشته‌شده: ','Undated / future rows excluded: ')}{fmt(current.evm.excludedUndatedOrFuture)}</p>
         {p?.stale&&<p className="text-amber-400 text-xs">{text('این تصویر بیش از ۳۰ روز قدمت دارد.','This snapshot is over 30 days old.')}</p>}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">{(tab==='forecast'?['eac','etc','vac']:tab==='var'?['spi','cpi','sv','cv']:['pv','ev','ac','bac','spi','cpi','sv','cv']).map(k=><div key={k} className="rounded-lg border b-line-soft p-3"><div className="text-xs tx3">{k.toUpperCase()}</div><div className="text-xl tx1 tabular-nums" dir="ltr">{fmt(p?.[k as 'pv'])}</div></div>)}</div>
@@ -219,7 +219,7 @@ function ControlDashboard({p,history,lang,fmt}:{p:EvmPoint|null;history:EvmPoint
             <select className="bg-[var(--row)] tx1 rounded-lg border b-line-soft p-1.5 text-[11px]" value={cmpId}
               disabled={history.length<2} onChange={e=>setCmpId(e.target.value)}>
               {history.filter(h=>h.id!==p?.id).map(h=>(
-                <option key={h.id} value={h.id}>{jalaliLabel(h.dataDate,lang)}{h.integrity==='verified'?'':' ⚠'}</option>
+                <option key={h.id} value={h.id} dir="ltr">{jalaliLabel(h.dataDate,lang)}{h.integrity==='verified'?'':' ⚠'}</option>
               ))}
             </select>
           </label>
@@ -267,7 +267,7 @@ function ControlDashboard({p,history,lang,fmt}:{p:EvmPoint|null;history:EvmPoint
   );
 }
 
-function Items({title,items,lang}:{title:string;items:MonitoringItem[];lang:Lang}) {  return <section className="glass-dark rounded-xl p-3 space-y-2"><h4 className="text-sm tx1">{title}</h4>{!items.length&&<p className="tx3 text-xs">{lang==='fa'?'مورد قابل مشاهده‌ای در این افق نیست؛ وضعیت منبع را در جدول پوشش بررسی کنید.':'No visible items in this horizon; check source coverage.'}</p>}{items.map(i=><article key={`${i.table}:${i.id}`} className="rounded-lg border b-line-soft p-2 flex flex-wrap gap-3 text-xs tx2"><strong>{i.code} — {i.title}</strong><span dir="ltr">{i.dueDate??'—'}</span><span className={i.status==='overdue'||i.critical?'text-amber-300':''}>{i.status}{i.critical?' · !':''}</span>{i.table==='Activity'&&<span>{lang==='fa'?'پیشرفت مصوب: ':'Approved: '}{i.approvedPct===null?'—':`${i.approvedPct}%`}</span>}<small className="tx3" dir="ltr">{i.table} · {i.id}</small></article>)}</section>;
+function Items({title,items,lang}:{title:string;items:MonitoringItem[];lang:Lang}) {  return <section className="glass-dark rounded-xl p-3 space-y-2"><h4 className="text-sm tx1">{title}</h4>{!items.length&&<p className="tx3 text-xs">{lang==='fa'?'مورد قابل مشاهده‌ای در این افق نیست؛ وضعیت منبع را در جدول پوشش بررسی کنید.':'No visible items in this horizon; check source coverage.'}</p>}{items.map(i=><article key={`${i.table}:${i.id}`} className="rounded-lg border b-line-soft p-2 flex flex-wrap gap-3 text-xs tx2"><strong>{i.code} — {i.title}</strong><span dir="ltr">{jalaliLabel(i.dueDate,lang)}</span><span className={i.status==='overdue'||i.critical?'text-amber-300':''}>{i.status}{i.critical?' · !':''}</span>{i.table==='Activity'&&<span>{lang==='fa'?'پیشرفت مصوب: ':'Approved: '}{i.approvedPct===null?'—':`${i.approvedPct}%`}</span>}<small className="tx3" dir="ltr">{i.table} · {i.id}</small></article>)}</section>;
 }
 function SnapshotTrend({data,lang}:{data:MonitoringData;lang:Lang}) {
   const points=data.evm.history.slice(-60);
@@ -277,5 +277,5 @@ function SnapshotTrend({data,lang}:{data:MonitoringData;lang:Lang}) {
   const x=(p:typeof points[number])=>30+((Date.parse(p.dataDate??data.today)-first)/Math.max(86400000,last-first))*620;
   const y=(n:number)=>185-(n/max)*160;
   const colours={pv:'#7fb2ff',ev:'#34d399',ac:'#fbbf24'};
-  return <section className="glass-dark rounded-xl p-3 space-y-3"><h4 className="text-sm tx1">{lang==='fa'?'روند حداکثر ۶۰ تصویر آخر؛ نه منحنی برنامهٔ ساخته‌شده':'Up to 60 latest snapshots; not an invented planned curve'}</h4>{!points.length?<p className="tx3 text-xs">{lang==='fa'?'تصویر قابل مشاهده‌ای وجود ندارد.':'No visible snapshots.'}</p>:<><svg viewBox="0 0 680 210" className="w-full max-h-64" role="img" aria-label="PV EV AC snapshot trend"><path d="M30 20 V185 H650" stroke="currentColor" fill="none" opacity=".3"/>{(['pv','ev','ac'] as const).map(key=><g key={key}>{points.map((p,i)=>{const value=p[key],prev=points[i-1];return value===null?null:<g key={p.id}><circle cx={x(p)} cy={y(value)} r="3" fill={colours[key]}/>{prev&&prev.formulaVersion===p.formulaVersion&&prev[key]!==null&&<line x1={x(prev)} y1={y(prev[key]!)} x2={x(p)} y2={y(value)} stroke={colours[key]}/>}</g>;})}</g>)}</svg><div className="flex gap-4 text-xs">{Object.entries(colours).map(([k,v])=><span key={k} style={{color:v}}>{k.toUpperCase()}</span>)}</div><div className="overflow-x-auto"><table className="w-full text-xs tx2"><thead><tr><th>DataDate</th><th>PV</th><th>EV</th><th>AC</th><th>Status</th></tr></thead><tbody>{points.map(p=><tr key={p.id}><td>{p.dataDate}</td><td>{p.pv??'—'}</td><td>{p.ev??'—'}</td><td>{p.ac??'—'}</td><td>{p.state}</td></tr>)}</tbody></table></div></>}</section>;
+  return <section className="glass-dark rounded-xl p-3 space-y-3"><h4 className="text-sm tx1">{lang==='fa'?'روند حداکثر ۶۰ تصویر آخر؛ نه منحنی برنامهٔ ساخته‌شده':'Up to 60 latest snapshots; not an invented planned curve'}</h4>{!points.length?<p className="tx3 text-xs">{lang==='fa'?'تصویر قابل مشاهده‌ای وجود ندارد.':'No visible snapshots.'}</p>:<><svg viewBox="0 0 680 210" className="w-full max-h-64" role="img" aria-label="PV EV AC snapshot trend"><path d="M30 20 V185 H650" stroke="currentColor" fill="none" opacity=".3"/>{(['pv','ev','ac'] as const).map(key=><g key={key}>{points.map((p,i)=>{const value=p[key],prev=points[i-1];return value===null?null:<g key={p.id}><circle cx={x(p)} cy={y(value)} r="3" fill={colours[key]}/>{prev&&prev.formulaVersion===p.formulaVersion&&prev[key]!==null&&<line x1={x(prev)} y1={y(prev[key]!)} x2={x(p)} y2={y(value)} stroke={colours[key]}/>}</g>;})}</g>)}</svg><div className="flex gap-4 text-xs">{Object.entries(colours).map(([k,v])=><span key={k} style={{color:v}}>{k.toUpperCase()}</span>)}</div><div className="overflow-x-auto"><table className="w-full text-xs tx2"><thead><tr><th>DataDate</th><th>PV</th><th>EV</th><th>AC</th><th>Status</th></tr></thead><tbody>{points.map(p=><tr key={p.id}><td>{jalaliLabel(p.dataDate,lang)}</td><td>{p.pv??'—'}</td><td>{p.ev??'—'}</td><td>{p.ac??'—'}</td><td>{p.state}</td></tr>)}</tbody></table></div></>}</section>;
 }

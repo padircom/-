@@ -236,7 +236,9 @@ export default function PlanningWorkspace({
       { k: rtl ? "پیشرفت واقعی" : "Actual", v: `${m.overallPct}%`, c: "#8FE3C8" },
       { k: rtl ? "برنامه‌ای" : "Planned", v: `${m.plannedPct}%`, c: "#7FB2FF" },
       { k: rtl ? "انحراف" : "Variance", v: `${m.variance.deltaPct > 0 ? "+" : ""}${m.variance.deltaPct}`, c: m.variance.status === "behind" ? "#FF9F9F" : "#8FE3C8" },
-      ...(spi === null ? [] : [{ k: "SPI", v: `${(spi * 100).toFixed(0)}%`, c: spiColor }]),
+      /* SPI به‌صورت نسبت (۰٫۹۵ آستانهٔ هشدار) — همان قرارداد تب EVM
+       * پایش، نه درصد؛ وگرنه یک شاخص در دو ماژول دو معنا پیدا می‌کند. */
+      ...(spi === null ? [] : [{ k: "SPI", v: spi.toFixed(2), c: spiColor }]),
       { k: "PPC", v: `${m.ppcPct}%`, c: "#C9A7FF" },
       { k: rtl ? "سلامت زمان‌بندی" : "Health", v: String(m.dcma.healthScore), c: m.dcma.healthScore < 80 ? "#FFD48A" : "#8FE3C8" },
       { k: rtl ? "جریمه برآوردی" : "Penalty est.", v: `${Math.round(m.totalPenalty / 1000)}k`, c: "#FF9F9F" },
