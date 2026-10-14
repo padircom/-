@@ -329,7 +329,6 @@ export default function PlanningWorkspace({
             </h3>
           </div>
           <span className="rounded-lg border b-line-soft px-2 py-1 text-[10px] tx3" dir="ltr">{m.project.code} · DataDate {dataDate}</span>
-          <span className="rounded-lg border border-emerald-400/30 bg-emerald-400/10 px-2 py-1 text-[10px] text-emerald-200" dir="ltr">{m.cpm.formulaVersion}</span>
         </div>
       </section>
 
