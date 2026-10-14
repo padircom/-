@@ -1806,7 +1806,7 @@ export default function ManufacturingWorkspace({
     >
       <div ref={contentRef} className="flex flex-col gap-3">
       {/* ── وضعیت نقش فعال و بازهٔ زمانی ── */}
-      <div className="glass rounded-xl px-3 py-2 flex flex-wrap items-center justify-between gap-2 text-xs tx3">
+      <div className="glass relative z-40 rounded-xl px-3 py-2 flex flex-wrap items-center justify-between gap-2 text-xs tx3">
         <div>
           <span>{tr("کاربر فعال MES:", "Active MES Subject:")} </span>
           {/* شناسهٔ فنی کاربر (u-…) نمایشی نیست و فقط مقدار داخلی انتخاب است؛ این‌جا فقط نام نقش می‌آید. */}
