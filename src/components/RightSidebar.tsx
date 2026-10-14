@@ -57,20 +57,16 @@ const MES_SIDEBAR_ITEMS: Array<{ id: MfgTab; icon: string; label: Bi }> = [
   { id: "overview", icon: "📊", label: { fa: "داشبورد و OEE", en: "Dashboard & OEE" } },
 ];
 
-/* زیرماژول‌های سرگروه سوم: نگهداری و تعمیرات (CMMS) — هم‌راستا با
- * CMMS_SUBMODULES در CmmsWorkspaceShell تا نوار کناری و تب‌ها یکی بمانند. */
+/* سرگروه سوم: نگهداری و تعمیرات (CMMS) — در سایدبار اصلی فقط ۵ ماژول
+ * اصلی و روزمره می‌نشیند تا زیرمنو خلوت بماند. باقی زیرماژول‌ها حذف
+ * نشده‌اند؛ در سایدبار داخلی خود ماژول CMMS، دسته‌بندی‌شده زیر
+ * CMMS_GROUPS در CmmsWorkspaceShell در دسترس‌اند. */
 const CMMS_SIDEBAR_ITEMS: Array<{ id: CmmsSubModuleId; icon: string; label: Bi }> = [
   { id: "dashboard", icon: "📊", label: { fa: "داشبورد مدیریت نت", en: "Maintenance Dashboard" } },
+  { id: "workflow", icon: "🗺️", label: { fa: "نقشهٔ گردش‌کار نت", en: "Maintenance Workflow Map" } },
   { id: "assets", icon: "🏷️", label: { fa: "شناسنامه تجهیزات و دارایی‌ها", en: "Equipment & Asset Registry" } },
-  { id: "families", icon: "🧬", label: { fa: "خانوادهٔ تجهیز (PMworks)", en: "Equipment Family (PMworks)" } },
   { id: "pm", icon: "🗓️", label: { fa: "برنامه‌ریزی نت پیشگیرانه", en: "Preventive Maintenance Planning" } },
   { id: "work-orders", icon: "🛠️", label: { fa: "درخواست‌کار و دستورکار", en: "Work Requests & Orders" } },
-  { id: "spares", icon: "⚙️", label: { fa: "انبار قطعات یدکی", en: "MRO Spare Parts" } },
-  { id: "condition", icon: "🌡️", label: { fa: "پایش وضعیت و هشدارها", en: "Condition Monitoring & Alerts" } },
-  { id: "analytics", icon: "📈", label: { fa: "قابلیت اطمینان و هزینهٔ چرخهٔ عمر", en: "Reliability & LCC Analytics" } },
-  { id: "rcfa", icon: "🧩", label: { fa: "تحلیل ریشه‌ای (RCFA)", en: "Root Cause Analysis (RCFA)" } },
-  { id: "integration", icon: "🔗", label: { fa: "یکپارچگی با تولید (MES)", en: "Cross-module Integration (MES)" } },
-  { id: "ai", icon: "🤖", label: { fa: "هوش مصنوعی نت", en: "Maintenance AI" } },
 ];
 
 /* زیرماژول‌های سرگروه چهارم: زنجیره تأمین، بازرگانی و مالی (SCM & Finance) */
@@ -84,6 +80,7 @@ const SCM_SIDEBAR_ITEMS: Array<{ id: ScmSubModuleId; icon: string; label: Bi }> 
 
 /* زیرماژول‌های سرگروه پنجم: پایش میدانی و اینترنت اشیاء (IIoT & DAS) */
 const IIOT_SIDEBAR_ITEMS: Array<{ id: IiotSubModuleId; icon: string; label: Bi }> = [
+  { id: "dashboard", icon: "📊", label: { fa: "داشبورد IIoT", en: "IIoT Dashboard" } },
   { id: "drilling-das", icon: "📡", label: { fa: "پایش زنده حفاری و عملیات (Drilling DAS)", en: "Live Drilling & Operations (Drilling DAS)" } },
   { id: "iot-devices", icon: "🛰️", label: { fa: "مدیریت سنسورها و تجهیزات IoT", en: "IoT Sensors & Devices Management" } },
   { id: "condition-monitoring", icon: "🌡️", label: { fa: "پایش آنلاین شرایط محیطی و تجهیزات", en: "Online Environmental & Condition Monitoring" } },
@@ -242,14 +239,6 @@ export default function RightSidebar({
     .filter((d) => d.id !== "d7" || can("system.manage"))
     .map((d) => taxonomyOverrides[d.id] ? { ...d, processes: taxonomyOverrides[d.id] } : d);
 
-  /* شمارندهٔ چارچوب از خودِ داده مشتق می‌شود، نه متن ثابت — و فقط همانی را
-   * می‌شمارد که کاربر اجازهٔ دیدنش را دارد تا عدد با فهرست یکی باشد. */
-  const domainCount = visibleDomains.length;
-  const processCount = visibleDomains.reduce((n, d) => n + d.processes.length, 0);
-  const subCount = visibleDomains.reduce(
-    (n, d) => n + d.processes.reduce((m, p) => m + p.subs.length, 0),
-    0,
-  );
   const faDigits = (n: number) => n.toLocaleString("fa-IR", { useGrouping: false });
 
 
@@ -383,21 +372,25 @@ export default function RightSidebar({
     <div className="sidebar-dock context-sidebar">
     <div className="sidebar-panel">
     <aside dir={rtl ? "rtl" : "ltr"} className="glass-dark flex h-full min-h-0 w-full flex-col rounded-2xl">
-      <header className="b-line border-b px-4 py-3.5">
+      <header className="b-line border-b px-4 pb-3 pt-3.5">
+        {/* لوگوتایپ خلوت بالای جست‌وجو: فقط نشان کوچک + نام برند، صرفاً انگلیسی،
+            هم‌تراز با ابتدای سایدبار (نه وسط‌چین) و بدون هیچ tooltip/باکس
+            شناوری روی هاور — آمار حوزه/فرآیند این‌جا نمایش داده نمی‌شود. */}
         <div className="flex items-center gap-2">
-          <span className="chip-bg grid h-7 w-7 place-items-center rounded-lg text-[13px]">🧩</span>
-          <div className="min-w-0 flex-1">
-            <h2 className="truncate text-[12.5px] font-normal tx1">{t(ui.frameworkTitle, lang)}</h2>
-            <p className="mt-0.5 truncate text-[9.5px] font-extralight tx3">
-{rtl
-                ? `${faDigits(domainCount)} حوزه · ${faDigits(processCount)} فرآیند · ${faDigits(subCount)} زیرفرآیند`
-                : `${domainCount} Domains · ${processCount} Processes · ${subCount} Sub-processes`}
-            </p>
-          </div>
+          <span
+            aria-hidden="true"
+            className="accent-t grid h-6 w-6 shrink-0 select-none place-items-center rounded-[7px] text-[11px] font-bold leading-none"
+            style={{ background: "var(--accent-soft)", boxShadow: "inset 0 0 0 1px var(--line-soft)" }}
+          >
+            A
+          </span>
+          <h2 dir="ltr" className="whitespace-nowrap text-[12.5px] font-semibold leading-6 tracking-tight tx1">
+            {t(ui.frameworkTitle, lang)}
+          </h2>
         </div>
 
         {/* جست‌وجوی زندهٔ حوزه / فرآیند / زیرفرآیند */}
-        <div className="relative mt-2.5">
+        <div className="relative mt-3">
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}

@@ -14,6 +14,7 @@
  * این کامپوننت فقط نمایش است؛ هیچ API، داده یا منطق دامنه‌ای ندارد.
  */
 
+import { Fragment } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import type { Lang } from "../data/framework";
 
@@ -26,6 +27,12 @@ export type ModuleNavItem<T extends string = string> = {
   disabledHint?: string;
   /** عنصر دلخواه در انتهای ردیف، مثل نقطهٔ وضعیت مجوز. */
   trailing?: ReactNode;
+  /**
+   * عنوان دستهٔ سایدبار داخلی (اختیاری). هرجا مقدارش نسبت به آیتم قبلی
+   * عوض شود، یک سربند دسته چاپ می‌شود؛ ماژول‌هایی که دسته نمی‌گذارند
+   * (MES/SCM/…) همان فهرست تخت قبلی را می‌بینند.
+   */
+  group?: string;
 };
 
 /** کلاس‌های مشترک؛ هم‌خوان با سطوح PMIS. */
@@ -166,7 +173,10 @@ export default function ModuleWorkspaceShell<T extends string>({
 
         <ModuleIconTile accent={accent}>{icon}</ModuleIconTile>
 
-        <div className="min-w-0 flex-1">
+        {/* بلوک عنوان حداقل عرض خوانا دارد؛ اگر انتخاب‌گرهای ماژول (مثل IIoT)
+            جا را تنگ کنند، به‌جای له‌شدن عنوان و کلمه‌کلمه‌شدن متن، کل بخش
+            اکشن‌ها به خط بعد می‌رود و عنوان با ellipsis کوتاه می‌شود. */}
+        <div className="min-w-60 flex-1">
           <nav aria-label={fa ? "مسیر" : "Breadcrumb"} className="flex flex-wrap items-center gap-1 text-[9px] font-extralight tx3">
             {onBack ? (
               <button type="button" onClick={onBack} className="hover:tx1 transition">{homeLabel}</button>
@@ -187,7 +197,7 @@ export default function ModuleWorkspaceShell<T extends string>({
         </div>
 
         {(badges || actions) && (
-          <div className="flex min-w-0 max-w-full flex-wrap items-center justify-end gap-2 text-end">
+          <div className="ms-auto flex min-w-0 max-w-full flex-wrap items-center justify-end gap-2 text-end [&_input]:max-w-52 [&_select]:max-w-52">
             {badges}
             {actions}
           </div>
@@ -226,9 +236,22 @@ export default function ModuleWorkspaceShell<T extends string>({
           <div className="thin-scroll flex-1 space-y-1 overflow-y-auto p-2">
             {navItems.map((item, index) => {
               const active = item.id === activeId;
+              /* سربند دسته: فقط وقتی این آیتم دسته دارد و دسته‌اش با قبلی فرق می‌کند. */
+              const groupHeader = item.group && item.group !== navItems[index - 1]?.group ? (
+                <div
+                  key={`group:${item.group}`}
+                  className="flex items-center gap-1.5 px-2 pb-0.5 pt-3 text-[9px] font-semibold tracking-wide tx3 first:pt-1"
+                  role="presentation"
+                >
+                  <span className="h-px flex-1" style={{ background: "var(--line-soft)" }} aria-hidden="true" />
+                  <span>{item.group}</span>
+                  <span className="h-px flex-1" style={{ background: "var(--line-soft)" }} aria-hidden="true" />
+                </div>
+              ) : null;
               return (
+                <Fragment key={item.id}>
+                {groupHeader}
                 <button
-                  key={item.id}
                   type="button"
                   disabled={item.disabled}
                   title={item.disabled ? item.disabledHint : undefined}
@@ -240,10 +263,10 @@ export default function ModuleWorkspaceShell<T extends string>({
                     {(index + 1).toLocaleString(fa ? "fa-IR" : "en-US")}
                   </span>
                   {item.icon && <span className="shrink-0 text-[12px]" aria-hidden="true">{item.icon}</span>}
-                  <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: accent }} aria-hidden="true" />
                   <span className="min-w-0 flex-1 truncate text-[10px] font-light tx1">{item.label}</span>
                   {item.trailing}
                 </button>
+                </Fragment>
               );
             })}
           </div>

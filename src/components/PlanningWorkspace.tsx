@@ -20,9 +20,11 @@ import DprProgressFallback from "./DprProgressFallback";
 import DprSupportTables from "./DprSupportTables";
 import { isDprFormatActive, isDprSupportBoxActive } from "../data/dprScope";
 import MspAnalysisPanel from "./MspAnalysisPanel";
+import PlanningWorkflowMap from "./PlanningWorkflowMap";
 import { ScheduleImportActions } from "./ConnectorActions";
 
 export type PexTab =
+  | "workflow"
   | "dashboard"
   | "insight"
   | "workshop"
@@ -44,6 +46,7 @@ export type PexTab =
   | "roc";
 
 const TABS: { id: PexTab; fa: string; en: string }[] = [
+  { id: "workflow", fa: "نقشهٔ گردش‌کار", en: "Workflow Map" },
   { id: "dashboard", fa: "داشبورد", en: "Dashboard" },
   { id: "insight", fa: "تحلیل MSP/P6", en: "MSP/P6 Insight" },
   { id: "workshop", fa: "کارگاه برنامه‌ریزی", en: "Planning Workshop" },
@@ -113,7 +116,9 @@ export default function PlanningWorkspace({
     setTab(initialTab);
   }, [initialTab]);
 
-  const [live, setLive] = useState<ApiSchedule | null>(null);
+  /* نشان «زنده/محلی» حذف شد؛ خواندن از سرور برای گرم‌شدن مسیر API می‌ماند
+   * ولی مقدارش دیگر جایی نمایش داده نمی‌شود. */
+  const [, setLive] = useState<ApiSchedule | null>(null);
 
   /* خواندن برنامه از سرور؛ بازخوانی پس از ورود فایل هم از همین مسیر می‌آید تا
    * نمودار و اعداد همان دادهٔ سرور باشند، نه محاسبهٔ محلی. */
@@ -322,21 +327,9 @@ export default function PlanningWorkspace({
             <h3 className="text-[13px] font-semibold tx1">
               {rtl ? "برنامه‌ریزی و اجرای عملیات (PEX)" : "Planning & Execution (PEX)"}
             </h3>
-            <p className="text-[9.5px] font-extralight tx3">
-              {rtl
-                ? "WBS ستون فقرات · Baseline قفل · Excel/XER ظرف · پیشرفت فقط Approved · Forecast مایلستون = CPM EF"
-                : "WBS backbone · locked baseline · Excel/XER vessel · EV from Approved only · MS forecast = CPM EF"}
-            </p>
           </div>
           <span className="rounded-lg border b-line-soft px-2 py-1 text-[10px] tx3" dir="ltr">{m.project.code} · DataDate {dataDate}</span>
           <span className="rounded-lg border border-emerald-400/30 bg-emerald-400/10 px-2 py-1 text-[10px] text-emerald-200" dir="ltr">{m.cpm.formulaVersion}</span>
-          <span
-            className="rounded-lg px-2 py-1 text-[10px]"
-            style={live ? { background: "#8FE3C822", color: "#8FE3C8" } : { background: "#FFD48A22", color: "#FFD48A" }}
-            title={live ? "/api/pex/schedule" : rtl ? "بک‌اند در دسترس نیست؛ محاسبه محلی با همان موتور" : "backend unavailable; local engine"}
-          >
-            {live ? (rtl ? "داده زنده" : "live") : rtl ? "محاسبه محلی" : "local"}
-          </span>
         </div>
       </section>
 
@@ -357,6 +350,38 @@ export default function PlanningWorkspace({
       )}
 
       <div className="thin-scroll min-h-0 flex-1 overflow-y-auto pe-1">
+        {/* در حالت بدون نوار تب (ورود از مسیر پروژه)، بعد از پرش از روی نقشه
+            به یک زیربخش، راه برگشت فقط همین دکمه است. */}
+        {hideTabs && tab !== "workflow" && (
+          <div className="fade-rise mb-2 flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setTab("workflow")}
+              className="glass-row flex items-center gap-1.5 rounded-lg px-3 py-2 text-[10.5px] font-light tx2 transition hover:tx1"
+            >
+              <span aria-hidden="true">{rtl ? "→" : "←"}</span>
+              {rtl ? "بازگشت به نقشهٔ گردش‌کار" : "Back to workflow map"}
+            </button>
+            <span className="text-[10px] tx3">
+              {rtl ? "برای دیدن دوبارهٔ نقشهٔ فرایند و انتخاب گرهٔ دیگر" : "To see the process map again and pick another node"}
+            </span>
+          </div>
+        )}
+
+        {/* نقشهٔ گردش‌کار: صفحهٔ مرکزی و مستقل ماژول؛ نقطهٔ ورود پیش‌فرض.
+            کلیک روی هر گره به زیربخش/ماژول مربوط می‌رود و دکمهٔ بازگشت
+            بالای زیربخش‌ها دوباره به همین نقشه برمی‌گردد. */}
+        {tab === "workflow" && (
+          <div className="fade-rise flex min-h-full items-center justify-center py-3">
+            <div className="w-full max-w-[1060px]">
+              <PlanningWorkflowMap rtl={rtl} onNavigate={(next) => setTab(next)} />
+              <p className="mt-2 text-center text-[10px] tx3">
+                {rtl ? "برای شروع، روی هر گره از نقشه کلیک کنید تا به بخش مربوط بروید." : "Start by clicking any node on the map to open its section."}
+              </p>
+            </div>
+          </div>
+        )}
+
         {tab === "dashboard" && (
           <div className="fade-rise space-y-2">
             <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-6">

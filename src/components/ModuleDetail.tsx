@@ -581,9 +581,9 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
   const d2Tab = ((): PexTab => {
     const sid = selected?.sId ?? target.subId;
     if (sid && D2_TAB_BY_SUB[sid]) return D2_TAB_BY_SUB[sid];
-    /* داشبورد مدیر پروژه به حوزهٔ پایش رفت، پس دیگر نقطهٔ ورود معقولی
-     * برای این حوزه نیست. کارگاه سرِ زنجیره است و پیش‌فرض درست همان. */
-    return "workshop";
+    /* نقطهٔ ورود ماژول، نقشهٔ گردش‌کار در وسط صفحه است؛ از روی گره‌ها
+     * به زیربخش‌ها می‌روند و با دکمهٔ بازگشت به نقشه برمی‌گردند. */
+    return "workflow";
   })();
 
   if (dom.id === "d2") {
@@ -621,9 +621,6 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
           <div className="shrink-0 text-end">
             <SystemBadge domainId={dom.id} lang={lang} className="mb-1 justify-end" />
             <div className="text-[9px] font-extralight tx3">{t(dom.title, lang)}</div>
-            <div className="text-[11px] font-light tx1">
-              {rtl ? "PEX — Excel/XER ظرف است" : "PEX — Excel/XER is a vessel"}
-            </div>
           </div>
         </div>
 

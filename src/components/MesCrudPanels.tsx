@@ -55,6 +55,17 @@ const PRIORITY_RULES = ["EDD", "CR", "MANUAL"] as const;
 const DEMAND_SOURCES = ["manual", "sales-order", "contract", "forecast"] as const;
 const DEMAND_TYPES = ["sales-order", "forecast", "contract", "manual"] as const;
 const DEMAND_STATUSES = ["draft", "confirmed", "cancelled"] as const;
+const DEMAND_TYPE_LABELS: Record<string, { fa: string; en: string }> = {
+  "sales-order": { fa: "سفارش فروش", en: "Sales order" },
+  forecast: { fa: "پیش‌بینی فروش", en: "Forecast" },
+  contract: { fa: "قرارداد", en: "Contract" },
+  manual: { fa: "ثبت دستی", en: "Manual" },
+};
+const DEMAND_STATUS_LABELS: Record<string, { fa: string; en: string }> = {
+  draft: { fa: "پیش‌نویس", en: "Draft" },
+  confirmed: { fa: "تأییدشده", en: "Confirmed" },
+  cancelled: { fa: "لغوشده", en: "Cancelled" },
+};
 const LOT_RULES = ["L4L", "FOQ", "EOQ", "POQ"] as const;
 
 function opts(values: readonly string[]) {
@@ -1217,31 +1228,95 @@ export function MesOrdersPanel({ fa, plantId, userId, onChanged }: MesPanelProps
 export function MesDemandPanel({ fa, plantId, userId, onChanged }: MesPanelProps) {
   const tr = (faText: string, enText: string) => (fa ? faText : enText);
   const allowed = canMfgAccess(userId, "mfg.demand.edit", plantId);
+  const deniedText = tr("نقش فعال مجوز ویرایش تقاضا ندارد", "The active role cannot edit demand");
   const list = useMesRows((offset) => MfgClient.listDemandForecasts(plantId, userId, { limit: PAGE, offset }), [plantId, userId]);
   const parts = useMesRows((offset) => MfgClient.listParts(plantId, userId, { limit: PAGE, offset }), [plantId, userId]);
   const rows = list.rows as MfgDemandForecast[];
   const partList = parts.rows as MfgPart[];
   const partOptions = partList.map((p) => ({ value: p.Id, label: `${p.PartNo} — ${p.NameFa}` }));
-  const partLabel = (id: string) => partList.find((p) => p.Id === id)?.PartNo ?? id;
+  const partLabel = (id: string) => {
+    const part = partList.find((p) => p.Id === id);
+    return part ? `${part.PartNo} — ${part.NameFa}` : id;
+  };
+  const typeLabel = (code: string) => {
+    const label = DEMAND_TYPE_LABELS[code];
+    return label ? (fa ? label.fa : label.en) : code;
+  };
+  const statusLabel = (code: string) => {
+    const label = DEMAND_STATUS_LABELS[code];
+    return label ? (fa ? label.fa : label.en) : code;
+  };
+  const typeOptions = DEMAND_TYPES.map((value) => ({ value, label: typeLabel(value) }));
+  const statusOptions = DEMAND_STATUSES.map((value) => ({ value, label: statusLabel(value) }));
 
   const fields: FormFieldDef[] = [
     { name: "RequiredAt", label: tr("تاریخ نیاز", "Required on"), type: "date", required: true },
     { name: "Quantity", label: tr("مقدار", "Quantity"), type: "number", required: true, min: 0.000001 },
-    { name: "Uom", label: tr("واحد", "UoM"), maxLength: 16, ltr: true },
-    { name: "ConfidencePct", label: tr("اطمینان %", "Confidence %"), type: "number", min: 0, max: 100 },
+    {
+      name: "Uom",
+      label: tr("واحد", "UoM"),
+      maxLength: 16,
+      ltr: true,
+      hint: tr("خالی بماند، واحد پایهٔ قطعه استفاده می‌شود", "Leave blank to use the part's base unit"),
+    },
+    {
+      name: "ConfidencePct",
+      label: tr("درصد اطمینان", "Confidence %"),
+      type: "number",
+      min: 0,
+      max: 100,
+      hint: tr("برای ردیف «پیش‌بینی فروش» الزامی است", "Required for a sales-forecast row"),
+    },
     { name: "CustomerRef", label: tr("ارجاع مشتری", "Customer ref."), maxLength: 80, ltr: true },
     { name: "CustomerNameSnapshot", label: tr("نام مشتری", "Customer name"), maxLength: 240 },
-    { name: "NoteFa", label: tr("یادداشت", "Note"), type: "textarea", maxLength: 1000, fullWidth: true },
+    { name: "NoteFa", label: tr("یادداشت", "Note"), type: "textarea", maxLength: 800, fullWidth: true },
   ];
 
   const columns: GridColumnDef<MfgDemandForecast>[] = [
-    { key: "DemandRef", header: tr("ارجاع", "Reference"), ltr: true, mono: true },
-    { key: "PartId", header: tr("قطعه", "Part"), accessor: (row) => partLabel(row.PartId), ltr: true, mono: true },
-    { key: "DemandType", header: tr("نوع", "Type"), filter: "auto" },
+    { key: "DemandRef", header: tr("ارجاع تقاضا", "Demand reference"), ltr: true, mono: true },
+    { key: "PartId", header: tr("قطعه", "Part"), accessor: (row) => partLabel(row.PartId) },
+    {
+      key: "DemandType",
+      header: tr("نوع تقاضا", "Demand type"),
+      accessor: (row) => row.DemandType,
+      render: (row) => typeLabel(row.DemandType),
+      filter: typeOptions.map((option) => ({ value: option.value, label: option.label })),
+    },
     { key: "RequiredAt", header: tr("تاریخ نیاز", "Required on"), accessor: (row) => shortDate(row.RequiredAt), ltr: true },
-    { key: "Quantity", header: tr("مقدار", "Qty"), align: "end", ltr: true },
-    { key: "ConsumedQuantity", header: tr("مصرف‌شده", "Consumed"), align: "end", ltr: true },
-    { key: "Status", header: tr("وضعیت", "Status"), filter: "auto" },
+    {
+      key: "Quantity",
+      header: tr("مقدار", "Quantity"),
+      accessor: (row) => row.Quantity,
+      render: (row) => `${row.Quantity.toLocaleString()} ${row.Uom}`,
+      align: "end",
+      ltr: true,
+    },
+    {
+      key: "ConsumedQuantity",
+      header: tr("مصرف‌شده", "Consumed"),
+      accessor: (row) => row.ConsumedQuantity ?? 0,
+      render: (row) => {
+        const consumed = row.ConsumedQuantity ?? 0;
+        const pct = row.Quantity > 0 ? Math.round((consumed / row.Quantity) * 100) : 0;
+        return `${consumed.toLocaleString()} (${pct}${fa ? "٪" : "%"})`;
+      },
+      align: "end",
+      ltr: true,
+    },
+    {
+      key: "RemainingQuantity",
+      header: tr("باقی‌مانده", "Remaining"),
+      accessor: (row) => Math.max(0, (row.Quantity ?? 0) - (row.ConsumedQuantity ?? 0)),
+      align: "end",
+      ltr: true,
+    },
+    {
+      key: "Status",
+      header: tr("وضعیت", "Status"),
+      accessor: (row) => row.Status,
+      render: (row) => statusLabel(row.Status),
+      filter: statusOptions.map((option) => ({ value: option.value, label: option.label })),
+    },
   ];
 
   return (
@@ -1256,26 +1331,41 @@ export function MesDemandPanel({ fa, plantId, userId, onChanged }: MesPanelProps
       onRetry={() => { list.reload(); parts.reload(); }}
       onChanged={() => { list.reload(); onChanged(); }}
       describeError={describeMesError}
-      emptyText={tr("تقاضایی ثبت نشده است", "No demand recorded")}
+      emptyText={tr("تقاضایی ثبت نشده است؛ با «ثبت جدید» اولین ردیف را بسازید", "No demand recorded yet; create the first row with New")}
+      defaultSort={{ key: "RequiredAt", dir: "asc" }}
+      viewFields={[
+        { name: "DemandRef", label: tr("ارجاع تقاضا", "Demand reference"), ltr: true },
+        { name: "PartId", label: tr("قطعه", "Part"), type: "select", options: partOptions },
+        { name: "DemandType", label: tr("نوع تقاضا", "Demand type"), type: "select", options: typeOptions },
+        ...fields,
+        { name: "Status", label: tr("وضعیت", "Status"), type: "select", options: statusOptions },
+        { name: "ConsumedQuantity", label: tr("مقدار مصرف‌شده", "Consumed quantity"), type: "number" },
+      ]}
       create={{
         title: tr("تقاضای جدید", "New demand"),
         fields: [
           { name: "PartId", label: tr("قطعه", "Part"), type: "select", required: true, options: partOptions },
-          { name: "DemandType", label: tr("نوع تقاضا", "Demand type"), type: "select", required: true, options: opts(DEMAND_TYPES) },
-          { name: "DemandRef", label: tr("ارجاع تقاضا", "Demand ref."), required: true, maxLength: 80, ltr: true },
+          { name: "DemandType", label: tr("نوع تقاضا", "Demand type"), type: "select", required: true, options: typeOptions },
+          { name: "DemandRef", label: tr("ارجاع تقاضا", "Demand ref."), required: true, maxLength: 60, ltr: true },
           ...fields,
         ],
-        defaults: { DemandType: "forecast", Uom: "ea" },
+        defaults: { DemandType: "forecast" },
         allowed,
-        deniedTitle: "mfg.demand.edit",
-        submit: (payload) => MfgClient.createDemandForecast(plantId, userId, asBody(payload)),
+        deniedTitle: deniedText,
+        submit: (payload) => {
+          // سرور پیش‌بینی بدون درصد اطمینان را رد می‌کند؛ همان‌جا در فرم به کاربر بگو، نه بعد از خطای سرور.
+          if (payload.DemandType === "forecast" && (payload.ConfidencePct === null || payload.ConfidencePct === undefined)) {
+            throw new Error(tr("برای ردیف «پیش‌بینی فروش»، درصد اطمینان الزامی است", "Confidence % is required for a sales-forecast row"));
+          }
+          return MfgClient.createDemandForecast(plantId, userId, asBody(payload));
+        },
         successText: tr("تقاضا ثبت شد.", "Demand created."),
       }}
       edit={{
         title: tr("ویرایش تقاضا", "Edit demand"),
-        fields: [...fields, { name: "Status", label: tr("وضعیت", "Status"), type: "select", required: true, options: opts(DEMAND_STATUSES) }],
+        fields: [...fields, { name: "Status", label: tr("وضعیت", "Status"), type: "select", required: true, options: statusOptions }],
         allowed,
-        deniedTitle: "mfg.demand.edit",
+        deniedTitle: deniedText,
         submit: (row, payload) => MfgClient.patchDemandForecast(plantId, userId, row.Id, row.RowVersion, asBody(payload)),
         successText: tr("تقاضا ذخیره شد.", "Demand updated."),
       }}
@@ -1287,7 +1377,11 @@ export function MesDemandPanel({ fa, plantId, userId, onChanged }: MesPanelProps
           (r) => MfgClient.patchDemandForecast(plantId, userId, r.Id, r.RowVersion, { Status: "cancelled" }),
           tr("تقاضا لغو شد.", "Demand cancelled."),
           tr("ردیف لغوشده در سابقه می‌ماند.", "The cancelled row stays in history."),
-          { hidden: () => row.Status === "cancelled", disabled: () => !allowed, title: allowed ? undefined : "mfg.demand.edit" },
+          {
+            hidden: () => row.Status === "cancelled" || (row.ConsumedQuantity ?? 0) > 0,
+            disabled: () => !allowed,
+            title: allowed ? undefined : deniedText,
+          },
         ),
         statusAction<MfgDemandForecast>(
           "delete",
@@ -1299,7 +1393,7 @@ export function MesDemandPanel({ fa, plantId, userId, onChanged }: MesPanelProps
           {
             hidden: () => !(row.Status === "draft" && !row.MpsRunId),
             disabled: () => !allowed,
-            title: allowed ? undefined : "mfg.demand.edit",
+            title: allowed ? undefined : deniedText,
           },
         ),
       ]}
@@ -1617,7 +1711,7 @@ export function MesMaterialsPanel({ fa, plantId, userId }: Omit<MesPanelProps, "
   const columns: GridColumnDef<MfgMaterial>[] = [
     { key: "PartNo", header: tr("شمارهٔ قطعه", "Part no."), ltr: true, mono: true, accessor: (row) => row.PartNo ?? "—" },
     { key: "PartNameFa", header: tr("نام", "Name"), accessor: (row) => row.PartNameFa ?? "—" },
-    { key: "ProcurementType", header: tr("تأمین", "Procurement"), filter: "auto" },
+    { key: "ProcurementType", header: tr("نوع تأمین", "Procurement type"), accessor: (row) => row.ProcurementType, render: (row) => (row.ProcurementType === "buy" ? tr("خریدنی", "Purchased") : tr("ساختنی", "Manufactured")), filter: [{ value: "buy", label: tr("خریدنی", "Purchased") }, { value: "make", label: tr("ساختنی", "Manufactured") }] },
     { key: "LeadTimeDays", header: tr("زمان تحویل (روز)", "Lead time (days)"), align: "end", ltr: true },
     { key: "SafetyStockQty", header: tr("موجودی اطمینان", "Safety stock"), align: "end", ltr: true },
     { key: "LotSize", header: tr("اندازهٔ لات", "Lot size"), align: "end", ltr: true },
@@ -1628,7 +1722,7 @@ export function MesMaterialsPanel({ fa, plantId, userId }: Omit<MesPanelProps, "
   return (
     <CrudResource<MfgMaterial>
       fa={fa}
-      caption={tr("مواد و تنظیمات MRP", "Materials & MRP settings")}
+      caption={tr("مواد و تنظیمات برنامه‌ریزی", "Materials & planning settings")}
       rows={rows}
       columns={columns}
       rowKey={(row) => row.Id}
@@ -1651,26 +1745,39 @@ export interface MesSectionProps {
   onChanged: () => void;
 }
 
-export function MesEngineeringCrudSection(props: MesSectionProps) {
+export type MesEngineeringSectionId = "industry" | "parts" | "bom" | "routings" | "workcenters";
+
+export function MesEngineeringCrudSection(props: MesSectionProps & { section?: MesEngineeringSectionId }) {
   const t = (faText: string, enText: string) => (props.fa ? faText : enText);
+  /* بدون `section` همهٔ بخش‌ها (رفتار قبلی)؛ با آن فقط همان زیرتب فعال
+   * رندر می‌شود تا صفحهٔ مهندسی ساخت اسکرول طولانی نداشته باشد. */
+  const show = (id: MesEngineeringSectionId) => !props.section || props.section === id;
   return (
     <div className="space-y-3">
-      <MesIndustrySettingsPanel fa={props.fa} plantId={props.plantId} userId={props.userId} />
-      <Section title={t("قطعات", "Parts")} hint={t("ثبت، ویرایش و فعال/غیرفعال‌سازی قطعه", "Create, edit and activate/deactivate parts")}>
-        <MesPartsPanel {...props} />
-      </Section>
-      <Section title={t("BOM (فهرست مواد)", "Bills of material")} hint={t("BOM پیش‌نویس قابل ویرایش و حذف ردیف است؛ آزادسازی آن را قفل می‌کند", "Draft BOMs are editable; release locks them")}>
-        <MesBomHeadersPanel {...props} />
-        <MesBomItemsPanel {...props} />
-      </Section>
-      <Section title={t("مسیرهای ساخت", "Routings")} hint={t("عملیات مسیر پیش‌نویس را می‌توان افزود، ویرایش و حذف کرد", "Draft routing operations can be added, edited and deleted")}>
-        <MesRoutingsPanel {...props} />
-        <MesRoutingOperationsPanel {...props} />
-      </Section>
-      <Section title={t("مراکز کاری و منابع", "Work centers & resources")} hint={t("ظرفیت و وضعیت خطوط تولید", "Capacity and status of production lines")}>
-        <MesWorkCentersPanel {...props} />
-        <MesResourcesPanel {...props} />
-      </Section>
+      {show("industry") && <MesIndustrySettingsPanel fa={props.fa} plantId={props.plantId} userId={props.userId} />}
+      {show("parts") && (
+        <Section title={t("قطعات", "Parts")} hint={t("ثبت، ویرایش و فعال/غیرفعال‌سازی قطعه", "Create, edit and activate/deactivate parts")}>
+          <MesPartsPanel {...props} />
+        </Section>
+      )}
+      {show("bom") && (
+        <Section title={t("BOM (فهرست مواد)", "Bills of material")} hint={t("BOM پیش‌نویس قابل ویرایش و حذف ردیف است؛ آزادسازی آن را قفل می‌کند", "Draft BOMs are editable; release locks them")}>
+          <MesBomHeadersPanel {...props} />
+          <MesBomItemsPanel {...props} />
+        </Section>
+      )}
+      {show("routings") && (
+        <Section title={t("مسیرهای ساخت", "Routings")} hint={t("عملیات مسیر پیش‌نویس را می‌توان افزود، ویرایش و حذف کرد", "Draft routing operations can be added, edited and deleted")}>
+          <MesRoutingsPanel {...props} />
+          <MesRoutingOperationsPanel {...props} />
+        </Section>
+      )}
+      {show("workcenters") && (
+        <Section title={t("مراکز کاری و منابع", "Work centers & resources")} hint={t("ظرفیت و وضعیت خطوط تولید", "Capacity and status of production lines")}>
+          <MesWorkCentersPanel {...props} />
+          <MesResourcesPanel {...props} />
+        </Section>
+      )}
     </div>
   );
 }
@@ -1684,20 +1791,32 @@ export function MesOrdersCrudSection(props: MesSectionProps) {
   );
 }
 
-export function MesPlanningCrudSection(props: MesSectionProps) {
+export type MesPlanningSectionId = "demand" | "lotsize" | "planned" | "none";
+
+export function MesPlanningCrudSection(props: MesSectionProps & { section?: MesPlanningSectionId }) {
   const t = (faText: string, enText: string) => (props.fa ? faText : enText);
+  /* هر بخش CRUD فقط در زیرتب هم‌نام خودش در برنامه‌ریزی پیشرفته می‌آید؛
+   * در بقیهٔ زیرتب‌ها چیزی رندر نمی‌شود تا بالای صفحه بی‌دلیل بلند نشود. */
+  const show = (id: MesPlanningSectionId) => !props.section || props.section === id;
+  if (props.section === "none") return null;
   return (
     <div className="space-y-3">
-      <Section title={t("تقاضا و پیش‌بینی", "Demand & forecast")} hint={t("ردیف‌های پیش‌نویس مصرف‌نشده حذف می‌شوند؛ بقیه لغو می‌شوند", "Unused drafts can be deleted; others are cancelled")}>
-        <MesDemandPanel {...props} />
-      </Section>
-      <Section title={t("لات‌سایزینگ و نسخه‌های تولید", "Lot sizing & production versions")}>
-        <MesLotSizingPanel {...props} />
-        <MesProductionVersionsPanel {...props} />
-      </Section>
-      <Section title={t("سفارش‌های برنامه‌ریزی‌شده", "Planned orders")} hint={t("تأیید، رد و تبدیل به سفارش تولید", "Approve, reject and convert to production orders")}>
-        <MesPlannedOrdersPanel {...props} />
-      </Section>
+      {show("demand") && (
+        <Section title={t("تقاضا و پیش‌بینی", "Demand & forecast")} hint={t("ردیف‌های پیش‌نویس مصرف‌نشده حذف می‌شوند؛ بقیه لغو می‌شوند", "Unused drafts can be deleted; others are cancelled")}>
+          <MesDemandPanel {...props} />
+        </Section>
+      )}
+      {show("lotsize") && (
+        <Section title={t("لات‌سایزینگ و نسخه‌های تولید", "Lot sizing & production versions")}>
+          <MesLotSizingPanel {...props} />
+          <MesProductionVersionsPanel {...props} />
+        </Section>
+      )}
+      {show("planned") && (
+        <Section title={t("سفارش‌های برنامه‌ریزی‌شده", "Planned orders")} hint={t("تأیید، رد و تبدیل به سفارش تولید", "Approve, reject and convert to production orders")}>
+          <MesPlannedOrdersPanel {...props} />
+        </Section>
+      )}
     </div>
   );
 }
@@ -1714,7 +1833,7 @@ export function MesExecutionCrudSection(props: MesSectionProps) {
 export function MesMrpCrudSection(props: Omit<MesSectionProps, "onChanged">) {
   const t = (faText: string, enText: string) => (props.fa ? faText : enText);
   return (
-    <Section title={t("فهرست مواد و MRP", "Materials & MRP")} hint={t("نمایش فقط‌خواندنی؛ تغییر مواد از مسیر ثبت قطعه انجام می‌شود", "Read-only; material changes go through part registration")}>
+    <Section title={t("فهرست مواد و برنامه‌ریزی نیازمندی‌ها", "Materials & requirements planning")} hint={t("نمایش فقط‌خواندنی؛ تغییر مواد از مسیر ثبت قطعه انجام می‌شود", "Read-only; material changes go through part registration")}>
       <MesMaterialsPanel {...props} />
     </Section>
   );

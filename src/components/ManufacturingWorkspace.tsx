@@ -45,13 +45,16 @@ import {
   type MfgWorkCenterResource,
 } from "../services/manufacturingApi";
 import type { DispatchRule } from "../services/manufacturingModel";
-import ModuleWorkspaceShell, { ModuleTabs, moduleChipCls, moduleSelectCls } from "./ModuleWorkspaceShell";
+import ModuleWorkspaceShell, { ModuleTabs, moduleSelectCls } from "./ModuleWorkspaceShell";
+import { WeeklyReportDatePicker } from "./WeeklyReportWorkspace";
+import { toGregorian, toJalaali } from "jalaali-js";
 import {
   MesEngineeringCrudSection,
   MesExecutionCrudSection,
   MesMrpCrudSection,
   MesOrdersCrudSection,
   MesPlanningCrudSection,
+  type MesEngineeringSectionId,
 } from "./MesCrudPanels";
 
 export type MfgTab =
@@ -71,6 +74,14 @@ export interface ManufacturingWorkspaceProps {
   onTabChange?: (tab: MfgTab) => void;
   standalone?: boolean;
   onExitStandalone?: () => void;
+  /**
+   * ورود به حالت مستقل از داخل اپ میزبان، بدون بازکردن تب جدید — چون
+   * پنجرهٔ تازه (`target=_blank`) داخل آی‌فریم پیش‌نمایش مسدود می‌شود و
+   * دکمه عملاً کار نمی‌کرد. میزبان با این کال‌بک همان نمای تمام‌صفحه را
+   * در همین تب فعال می‌کند؛ اگر داده نشود، دکمه با بارگذاری `?app=mes`
+   * در همین تب همان کار را می‌کند.
+   */
+  onEnterStandalone?: () => void;
   /**
    * خروج به نمای اصلی اپ میزبان (حالت غیر-standalone). وقتی این مقدار بده شود
    * دکمهٔ «بازگشت به نمای اصلی» در سربرگ پوستهٔ ماژول رندر می‌شود — همان
@@ -93,12 +104,29 @@ const TABS: Array<{
   { id: "orders", fa: "سفارش‌های تولید", en: "Production Orders", defaultUser: "u-mfg-plan", permission: "mfg.order.view" },
   { id: "scheduling", fa: "زمان‌بندی ظرفیت، گانت و گلوگاه", en: "Scheduling, Gantt & Capacity", defaultUser: "u-mfg-plan", permission: "mfg.schedule.view" },
   { id: "execution", fa: "اجرای کارگاهی، توقف و ضایعات", en: "Shop-Floor Execution", defaultUser: "u-mfg-supervisor", permission: "mfg.execution.view" },
-  { id: "mrp", fa: "مواد، MRP، کمبود و مصرف", en: "Materials & MRP", defaultUser: "u-mfg-material", permission: "mfg.material.view" },
+  { id: "mrp", fa: "برنامه‌ریزی مواد، کمبود و مصرف", en: "Materials & MRP", defaultUser: "u-mfg-material", permission: "mfg.material.view" },
   { id: "cost", fa: "رول‌آپ هزینه و تطبیق مالی", en: "Cost Roll-up & Reconcile", defaultUser: "u-mfg-cost", permission: "mfg.cost.view" },
 ];
 
 /** رنگ تأکیدی MES (نارنجی گرم). */
 const MES_ACCENT = "#fb923c";
+
+/** تبدیل تاریخ ISO میلادی (مقدار داخلی بازه) به رشتهٔ شمسی برای تقویم و برعکس.
+ * مقدار ذخیره‌شده همان ISO میلادی می‌ماند؛ فقط نمایش و انتخاب، شمسی است. */
+function isoDateToJalali(iso: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso ?? "");
+  if (!match) return "";
+  const converted = toJalaali(Number(match[1]), Number(match[2]), Number(match[3]));
+  return `${converted.jy}/${String(converted.jm).padStart(2, "0")}/${String(converted.jd).padStart(2, "0")}`;
+}
+
+function jalaliDateToIso(jalali: string, timePart: string): string {
+  const match = /^(\d{4})\/(\d{1,2})\/(\d{1,2})$/.exec((jalali ?? "").trim());
+  if (!match) return "";
+  const converted = toGregorian(Number(match[1]), Number(match[2]), Number(match[3]));
+  const date = `${converted.gy}-${String(converted.gm).padStart(2, "0")}-${String(converted.gd).padStart(2, "0")}`;
+  return `${date}T${timePart}`;
+}
 
 export default function ManufacturingWorkspace({
   lang,
@@ -107,6 +135,7 @@ export default function ManufacturingWorkspace({
   onTabChange,
   standalone = false,
   onExitStandalone,
+  onEnterStandalone,
   onExit,
 }: ManufacturingWorkspaceProps) {
   const { user: authUser } = useAuth();
@@ -221,6 +250,9 @@ export default function ManufacturingWorkspace({
     NoteFa: "تکمیل عملیات و تحویل به ایستگاه بعدی",
   });
   const [execEventSubTab, setExecEventSubTab] = useState<"downtime" | "scrap" | "rework">("downtime");
+  /* زیرتب‌های مهندسی ساخت: هر لحظه فقط یک بخش دیده می‌شود تا صفحه اسکرول
+   * طولانی نداشته باشد (همان الگوی زیرتب‌های برنامه‌ریزی پیشرفته). */
+  const [engSubTab, setEngSubTab] = useState<MesEngineeringSectionId>("industry");
   const [downtimeForm, setDowntimeForm] = useState({
     WorkCenterId: "",
     DowntimeType: "unplanned" as "planned" | "unplanned",
@@ -357,6 +389,13 @@ export default function ManufacturingWorkspace({
       aliveRef.current = false;
     };
   }, []);
+
+  /* با عوض‌شدن زیرتب (مهندسی/برنامه‌ریزی) اسکرول پنل به بالا برمی‌گردد تا
+   * کاربر وسط صفحهٔ قبلی جا نماند. */
+  const contentRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    contentRef.current?.closest(".thin-scroll")?.scrollTo({ top: 0 });
+  }, [engSubTab, planSubTab, tab]);
 
   useEffect(() => {
     setTab(initialTab);
@@ -916,43 +955,6 @@ export default function ManufacturingWorkspace({
       setConformance(await MfgClient.getIsa95Conformance(plantId, mfgUserId));
     } catch (err) {
       setError(formatError(err));
-    }
-  }
-
-  async function handleCreateDemand() {
-    setBusy(true);
-    setError("");
-    setNotice("");
-    try {
-      const row = await MfgClient.createDemandForecast(plantId, mfgUserId, {
-        PartId: demandForm.PartId,
-        DemandType: demandForm.DemandType,
-        DemandRef: demandForm.DemandRef,
-        RequiredAt: demandForm.RequiredAt,
-        Quantity: Number(demandForm.Quantity),
-        ...(demandForm.ConfidencePct.trim() === "" ? {} : { ConfidencePct: Number(demandForm.ConfidencePct) }),
-      });
-      setNotice(tr(`تقاضای ${row.DemandRef} با مقدار ${row.Quantity} ثبت شد.`, `Demand ${row.DemandRef} for ${row.Quantity} created.`));
-      await loadActiveTab();
-    } catch (err) {
-      setError(formatError(err));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function handleDeleteDemand(demand: MfgDemandForecast) {
-    setBusy(true);
-    setError("");
-    setNotice("");
-    try {
-      await MfgClient.deleteDemandForecast(plantId, mfgUserId, demand.Id);
-      setNotice(tr(`تقاضای ${demand.DemandRef} حذف شد.`, `Demand ${demand.DemandRef} deleted.`));
-      await loadActiveTab();
-    } catch (err) {
-      setError(formatError(err));
-    } finally {
-      setBusy(false);
     }
   }
 
@@ -1714,15 +1716,6 @@ export default function ManufacturingWorkspace({
          حالت standalone تغییر نمی‌کند (دکمهٔ «بازگشت به پورتال» در actions). */
       onBack={standalone ? undefined : onExit}
       title={tr("سامانهٔ مستقل برنامه‌ریزی و کنترل تولید (Standalone MES)", "Standalone Manufacturing Execution System (MES)")}
-      subtitle={tr(
-        "دیتابیس مستقل (۲۶ جدول Mfg*) · بک‌اند مستقل کارخانه‌محور · فرانت‌اند مستقل · ارتباط با سامانه‌های دیگر فقط از طریق REST API",
-        "Independent DB (26 Mfg* tables) · Plant-scoped backend · Standalone frontend · External integration via REST API only",
-      )}
-      badges={
-        <span className="rounded-md border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[10px] text-emerald-300" dir="ltr">
-          mfg-api-v1 · 65 REST Routes
-        </span>
-      }
       actions={
         <>
           <label className="tx3 text-xs flex items-center gap-1.5">
@@ -1737,10 +1730,11 @@ export default function ManufacturingWorkspace({
           </label>
 
           <label className="tx3 text-xs flex items-center gap-1.5">
-            <span>{tr("نقش کارگاهی (RBAC):", "MES Role:")}</span>
+            <span>{tr("نقش کارگاهی:", "MES Role:")}</span>
             <select
               aria-label="MES User"
-              className={moduleSelectCls}
+              className={`${moduleSelectCls} w-72 sm:w-[22rem]`}
+              style={{ maxWidth: "min(22rem, 85vw)" }}
               value={mfgUserId}
               onChange={(e) => {
                 setAutoRoleFollow(false);
@@ -1749,7 +1743,7 @@ export default function ManufacturingWorkspace({
             >
               {MFG_DEMO_USERS.map((u) => (
                 <option key={u.id} value={u.id}>
-                  {u.id} — {fa ? u.fa : u.en}
+                  {fa ? u.fa : u.en}
                 </option>
               ))}
             </select>
@@ -1780,7 +1774,15 @@ export default function ManufacturingWorkspace({
               target="_blank"
               rel="noreferrer"
               className={btnCls}
-              title={tr("باز کردن در پنجرهٔ کاملاً مستقل MES", "Open in standalone MES window")}
+              title={tr("باز کردن نمای کاملاً مستقل MES (در پیش‌نمایش: همین تب؛ با Ctrl/⌘+کلیک: تب جدید)", "Open the standalone MES view (in preview: same tab; Ctrl/⌘+click: new tab)")}
+              onClick={(event) => {
+                /* تب جدید داخل آی‌فریم پیش‌نمایش مسدود است؛ کلیک عادی حالت
+                   مستقل را همین‌جا فعال می‌کند و فقط Ctrl/⌘+کلیک تب تازه باز می‌کند. */
+                if (event.metaKey || event.ctrlKey) return;
+                event.preventDefault();
+                if (onEnterStandalone) onEnterStandalone();
+                else window.location.assign("?app=mes");
+              }}
             >
               {tr("پنجرهٔ مستقل MES ↗", "Standalone MES ↗")}
             </a>
@@ -1789,19 +1791,10 @@ export default function ManufacturingWorkspace({
       }
       navTitle={tr("ماژول‌های MES", "MES Modules")}
       navIcon="🏭"
-      navItems={TABS.map((tItem) => {
-        const allowed = canMfgAccess(mfgUserId, tItem.permission, plantId);
-        return {
-          id: tItem.id,
-          label: fa ? tItem.fa : tItem.en,
-          trailing: (
-            <span
-              className={`h-2 w-2 shrink-0 rounded-full ${allowed ? "bg-emerald-400" : "bg-amber-400"}`}
-              title={allowed ? tr("مجوز فعال", "Permitted") : tr(`نیازمند ${tItem.permission}`, `Requires ${tItem.permission}`)}
-            />
-          ),
-        };
-      })}
+      navItems={TABS.map((tItem) => ({
+        id: tItem.id,
+        label: fa ? tItem.fa : tItem.en,
+      }))}
       activeId={tab}
       onSelect={(nextTab) => {
         setTab(nextTab);
@@ -1811,33 +1804,39 @@ export default function ManufacturingWorkspace({
         const activeTab = TABS.find((tItem) => tItem.id === tab);
         return activeTab ? (fa ? activeTab.fa : activeTab.en) : undefined;
       })()}
-      panelMeta={<span className={moduleChipCls} dir="ltr">{mfgUserId}</span>}
     >
-      <div className="flex flex-col gap-3">
+      <div ref={contentRef} className="flex flex-col gap-3">
       {/* ── وضعیت نقش فعال و بازهٔ زمانی ── */}
-      <div className="glass rounded-xl px-3 py-2 flex flex-wrap items-center justify-between gap-2 text-xs tx3">
+      <div className="glass relative z-40 rounded-xl px-3 py-2 flex flex-wrap items-center justify-between gap-2 text-xs tx3">
         <div>
           <span>{tr("کاربر فعال MES:", "Active MES Subject:")} </span>
-          <strong className="tx1" dir="ltr">{mfgUserId}</strong>
-          {activeUserMeta && <span> — {fa ? activeUserMeta.fa : activeUserMeta.en}</span>}
+          {/* شناسهٔ فنی کاربر (u-…) نمایشی نیست و فقط مقدار داخلی انتخاب است؛ این‌جا فقط نام نقش می‌آید. */}
+          <strong className="tx1">{activeUserMeta ? (fa ? activeUserMeta.fa : activeUserMeta.en) : "—"}</strong>
         </div>
-        <div className="flex flex-wrap items-center gap-2" dir="ltr">
-          <span>Window:</span>
-          <input
-            type="text"
-            aria-label="From ISO"
-            className="rounded border b-line-soft bg-[var(--row)] px-2 py-0.5 text-xs tx1 w-44"
-            value={fromIso}
-            onChange={(e) => setFromIso(e.target.value)}
-          />
-          <span>→</span>
-          <input
-            type="text"
-            aria-label="To ISO"
-            className="rounded border b-line-soft bg-[var(--row)] px-2 py-0.5 text-xs tx1 w-44"
-            value={toIso}
-            onChange={(e) => setToIso(e.target.value)}
-          />
+        <div className="flex flex-wrap items-center gap-2">
+          <span>{tr("بازهٔ زمانی:", "Time window:")}</span>
+          <div className="flex items-center gap-1">
+            <span>{tr("از", "From")}</span>
+            <WeeklyReportDatePicker
+              value={isoDateToJalali(fromIso)}
+              rtl={fa}
+              onChange={(jalali) => {
+                const iso = jalaliDateToIso(jalali, fromIso.slice(11) || "00:00:00.000Z");
+                if (iso) setFromIso(iso);
+              }}
+            />
+          </div>
+          <div className="flex items-center gap-1">
+            <span>{tr("تا", "To")}</span>
+            <WeeklyReportDatePicker
+              value={isoDateToJalali(toIso)}
+              rtl={fa}
+              onChange={(jalali) => {
+                const iso = jalaliDateToIso(jalali, toIso.slice(11) || "23:59:59.000Z");
+                if (iso) setToIso(iso);
+              }}
+            />
+          </div>
         </div>
       </div>
 
@@ -2056,13 +2055,30 @@ export default function ManufacturingWorkspace({
 
       {/* ══════════════════════ ۲) تب مهندسی ساخت ══════════════════════ */}
       {tab === "engineering" && (
-        <MesEngineeringCrudSection fa={fa} plantId={plantId} userId={mfgUserId} onChanged={() => void loadActiveTab()} />
+        <section className="glass-dark sticky top-0 z-10 rounded-xl p-3 flex flex-wrap items-center gap-2 text-xs">
+          <span className="tx1 font-semibold">{tr("زیربخش مهندسی:", "Engineering area:")}</span>
+          <ModuleTabs
+            ariaLabel={tr("زیربخش‌های مهندسی ساخت", "Manufacturing engineering areas")}
+            items={([
+              ["industry", "نوع صنعت / الگوی تولید", "Industry Type / Production Pattern"],
+              ["parts", "قطعات", "Parts"],
+              ["bom", "ساختار محصول (BOM)", "BOM"],
+              ["routings", "مسیر ساخت", "Routings"],
+              ["workcenters", "مراکز کاری و منابع", "Work Centers & Resources"],
+            ] as const).map(([id, faLabel, enLabel]) => ({ id, label: tr(faLabel, enLabel) }))}
+            activeId={engSubTab}
+            onSelect={setEngSubTab}
+          />
+        </section>
+      )}
+      {tab === "engineering" && (
+        <MesEngineeringCrudSection fa={fa} plantId={plantId} userId={mfgUserId} onChanged={() => void loadActiveTab()} section={engSubTab} />
       )}
       {!loading && tab === "engineering" && (
         <div className="space-y-3">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
             {/* فهرست قطعات + فرم ساخت قطعه با بلوک Planning */}
-            <section className="glass-dark rounded-xl p-3 space-y-3">
+            <section className={`glass-dark rounded-xl p-3 space-y-3 ${engSubTab === "parts" ? "" : "hidden"}`}>
               <h4 className="tx1 font-semibold">{tr("قطعات و محصولات (MfgPart + Planning)", "Parts & Master Planning")}</h4>
               <div className="space-y-1.5 max-h-60 overflow-y-auto">
                 {parts.map((p) => (
@@ -2202,7 +2218,7 @@ export default function ManufacturingWorkspace({
             </section>
 
             {/* مسیر ساخت و عملیات */}
-            <section className="glass-dark rounded-xl p-3 space-y-2">
+            <section className={`glass-dark rounded-xl p-3 space-y-2 ${engSubTab === "routings" ? "" : "hidden"}`}>
               <h4 className="tx1 font-semibold">{tr("مسیر ساخت و توالی عملیات (MfgRouting)", "Routings & Operations")}</h4>
               <div className="flex flex-wrap gap-1.5">
                 {routings.map((r) => (
@@ -2377,15 +2393,15 @@ export default function ManufacturingWorkspace({
           <section className="glass-dark rounded-xl p-3 space-y-2.5">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex flex-wrap items-center gap-2 text-xs">
-                <strong className="tx1">{tr("موتور زمان‌بندی ظرفیت محدود (Finite Capacity Scheduler):", "Finite Capacity Scheduler:")}</strong>
+                <strong className="tx1">{tr("موتور زمان‌بندی ظرفیت محدود:", "Finite Capacity Scheduler:")}</strong>
                 <select
                   aria-label="Direction"
                   className="rounded border b-line-soft bg-[var(--row)] px-2 py-1 text-xs tx1"
                   value={scheduleForm.Direction}
                   onChange={(e) => setScheduleForm((f) => ({ ...f, Direction: e.target.value as "forward" | "backward" }))}
                 >
-                  <option value="forward">forward (رو به جلو)</option>
-                  <option value="backward">backward (رو به عقب از DueAt)</option>
+                  <option value="forward">{tr("رو به جلو", "Forward")}</option>
+                  <option value="backward">{tr("رو به عقب از سررسید", "Backward from due date")}</option>
                 </select>
                 <select
                   aria-label="CapacityMode"
@@ -2393,8 +2409,8 @@ export default function ManufacturingWorkspace({
                   value={scheduleForm.CapacityMode}
                   onChange={(e) => setScheduleForm((f) => ({ ...f, CapacityMode: e.target.value as "finite" | "semi-finite" }))}
                 >
-                  <option value="finite">finite (ظرفیت محدود بدون هم‌پوشانی)</option>
-                  <option value="semi-finite">semi-finite (ثبت اضافه‌بار)</option>
+                  <option value="finite">{tr("ظرفیت محدود، بدون هم‌پوشانی", "Finite, no overlap")}</option>
+                  <option value="semi-finite">{tr("ظرفیت نیمه‌محدود، ثبت اضافه‌بار", "Semi-finite, record overload")}</option>
                 </select>
                 <select
                   aria-label="DispatchRule"
@@ -2402,22 +2418,22 @@ export default function ManufacturingWorkspace({
                   value={scheduleForm.DispatchRule}
                   onChange={(e) => setScheduleForm((f) => ({ ...f, DispatchRule: e.target.value as DispatchRule }))}
                 >
-                  <option value="WSPT">WSPT (نسبت DispatchWeight به زمان)</option>
-                  <option value="EDD">EDD (زودترین سررسید)</option>
-                  <option value="SPT">SPT (کوتاه‌ترین زمان پردازش)</option>
-                  <option value="CR">CR (نسبت بحرانی)</option>
-                  <option value="FIFO">FIFO (نوبت ورود)</option>
-                  <option value="MANUAL">MANUAL (رتبهٔ دستی)</option>
+                  <option value="WSPT">{tr("نسبت وزن اعزام به زمان پردازش", "Weighted shortest processing time")}</option>
+                  <option value="EDD">{tr("زودترین سررسید", "Earliest due date")}</option>
+                  <option value="SPT">{tr("کوتاه‌ترین زمان پردازش", "Shortest processing time")}</option>
+                  <option value="CR">{tr("نسبت بحرانی", "Critical ratio")}</option>
+                  <option value="FIFO">{tr("نوبت ورود", "First in, first out")}</option>
+                  <option value="MANUAL">{tr("رتبهٔ دستی", "Manual rank")}</option>
                 </select>
                 {canMfgAccess(mfgUserId, "mfg.schedule.run", plantId) && (
                   <button className={btnCls} disabled={busy} onClick={() => void handleRunSchedule()}>
-                    {tr("اجرای زمان‌بندی جدید (POST /scheduling/runs)", "Run Schedule")}
+                    {tr("اجرای زمان‌بندی جدید", "Run New Schedule")}
                   </button>
                 )}
               </div>
-              <div className="flex items-center gap-2 text-xs" dir="ltr">
+              <div className="flex items-center gap-2 text-xs">
                 <span className="rounded bg-sky-500/15 border border-sky-500/40 px-2 py-0.5 text-sky-200 font-semibold">
-                  ScheduleVersion: v{gantt?.scheduleVersion ?? lastScheduleResult?.ScheduleVersion ?? 0}
+                  {tr("نسخهٔ زمان‌بندی:", "Schedule version:")} <span dir="ltr">v{gantt?.scheduleVersion ?? lastScheduleResult?.ScheduleVersion ?? 0}</span>
                 </span>
               </div>
             </div>
@@ -2425,7 +2441,7 @@ export default function ManufacturingWorkspace({
             {/* فیلترهای گانت، سطل ظرفیت و آستانهٔ گلوگاه */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-2 pt-2 border-t b-line-soft text-xs">
               <div>
-                <label className="tx3 block mb-1">{tr("فیلتر مرکز کاری (workCenterId)", "Filter Work Center")}</label>
+                <label className="tx3 block mb-1">{tr("فیلتر مرکز کاری", "Filter Work Center")}</label>
                 <select
                   className={inputCls}
                   value={schedFilterWorkCenterId}
@@ -2440,7 +2456,7 @@ export default function ManufacturingWorkspace({
                 </select>
               </div>
               <div>
-                <label className="tx3 block mb-1">{tr("فیلتر سفارش تولید (orderId)", "Filter Order")}</label>
+                <label className="tx3 block mb-1">{tr("فیلتر سفارش تولید", "Filter Order")}</label>
                 <select
                   className={inputCls}
                   value={schedFilterOrderId}
@@ -2455,14 +2471,14 @@ export default function ManufacturingWorkspace({
                 </select>
               </div>
               <div>
-                <label className="tx3 block mb-1">{tr("سطل گزارش ظرفیت (bucket)", "Capacity Bucket")}</label>
+                <label className="tx3 block mb-1">{tr("سطل گزارش ظرفیت", "Capacity Bucket")}</label>
                 <select
                   className={inputCls}
                   value={capacityBucketMode}
                   onChange={(e) => setCapacityBucketMode(e.target.value as "day" | "week")}
                 >
-                  <option value="day">{tr("روزانه (day)", "Daily (day)")}</option>
-                  <option value="week">{tr("هفتگی (week)", "Weekly (week)")}</option>
+                  <option value="day">{tr("روزانه", "Daily")}</option>
+                  <option value="week">{tr("هفتگی", "Weekly")}</option>
                 </select>
               </div>
               <div>
@@ -2484,9 +2500,9 @@ export default function ManufacturingWorkspace({
             {/* گانت خطوط مراکز کاری همراه با نوار زمانی نسبی و انتخاب عملیات برای باززمان‌بندی */}
             <section className="glass-dark rounded-xl p-3 space-y-2.5">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <h4 className="tx1 font-semibold">{tr("نمای گانت مراکز کاری و قطعات چندتکه (GET /scheduling/gantt)", "Work Center Gantt Lanes")}</h4>
+                <h4 className="tx1 font-semibold">{tr("نمای گانت مراکز کاری و قطعات چندتکه", "Work Center Gantt")}</h4>
                 <span className="tx3 text-[11px]">
-                  {tr("شکست خودکار روی استراحت صریح (BreakStartMinuteOfDay) و توقف‌ها", "Splits across explicit breaks & downtime")}
+                  {tr("شکست خودکار روی زمان‌های استراحت و توقف‌ها", "Splits across explicit breaks & downtime")}
                 </span>
               </div>
               {!gantt?.lanes?.length ? (
@@ -2504,8 +2520,9 @@ export default function ManufacturingWorkspace({
                             {lane.workCenter.Code} — {lane.workCenter.NameFa}
                             <span className="tx3 mx-1.5 text-[11px]">({lane.workCenter.Kind})</span>
                           </span>
-                          <span className="tx3" dir="ltr">
-                            TZ: {lane.workCenter.TimeZoneId} · Cap: {lane.workCenter.NominalCapacityMinutesPerDay}m/d · Eff: {lane.workCenter.EfficiencyPct}%
+                          <span className="tx3">
+                            {tr("منطقهٔ زمانی:", "Time zone:")} <span dir="ltr">{lane.workCenter.TimeZoneId}</span> · {tr("ظرفیت روزانه:", "Daily capacity:")}{" "}
+                            {lane.workCenter.NominalCapacityMinutesPerDay} {tr("دقیقه", "min")} · {tr("بازده:", "Efficiency:")} {lane.workCenter.EfficiencyPct}٪
                           </span>
                         </div>
                         <div className="space-y-1.5">
@@ -2542,7 +2559,7 @@ export default function ManufacturingWorkspace({
                                     )}
                                     <strong>{seg.OrderNo}</strong> · #{seg.SequenceNo} {seg.OperationCode}
                                     <span className="rounded bg-black/30 px-1.5 py-0.5 text-[10px]">
-                                      Seg #{seg.SegmentNo}
+                                      {tr("قطعهٔ", "Segment")} {seg.SegmentNo}
                                     </span>
                                     <span
                                       className={`rounded px-1.5 py-0.5 text-[10px] ${
@@ -2551,11 +2568,11 @@ export default function ManufacturingWorkspace({
                                           : "bg-sky-500/20 text-sky-200"
                                       }`}
                                     >
-                                      {seg.Status}
+                                      {seg.Status === "firm" ? tr("قطعی", "Firm") : tr("برنامه‌ای", "Planned")}
                                     </span>
                                   </label>
                                   <span className="text-[11px]">
-                                    {seg.PlannedStartAt.slice(0, 16).replace("T", " ")} → {seg.PlannedEndAt.slice(0, 16).replace("T", " ")} ({seg.PlannedCapacityMinutes}m · {seg.DispatchRule})
+                                    {seg.PlannedStartAt.slice(0, 16).replace("T", " ")} → {seg.PlannedEndAt.slice(0, 16).replace("T", " ")} ({seg.PlannedCapacityMinutes} {tr("دقیقه", "min")} · {seg.DispatchRule === "WSPT" ? tr("نسبت وزن به زمان", "Weighted SPT") : seg.DispatchRule === "EDD" ? tr("زودترین سررسید", "Earliest due date") : seg.DispatchRule === "SPT" ? tr("کوتاه‌ترین زمان", "Shortest time") : seg.DispatchRule === "CR" ? tr("نسبت بحرانی", "Critical ratio") : seg.DispatchRule === "FIFO" ? tr("نوبت ورود", "First in, first out") : tr("رتبهٔ دستی", "Manual rank")})
                                   </span>
                                 </div>
                                 {/* نوار موقعیت زمانی در پنجره */}
@@ -2578,7 +2595,7 @@ export default function ManufacturingWorkspace({
 
             {/* بار ظرفیت و گلوگاه‌ها */}
             <section className="glass-dark rounded-xl p-3 space-y-2.5">
-              <h4 className="tx1 font-semibold">{tr("بار ظرفیت و گلوگاه‌ها (GET /capacity/load & bottlenecks)", "Capacity Load & Bottlenecks")}</h4>
+              <h4 className="tx1 font-semibold">{tr("بار ظرفیت و گلوگاه‌ها", "Capacity Load & Bottlenecks")}</h4>
               <div className="space-y-1.5 max-h-64 overflow-y-auto">
                 {capacityBuckets.map((b, i) => {
                   const util = b.UtilizationPct ?? 0;
@@ -2592,7 +2609,7 @@ export default function ManufacturingWorkspace({
                           <strong>{wcName}</strong> · {b.PeriodStart.slice(0, 10)}
                         </span>
                         <span>
-                          Load: <strong>{b.PlannedLoadMinutes}</strong> / Avail: {b.AvailableMinutes}m ({util}%)
+                          {tr("بار:", "Load:")} <strong>{b.PlannedLoadMinutes}</strong> / {tr("ظرفیت در دسترس:", "Available:")} {b.AvailableMinutes} {tr("دقیقه", "min")} ({util}٪)
                         </span>
                       </div>
                       <div className="h-1.5 w-full rounded bg-black/30 overflow-hidden">
@@ -2612,7 +2629,7 @@ export default function ManufacturingWorkspace({
                     return (
                       <div key={idx} className="flex justify-between" dir="ltr">
                         <span>{wcName} · {bn.PeriodStart.slice(0, 10)}</span>
-                        <span>Util: {bn.UtilizationPct}% · Overload: {bn.OverloadMinutes}m</span>
+                        <span>{tr("بهره‌وری:", "Utilization:")} {bn.UtilizationPct}٪ · {tr("اضافه‌بار:", "Overload:")} {bn.OverloadMinutes} {tr("دقیقه", "min")}</span>
                       </div>
                     );
                   })}
@@ -2630,12 +2647,12 @@ export default function ManufacturingWorkspace({
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h4 className="tx1 font-semibold">
                 {tr(
-                  "باززمان‌بندی انتخابی عملیات و زنجیرهٔ پس‌نیاز با حفظ بلوک‌های Firm (POST /scheduling/reschedules)",
+                  "باززمان‌بندی انتخابی عملیات و زنجیرهٔ پس‌نیاز با حفظ بلوک‌های قطعی",
                   "Selective Operation Rescheduling & Schedule Diff",
                 )}
               </h4>
-              <span className="tx3 text-xs" dir="ltr">
-                ExpectedScheduleVersion: v{gantt?.scheduleVersion ?? lastScheduleResult?.ScheduleVersion ?? 0} · Selected: {selectedRescheduleOpIds.length}
+              <span className="tx3 text-xs">
+                {tr("نسخهٔ مورد انتظار زمان‌بندی:", "Expected schedule version:")} <span dir="ltr">v{gantt?.scheduleVersion ?? lastScheduleResult?.ScheduleVersion ?? 0}</span> · {tr("انتخاب‌شده:", "Selected:")} {selectedRescheduleOpIds.length}
               </span>
             </div>
 
@@ -2654,7 +2671,7 @@ export default function ManufacturingWorkspace({
                     >
                       <span dir="ltr">
                         {checked ? "☑ " : "☐ "}
-                        {op.OrderNo ?? op.ProductionOrderId} · #{op.SequenceNo} {op.OperationCode} ({op.Status})
+                        {op.OrderNo ?? op.ProductionOrderId} · #{op.SequenceNo} {op.OperationCode} ({op.Status === "pending" ? tr("در انتظار", "pending") : op.Status === "queued" ? tr("در صف", "queued") : tr("آمادهٔ اعزام", "ready")})
                       </span>
                     </button>
                   );
@@ -2664,7 +2681,7 @@ export default function ManufacturingWorkspace({
             {canMfgAccess(mfgUserId, "mfg.schedule.resequence", plantId) && (
               <form onSubmit={handleRescheduleSelected} className="grid grid-cols-1 md:grid-cols-4 gap-2 items-end">
                 <div className="md:col-span-2">
-                  <label className="tx3 text-xs block mb-1">{tr("علت باززمان‌بندی (Reason)", "Reschedule Reason")}</label>
+                  <label className="tx3 text-xs block mb-1">{tr("علت باززمان‌بندی", "Reschedule Reason")}</label>
                   <input
                     className={inputCls}
                     value={rescheduleReason}
@@ -2673,22 +2690,22 @@ export default function ManufacturingWorkspace({
                   />
                 </div>
                 <div>
-                  <label className="tx3 text-xs block mb-1">{tr("قاعدهٔ اعزام جدید (DispatchRule)", "New DispatchRule")}</label>
+                  <label className="tx3 text-xs block mb-1">{tr("قاعدهٔ اعزام جدید", "New Dispatch Rule")}</label>
                   <select
                     className={inputCls}
                     value={rescheduleDispatchRule}
                     onChange={(e) => setRescheduleDispatchRule(e.target.value as DispatchRule)}
                   >
-                    <option value="WSPT">WSPT</option>
-                    <option value="EDD">EDD</option>
-                    <option value="SPT">SPT</option>
-                    <option value="CR">CR</option>
-                    <option value="FIFO">FIFO</option>
-                    <option value="MANUAL">MANUAL</option>
+                    <option value="WSPT">{tr("نسبت وزن اعزام به زمان پردازش", "Weighted shortest processing time")}</option>
+                    <option value="EDD">{tr("زودترین سررسید", "Earliest due date")}</option>
+                    <option value="SPT">{tr("کوتاه‌ترین زمان پردازش", "Shortest processing time")}</option>
+                    <option value="CR">{tr("نسبت بحرانی", "Critical ratio")}</option>
+                    <option value="FIFO">{tr("نوبت ورود", "First in, first out")}</option>
+                    <option value="MANUAL">{tr("رتبهٔ دستی", "Manual rank")}</option>
                   </select>
                 </div>
                 <button type="submit" className={btnCls} disabled={busy || !selectedRescheduleOpIds.length}>
-                  {tr("اجرای باززمان‌بندی انتخابی (Reschedule)", "Run Selective Reschedule")}
+                  {tr("اجرای باززمان‌بندی انتخابی", "Run Selective Reschedule")}
                 </button>
               </form>
             )}
@@ -2697,15 +2714,15 @@ export default function ManufacturingWorkspace({
               <div className="rounded-lg border border-sky-500/40 bg-sky-500/10 p-2.5 text-xs tx2 space-y-1.5" dir="ltr">
                 <div className="flex flex-wrap justify-between font-semibold text-sky-200">
                   <span>
-                    Schedule Diff: v{lastRescheduleResult.diff.fromScheduleVersion} → v{lastRescheduleResult.diff.toScheduleVersion}
+                    {tr("گزارش تغییرات زمان‌بندی:", "Schedule changes:")} <span dir="ltr">v{lastRescheduleResult.diff.fromScheduleVersion} → v{lastRescheduleResult.diff.toScheduleVersion}</span>
                   </span>
                   <span>
-                    Changed Ops: {lastRescheduleResult.diff.changedOperationCount} · Moved: {lastRescheduleResult.diff.movedCount} · Unchanged (Firm/Frozen): {lastRescheduleResult.diff.unchangedOperationCount}
+                    {tr("عملیات تغییریافته:", "Changed operations:")} {lastRescheduleResult.diff.changedOperationCount} · {tr("جابه‌جاشده:", "Moved:")} {lastRescheduleResult.diff.movedCount} · {tr("بدون تغییر (قطعی/قفل‌شده):", "Unchanged (firm/frozen):")} {lastRescheduleResult.diff.unchangedOperationCount}
                   </span>
                 </div>
                 {(lastRescheduleResult.diff.changedOperations ?? []).map((ch: any, idx: number) => (
                   <div key={idx} className="rounded bg-black/25 px-2 py-1 flex flex-wrap justify-between gap-2">
-                    <span>Op: <strong>{ch.operationId}</strong> ({ch.changeType ?? "rescheduled"})</span>
+                    <span>{tr("عملیات:", "Operation:")} <strong>{ch.operationId}</strong> ({ch.changeType ?? tr("باززمان‌بندی‌شده", "rescheduled")})</span>
                     <span>
                       {ch.previousStartAt ? `${ch.previousStartAt.slice(0, 16).replace("T", " ")} → ` : ""}
                       <strong>{ch.newStartAt?.slice(0, 16).replace("T", " ") ?? "—"}</strong> .. <strong>{ch.newEndAt?.slice(0, 16).replace("T", " ") ?? "—"}</strong>
@@ -3325,7 +3342,7 @@ export default function ManufacturingWorkspace({
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="text-xs tx1 font-semibold">
                 {tr(
-                  "برنامه‌ریزی نیازمندی‌های مواد (MRP)، مدیریت موجودی/بچ، پیشنهاد تأمین و هشدارهای کمبود",
+                  "برنامه‌ریزی نیازمندی‌های مواد، مدیریت موجودی و بچ، پیشنهاد تأمین و هشدارهای کمبود",
                   "Material Requirements Planning (MRP), Inventory/Lot, Proposals & Alerts",
                 )}
               </div>
@@ -3333,10 +3350,10 @@ export default function ManufacturingWorkspace({
                 {canMfgAccess(mfgUserId, "mfg.mrp.run", plantId) && (
                   <>
                     <button className={btnCls} disabled={busy} onClick={() => void handleRunMrp(true)}>
-                      {tr("اجرای پیش‌نمایش MRP (PreviewOnly)", "Run MRP Preview")}
+                      {tr("اجرای پیش‌نمایش برنامه‌ریزی مواد", "Run Materials Planning Preview")}
                     </button>
                     <button className={btnCls} disabled={busy} onClick={() => void handleRunMrp(false)}>
-                      {tr("محاسبه و ثبت اتمیک MRP + صدور هشدار کمبود", "Commit MRP + Auto Alerts")}
+                      {tr("محاسبه و ثبت نهایی برنامه‌ریزی مواد و صدور هشدار کمبود", "Commit Materials Plan + Auto Alerts")}
                     </button>
                   </>
                 )}
@@ -3354,16 +3371,18 @@ export default function ManufacturingWorkspace({
             {/* پارامترهای افق زمانی MRP، سفارش هدف و یادداشت پیشنهاد تأمین */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-2 pt-2 border-t b-line-soft text-xs">
               <div>
-                <label className="tx3 block mb-1">{tr("افق زمانی محاسبهٔ MRP (ThroughDate)", "MRP Horizon (ThroughDate)")}</label>
-                <input
-                  className={inputCls}
-                  dir="ltr"
-                  value={mrpHorizonIso}
-                  onChange={(e) => setMrpHorizonIso(e.target.value)}
+                <label className="tx3 block mb-1">{tr("افق زمانی محاسبهٔ برنامه‌ریزی مواد", "Materials Planning Horizon")}</label>
+                <WeeklyReportDatePicker
+                  value={isoDateToJalali(mrpHorizonIso)}
+                  rtl={fa}
+                  onChange={(jalali) => {
+                    const iso = jalaliDateToIso(jalali, mrpHorizonIso.slice(11) || "23:59:59.000Z");
+                    if (iso) setMrpHorizonIso(iso);
+                  }}
                 />
               </div>
               <div>
-                <label className="tx3 block mb-1">{tr("محدودسازی MRP به سفارش خاص (اختیاری)", "Target Order (Optional)")}</label>
+                <label className="tx3 block mb-1">{tr("محدودسازی محاسبه به سفارش خاص (اختیاری)", "Target Order (Optional)")}</label>
                 <select
                   className={inputCls}
                   value={mrpTargetOrderId}
@@ -3374,13 +3393,13 @@ export default function ManufacturingWorkspace({
                     .filter((o) => ["released", "in-progress"].includes(o.Status))
                     .map((o) => (
                       <option key={o.Id} value={o.Id}>
-                        {o.OrderNo} ({o.Status} · Qty: {o.OrderQuantity})
+                        {o.OrderNo} ({o.Status === "released" ? tr("آزادشده", "released") : tr("در حال اجرا", "in progress")} · {tr("مقدار:", "Qty:")} {o.OrderQuantity})
                       </option>
                     ))}
                 </select>
               </div>
               <div>
-                <label className="tx3 block mb-1">{tr("یادداشت پیشنهاد تأمین (NoteFa)", "Proposal Note")}</label>
+                <label className="tx3 block mb-1">{tr("یادداشت پیشنهاد تأمین", "Proposal Note")}</label>
                 <input
                   className={inputCls}
                   value={proposalNoteFa}
@@ -3394,7 +3413,7 @@ export default function ManufacturingWorkspace({
             {/* ستون راست: مواد برنامه‌ریزی‌شده، موجودی آزاد انبار و جزئیات بچ/لات */}
             <section className="glass-dark rounded-xl p-3 space-y-2.5">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <h4 className="tx1 font-semibold">{tr("مواد برنامه‌ریزی‌شده و موجودی انبار (GET /materials)", "Planned Materials & Live Inventory")}</h4>
+                <h4 className="tx1 font-semibold">{tr("مواد برنامه‌ریزی‌شده و موجودی انبار", "Planned Materials & Live Inventory")}</h4>
                 <span className="tx3 text-xs">{tr(`${materials.length} ماده`, `${materials.length} materials`)}</span>
               </div>
 
@@ -3402,7 +3421,7 @@ export default function ManufacturingWorkspace({
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
                 <input
                   className={inputCls}
-                  placeholder={tr("جستجوی کد/نام قطعه یا انبار (q)...", "Search PartNo / Name / Warehouse...")}
+                  placeholder={tr("جستجوی کد یا نام قطعه یا انبار...", "Search part code / name / warehouse...")}
                   value={matFilterQuery}
                   onChange={(e) => setMatFilterQuery(e.target.value)}
                 />
@@ -3412,9 +3431,9 @@ export default function ManufacturingWorkspace({
                   value={matFilterProcurement}
                   onChange={(e) => setMatFilterProcurement(e.target.value as "" | "buy" | "make")}
                 >
-                  <option value="">{tr("همهٔ انواع تأمین (buy & make)", "All Procurement Types")}</option>
-                  <option value="buy">buy (خریدنی)</option>
-                  <option value="make">make (ساختنی)</option>
+                  <option value="">{tr("همهٔ انواع تأمین", "All Procurement Types")}</option>
+                  <option value="buy">{tr("خریدنی", "Purchased")}</option>
+                  <option value="make">{tr("ساختنی", "Manufactured")}</option>
                 </select>
               </div>
 
@@ -3425,12 +3444,12 @@ export default function ManufacturingWorkspace({
                       <div>
                         <strong className="tx1" dir="ltr">{m.PartNo ?? m.Id}</strong>
                         {m.PartNameFa && <span> — {m.PartNameFa}</span>}
-                        <span className="mx-1.5 rounded bg-black/30 px-1.5 py-0.5 text-[10px] uppercase" dir="ltr">
-                          {m.ProcurementType}
+                        <span className="mx-1.5 rounded bg-black/30 px-1.5 py-0.5 text-[10px]">
+                          {m.ProcurementType === "buy" ? tr("خریدنی", "Purchased") : tr("ساختنی", "Manufactured")}
                         </span>
                         {m.IsLotTracked && (
                           <span className="rounded bg-amber-500/20 border border-amber-500/40 px-1.5 py-0.5 text-[10px] text-amber-200" dir="ltr">
-                            Lot-Tracked
+                            {tr("ردیابی بچ/لات", "Lot-tracked")}
                           </span>
                         )}
                       </div>
@@ -3443,35 +3462,35 @@ export default function ManufacturingWorkspace({
                       </button>
                     </div>
 
-                    <div className="grid grid-cols-2 md:grid-cols-5 gap-1.5 text-center" dir="ltr">
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-1.5 text-center">
                       <div className="rounded bg-black/25 p-1">
-                        <span className="tx3 text-[10px] block">OnHand</span>
+                        <span className="tx3 text-[10px] block">{tr("موجودی فعلی", "On hand")}</span>
                         <strong>{m.OnHandQty ?? 0} {m.BaseUom ?? ""}</strong>
                       </div>
                       <div className="rounded bg-black/25 p-1">
-                        <span className="tx3 text-[10px] block">Reserved</span>
+                        <span className="tx3 text-[10px] block">{tr("رزروشده", "Reserved")}</span>
                         <strong>{m.ReservedQty ?? 0}</strong>
                       </div>
                       <div className="rounded bg-black/25 p-1">
-                        <span className="tx3 text-[10px] block">Safety</span>
+                        <span className="tx3 text-[10px] block">{tr("ذخیرهٔ اطمینان", "Safety stock")}</span>
                         <strong>{m.SafetyStockQty}</strong>
                       </div>
                       <div className="rounded bg-black/25 p-1 text-emerald-300">
-                        <span className="tx3 text-[10px] block">Free Avail</span>
+                        <span className="tx3 text-[10px] block">{tr("موجودی آزاد", "Free available")}</span>
                         <strong>{m.FreeAvailableQty ?? 0}</strong>
                       </div>
                       <div className="rounded bg-black/25 p-1 text-sky-300">
-                        <span className="tx3 text-[10px] block">Consumed</span>
+                        <span className="tx3 text-[10px] block">{tr("مصرف‌شده", "Consumed")}</span>
                         <strong>{m.TotalConsumedQty ?? 0}</strong>
                       </div>
                     </div>
 
-                    <div className="flex flex-wrap justify-between gap-2 tx3 text-[11px]" dir="ltr">
+                    <div className="flex flex-wrap justify-between gap-2 tx3 text-[11px]">
                       <span>
-                        Lead: {m.LeadTimeDays}d · LotSize: {m.LotSize} · Mult: {m.OrderMultiple}
+                        {tr("زمان تأمین:", "Lead time:")} {m.LeadTimeDays} {tr("روز", "days")} · {tr("اندازهٔ دسته:", "Lot size:")} {m.LotSize} · {tr("مضرب سفارش:", "Order multiple:")} {m.OrderMultiple}
                       </span>
                       <span>
-                        Std Cost: {m.StandardUnitCost?.toLocaleString() ?? 0} {m.Currency}
+                        {tr("بهای استاندارد:", "Standard cost:")} {m.StandardUnitCost?.toLocaleString() ?? 0} {m.Currency}
                       </span>
                     </div>
 
@@ -3481,7 +3500,7 @@ export default function ManufacturingWorkspace({
                           <span key={loc.Id} className="rounded border b-line-soft bg-black/20 px-2 py-0.5 text-[10px] tx3">
                             {loc.WarehouseCode}
                             {loc.LocationCode ? `/${loc.LocationCode}` : ""}
-                            {loc.LotNo ? ` · Lot: ${loc.LotNo}` : ""} — OnHand: <strong className="tx2">{loc.OnHandQty}</strong>
+                            {loc.LotNo ? ` · ${tr("بچ:", "Lot:")} ${loc.LotNo}` : ""} — {tr("موجودی:", "On hand:")} <strong className="tx2">{loc.OnHandQty}</strong>
                           </span>
                         ))}
                       </div>
@@ -3494,7 +3513,7 @@ export default function ManufacturingWorkspace({
             {/* ستون چپ: کمبودهای مواد (GET /mrp/shortages)، خروجی اجرای MRP و پیشنهادهای تأمین */}
             <section className="glass-dark rounded-xl p-3 space-y-2.5">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <h4 className="tx1 font-semibold">{tr("کمبودهای باز مواد (GET /mrp/shortages)", "Open Material Shortages")}</h4>
+                <h4 className="tx1 font-semibold">{tr("کمبودهای باز مواد", "Open Material Shortages")}</h4>
                 <span className="tx3 text-xs">
                   {tr(`${shortages.length} کمبود فعال`, `${shortages.length} shortages`)}
                 </span>
@@ -3540,7 +3559,6 @@ export default function ManufacturingWorkspace({
                       <div
                         key={s.Id}
                         className="rounded-lg border border-rose-500/30 bg-rose-500/5 p-2 text-xs tx2 space-y-1"
-                        dir="ltr"
                       >
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <label className="flex items-center gap-1.5 cursor-pointer">
@@ -3549,9 +3567,9 @@ export default function ManufacturingWorkspace({
                               checked={checked}
                               onChange={() => handleToggleShortage(s.Id)}
                             />
-                            <strong className="tx1">{s.PartNo ?? s.MaterialId}</strong>
-                            {s.OrderNo && <span className="tx3">· Order: {s.OrderNo}</span>}
-                            {s.OperationCode && <span className="tx3">· Op: {s.OperationCode}</span>}
+                            <strong className="tx1" dir="ltr">{s.PartNo ?? s.MaterialId}</strong>
+                            {s.OrderNo && <span className="tx3">· {tr("سفارش:", "Order:")} <span dir="ltr">{s.OrderNo}</span></span>}
+                            {s.OperationCode && <span className="tx3">· {tr("عملیات:", "Operation:")} <span dir="ltr">{s.OperationCode}</span></span>}
                           </label>
                           <button
                             type="button"
@@ -3563,10 +3581,10 @@ export default function ManufacturingWorkspace({
                         </div>
                         <div className="flex flex-wrap justify-between gap-2 text-[11px]">
                           <span className="tx3">
-                            Gross: {s.GrossQuantity} + Scrap: {s.ScrapAllowanceQty} = Net: <strong>{s.NetQuantity}</strong> · Avail: {s.AvailableQuantity}
+                            {tr("نیاز ناخالص:", "Gross:")} {s.GrossQuantity} + {tr("ضایعات:", "Scrap:")} {s.ScrapAllowanceQty} = {tr("نیاز خالص:", "Net:")} <strong>{s.NetQuantity}</strong> · {tr("موجود:", "Available:")} {s.AvailableQuantity}
                           </span>
                           <span className="text-rose-300">
-                            Shortage: <strong>{s.ShortageQuantity} {s.Uom}</strong> (Need: {s.RequiredAt.slice(0, 10)})
+                            {tr("کمبود:", "Shortage:")} <strong>{s.ShortageQuantity} {s.Uom}</strong> ({tr("تاریخ نیاز:", "Needed on:")} <span dir="ltr">{s.RequiredAt.slice(0, 10)}</span>)
                           </span>
                         </div>
                       </div>
@@ -3576,12 +3594,12 @@ export default function ManufacturingWorkspace({
               )}
 
               {mrpResult && (
-                <div className="rounded-lg border border-sky-500/30 bg-sky-500/10 p-2.5 text-xs text-sky-200 space-y-1" dir="ltr">
+                <div className="rounded-lg border border-sky-500/30 bg-sky-500/10 p-2.5 text-xs text-sky-200 space-y-1">
                   <div className="font-semibold">
-                    MRP Calculation @ {mrpResult.calculationAt?.slice(0, 19).replace("T", " ")} · PreviewOnly: {String(mrpResult.previewOnly)} · Schedule: v{mrpResult.scheduleVersion ?? 1}
+                    {tr("نتیجهٔ محاسبهٔ برنامه‌ریزی مواد", "Materials planning result")} · <span dir="ltr">{mrpResult.calculationAt?.slice(0, 19).replace("T", " ")}</span> · {tr("پیش‌نمایش:", "Preview:")} {mrpResult.previewOnly ? tr("بله", "Yes") : tr("خیر", "No")} · {tr("نسخهٔ زمان‌بندی:", "Schedule version:")} <span dir="ltr">v{mrpResult.scheduleVersion ?? 1}</span>
                   </div>
                   <div>
-                    Total Requirements: <strong>{mrpResult.requirements?.length ?? 0}</strong> · Shortages: <strong>{mrpResult.shortages?.length ?? 0}</strong> · Auto-Suggested Proposals: <strong>{mrpResult.proposals?.length ?? 0}</strong>
+                    {tr("کل نیازها:", "Total requirements:")} <strong>{mrpResult.requirements?.length ?? 0}</strong> · {tr("کمبودها:", "Shortages:")} <strong>{mrpResult.shortages?.length ?? 0}</strong> · {tr("پیشنهادهای خودکار تأمین:", "Auto-suggested proposals:")} <strong>{mrpResult.proposals?.length ?? 0}</strong>
                   </div>
                 </div>
               )}
@@ -3589,15 +3607,15 @@ export default function ManufacturingWorkspace({
               {proposalResult?.proposals && (
                 <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-2.5 text-xs text-emerald-200 space-y-1.5" dir="ltr">
                   <div className="font-semibold">
-                    Procurement Proposals Created ({proposalResult.proposalsCount ?? proposalResult.proposals.length}):
+                    {tr("پیشنهادهای تأمین صادرشده", "Procurement proposals created")} ({proposalResult.proposalsCount ?? proposalResult.proposals.length}):
                   </div>
                   {proposalResult.proposals.map((prp: any, idx: number) => (
                     <div key={idx} className="rounded bg-black/25 px-2 py-1 flex flex-wrap justify-between gap-2">
                       <span>
-                        <strong>{prp.ProposalNo}</strong> · {prp.PartNo ?? prp.MaterialId} ({prp.ProcurementType})
+                        <strong>{prp.ProposalNo}</strong> · {prp.PartNo ?? prp.MaterialId} ({prp.ProcurementType === "buy" ? tr("خریدنی", "Purchased") : tr("ساختنی", "Manufactured")})
                       </span>
                       <span>
-                        Shortage: {prp.ShortageQuantity} → Suggested: <strong>{prp.SuggestedQuantity} {prp.Uom}</strong> · OrderBy: {prp.OrderBy?.slice(0, 10)} · Est: {prp.EstimatedTotalCost?.toLocaleString() ?? "—"} {prp.Currency}
+                        {tr("کمبود:", "Shortage:")} {prp.ShortageQuantity} ← {tr("مقدار پیشنهادی:", "Suggested:")} <strong>{prp.SuggestedQuantity} {prp.Uom}</strong> · {tr("مهلت سفارش:", "Order by:")} <span dir="ltr">{prp.OrderBy?.slice(0, 10)}</span> · {tr("برآورد هزینه:", "Estimated:")} {prp.EstimatedTotalCost?.toLocaleString() ?? "—"} {prp.Currency}
                       </span>
                     </div>
                   ))}
@@ -3612,18 +3630,18 @@ export default function ManufacturingWorkspace({
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <h4 className="tx1 font-semibold">
                   {tr(
-                    "ثبت مصرف واقعی مواد و کسر اتمیک موجودی انبار (POST /material-consumptions)",
+                    "ثبت مصرف واقعی مواد و کسر خودکار موجودی انبار",
                     "Record Actual Material Consumption (Atomic Inventory Deduction)",
                   )}
                 </h4>
-                <span className="tx3 text-[11px]" dir="ltr">Idempotency-Key + LotNo Check</span>
+                <span className="tx3 text-[11px]">{tr("با کنترل یکتایی ثبت و شمارهٔ بچ", "With duplicate-posting & lot checks")}</span>
               </div>
 
               {canMfgAccess(mfgUserId, "mfg.material.consume", plantId) ? (
                 <form onSubmit={handleConsumeMaterial} className="space-y-2 text-xs">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                     <div>
-                      <label className="tx3 block mb-1">{tr("عملیات سفارش (OperationId)", "Operation")}</label>
+                      <label className="tx3 block mb-1">{tr("عملیات سفارش", "Operation")}</label>
                       <select
                         aria-label="Consumption Operation"
                         className={inputCls}
@@ -3633,13 +3651,13 @@ export default function ManufacturingWorkspace({
                         <option value="">{tr("انتخاب عملیات...", "Select Operation...")}</option>
                         {queueOps.map((op) => (
                           <option key={op.Id} value={op.Id}>
-                            {op.OrderNo ?? op.ProductionOrderId} · #{op.SequenceNo} {op.OperationCode} ({op.Status})
+                            {op.OrderNo ?? op.ProductionOrderId} · #{op.SequenceNo} {op.OperationCode} ({op.Status === "pending" ? tr("در انتظار", "pending") : op.Status === "queued" ? tr("در صف", "queued") : op.Status === "ready" ? tr("آماده", "ready") : op.Status === "running" ? tr("در حال اجرا", "running") : op.Status === "setup" ? tr("در حال آماده‌سازی", "setup") : op.Status === "completed" ? tr("تکمیل‌شده", "completed") : tr("مسدود", "blocked")})
                           </option>
                         ))}
                       </select>
                     </div>
                     <div>
-                      <label className="tx3 block mb-1">{tr("مادهٔ مصرفی (MaterialId)", "Material")}</label>
+                      <label className="tx3 block mb-1">{tr("مادهٔ مصرفی", "Material")}</label>
                       <select
                         aria-label="Consumption Material"
                         className={inputCls}
@@ -3653,13 +3671,13 @@ export default function ManufacturingWorkspace({
                         <option value="">{tr("انتخاب ماده...", "Select Material...")}</option>
                         {materials.map((m) => (
                           <option key={m.Id} value={m.Id}>
-                            {m.PartNo ?? m.Id} — {m.PartNameFa ?? ""} (OnHand: {m.OnHandQty ?? 0} {m.BaseUom ?? ""})
+                            {m.PartNo ?? m.Id} — {m.PartNameFa ?? ""} ({tr("موجودی:", "On hand:")} {m.OnHandQty ?? 0} {m.BaseUom ?? ""})
                           </option>
                         ))}
                       </select>
                     </div>
                     <div>
-                      <label className="tx3 block mb-1">{tr("مقدار مصرف (Quantity)", "Quantity")}</label>
+                      <label className="tx3 block mb-1">{tr("مقدار مصرف", "Quantity")}</label>
                       <input
                         type="number"
                         step="0.1"
@@ -3670,7 +3688,7 @@ export default function ManufacturingWorkspace({
                       />
                     </div>
                     <div>
-                      <label className="tx3 block mb-1">{tr("روش ثبت مصرف (ConsumptionMethod)", "Consumption Method")}</label>
+                      <label className="tx3 block mb-1">{tr("روش ثبت مصرف", "Consumption Method")}</label>
                       <select
                         aria-label="Consumption Method"
                         className={inputCls}
@@ -3682,14 +3700,14 @@ export default function ManufacturingWorkspace({
                           }))
                         }
                       >
-                        <option value="manual">manual (ثبت دستی کارگاهی)</option>
-                        <option value="issue">issue (حوالهٔ انبار)</option>
-                        <option value="backflush">backflush (کسر خودکار پسینی)</option>
+                        <option value="manual">{tr("ثبت دستی کارگاهی", "Manual shop-floor posting")}</option>
+                        <option value="issue">{tr("حوالهٔ انبار", "Warehouse issue")}</option>
+                        <option value="backflush">{tr("کسر خودکار پس از تولید", "Automatic backflush")}</option>
                       </select>
                     </div>
                     <div>
                       <label className="tx3 block mb-1">
-                        {tr("شماره بچ / لات (LotNo)", "LotNo")}
+                        {tr("شماره بچ / لات", "Lot / batch no.")}
                         {materials.find((m) => m.Id === consumeForm.MaterialId)?.IsLotTracked && (
                           <strong className="text-amber-300 mx-1">{tr("(الزامی)", "(Required)")}</strong>
                         )}
@@ -3703,7 +3721,7 @@ export default function ManufacturingWorkspace({
                       />
                     </div>
                     <div>
-                      <label className="tx3 block mb-1">{tr("بهای واحد مصرف (UnitCost - IRR)", "Unit Cost (IRR)")}</label>
+                      <label className="tx3 block mb-1">{tr("بهای واحد مصرف (ریال)", "Unit cost")}</label>
                       <input
                         type="number"
                         className={inputCls}
@@ -3714,9 +3732,9 @@ export default function ManufacturingWorkspace({
                     </div>
                   </div>
                   <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
-                    <span className="tx3 text-[11px]" dir="ltr">
-                      Warehouse: {consumeForm.WarehouseCode} · UoM: {consumeForm.Uom}
-                      {consumeForm.RequirementId ? ` · Linked Req: ${consumeForm.RequirementId}` : ""}
+                    <span className="tx3 text-[11px]">
+                      {tr("انبار:", "Warehouse:")} <span dir="ltr">{consumeForm.WarehouseCode}</span> · {tr("واحد:", "Unit:")} {consumeForm.Uom}
+                      {consumeForm.RequirementId ? ` · ${tr("نیاز مرتبط:", "Linked requirement:")} ${consumeForm.RequirementId}` : ""}
                     </span>
                     <button type="submit" className={btnCls} disabled={busy}>
                       {tr("ثبت مصرف واقعی و کسر موجودی انبار", "Post Material Consumption")}
@@ -3724,7 +3742,7 @@ export default function ManufacturingWorkspace({
                   </div>
                 </form>
               ) : (
-                <p className="tx3 text-xs">{tr("نقش فعلی مجوز mfg.material.consume ندارد.", "Requires mfg.material.consume permission.")}</p>
+                <p className="tx3 text-xs">{tr("نقش فعلی مجوز ثبت مصرف مواد ندارد.", "The active role cannot post material consumption.")}</p>
               )}
             </section>
 
@@ -3732,10 +3750,10 @@ export default function ManufacturingWorkspace({
             <section className="glass-dark rounded-xl p-3 space-y-2.5">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <h4 className="tx1 font-semibold">
-                  {tr("هشدارهای کمبود مواد و کارگاه (GET /alerts)", "Material Shortage & Plant Alerts")}
+                  {tr("هشدارهای کمبود مواد و کارگاه", "Material Shortage & Plant Alerts")}
                 </h4>
-                <span className="tx3 text-xs" dir="ltr">
-                  Open: {alerts.filter((a) => a.Status === "open").length} / Total: {alerts.length}
+                <span className="tx3 text-xs">
+                  {tr("باز:", "Open:")} {alerts.filter((a) => a.Status === "open").length} / {tr("کل:", "Total:")} {alerts.length}
                 </span>
               </div>
               {!alerts.length ? (
@@ -3747,13 +3765,13 @@ export default function ManufacturingWorkspace({
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div>
                           <strong className="tx1">{al.TitleFa}</strong>
-                          <span className="mx-1.5 tx3" dir="ltr">
-                            [{al.AlertCode} · {al.Severity} · {al.Status} · v{al.RowVersion}]
+                          <span className="mx-1.5 tx3">
+                            [<span dir="ltr">{al.AlertCode}</span> · {al.Severity === "critical" ? tr("بحرانی", "critical") : al.Severity === "high" ? tr("زیاد", "high") : al.Severity === "medium" ? tr("متوسط", "medium") : tr("کم", "low")} · {al.Status === "open" ? tr("باز", "open") : al.Status === "acknowledged" ? tr("تأیید دریافت‌شده", "acknowledged") : tr("بسته", "closed")} · {tr("نسخه", "v")}{al.RowVersion}]
                           </span>
                         </div>
                         {al.Status === "open" && canMfgAccess(mfgUserId, "mfg.alert.ack", plantId) && (
                           <button className={btnCls} disabled={busy} onClick={() => void handleAckAlert(al)}>
-                            {tr("تأیید دریافت (Ack)", "Acknowledge")}
+                            {tr("تأیید دریافت", "Acknowledge")}
                           </button>
                         )}
                       </div>
@@ -3767,10 +3785,7 @@ export default function ManufacturingWorkspace({
         </div>
       )}
 
-      {/* ══════════════════════ ۷) تب بهای تمام‌شده و تطبیق مالی ══════════════════════ */}
-      {tab === "planning" && (
-        <MesPlanningCrudSection fa={fa} plantId={plantId} userId={mfgUserId} onChanged={() => void loadActiveTab()} />
-      )}
+      {/* ══════════════════════ ۷) تب برنامه‌ریزی پیشرفته ══════════════════════ */}
       {!loading && tab === "planning" && (
         <div className="space-y-3">
           <section className="glass-dark rounded-xl p-3 flex flex-wrap items-center gap-2 text-xs">
@@ -3793,6 +3808,23 @@ export default function ManufacturingWorkspace({
               onSelect={setPlanSubTab}
             />
           </section>
+
+          {/* پنل ویرایشی هر زیرتب دقیقاً زیر نوار آن می‌آید؛ نه بالای صفحه. */}
+          <MesPlanningCrudSection
+            fa={fa}
+            plantId={plantId}
+            userId={mfgUserId}
+            onChanged={() => void loadActiveTab()}
+            section={
+              planSubTab === "demand"
+                ? "demand"
+                : planSubTab === "lotsize" || planSubTab === "version"
+                  ? "lotsize"
+                  : planSubTab === "planned"
+                    ? "planned"
+                    : "none"
+            }
+          />
 
           {/* ═══ MPS ═══ */}
           {planSubTab === "mps" && (
@@ -3888,73 +3920,72 @@ export default function ManufacturingWorkspace({
 
           {/* ═══ Demand & Forecast ═══ */}
           {planSubTab === "demand" && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-              <section className="glass-dark rounded-xl p-3 space-y-2">
-                <h4 className="tx1 font-semibold">{tr("ثبت تقاضا / پیش‌بینی", "Create Demand / Forecast")}</h4>
-                <form className="space-y-2" onSubmit={(e) => { e.preventDefault(); void handleCreateDemand(); }}>
-                  <select aria-label="PartId" className={inputCls} value={demandForm.PartId} onChange={(e) => setDemandForm((f) => ({ ...f, PartId: e.target.value }))}>
-                    <option value="">{tr("— انتخاب قطعه —", "— select part —")}</option>
-                    {parts.map((part) => (
-                      <option key={part.Id} value={part.Id}>{part.PartNo} · {part.NameFa}</option>
-                    ))}
-                  </select>
-                  <div className="grid grid-cols-2 gap-2">
-                    <select aria-label="DemandType" className={inputCls} value={demandForm.DemandType} onChange={(e) => setDemandForm((f) => ({ ...f, DemandType: e.target.value as MfgDemandType }))}>
-                      <option value="sales-order">sales-order</option>
-                      <option value="forecast">forecast</option>
-                      <option value="contract">contract</option>
-                      <option value="manual">manual</option>
-                    </select>
-                    <input placeholder="DemandRef" className={inputCls} dir="ltr" value={demandForm.DemandRef} onChange={(e) => setDemandForm((f) => ({ ...f, DemandRef: e.target.value }))} />
-                    <input type="date" className={inputCls} dir="ltr" value={demandForm.RequiredAt} onChange={(e) => setDemandForm((f) => ({ ...f, RequiredAt: e.target.value }))} />
-                    <input type="number" min={0} placeholder="Quantity" className={inputCls} value={demandForm.Quantity} onChange={(e) => setDemandForm((f) => ({ ...f, Quantity: e.target.value }))} />
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                {[
+                  { label: tr("ردیف‌های تقاضا", "Demand rows"), value: demandRows.length.toLocaleString() },
+                  {
+                    label: tr("تقاضای باز (مصرف‌نشده)", "Open demand (unconsumed)"),
+                    value: demandRows
+                      .filter((row) => row.Status !== "cancelled")
+                      .reduce((sum, row) => sum + Math.max(0, (row.Quantity ?? 0) - (row.ConsumedQuantity ?? 0)), 0)
+                      .toLocaleString(),
+                  },
+                  { label: tr("ردیف‌های پیش‌بینی", "Forecast rows"), value: demandRows.filter((row) => row.DemandType === "forecast").length.toLocaleString() },
+                  { label: tr("ردیف‌های تأییدشده", "Confirmed rows"), value: demandRows.filter((row) => row.Status === "confirmed").length.toLocaleString() },
+                ].map((card) => (
+                  <div key={card.label} className="glass-dark rounded-xl p-3">
+                    <div className="tx3 text-[11px]">{card.label}</div>
+                    <div className="tx1 mt-1 text-lg font-semibold">{card.value}</div>
                   </div>
-                  <input type="number" min={0} max={100} placeholder={tr("درصد اطمینان (برای forecast الزامی)", "ConfidencePct (required for forecast)")} className={inputCls} value={demandForm.ConfidencePct} onChange={(e) => setDemandForm((f) => ({ ...f, ConfidencePct: e.target.value }))} />
-                  <button type="submit" className={btnCls} disabled={busy || !demandForm.PartId || !canMfgAccess(mfgUserId, "mfg.demand.edit", plantId)}>
-                    {tr("ثبت تقاضا (POST /demand-forecasts)", "Create Demand")}
+                ))}
+              </div>
+
+              <section className="glass-dark rounded-xl p-3 space-y-3">
+                <div className="space-y-1">
+                  <h4 className="tx1 font-semibold">{tr("تحلیل زمان‌بندی تقاضا", "Time-Phased Demand Analysis")}</h4>
+                  <p className="tx3 text-[11px]">
+                    {tr(
+                      "تقاضا در سطل‌های زمانی افق برنامه‌ریزی جمع‌بندی می‌شود؛ اندازهٔ سطل و افق از تنظیمات «برنامهٔ اصلی تولید» خوانده می‌شود.",
+                      "Demand is summarized into the planning-horizon time buckets; bucket size and horizon come from the MPS settings.",
+                    )}
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-end gap-2">
+                  <label className="min-w-56 flex-1 space-y-1 text-[11px] tx3">
+                    <span>{tr("قطعه", "Part")}</span>
+                    <select aria-label="PartId" className={inputCls} value={demandForm.PartId} onChange={(e) => setDemandForm((f) => ({ ...f, PartId: e.target.value }))}>
+                      <option value="">{tr("همهٔ قطعات", "All parts")}</option>
+                      {parts.map((part) => (
+                        <option key={part.Id} value={part.Id}>{part.PartNo} · {part.NameFa}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <button type="button" className={btnCls} disabled={busy || !canMfgAccess(mfgUserId, "mfg.demand.view", plantId)} onClick={() => void handleLoadTimePhased()}>
+                    {tr("نمایش زمان‌بندی‌شدهٔ تقاضا", "Show Time-Phased Demand")}
                   </button>
-                </form>
-                <button className={btnCls} disabled={busy} onClick={() => void handleLoadTimePhased()}>
-                  {tr("نمایش زمان‌بندی‌شدهٔ تقاضا", "Show Time-Phased Demand")}
-                </button>
+                </div>
                 {timePhased && (
                   <div className="space-y-1.5 pt-1">
-                    <div className="text-[11px] tx3" dir="ltr">
-                      {timePhased.bucketUnit} × {timePhased.bucketCount} · {timePhased.horizonStart} → {timePhased.horizonEnd}
-                      {timePhased.outsideHorizonQty > 0 ? ` · ${tr("خارج از افق", "outside horizon")}: ${timePhased.outsideHorizonQty}` : ""}
+                    <div className="text-[11px] tx3">
+                      {(timePhased.bucketUnit === "week" ? tr("هفتگی", "Weekly") : timePhased.bucketUnit === "month" ? tr("ماهانه", "Monthly") : tr("روزانه", "Daily"))}
+                      {` × ${timePhased.bucketCount} · `}
+                      <span dir="ltr">{timePhased.horizonStart} → {timePhased.horizonEnd}</span>
+                      {timePhased.outsideHorizonQty > 0 ? ` · ${tr("خارج از افق", "Outside horizon")}: ${timePhased.outsideHorizonQty}` : ""}
                     </div>
                     {(timePhased.parts ?? []).map((part: any) => (
-                      <div key={part.partId} className="rounded border b-line-soft p-2 text-[11px] tx2" dir="ltr">
-                        <strong>{part.partNo ?? part.partId}</strong> · total {part.totalQty} {part.uom ?? ""}
-                        <div className="flex flex-wrap gap-1 pt-1">
+                      <div key={part.partId} className="rounded border b-line-soft p-2 text-[11px] tx2">
+                        <strong className="tx1" dir="ltr">{part.partNo ?? part.partId}</strong> · {tr("مجموع", "Total")}: {part.totalQty} {part.uom ?? ""}
+                        <div className="flex flex-wrap gap-1 pt-1" dir="ltr">
                           {(part.lines ?? []).map((line: any, idx: number) => (
                             <span key={idx} className="rounded border b-line-soft px-1.5 py-0.5">{line.bucketStart}: {line.totalQty}</span>
                           ))}
                         </div>
                       </div>
                     ))}
+                    {(timePhased.parts ?? []).length === 0 && <div className="text-[11px] tx3">{tr("برای این انتخاب، تقاضایی در افق برنامه‌ریزی نیست.", "No demand falls inside the planning horizon for this selection.")}</div>}
                   </div>
                 )}
-              </section>
-
-              <section className="glass-dark rounded-xl p-3 space-y-2">
-                <h4 className="tx1 font-semibold">{tr("فهرست تقاضا", "Demand Register")}</h4>
-                <div className="space-y-1.5 max-h-[420px] overflow-y-auto">
-                  {demandRows.map((row) => (
-                    <div key={row.Id} className="rounded border b-line-soft p-2 text-[11px] tx2 flex flex-wrap items-center justify-between gap-2">
-                      <span dir="ltr">
-                        <strong>{row.DemandRef}</strong> · {row.DemandType} · {row.RequiredAt} · <strong>{row.Quantity}</strong> {row.Uom}
-                        {row.ConfidencePct != null ? ` · ${row.ConfidencePct}%` : ""} · {row.Status}
-                      </span>
-                      {canMfgAccess(mfgUserId, "mfg.demand.edit", plantId) && row.Status !== "consumed" && (
-                        <button className={btnCls} disabled={busy} onClick={() => void handleDeleteDemand(row)}>
-                          {tr("حذف", "Delete")}
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                  {demandRows.length === 0 && <div className="text-[11px] tx3">{tr("تقاضایی ثبت نشده است.", "No demand rows.")}</div>}
-                </div>
               </section>
             </div>
           )}
