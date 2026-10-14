@@ -426,6 +426,14 @@ export default function PlanningWorkspace({
           </div>
         )}
 
+        {/* نقشهٔ گردش‌کار EPC در ابتدای تب کارگاه هم می‌آید، چون ورود پیش‌فرض
+            ماژول از مسیر پروژه روی همین تب است و داشبورد نقطهٔ ورود نیست. */}
+        {tab === "workshop" && (
+          <div className="fade-rise mb-2">
+            <PlanningWorkflowMap rtl={rtl} onNavigate={(next) => setTab(next)} />
+          </div>
+        )}
+
         {tab === "workshop" && (
           <nav className="fade-rise flex flex-wrap items-center gap-1 rounded-xl bg-black/15 p-1">
             {([
