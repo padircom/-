@@ -117,7 +117,7 @@ function LiveMonitoring({lang,projectId,initialTab,subId,hideTabs,userId}:Props 
       {/* داشبورد کنترل: سنجهٔ SPI، دونات پیشرفت، مقایسهٔ PV/EV/AC و روند
           انحراف — همه از تصویر EVM انتخاب‌شده بالای صفحه. نبود تصویر
           یعنی ویجت خالی، نه مقدار ساختگی. */}
-      {tab==='dash'&&<ControlDashboard p={p} history={snapHistory} lang={lang}/>}
+      {tab==='dash'&&<ControlDashboard p={p} history={snapHistory} lang={lang} fmt={fmt}/>}
       {showEvm&&<section className="glass-dark rounded-xl p-3 space-y-3">
         <div className="flex flex-wrap gap-3 text-xs tx2"><h4>EVM · {state(current.evm.state)}</h4><span>{text('تاریخ داده: ','Data date: ')}{p?.dataDate??'—'}</span><span dir="ltr">{p?.formulaVersion??'—'} · {p?.id??'—'}</span></div>
         <p className="text-xs tx3">{text('سازگاری تصویر: ','Snapshot integrity: ')}{p?.integrity??'—'} · {text('ردیف بی‌تاریخ / آینده کنارگذاشته‌شده: ','Undated / future rows excluded: ')}{fmt(current.evm.excludedUndatedOrFuture)}</p>
@@ -144,7 +144,7 @@ type EvmPoint = MonitoringData['evm']['history'][number];
  * صفحه به‌صورت خام می‌آیند. عمداً موتور تازه ندارد: اگر فردا محاسبهٔ SPI
  * در سرویس عوض شود، اینجا هم عوض می‌شود.
  */
-function ControlDashboard({p,history,lang}:{p:EvmPoint|null;history:EvmPoint[];lang:Lang}) {
+function ControlDashboard({p,history,lang,fmt}:{p:EvmPoint|null;history:EvmPoint[];lang:Lang;fmt:(n:number|null|undefined)=>string}) {
   const fa=lang==='fa'; const text=(a:string,b:string)=>fa?a:b;
   return (
     <section className="space-y-3">
@@ -167,6 +167,26 @@ function ControlDashboard({p,history,lang}:{p:EvmPoint|null;history:EvmPoint[];l
       <article className="glass-dark rounded-xl p-3">
         <h4 className="text-sm tx1 mb-2">{text('روند انحراف زمان‌بندی','Schedule variance trend')}</h4>
         <VarianceTrend history={history} lang={lang}/>
+      </article>
+      {/* پیش‌بینی فقط مقدار ثبت‌شده است — مدل تازه ساخته نمی‌شود. */}
+      <article className="glass-dark rounded-xl p-3">
+        <h4 className="text-sm tx1 mb-2">{text('پیش‌بینی ثبت‌شده','Stored forecast')}</h4>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {([
+            ['bac',text('بودجهٔ تصویب‌شده','Budget at completion')],
+            ['eac',text('تخمین در اتمام','Estimate at completion')],
+            ['etc',text('تخمین تکمیل','Estimate to complete')],
+            ['vac',text('انحراف تکمیل','Variance at completion')],
+          ] as const).map(([k,label])=>(
+            <div key={k} className="rounded-lg border b-line-soft p-2">
+              <div className="text-[10px] tx3">{label}</div>
+              <div className="mt-0.5 text-base tx1 tabular-nums" dir="ltr">{fmt(p?.[k]??null)}</div>
+            </div>
+          ))}
+        </div>
+        <p className="mt-2 text-[10px] tx3">
+          {text('EAC فقط مقدار ثبت‌شده در تصویر انتخاب‌شده است؛ ETC = EAC − AC و VAC = BAC − EAC. هیچ مدل پیش‌بینی تازه‌ای ساخته نمی‌شود و نبود تصویر یعنی نبود عدد.','EAC is only the value stored in the selected snapshot; ETC = EAC − AC and VAC = BAC − EAC. No new forecast model is fabricated; no snapshot means no number.')}
+        </p>
       </article>
       {!p&&<p className="text-xs tx3">{text('تصویر EVM ثبت‌شده‌ای برای این پروژه نیست؛ ویجت‌ها خالی‌اند و هیچ مقدار ساختگی نمایش داده نمی‌شود.','No stored EVM snapshot for this project; widgets stay empty and no synthetic value is shown.')}</p>}
     </section>
