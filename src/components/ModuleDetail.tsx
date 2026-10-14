@@ -581,9 +581,9 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
   const d2Tab = ((): PexTab => {
     const sid = selected?.sId ?? target.subId;
     if (sid && D2_TAB_BY_SUB[sid]) return D2_TAB_BY_SUB[sid];
-    /* داشبورد مدیر پروژه به حوزهٔ پایش رفت، پس دیگر نقطهٔ ورود معقولی
-     * برای این حوزه نیست. کارگاه سرِ زنجیره است و پیش‌فرض درست همان. */
-    return "workshop";
+    /* نقطهٔ ورود ماژول، نقشهٔ گردش‌کار در وسط صفحه است؛ از روی گره‌ها
+     * به زیربخش‌ها می‌روند و با دکمهٔ بازگشت به نقشه برمی‌گردند. */
+    return "workflow";
   })();
 
   if (dom.id === "d2") {

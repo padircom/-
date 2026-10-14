@@ -24,6 +24,7 @@ import PlanningWorkflowMap from "./PlanningWorkflowMap";
 import { ScheduleImportActions } from "./ConnectorActions";
 
 export type PexTab =
+  | "workflow"
   | "dashboard"
   | "insight"
   | "workshop"
@@ -45,6 +46,7 @@ export type PexTab =
   | "roc";
 
 const TABS: { id: PexTab; fa: string; en: string }[] = [
+  { id: "workflow", fa: "نقشهٔ گردش‌کار", en: "Workflow Map" },
   { id: "dashboard", fa: "داشبورد", en: "Dashboard" },
   { id: "insight", fa: "تحلیل MSP/P6", en: "MSP/P6 Insight" },
   { id: "workshop", fa: "کارگاه برنامه‌ریزی", en: "Planning Workshop" },
@@ -360,11 +362,11 @@ export default function PlanningWorkspace({
       <div className="thin-scroll min-h-0 flex-1 overflow-y-auto pe-1">
         {/* در حالت بدون نوار تب (ورود از مسیر پروژه)، بعد از پرش از روی نقشه
             به یک زیربخش، راه برگشت فقط همین دکمه است. */}
-        {hideTabs && tab !== "workshop" && (
+        {hideTabs && tab !== "workflow" && (
           <div className="fade-rise mb-2 flex items-center gap-2">
             <button
               type="button"
-              onClick={() => setTab("workshop")}
+              onClick={() => setTab("workflow")}
               className="glass-row flex items-center gap-1.5 rounded-lg px-3 py-2 text-[10.5px] font-light tx2 transition hover:tx1"
             >
               <span aria-hidden="true">{rtl ? "→" : "←"}</span>
@@ -376,10 +378,22 @@ export default function PlanningWorkspace({
           </div>
         )}
 
+        {/* نقشهٔ گردش‌کار: صفحهٔ مرکزی و مستقل ماژول؛ نقطهٔ ورود پیش‌فرض.
+            کلیک روی هر گره به زیربخش/ماژول مربوط می‌رود و دکمهٔ بازگشت
+            بالای زیربخش‌ها دوباره به همین نقشه برمی‌گردد. */}
+        {tab === "workflow" && (
+          <div className="fade-rise flex min-h-full items-center justify-center py-3">
+            <div className="w-full max-w-[1060px]">
+              <PlanningWorkflowMap rtl={rtl} onNavigate={(next) => setTab(next)} />
+              <p className="mt-2 text-center text-[10px] tx3">
+                {rtl ? "برای شروع، روی هر گره از نقشه کلیک کنید تا به بخش مربوط بروید." : "Start by clicking any node on the map to open its section."}
+              </p>
+            </div>
+          </div>
+        )}
+
         {tab === "dashboard" && (
           <div className="fade-rise space-y-2">
-            {/* نقشهٔ گردش‌کار برنامه‌ریزی و کنترل (EPC) — کلیک روی گره‌ها به زیربخش مربوط می‌رود */}
-            <PlanningWorkflowMap rtl={rtl} onNavigate={(next) => setTab(next)} />
             <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-6">
               {kpis.map((c) => (
                 <div key={c.k} className="glass-dark rounded-2xl p-3">
@@ -441,14 +455,6 @@ export default function PlanningWorkspace({
                 </div>
               ))}
             </div>
-          </div>
-        )}
-
-        {/* نقشهٔ گردش‌کار EPC در ابتدای تب کارگاه هم می‌آید، چون ورود پیش‌فرض
-            ماژول از مسیر پروژه روی همین تب است و داشبورد نقطهٔ ورود نیست. */}
-        {tab === "workshop" && (
-          <div className="fade-rise mb-2">
-            <PlanningWorkflowMap rtl={rtl} onNavigate={(next) => setTab(next)} />
           </div>
         )}
 
