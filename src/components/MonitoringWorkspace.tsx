@@ -146,6 +146,26 @@ type EvmPoint = MonitoringData['evm']['history'][number];
  */
 function ControlDashboard({p,history,lang,fmt}:{p:EvmPoint|null;history:EvmPoint[];lang:Lang;fmt:(n:number|null|undefined)=>string}) {
   const fa=lang==='fa'; const text=(a:string,b:string)=>fa?a:b;
+  /* مقایسهٔ دو تصویر: پیش‌فرض، تصویر پیش از تصویر انتخاب‌شده. اگر انتخاب
+   * روی نخستین تصویر باشد، مقایسه به تصویر آخر می‌رود — نه به خودش. */
+  const [cmpId,setCmpId]=useState('');
+  useEffect(()=>{
+    if(history.length<2){ if(cmpId) setCmpId(''); return; }
+    const i=history.findIndex(h=>h.id===p?.id);
+    const fallback=history[(i<=0?history.length:i)-1];
+    if(!history.some(h=>h.id===cmpId)||cmpId===p?.id) setCmpId(fallback.id);
+  },[history,p,cmpId]);
+  const cmp=history.find(h=>h.id===cmpId)??null;
+  const cmpRows:[string,number|null,number|null,boolean][]=[
+    ['PV',p?.pv??null,cmp?.pv??null,false],
+    ['EV',p?.ev??null,cmp?.ev??null,false],
+    ['AC',p?.ac??null,cmp?.ac??null,false],
+    ['BAC',p?.bac??null,cmp?.bac??null,false],
+    ['SPI',p?.spi??null,cmp?.spi??null,true],
+    ['CPI',p?.cpi??null,cmp?.cpi??null,true],
+    ['SV',p?.sv??null,cmp?.sv??null,true],
+    ['CV',p?.cv??null,cmp?.cv??null,true],
+  ];
   return (
     <section className="space-y-3">
       <div className="grid gap-3 md:grid-cols-3">
@@ -186,6 +206,60 @@ function ControlDashboard({p,history,lang,fmt}:{p:EvmPoint|null;history:EvmPoint
         </div>
         <p className="mt-2 text-[10px] tx3">
           {text('EAC فقط مقدار ثبت‌شده در تصویر انتخاب‌شده است؛ ETC = EAC − AC و VAC = BAC − EAC. هیچ مدل پیش‌بینی تازه‌ای ساخته نمی‌شود و نبود تصویر یعنی نبود عدد.','EAC is only the value stored in the selected snapshot; ETC = EAC − AC and VAC = BAC − EAC. No new forecast model is fabricated; no snapshot means no number.')}
+        </p>
+      </article>
+
+      {/* مقایسهٔ دو تصویر — همان «آخرین به‌روزرسانی / قبل» اسلاید جدول.
+          تغییرات از روی ردیف‌های ثبت‌شده حساب می‌شوند، نه از یک مدل. */}
+      <article className="glass-dark rounded-xl p-3">
+        <div className="mb-2 flex flex-wrap items-center gap-2">
+          <h4 className="text-sm tx1">{text('مقایسهٔ دو تصویر','Two-snapshot comparison')}</h4>
+          <label className="ms-auto flex items-center gap-2 text-[10px] tx3">
+            {text('مقایسه با','Compare with')}
+            <select className="bg-[var(--row)] tx1 rounded-lg border b-line-soft p-1.5 text-[11px]" value={cmpId}
+              disabled={history.length<2} onChange={e=>setCmpId(e.target.value)}>
+              {history.filter(h=>h.id!==p?.id).map(h=>(
+                <option key={h.id} value={h.id}>{jalaliLabel(h.dataDate,lang)}{h.integrity==='verified'?'':' ⚠'}</option>
+              ))}
+            </select>
+          </label>
+        </div>
+        {history.length<2?(
+          <p className="py-4 text-center text-[10.5px] tx4">
+            {text('برای مقایسه، دست‌کم دو تصویر EVM ثبت‌شده لازم است.','At least two stored EVM snapshots are required to compare.')}
+          </p>
+        ):(
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[420px] border-collapse text-[11px]">
+              <thead>
+                <tr className="border-b b-line text-[9.5px] tx3">
+                  <th className="p-2 text-start">{text('شاخص','Metric')}</th>
+                  <th className="p-2 text-center">{text('تصویر انتخاب‌شده','Selected')}</th>
+                  <th className="p-2 text-center">{text('تصویر مقایسه','Comparison')}</th>
+                  <th className="p-2 text-center">{text('تغییر','Change')}</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y b-line-soft">
+                {cmpRows.map(([k,a,b,better])=>{
+                  const d=a!==null&&b!==null?a-b:null;
+                  const col=d===null?undefined:d>0?(better?'#8FE3C8':undefined):d<0?(better?'#FF9F9F':undefined):undefined;
+                  return (
+                    <tr key={k} className="glass-row">
+                      <td className="p-2 tx2" dir="ltr">{k}</td>
+                      <td className="p-2 text-center tx1 tabular-nums" dir="ltr">{fmt(a)}</td>
+                      <td className="p-2 text-center tx2 tabular-nums" dir="ltr">{fmt(b)}</td>
+                      <td className="p-2 text-center tabular-nums" dir="ltr" style={{color:col}}>
+                        {d===null?'—':`${d>0?'+':''}${fmt(d)}`}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <p className="mt-2 text-[10px] tx3">
+          {text('تغییر از روی ردیف‌های ثبت‌شده حساب می‌شود؛ تصویر بدون تأییدسازگاری (⚠) ممکن است مقادیر خالی داشته باشد و در مقایسه «—» بماند.','Changes are computed from stored rows; a snapshot without verified integrity (⚠) may carry null values and stays "—" in the comparison.')}
         </p>
       </article>
       {!p&&<p className="text-xs tx3">{text('تصویر EVM ثبت‌شده‌ای برای این پروژه نیست؛ ویجت‌ها خالی‌اند و هیچ مقدار ساختگی نمایش داده نمی‌شود.','No stored EVM snapshot for this project; widgets stay empty and no synthetic value is shown.')}</p>}

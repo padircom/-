@@ -555,6 +555,82 @@ export default function PlanningWorkspace({
               </p>
             </div>
 
+            {/* نمای جدول WBS — همان اعداد میله‌های بالا، برای خواندن دقیق و
+                خروجی چاپی. جمع ردیف آخر با جمع وزنی موتور یکی است. */}
+            <details className="glass-dark rounded-2xl p-3">
+              <summary className="cursor-pointer text-[11.5px] tx1">
+                {rtl ? "جدول WBS" : "WBS table"}
+                <span className="ms-2 text-[9.5px] tx4">
+                  {rtl ? "تجمعی تا Data Date" : "Cumulative to data date"}
+                </span>
+              </summary>
+              <div className="thin-scroll mt-2 overflow-x-auto">
+                <table className="w-full min-w-[560px] border-collapse text-[10.5px]">
+                  <thead>
+                    <tr className="border-b b-line text-[9.5px] tx3">
+                      <th className="px-2 py-1.5 text-start" style={{ width: 56 }}>WBS</th>
+                      <th className="px-2 py-1.5 text-start">{rtl ? "نام" : "Name"}</th>
+                      <th className="px-2 py-1.5 text-center" style={{ width: 62 }}>{rtl ? "وزن از کل" : "Weight"}</th>
+                      <th className="px-2 py-1.5 text-center" style={{ width: 62 }}>{rtl ? "برنامه‌ای" : "Planned"}</th>
+                      <th className="px-2 py-1.5 text-center" style={{ width: 62 }}>{rtl ? "واقعی" : "Actual"}</th>
+                      <th className="px-2 py-1.5 text-center" style={{ width: 60 }}>{rtl ? "انحراف" : "Var"}</th>
+                      <th className="px-2 py-1.5 text-center" style={{ width: 52 }}>{rtl ? "فعالیت" : "Acts"}</th>
+                      <th className="px-2 py-1.5 text-center" style={{ width: 56 }}>{rtl ? "لغزش" : "Slip"}</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y b-line-soft">
+                    {m.wbsRollup.map((w) => {
+                      const variance = Math.round((w.actualPct - w.plannedPct) * 10) / 10;
+                      const slip = wbsSlip[w.id] ?? 0;
+                      return (
+                        <tr key={w.id} className="glass-row">
+                          <td className="px-2 py-1.5 font-mono tx3" dir="ltr">{w.id}</td>
+                          <td className="px-2 py-1.5 tx1"><span className="truncate">{rtl ? w.nameFa : w.nameEn}</span></td>
+                          <td className="px-2 py-1.5 text-center tabular-nums tx2" dir="ltr">{(w.weight * 100).toFixed(1)}%</td>
+                          <td className="px-2 py-1.5 text-center tabular-nums tx3" dir="ltr">{w.plannedPct}%</td>
+                          <td className="px-2 py-1.5 text-center tabular-nums tx1" dir="ltr">{w.actualPct}%</td>
+                          <td className="px-2 py-1.5 text-center tabular-nums" dir="ltr"
+                            style={{ color: variance < -3 ? "#FF9F9F" : variance > 3 ? "#8FE3C8" : undefined }}>
+                            {variance > 0 ? "+" : ""}
+                            {variance}
+                          </td>
+                          <td className="px-2 py-1.5 text-center tabular-nums tx3" dir="ltr">{w.count}</td>
+                          <td className="px-2 py-1.5 text-center tabular-nums" dir="ltr"
+                            style={{ color: slip > 0 ? "#FF9F9F" : slip < 0 ? "#8FE3C8" : undefined }}>
+                            {slip > 0 ? `+${slip}` : slip}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot>
+                    <tr className="border-t b-line text-[10px] tx1">
+                      <td className="px-2 py-1.5" colSpan={2}>{rtl ? "جمع پروژه" : "Project total"}</td>
+                      <td className="px-2 py-1.5 text-center tabular-nums" dir="ltr">
+                        {(m.wbsRollup.reduce((s2, w) => s2 + w.weight, 0) * 100).toFixed(1)}%
+                      </td>
+                      <td className="px-2 py-1.5 text-center tabular-nums" dir="ltr">{m.plannedPct}%</td>
+                      <td className="px-2 py-1.5 text-center tabular-nums" dir="ltr">{m.overallPct}%</td>
+                      <td className="px-2 py-1.5 text-center tabular-nums" dir="ltr"
+                        style={{ color: m.variance.deltaPct < 0 ? "#FF9F9F" : m.variance.deltaPct > 0 ? "#8FE3C8" : undefined }}>
+                        {m.variance.deltaPct > 0 ? "+" : ""}
+                        {m.variance.deltaPct}
+                      </td>
+                      <td className="px-2 py-1.5 text-center tabular-nums" dir="ltr">{m.rows.length}</td>
+                      <td className="px-2 py-1.5 text-center tabular-nums" dir="ltr">
+                        {Math.max(0, ...Object.values(rowSlip))}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+              <p className="mt-2 text-[9px] tx4">
+                {rtl
+                  ? "وزن هر WBS جمع وزن فعالیت‌هایش است و جمع کل باید ۱۰۰٪ بدهد؛ انحراف = واقعی − برنامه‌ای."
+                  : "Each WBS weight is the sum of its activity weights and must total 100%; variance = actual − planned. A lock on the weight means changing it needs a change request."}
+              </p>
+            </details>
+
             {/* نمای پیشرفت فعالیت‌ها — همان دادهٔ WBS بالا، یک سطح ریزتر.
                 عقب‌افتاده‌ها اول: کاربر برای پیدا کردن مشکل می‌آید، نه
                 برای خواندن چهل ردیف سالم. */}
