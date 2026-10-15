@@ -17,6 +17,7 @@
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { type Lang } from "../data/framework";
+import { toJalaali } from "jalaali-js";
 import { buildPexModel, type PexModel } from "../services/pexModel";
 import PeriodicReportWorkspace from "./PeriodicReportWorkspace";
 import { WeeklyReportDatePicker } from "./WeeklyReportWorkspace";
@@ -53,6 +54,16 @@ const DEFAULT_COVER: CoverFields = {
 
 const STORAGE_PREFIX = "monthly-report:";
 
+const JALALI_MONTHS_FA = [
+  "فروردین", "اردیبهشت", "خرداد", "تیر", "مرداد", "شهریور",
+  "مهر", "آبان", "آذر", "دی", "بهمن", "اسفند",
+] as const;
+
+const JALALI_MONTHS_EN = [
+  "Farvardin", "Ordibehesht", "Khordad", "Tir", "Mordad", "Shahrivar",
+  "Mehr", "Aban", "Azar", "Dey", "Bahman", "Esfand",
+] as const;
+
 /** تب‌های شیت ماهانه — همان الگوی WEEKLY_REPORT_TABS در گزارش هفتگی. */
 const MONTHLY_REPORT_TABS: { id: MonthlyReportTab; fa: string; en: string }[] = [
   { id: "cover", fa: "کاور", en: "Cover" },
@@ -70,18 +81,31 @@ const num = (v: number | null | undefined, fa: boolean, fractionDigits = 1) =>
     : digits(v.toLocaleString("en-US", { minimumFractionDigits: fractionDigits, maximumFractionDigits: fractionDigits }), fa);
 
 /**
- * تاریخ میلادی ISO → اجزای تاریخ شمسی برای بلوک تاریخ کاور.
- * با timeZone: UTC خوانده می‌شود تا در هیچ منطقهٔ زمانی یک روز جابجا نشود.
+ * ISO میلادی («۲۰۲۶-۰۹-۲۲») → رشتهٔ شمسی «۱۴۰۵/۰۶/۳۱».
+ * همان قالبی که WeeklyReportDatePicker می‌پذیرد و برمی‌گرداند.
  */
-function jalaliParts(iso: string, fa: boolean) {
-  if (!iso) return null;
+function isoToJalali(iso: string): string {
+  if (!iso) return "";
   const date = new Date(`${iso}T00:00:00Z`);
-  if (Number.isNaN(date.getTime())) return null;
-  const locale = fa ? "fa-IR" : "en-US";
-  const numeric = new Intl.DateTimeFormat(locale, { day: "numeric", month: "numeric", year: "numeric", timeZone: "UTC" }).formatToParts(date);
-  const pick = (type: string) => numeric.find((part) => part.type === type)?.value ?? "";
-  const monthName = new Intl.DateTimeFormat(locale, { month: "long", timeZone: "UTC" }).format(date);
-  return { day: pick("day"), monthNumber: pick("month"), year: pick("year"), monthName };
+  if (Number.isNaN(date.getTime())) return "";
+  const { jy, jm, jd } = toJalaali(date.getUTCFullYear(), date.getUTCMonth() + 1, date.getUTCDate());
+  return `${jy}/${String(jm).padStart(2, "0")}/${String(jd).padStart(2, "0")}`;
+}
+
+/** رشتهٔ شمسی «۱۴۰۵/۰۶/۳۱» → اجزای تاریخ برای بلوک تاریخ کاور. */
+function jalaliParts(value: string, fa: boolean) {
+  const match = /^(\d{4})\/(\d{1,2})\/(\d{1,2})$/.exec(value.trim());
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const names = fa ? JALALI_MONTHS_FA : JALALI_MONTHS_EN;
+  return {
+    day: digits(day, fa),
+    monthNumber: digits(month, fa),
+    year: digits(year, fa),
+    monthName: names[month - 1] ?? "",
+  };
 }
 
 /* ── ورودی متنی روی شیت (همان CoverText گزارش هفتگی) ── */
@@ -152,7 +176,7 @@ function MonthlyCoverSheet({
   const fa = lang === "fa";
   const project = model?.project;
   const period = model?.openPeriod;
-  const periodEnd = cover.periodEnd || period?.to || model?.dataDate || "";
+  const periodEnd = cover.periodEnd || isoToJalali(period?.to ?? model?.dataDate ?? "");
   const dateParts = jalaliParts(periodEnd, fa);
 
   return (
@@ -206,7 +230,7 @@ function MonthlyCoverSheet({
           />
         </div>
         <div className="mt-1 font-sans text-[clamp(8px,1.1vw,10px)]">
-          {fa ? "دوره گزارشی؛ منتهی به" : "Reporting period; ending"} {periodEnd || "—"}
+          {fa ? "دوره گزارشی؛ منتهی به" : "Reporting period; ending"} {digits(periodEnd, fa) || "—"}
         </div>
         <CoverText
           ariaLabel={fa ? "تهیه شده" : "Prepared by"}
@@ -253,7 +277,7 @@ function MonthlySummarySheet({
   const fa = lang === "fa";
   const cell = "border border-[#b6bec6] px-1 py-0 text-start align-middle";
   const headerCell = `${cell} text-center font-semibold text-[#172f46]`;
-  const periodEnd = cover.periodEnd || model?.openPeriod?.to || "—";
+  const periodEnd = cover.periodEnd || isoToJalali(model?.openPeriod?.to ?? "");
 
   const rows: { label: string; value: string; note?: string }[] = model
     ? [
@@ -312,7 +336,7 @@ function MonthlySummarySheet({
             {fa ? "شمارهٔ گزارش:" : "Report No.:"} {cover.reportNo || "—"}
           </span>
           <span>
-            {fa ? "دوره گزارشی؛ منتهی به" : "Reporting period; ending"} {periodEnd}
+            {fa ? "دوره گزارشی؛ منتهی به" : "Reporting period; ending"} {digits(periodEnd || "—", fa)}
           </span>
         </div>
 
@@ -372,9 +396,9 @@ export default function MonthlyReportWorkspace({ lang, model }: Props) {
   useEffect(() => {
     let loaded: CoverFields = {
       ...DEFAULT_COVER,
-      reportDate: m?.openPeriod?.to ?? "",
-      periodStart: m?.openPeriod?.from ?? "",
-      periodEnd: m?.openPeriod?.to ?? "",
+      reportDate: isoToJalali(m?.openPeriod?.to ?? ""),
+      periodStart: isoToJalali(m?.openPeriod?.from ?? ""),
+      periodEnd: isoToJalali(m?.openPeriod?.to ?? ""),
     };
     try {
       const raw = localStorage.getItem(storageKey);
@@ -454,20 +478,20 @@ export default function MonthlyReportWorkspace({ lang, model }: Props) {
         </label>
         <label className="flex flex-col gap-1">
           <span className="tx3">{fa ? "شروع دوره" : "Period start"}</span>
-          <input
-            type="date"
+          <WeeklyReportDatePicker
             value={cover.periodStart}
-            onChange={(event) => patch({ periodStart: event.target.value })}
-            className="h-7 w-32 rounded-lg border b-line-soft bg-black/20 px-3 py-1 tx1 outline-none focus:border-[var(--accent)]"
+            rtl={fa}
+            onChange={(value) => patch({ periodStart: value })}
+            compact
           />
         </label>
         <label className="flex flex-col gap-1">
           <span className="tx3">{fa ? "پایان دوره" : "Period end"}</span>
-          <input
-            type="date"
+          <WeeklyReportDatePicker
             value={cover.periodEnd}
-            onChange={(event) => patch({ periodEnd: event.target.value })}
-            className="h-7 w-32 rounded-lg border b-line-soft bg-black/20 px-3 py-1 tx1 outline-none focus:border-[var(--accent)]"
+            rtl={fa}
+            onChange={(value) => patch({ periodEnd: value })}
+            compact
           />
         </label>
         <span className="ms-auto flex items-center gap-1.5">
