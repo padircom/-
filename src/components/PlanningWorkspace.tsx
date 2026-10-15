@@ -389,7 +389,7 @@ export default function PlanningWorkspace({
           <span className="grid h-8 w-8 place-items-center rounded-lg border border-emerald-400/40 bg-emerald-400/10 text-[16px]">🧭</span>
           <div className="min-w-0 flex-1">
             <h3 className="text-[13px] font-semibold tx1">
-              {rtl ? "برنامه‌ریزی و اجرای عملیات (PEX)" : "Planning & Execution (PEX)"}
+              {rtl ? "برنامه‌ریزی و اجرای عملیات" : "Planning & Execution"}
             </h3>
           </div>
           <span className="rounded-lg border b-line-soft px-2 py-1 text-[10px] tx3" dir="ltr">{m.project.code} · DataDate {dataDate}</span>
