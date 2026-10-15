@@ -16,6 +16,7 @@ import BaselineSCurvePanel from "./BaselineSCurvePanel";
 import CpmWorkspace from "./CpmWorkspace";
 import DailyReportWorkspace from "./DailyReportWorkspace";
 import WeeklyReportWorkspace from "./WeeklyReportWorkspace";
+import MonthlyReportWorkspace from "./MonthlyReportWorkspace";
 import DprProgressFallback from "./DprProgressFallback";
 import DprSupportTables from "./DprSupportTables";
 import { isDprFormatActive, isDprSupportBoxActive } from "../data/dprScope";
@@ -1452,30 +1453,8 @@ export default function PlanningWorkspace({
         )}
 
         {tab === "mpr" && (
-          <div className="fade-rise space-y-2">
-            <div className="grid gap-2 sm:grid-cols-4">
-              {[
-                { k: rtl ? "پیشرفت واقعی" : "Actual", v: `${m.overallPct}%` },
-                { k: rtl ? "برنامه‌ای" : "Planned", v: `${m.plannedPct}%` },
-                { k: rtl ? "وضعیت" : "Status", v: m.variance.status },
-                { k: rtl ? "دوره" : "Period", v: m.openPeriod.code },
-              ].map((x) => (
-                <div key={x.k} className="glass-dark rounded-2xl p-3">
-                  <div className="text-[9.5px] tx3">{x.k}</div>
-                  <div className="mt-1 text-[14px] tx1" dir="ltr">{x.v}</div>
-                </div>
-              ))}
-            </div>
-            <div className="glass-dark rounded-2xl p-3 text-[11px] tx2">
-              <p>{rtl ? "خلاصه ماهانه از داده تأییدشده تولید می‌شود:" : "Monthly summary from approved data:"}</p>
-              <ul className="mt-2 space-y-1 tx3">
-                <li>· {rtl ? "مایلستون‌های در تأخیر" : "Delayed milestones"}: {m.milestones.filter((x) => x.status === "Delayed").length}</li>
-                <li>· {rtl ? "جریمه انباشته" : "Accrued penalty"}: <span dir="ltr">{fmtNum(m.totalPenalty)} {m.project.currency}</span></li>
-                <li>· {rtl ? "رانش مسیر بحرانی" : "CP drift"}: <span dir="ltr">{m.snapshot.drift}d</span></li>
-                <li>· {rtl ? "سلامت زمان‌بندی (DCMA)" : "Schedule health (DCMA)"}: {m.dcma.healthScore}</li>
-                <li>· {rtl ? "دوره‌های بسته‌شده" : "Closed periods"}: {m.periods.filter((p) => p.closedAt).map((p) => p.code).join("، ") || "—"}</li>
-              </ul>
-            </div>
+          <div className="fade-rise">
+            <MonthlyReportWorkspace lang={lang} model={m} />
           </div>
         )}
 

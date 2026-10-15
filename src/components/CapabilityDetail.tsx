@@ -13,7 +13,7 @@ import {
 import { useSystem } from "../context/SystemContext";
 import { pmisApiClient } from "../services/pmisApiClient";
 import DailyReportWorkspace from "./DailyReportWorkspace";
-import PeriodicReportWorkspace from "./PeriodicReportWorkspace";
+import MonthlyReportWorkspace from "./MonthlyReportWorkspace";
 import WeeklyReportWorkspace from "./WeeklyReportWorkspace";
 import MonitoringWorkspace from "./MonitoringWorkspace";
 import RiskClaimsWorkspace from "./RiskClaimsWorkspace";
@@ -718,7 +718,7 @@ export default function CapabilityDetail({
       ) : domainId === "d2" && subId === "d2-p5-s1" ? (
         <WeeklyReportWorkspace lang={lang} projectId={projectId} />
       ) : domainId === "d2" && subId === "d2-p6-s1" ? (
-        <PeriodicReportWorkspace lang={lang} kind="monthly" />
+        <MonthlyReportWorkspace lang={lang} />
       ) : domainId === "d3" ? (
         <MonitoringWorkspace projectId={projectId} lang={lang} subId={subId} />
       ) : domainId === "d4" ? (
