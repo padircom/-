@@ -41,6 +41,8 @@ type CoverFields = {
   preparedUnit: string;
   /** مسئول کنترل پروژه — همان «Project Control: [...]» انتهای کاور. */
   projectControl: string;
+  /** نام شرکت — سطر سوم گوشهٔ پایین راست. */
+  companyName: string;
 };
 
 const DEFAULT_COVER: CoverFields = {
@@ -53,6 +55,7 @@ const DEFAULT_COVER: CoverFields = {
   preparedBy: "تهیه شده،",
   preparedUnit: "واحد برنامه‌ریزی و کنترل پروژه",
   projectControl: "",
+  companyName: "شرکت پاسارگاده",
 };
 
 const STORAGE_PREFIX = "monthly-report:";
@@ -218,40 +221,16 @@ function MonthlyCoverSheet({
         />
       </div>
 
-      {/* بلوک میانی: گزارش پیشرفت + شماره گزارش + دوره + تهیه‌کننده */}
+      {/* بلوک میانی: فقط عنوان گزارش */}
       <div className="absolute left-[23%] top-[41.5%] w-[77%] px-3 text-center font-sans">
         <div className="text-[clamp(13px,2.1vw,19px)] font-bold tracking-[0.09em] text-[#183b5b]">
           {fa ? "گزارش پیشرفت" : "Progress Report"}
         </div>
-        <div className="mt-2 flex items-center justify-center gap-1 text-[clamp(10px,1.6vw,14px)]">
-          <span>{fa ? "شماره گزارش:" : "Report No.:"}</span>
-          <CoverText
-            ariaLabel={fa ? "شماره گزارش" : "Report number"}
-            value={cover.reportNo}
-            onChange={(value) => onChange({ reportNo: value })}
-            className="w-auto max-w-[62%] text-start"
-          />
-        </div>
-        <div className="mt-1 font-sans text-[clamp(8px,1.1vw,10px)]">
-          {fa ? "دوره گزارشی؛ منتهی به" : "Reporting period; ending"} {digits(periodEnd, fa) || "—"}
-        </div>
-        <CoverText
-          ariaLabel={fa ? "تهیه شده" : "Prepared by"}
-          value={cover.preparedBy}
-          onChange={(value) => onChange({ preparedBy: value })}
-          className="mt-[6.5%] text-[clamp(10px,1.5vw,14px)]"
-        />
-        <CoverText
-          ariaLabel={fa ? "واحد تهیه‌کننده" : "Preparing unit"}
-          value={cover.preparedUnit}
-          onChange={(value) => onChange({ preparedUnit: value })}
-          className="mt-[2.2%] text-[clamp(10px,1.5vw,14px)]"
-        />
       </div>
 
       {/* بلوک تاریخ پایین راست — همان جای کاور هفتگی */}
       {dateParts && (
-        <div className="absolute bottom-[10%] left-[61%] flex items-stretch gap-1 font-sans">
+        <div className="absolute bottom-[12%] left-[61%] flex items-stretch gap-1 font-sans">
           <div className="flex w-[clamp(58px,12vw,96px)] flex-col items-center justify-center border border-[#cbd5e1] bg-white/80 px-2 py-1">
             <span className="text-[clamp(10px,1.3vw,14px)]">{dateParts.monthNumber}</span>
             <span className="text-[clamp(30px,5vw,48px)] leading-none">{dateParts.day}</span>
@@ -264,22 +243,62 @@ function MonthlyCoverSheet({
       )}
 
       {/*
-        انتهای صفحه: مسئول کنترل پروژه — «Project Control: [...]».
-        برچسب انگلیسی همان‌طور که در صفحهٔ مرجع بود باقی می‌ماند و مقدار
-        داخل براکت روی خود کاور قابل تایپ است (مثل بقیهٔ متن‌های کاور).
-        dir=ltr تا ترتیب «Project Control: [نام]» درست بنشیند.
+        پاصفحه — دو گوشه، مطابق عکس‌های مرجع:
+        · گوشهٔ چپ:  شمارهٔ گزارش · دوره گزارشی · مسئول کنترل پروژه
+        · گوشهٔ راست: تهیه کننده · واحد · شرکت
+        ظرف بیرونی dir=ltr است تا ستون‌ها از لبهٔ چپ رشد کنند؛ متن فارسی
+        داخل هر سطر دوباره dir=rtl می‌گیرد تا ترتیب کلمات درست بماند.
       */}
-      <div className="absolute inset-x-0 bottom-[2%] flex items-center gap-1 px-[7%] font-sans text-[clamp(9px,1.2vw,11px)]" dir="ltr">
-        <span className="tx3">Project Control:</span>
-        <span className="text-[#1b4672]">[</span>
-        <input
-          aria-label={fa ? "مسئول کنترل پروژه" : "Project control"}
-          value={cover.projectControl}
-          onChange={(event) => onChange({ projectControl: event.target.value })}
-          placeholder={fa ? "نام مسئول" : "Name"}
-          className="w-40 border-0 border-b border-dotted border-[#4a5b6b] bg-transparent px-1 py-0.5 text-center font-medium text-[#1b4672] outline-none focus:bg-white/60"
+      <div
+        className="absolute bottom-[2.5%] left-[7%] flex flex-col items-start gap-1 font-sans text-[clamp(10px,1.4vw,13px)]"
+        dir="ltr"
+      >
+        <div className="flex w-fit items-center gap-1" dir="rtl">
+          <span>{fa ? "شماره گزارش:" : "Report No.:"}</span>
+          <CoverText
+            ariaLabel={fa ? "شماره گزارش" : "Report number"}
+            value={cover.reportNo}
+            onChange={(value) => onChange({ reportNo: value })}
+            className="w-auto max-w-[62%] text-start"
+          />
+        </div>
+        <div dir="rtl">
+          {fa ? "دوره گزارشی؛ منتهی به" : "Reporting period; ending"} {digits(periodEnd, fa) || "—"}
+        </div>
+        <div className="flex items-center gap-1">
+          <span className="tx3">Project Control:</span>
+          <span className="text-[#1b4672]">[</span>
+          <input
+            aria-label={fa ? "مسئول کنترل پروژه" : "Project control"}
+            value={cover.projectControl}
+            onChange={(event) => onChange({ projectControl: event.target.value })}
+            placeholder={fa ? "نام مسئول" : "Name"}
+            className="w-40 border-0 border-b border-dotted border-[#4a5b6b] bg-transparent px-1 py-0.5 text-center font-medium text-[#1b4672] outline-none focus:bg-white/60"
+          />
+          <span className="text-[#1b4672]">]</span>
+        </div>
+      </div>
+
+      {/* text-start چون کاور dir=rtl است و start در راست‌به‌چپ یعنی «راست» */}
+      <div className="absolute bottom-[2.5%] right-[7%] w-[46%] text-start font-sans text-[clamp(10px,1.4vw,13px)]">
+        <CoverText
+          ariaLabel={fa ? "تهیه شده" : "Prepared by"}
+          value={cover.preparedBy}
+          onChange={(value) => onChange({ preparedBy: value })}
+          className="text-[clamp(10px,1.4vw,13px)]"
         />
-        <span className="text-[#1b4672]">]</span>
+        <CoverText
+          ariaLabel={fa ? "واحد تهیه‌کننده" : "Preparing unit"}
+          value={cover.preparedUnit}
+          onChange={(value) => onChange({ preparedUnit: value })}
+          className="mt-[2.2%] text-[clamp(10px,1.4vw,13px)]"
+        />
+        <CoverText
+          ariaLabel={fa ? "نام شرکت" : "Company name"}
+          value={cover.companyName}
+          onChange={(value) => onChange({ companyName: value })}
+          className="mt-[2.2%] text-[clamp(10px,1.4vw,13px)]"
+        />
       </div>
     </article>
   );
