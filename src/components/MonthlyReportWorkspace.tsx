@@ -232,7 +232,7 @@ function MonthlyCoverSheet({
             className="w-auto max-w-[62%] text-start"
           />
         </div>
-        <div className="mt-1 font-sans text-[clamp(8px,1.1vw,10px)]">
+        <div className="mt-1 font-sans text-[clamp(10px,1.6vw,14px)]">
           {fa ? "دوره گزارشی؛ منتهی به" : "Reporting period; ending"} {digits(periodEnd, fa) || "—"}
         </div>
         <CoverText
