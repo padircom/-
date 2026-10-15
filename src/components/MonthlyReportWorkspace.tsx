@@ -19,6 +19,7 @@ import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from
 import { type Lang } from "../data/framework";
 import { toJalaali } from "jalaali-js";
 import { buildPexModel, type PexModel } from "../services/pexModel";
+import { isWorkingDay, plannedPercentAt, rollUp, workingDaysBetween } from "../services/planning";
 import PeriodicReportWorkspace from "./PeriodicReportWorkspace";
 import { WeeklyReportDatePicker } from "./WeeklyReportWorkspace";
 import iranMap from "../assets/iran-provinces-map.png";
@@ -43,7 +44,27 @@ export type MonthlyReportTab =
   | "pmsDdr"
   | "pmsStatus"
   | "pmsProc"
+  | "pmsPsr"
   | "pmsConst"
+  | "physCurve"
+  | "physCurveE"
+  | "physCurveP"
+  | "physCurveC"
+  | "weather"
+  | "manpowerStats"
+  | "machineryStats"
+  | "resourceCharts"
+  | "materials"
+  | "resourceAnalysis"
+  | "keyActivities"
+  | "issues"
+  | "correspondence"
+  | "workStoppage"
+  | "changeWork"
+  | "delayedActivities"
+  | "siteVisit"
+  | "hse"
+  | "photoReport"
   | `divider-${number}`;
 
 type Props = {
@@ -330,12 +351,52 @@ const MONTHLY_REPORT_TABS: { id: MonthlyReportTab; fa: string; en: string }[] = 
   { id: "pmsDdr", fa: "DDR", en: "DDR" },
   { id: "pmsStatus", fa: "E - Chart", en: "E - Chart" },
   { id: "pmsProc", fa: "پیشرفت Procurement", en: "Procurement progress" },
+  { id: "pmsPsr", fa: "PSR", en: "PSR" },
   { id: "pmsConst", fa: "پیشرفت Construction", en: "Construction progress" },
-  ...MONTHLY_INDEX_CHAPTERS.slice(3).map((chapter, index) => ({
-    id: `divider-${index + 4}` as MonthlyReportTab,
-    fa: chapterHeading(chapter, true),
-    en: chapterHeading(chapter, false),
-  })),
+  { id: "physCurve", fa: "منحنی پیشرفت EPC", en: "EPC progress curve" },
+  { id: "physCurveE", fa: "منحنی پیشرفت Engineering", en: "Engineering progress curve" },
+  { id: "physCurveP", fa: "منحنی پیشرفت Procurement", en: "Procurement progress curve" },
+  { id: "physCurveC", fa: "منحنی پیشرفت Construction", en: "Construction progress curve" },
+  {
+    id: "divider-4",
+    fa: chapterHeading(MONTHLY_INDEX_CHAPTERS[3], true),
+    en: chapterHeading(MONTHLY_INDEX_CHAPTERS[3], false),
+  },
+  { id: "weather", fa: "وضعیت جوی و کاری", en: "Weather and working conditions" },
+  { id: "manpowerStats", fa: "آمار نیروی انسانی", en: "Manpower statistics" },
+  { id: "machineryStats", fa: "آمار تجهیزات و ماشین‌آلات", en: "Equipment and machinery statistics" },
+  { id: "resourceCharts", fa: "نمودار نیروی انسانی و ماشین‌آلات", en: "Manpower and equipment charts" },
+  { id: "materials", fa: "خلاصه کالا و مصالح", en: "Materials summary" },
+  { id: "resourceAnalysis", fa: "گزارش تحلیلی منابع", en: "Resource analysis" },
+  {
+    id: "divider-5",
+    fa: chapterHeading(MONTHLY_INDEX_CHAPTERS[4], true),
+    en: chapterHeading(MONTHLY_INDEX_CHAPTERS[4], false),
+  },
+  { id: "keyActivities", fa: "اهم فعالیت‌های پروژه", en: "Key project activities" },
+  { id: "issues", fa: "مشکلات و پیشنهادات", en: "Issues and recommendations" },
+  { id: "correspondence", fa: "جلسات و مکاتبات", en: "Meetings and correspondence" },
+  { id: "workStoppage", fa: "گزارش توقف کاری", en: "Work-stoppage report" },
+  { id: "changeWork", fa: "گزارش تغییر کار", en: "Change-of-work report" },
+  { id: "delayedActivities", fa: "فعالیت‌های متأثر از تأخیرات", en: "Activities affected by delays" },
+  {
+    id: "divider-6",
+    fa: chapterHeading(MONTHLY_INDEX_CHAPTERS[5], true),
+    en: chapterHeading(MONTHLY_INDEX_CHAPTERS[5], false),
+  },
+  { id: "siteVisit", fa: "بازدید کارشناسان کارفرما", en: "Employer site visit" },
+  {
+    id: "divider-7",
+    fa: chapterHeading(MONTHLY_INDEX_CHAPTERS[6], true),
+    en: chapterHeading(MONTHLY_INDEX_CHAPTERS[6], false),
+  },
+  { id: "hse", fa: "گزارش مدیریت HSE", en: "HSE management report" },
+  {
+    id: "divider-8",
+    fa: chapterHeading(MONTHLY_INDEX_CHAPTERS[7], true),
+    en: chapterHeading(MONTHLY_INDEX_CHAPTERS[7], false),
+  },
+  { id: "photoReport", fa: "گزارش تصویری", en: "Photo report" },
   ...MONTHLY_TAIL_TABS,
 ];
 
@@ -403,7 +464,7 @@ function CoverText({
 
 /* ══════════════════════════ شیت درونی (همالگوی WeeklySheet) ══════════════════════════ */
 
-function MonthlySheet({ title, children, dense = false, landscape = false, dir = "rtl" }: { title: string; children: ReactNode; dense?: boolean; landscape?: boolean; dir?: "rtl" | "ltr" }) {
+function MonthlySheet({ title, children, dense = false, landscape = false, dir = "rtl", titleDir }: { title: string; children: ReactNode; dense?: boolean; landscape?: boolean; dir?: "rtl" | "ltr"; titleDir?: "rtl" | "ltr" }) {
   const contentSpacing = dense ? "pb-[1%] pt-[1.6%]" : "pb-[3%] pt-[2.4%]";
   return (
     <article
@@ -425,7 +486,7 @@ function MonthlySheet({ title, children, dense = false, landscape = false, dir =
           <div className="bg-[#91afd0]" />
         </div>
         <h1
-          dir={dir}
+          dir={titleDir ?? dir}
           className="absolute inset-0 flex items-center justify-center px-[26%] text-center text-[clamp(15px,2.2vw,21px)] font-medium tracking-[0.015em] text-[#152536]"
           style={{ unicodeBidi: "isolate" }}
         >
@@ -2093,7 +2154,7 @@ function MonthlyEngineeringProgressSheet({ lang, model, kind }: { lang: Lang; mo
     : (fa ? "گزارش پیشرفت Engineering — DDR" : "Engineering progress — DDR");
 
   return (
-    <MonthlySheet title={title} dense landscape dir="ltr">
+    <MonthlySheet title={title} dense landscape dir="ltr" titleDir="rtl">
       <div className="h-full overflow-auto bg-white px-[0.5%] pt-[0.6%] pb-[0.5%] font-sans text-[#152536]">
         {kind === "mdr" ? (
         <table className="w-full border-collapse" style={{ tableLayout: "fixed", minWidth: 900, height: "100%" }}>
@@ -2346,6 +2407,86 @@ function MonthlyEngineeringStatusSheet({ lang, model }: { lang: Lang; model?: Pe
   );
 }
 
+function MonthlyPsrSheet({ lang, model }: { lang: Lang; model?: PexModel }) {
+  const fa = lang === "fa";
+  const node = model?.wbsRollup.find((item) => item.id === "2");
+  const kids = (model?.rows ?? []).filter((row) => row.wbs === "2" && !row.isMilestone);
+  const date = (iso?: string) => (iso ? digits(isoToJalali(iso), fa) : "");
+  const th: CSSProperties = { background: "#1f4e79", color: "#fff", border: "1px solid #163a5a", padding: "3px 2px", fontSize: 6.5, fontWeight: 700, textAlign: "center", whiteSpace: "normal", lineHeight: 1.15 };
+  const th2: CSSProperties = { ...th, background: "#2e6aa0", fontWeight: 600 };
+  const td: CSSProperties = { border: "1px solid #8aa0b4", background: "#fff", fontSize: 7, textAlign: "center", padding: "2px 2px", whiteSpace: "nowrap" };
+  const tdName: CSSProperties = { ...td, textAlign: "start", whiteSpace: "normal" };
+  const stage = ["Plan Start", "Plan Finish", "Plan %", "Actual %"];
+  const groups = [
+    { title: "P.O.", cols: stage },
+    { title: "Inspection During Construction", cols: ["Plan Start", "Plan Finish", "Plan Dur.", "Actual %"] },
+    { title: "Release Note", cols: stage },
+    { title: "Delivery at Site", cols: stage },
+    { title: "Installation, Test, Precom, Com, Hand Over", cols: ["Plan Start", "Plan Finish", "Plan %", "Actual %"] },
+  ];
+  const baseCols = fa
+    ? ["TASK", "Dis.", "Type", "Supply", "MR Number", "Category", "Sub Category", "Package Title", "Vendor", "Plan Start", "Plan Finish", "Cost", "W.V", "W.F", "Unit", "Qty"]
+    : ["TASK", "Dis.", "Type", "Supply", "MR Number", "Category", "Sub Category", "Package Title", "Vendor", "Plan Start", "Plan Finish", "Cost", "W.V", "W.F", "Unit", "Qty"];
+  const extra = groups.reduce((n, g) => n + g.cols.length, 0);
+  const tail = ["Plan Progress %", "Actual Progress %", "Remark"];
+  const lines = [
+    node
+      ? { id: "2", name: fa ? node.nameFa : node.nameEn, start: "", finish: "", cost: kids.reduce((s, r) => s + r.cost, 0), wv: node.weight * 100, wf: node.weight * 100, planned: node.plannedPct, actual: node.actualPct, bold: true }
+      : undefined,
+    ...kids.map((row) => ({
+      id: row.id,
+      name: fa ? row.nameFa : row.nameEn,
+      start: row.baselineStart ?? "",
+      finish: row.baselineFinish ?? "",
+      cost: row.cost,
+      wv: row.weight * 100,
+      wf: row.weight * 100,
+      planned: row.plannedPct,
+      actual: row.physicalPct,
+      bold: false,
+    })),
+  ].filter((row): row is NonNullable<typeof row> => Boolean(row));
+  return (
+    <MonthlySheet title={fa ? "Procurement Status (PSR)" : "Procurement Status (PSR)"} dense landscape dir="ltr" titleDir="rtl">
+      <div className="h-full overflow-auto bg-white font-sans text-[#152536]" style={{ display: "flex", flexDirection: "column" }}>
+        <div style={{ background: "#b8f3f8", color: "#1f4e79", textAlign: "center", fontWeight: 800, fontSize: 14, padding: "4px", border: "1px solid #1f4e79" }}>PROCUREMENT</div>
+        <div style={{ background: "#1f4e79", color: "#fff", textAlign: "center", fontWeight: 700, fontSize: 11, padding: "3px" }}>Procurement Status</div>
+        <table className="border-collapse" style={{ tableLayout: "fixed", minWidth: 1600, fontSize: 7 }}>
+          <thead>
+            <tr>
+              {baseCols.map((col) => <th key={col} rowSpan={2} style={th}>{col}</th>)}
+              {groups.map((group) => <th key={group.title} colSpan={group.cols.length} style={th}>{group.title}</th>)}
+              {tail.map((col) => <th key={col} rowSpan={2} style={th}>{col}</th>)}
+            </tr>
+            <tr>
+              {groups.flatMap((group) => group.cols.map((col) => <th key={`${group.title}-${col}`} style={th2}>{col}</th>))}
+            </tr>
+          </thead>
+          <tbody>
+            {lines.map((row) => (
+              <tr key={row.id} style={{ fontWeight: row.bold ? 700 : 400, background: row.bold ? "#d9ead3" : "#fff" }}>
+                <td style={tdName}>{row.name}</td>
+                {Array.from({ length: 8 }, (_, i) => <td key={`e-${i}`} style={td} />)}
+                <td style={td}>{date(row.start)}</td>
+                <td style={td}>{date(row.finish)}</td>
+                <td style={td}>{row.cost ? num(row.cost, fa, 0) : ""}</td>
+                <td style={td}>{pctCell(row.wv, fa)}</td>
+                <td style={td}>{pctCell(row.wf, fa)}</td>
+                <td style={td} />
+                <td style={td} />
+                {Array.from({ length: extra }, (_, i) => <td key={`g-${i}`} style={td} />)}
+                <td style={td}>{pctCell(row.planned, fa)}</td>
+                <td style={td}>{pctCell(row.actual, fa)}</td>
+                <td style={td} />
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </MonthlySheet>
+  );
+}
+
 function MonthlyPmsProgressSheet({ lang, model, wbsId }: { lang: Lang; model?: PexModel; wbsId: string; }) {
   const fa = lang === "fa";
   const titles: Record<string, { fa: string; en: string }> = {
@@ -2416,21 +2557,24 @@ function MonthlyPmsProgressSheet({ lang, model, wbsId }: { lang: Lang; model?: P
     background: "#d9d9d9",
     color: "#152536",
     border,
-    padding: "3px 2px",
+    padding: "4px 2px",
     textAlign: "center",
     fontWeight: 700,
-    fontSize: 7.5,
-    lineHeight: 1.15,
+    fontSize: 8,
+    lineHeight: 1.2,
     verticalAlign: "middle",
+    whiteSpace: "nowrap",
   };
   const thRed: CSSProperties = { ...th, color: "#c00000" };
   const td: CSSProperties = {
     border,
     padding: "3px 2px",
-    fontSize: 7.5,
+    fontSize: 8,
     textAlign: "center",
     background: "#fff",
     verticalAlign: "middle",
+    whiteSpace: "nowrap",
+    overflow: "hidden",
   };
   const dash = "—";
   const rotate: CSSProperties = {
@@ -2440,17 +2584,15 @@ function MonthlyPmsProgressSheet({ lang, model, wbsId }: { lang: Lang; model?: P
     fontSize: 8,
     fontWeight: 700,
   };
+  const colWidths = ["4.5%", "2.5%", "9%", "5.5%", "3.6%", "4%", "3%", "5.8%", "5.8%", "5.8%", "5.8%", "5%", "5%", "5%", "5%", "5%", "5%", "5%", "5%", "5%"];
 
   return (
-    <MonthlySheet title={fa ? titles[wbsId].fa : titles[wbsId].en} dense>
+    <MonthlySheet title={fa ? titles[wbsId].fa : titles[wbsId].en} dense landscape={wbsId === "2" || wbsId === "3"} dir={wbsId === "2" || wbsId === "3" ? "ltr" : "rtl"} titleDir={wbsId === "2" || wbsId === "3" ? "rtl" : undefined}>
       <div className="h-full overflow-auto bg-white px-[0.6%] pt-[0.8%] pb-[0.6%] font-sans text-[#152536]">
-        <table className="w-full border-collapse" style={{ tableLayout: "fixed", minWidth: 720 }}>
+        <table className="w-full border-collapse" style={{ tableLayout: "fixed" }}>
           <colgroup>
-            <col style={{ width: "5%" }} />
-            <col style={{ width: "3.2%" }} />
-            <col style={{ width: "14%" }} />
-            {Array.from({ length: 17 }, (_, index) => (
-              <col key={index} style={{ width: `${78 / 17}%` }} />
+            {colWidths.map((width, index) => (
+              <col key={index} style={{ width }} />
             ))}
           </colgroup>
           <thead>
@@ -2466,17 +2608,17 @@ function MonthlyPmsProgressSheet({ lang, model, wbsId }: { lang: Lang; model?: P
               <th style={{ ...thRed, border: groupBorder }} colSpan={3}>Variance &quot;Progress&quot;</th>
             </tr>
             <tr>
-              {["Cost", "W.V", "W.F", "Du.", "Start", "Finish", "Actual Start", "Actual Finish"].map((label) => (
-                <th key={label} style={th}>{label}</th>
+              {["Cost", "W.V", "W.F", "Du.", "Start", "Finish", "Actual\nStart", "Actual\nFinish"].map((label) => (
+                <th key={label} style={{ ...th, whiteSpace: "pre-line" }}>{label}</th>
               ))}
-              {["Up to Last", "The Period", "Up to Now"].map((label) => (
-                <th key={`p-${label}`} style={{ ...th, borderLeft: label === "Up to Last" ? groupBorder : border, borderRight: label === "Up to Now" ? groupBorder : border }}>{label}</th>
+              {["Up to\nLast", "The\nPeriod", "Up to\nNow"].map((label) => (
+                <th key={`p-${label}`} style={{ ...th, whiteSpace: "pre-line", borderLeft: label.startsWith("Up to\nL") ? groupBorder : border, borderRight: label.startsWith("Up to\nN") ? groupBorder : border }}>{label}</th>
               ))}
-              {["Up to Last", "The Period", "Up to Now"].map((label) => (
-                <th key={`a-${label}`} style={th}>{label}</th>
+              {["Up to\nLast", "The\nPeriod", "Up to\nNow"].map((label) => (
+                <th key={`a-${label}`} style={{ ...th, whiteSpace: "pre-line" }}>{label}</th>
               ))}
-              {["Up to Last", "The Period", "Up to Now"].map((label) => (
-                <th key={`v-${label}`} style={{ ...thRed, borderLeft: label === "Up to Last" ? groupBorder : border, borderRight: label === "Up to Now" ? groupBorder : border }}>{label}</th>
+              {["Up to\nLast", "The\nPeriod", "Up to\nNow"].map((label) => (
+                <th key={`v-${label}`} style={{ ...thRed, whiteSpace: "pre-line", borderLeft: label.startsWith("Up to\nL") ? groupBorder : border, borderRight: label.startsWith("Up to\nN") ? groupBorder : border }}>{label}</th>
               ))}
             </tr>
           </thead>
@@ -2488,7 +2630,7 @@ function MonthlyPmsProgressSheet({ lang, model, wbsId }: { lang: Lang; model?: P
                 <tr key={line.id}>
                   <td style={{ ...td, fontWeight: weight }}>{line.id}</td>
                   <td style={{ ...td, fontWeight: weight }}>{digits(line.level, fa)}</td>
-                  <td style={{ ...td, textAlign: "start", fontWeight: weight }}>{line.name}</td>
+                  <td style={{ ...td, textAlign: "start", fontWeight: weight, whiteSpace: "normal" }}>{line.name}</td>
                   <td style={{ ...td, fontWeight: weight }}>{moneyCell(line.cost, fa)}</td>
                   <td style={{ ...td, fontWeight: weight }}>{num(line.wv, fa, 2)}</td>
                   <td style={{ ...td, fontWeight: weight }}>{pctCell(line.wf, fa)}</td>
@@ -2511,6 +2653,1427 @@ function MonthlyPmsProgressSheet({ lang, model, wbsId }: { lang: Lang; model?: P
             })}
           </tbody>
         </table>
+      </div>
+    </MonthlySheet>
+  );
+}
+
+function monthEndIso(year: number, month1: number) {
+  return new Date(Date.UTC(year, month1, 0)).toISOString().slice(0, 10);
+}
+
+function scurveColumns(start: string, finish: string) {
+  const cols: { key: string; iso: string; title: string }[] = [{ key: "stat", iso: start, title: "Stat" }];
+  const [sy, sm] = start.split("-").map(Number);
+  const [ey, em] = finish.split("-").map(Number);
+  let y = sy;
+  let m = sm;
+  while (y < ey || (y === ey && m <= em)) {
+    const iso = monthEndIso(y, m);
+    if (iso > start && iso < finish) cols.push({ key: iso, iso, title: isoToJalali(iso) });
+    m += 1;
+    if (m > 12) {
+      m = 1;
+      y += 1;
+    }
+  }
+  cols.push({ key: "finish", iso: finish, title: "FINISH" });
+  return cols;
+}
+
+type PhysFocus = "epc" | "e" | "p" | "c";
+
+const PHYS_FOCUS: Record<PhysFocus, { wbsId: string | null; tag: string; titleFa: string; titleEn: string }> = {
+  epc: { wbsId: null, tag: "EPC", titleFa: "منحنی و نمودار پیشرفت فیزیکی (در بخش‌های EPC)", titleEn: "Physical progress curve (EPC)" },
+  e: { wbsId: "1", tag: "E", titleFa: "منحنی و نمودار پیشرفت فیزیکی (در بخش Engineering)", titleEn: "Physical progress curve (Engineering)" },
+  p: { wbsId: "2", tag: "P", titleFa: "منحنی و نمودار پیشرفت فیزیکی (در بخش Procurement)", titleEn: "Physical progress curve (Procurement)" },
+  c: { wbsId: "3", tag: "C", titleFa: "منحنی و نمودار پیشرفت فیزیکی (در بخش Construction)", titleEn: "Physical progress curve (Construction)" },
+};
+
+function activityPlanAt(row: PexModel["rows"][number], iso: string) {
+  if (!row.baselineStart) return 0;
+  const elapsed = workingDaysBetween(row.baselineStart, iso) - 1;
+  if (row.duration <= 0) return iso >= (row.baselineFinish ?? iso) ? 100 : 0;
+  return Math.max(0, Math.min(100, (elapsed / row.duration) * 100));
+}
+
+function wbsPlanAt(model: PexModel | undefined, wbsId: string, iso: string) {
+  if (!model) return undefined;
+  const kids = model.rows.filter((r) => r.wbs === wbsId);
+  if (!kids.length) return undefined;
+  const weights = Object.fromEntries(kids.map((k) => [k.id, k.weight]));
+  return rollUp(kids.map((k) => ({ id: k.id, percent: activityPlanAt(k, iso) })), weights);
+}
+
+function deltas(values: (number | undefined)[]) {
+  return values.map((value, index) => {
+    if (value === undefined) return undefined;
+    const prev = index === 0 ? 0 : values[index - 1];
+    return prev === undefined ? undefined : value - prev;
+  });
+}
+
+function MonthlyPhysCurveSheet({ lang, model, focus }: { lang: Lang; model?: PexModel; focus: PhysFocus }) {
+  const fa = lang === "fa";
+  const meta = PHYS_FOCUS[focus];
+  const start = model?.project.start ?? "";
+  const finish = model?.project.baselineEnd ?? "";
+  const dataDate = model?.dataDate ?? "";
+  const curve = model?.scurve ?? [];
+  const cols = start && finish ? scurveColumns(start, finish) : [];
+  const wbs = (id: string) => model?.wbsRollup.find((item) => item.id === id);
+  const planAt = (iso: string) => (curve.length ? plannedPercentAt(curve, iso) : undefined);
+  const inDataMonth = (iso: string) => dataDate !== "" && iso.slice(0, 7) === dataDate.slice(0, 7);
+  const actualEpc = (iso: string) => (inDataMonth(iso) ? model?.overallPct : undefined);
+  const actualWbs = (iso: string, id: string) => (inDataMonth(iso) ? wbs(id)?.actualPct : undefined);
+  const planWbs = (iso: string, id: string) => wbsPlanAt(model, id, iso);
+  const showActual = (id: string | null) => focus === "epc" || meta.wbsId === id;
+  const chartPlan = cols.map((col) => (meta.wbsId ? planWbs(col.iso, meta.wbsId) : planAt(col.iso)));
+  const chartActual = cols.map((col) => (meta.wbsId ? actualWbs(col.iso, meta.wbsId) : actualEpc(col.iso)));
+  const periodPlan = deltas(chartPlan);
+  const periodActual = deltas(chartActual);
+  const cell = (value: number | undefined, color?: string) =>
+    value === undefined ? "" : (
+      <span style={{ color }}>{pctCell(value, fa)}</span>
+    );
+  const th: CSSProperties = {
+    background: "#6e6e6e",
+    color: "#fff",
+    border: "1px solid #4a4a4a",
+    padding: "2px 1px",
+    fontSize: 6.5,
+    fontWeight: 700,
+    textAlign: "center",
+    whiteSpace: "nowrap",
+  };
+  const td: CSSProperties = {
+    background: "#d4d4d4",
+    border: "1px solid #9a9a9a",
+    padding: "2px 1px",
+    fontSize: 6.5,
+    textAlign: "center",
+    whiteSpace: "nowrap",
+  };
+  const labelTd: CSSProperties = { ...td, textAlign: "start", fontWeight: 700, background: "#c8c8c8", padding: "2px 4px" };
+  const rows: { label: string; values: (number | undefined)[]; color?: string }[] = [
+    { label: "Plan - EPC", color: "#1a7a2a", values: cols.map((col) => planAt(col.iso)) },
+    { label: "Plan - E", color: "#1a7a2a", values: cols.map((col) => planWbs(col.iso, "1")) },
+    { label: "Plan - P", color: "#1a7a2a", values: cols.map((col) => planWbs(col.iso, "2")) },
+    { label: "Plan - C", color: "#1a7a2a", values: cols.map((col) => planWbs(col.iso, "3")) },
+    { label: "Actual - EPC", color: "#2a4dff", values: cols.map((col) => (showActual(null) ? actualEpc(col.iso) : undefined)) },
+    { label: "Actual - E", color: "#2a4dff", values: cols.map((col) => (showActual("1") ? actualWbs(col.iso, "1") : undefined)) },
+    { label: "Actual - P", color: "#2a4dff", values: cols.map((col) => (showActual("2") ? actualWbs(col.iso, "2") : undefined)) },
+    { label: "Actual - C", color: "#2a4dff", values: cols.map((col) => (showActual("3") ? actualWbs(col.iso, "3") : undefined)) },
+    {
+      label: "Variance - EPC",
+      color: "#b00000",
+      values: cols.map((col) => {
+        if (!showActual(null)) return undefined;
+        const a = actualEpc(col.iso);
+        const p = planAt(col.iso);
+        return a === undefined || p === undefined ? undefined : a - p;
+      }),
+    },
+    {
+      label: "Variance - E",
+      color: "#b00000",
+      values: cols.map((col) => {
+        if (!showActual("1")) return undefined;
+        const a = actualWbs(col.iso, "1");
+        const p = planWbs(col.iso, "1");
+        return a === undefined || p === undefined ? undefined : a - p;
+      }),
+    },
+    {
+      label: "Variance - P",
+      color: "#b00000",
+      values: cols.map((col) => {
+        if (!showActual("2")) return undefined;
+        const a = actualWbs(col.iso, "2");
+        const p = planWbs(col.iso, "2");
+        return a === undefined || p === undefined ? undefined : a - p;
+      }),
+    },
+    {
+      label: "Variance - C",
+      color: "#b00000",
+      values: cols.map((col) => {
+        if (!showActual("3")) return undefined;
+        const a = actualWbs(col.iso, "3");
+        const p = planWbs(col.iso, "3");
+        return a === undefined || p === undefined ? undefined : a - p;
+      }),
+    },
+  ];
+  const periodPlanEpc = deltas(cols.map((col) => planAt(col.iso)));
+  const periodPlanE = deltas(cols.map((col) => planWbs(col.iso, "1")));
+  const periodPlanP = deltas(cols.map((col) => planWbs(col.iso, "2")));
+  const periodPlanC = deltas(cols.map((col) => planWbs(col.iso, "3")));
+  const periodRows: { label: string; values: (number | undefined)[]; color?: string }[] = [
+    { label: "Plan - EPC", color: "#1a7a2a", values: focus === "epc" ? periodPlanEpc : cols.map(() => undefined) },
+    { label: "Plan - E", color: "#1a7a2a", values: focus === "e" || focus === "epc" ? periodPlanE : cols.map(() => undefined) },
+    { label: "Plan - P", color: "#1a7a2a", values: focus === "p" || focus === "epc" ? periodPlanP : cols.map(() => undefined) },
+    { label: "Plan - C", color: "#1a7a2a", values: focus === "c" || focus === "epc" ? periodPlanC : cols.map(() => undefined) },
+    { label: "Contractor-Actual - EPC", color: "#2a4dff", values: cols.map(() => undefined) },
+    { label: "Actual - E", color: "#2a4dff", values: focus === "e" ? periodActual : cols.map(() => undefined) },
+    { label: "Actual - P", color: "#2a4dff", values: focus === "p" ? periodActual : cols.map(() => undefined) },
+    { label: "Actual - C", color: "#2a4dff", values: focus === "c" ? periodActual : cols.map(() => undefined) },
+    { label: "Variance - EPC", color: "#b00000", values: cols.map(() => undefined) },
+    { label: "Variance - E", color: "#b00000", values: cols.map(() => undefined) },
+    { label: "Variance - P", color: "#b00000", values: cols.map(() => undefined) },
+    { label: "Variance - C", color: "#b00000", values: cols.map(() => undefined) },
+  ];
+  const plot = { left: 48, top: 22, width: 820, height: 118 };
+  const xAt = (index: number) => plot.left + (cols.length <= 1 ? 0 : (index / (cols.length - 1)) * plot.width);
+  const yAt = (pct: number, max = 100) => plot.top + ((max - pct) / max) * plot.height;
+  const planLine = chartPlan.map((value, i) => `${xAt(i)},${yAt(value ?? 0)}`).join(" ");
+  const actualPts = chartActual
+    .map((value, i) => (value === undefined ? null : `${xAt(i)},${yAt(value)}`))
+    .filter((p): p is string => p !== null);
+  const periodMax = Math.max(20, ...periodPlan.map((v) => Math.abs(v ?? 0)), 5);
+  const chartTh: CSSProperties = {
+    border: "1px solid #111",
+    padding: "1px 2px",
+    fontSize: 6.5,
+    textAlign: "center",
+    background: "#fff",
+    fontWeight: 700,
+    whiteSpace: "nowrap",
+  };
+  const chartTd: CSSProperties = {
+    border: "1px solid #111",
+    padding: "1px 2px",
+    fontSize: 6.5,
+    textAlign: "center",
+    background: "#fff",
+    whiteSpace: "nowrap",
+  };
+  const underChart = (
+    series: { label: string; color: string; dashed?: boolean; values: (number | undefined)[] }[],
+  ) => (
+    <table className="w-full border-collapse" style={{ tableLayout: "fixed", margin: 0 }}>
+      <thead>
+        <tr>
+          <th style={{ ...chartTh, width: "16%" }} />
+          {cols.map((col, index) => (
+            <th key={col.key} style={chartTh}>
+              <div>{col.key === "stat" || col.key === "finish" ? col.title : digits(col.title, fa)}</div>
+              <div>{digits(index + 1, fa)}</div>
+            </th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {series.map((row) => (
+          <tr key={row.label}>
+            <td style={{ ...chartTd, textAlign: "start", fontWeight: 700, paddingInline: 6 }}>
+              <span
+                style={{
+                  display: "inline-block",
+                  width: 16,
+                  marginInlineEnd: 6,
+                  verticalAlign: "middle",
+                  borderTop: row.dashed ? `2px dashed ${row.color}` : `7px solid ${row.color}`,
+                }}
+              />
+              {row.label}
+            </td>
+            {row.values.map((value, index) => (
+              <td key={`${row.label}-${index}`} style={chartTd}>{value === undefined ? "" : pctCell(value, fa)}</td>
+            ))}
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+
+  return (
+    <MonthlySheet title={fa ? meta.titleFa : meta.titleEn} dense landscape dir="ltr" titleDir="rtl">
+      <div className="h-full overflow-auto bg-white px-[0.5%] pt-[0.5%] pb-[0.4%] font-sans text-[#152536]" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <div style={{ border: "1px solid #111", flexShrink: 0 }}>
+          <svg viewBox="0 0 900 148" className="w-full" style={{ display: "block", height: 168 }} preserveAspectRatio="xMidYMid meet">
+            <text x="450" y="14" textAnchor="middle" fill="#111" fontSize="12" fontFamily="Vazirmatn, Tahoma, sans-serif">{fa ? "منحنی S-Curve فیزیکی" : "Physical S-Curve"}</text>
+            <rect x={plot.left} y={plot.top} width={plot.width} height={plot.height} fill="#fff" stroke="#111" />
+            {[0, 25, 50, 75, 100].map((tick) => (
+              <g key={tick}>
+                <line x1={plot.left} y1={yAt(tick)} x2={plot.left + plot.width} y2={yAt(tick)} stroke="#ddd" />
+                <text x={plot.left - 4} y={yAt(tick) + 3} textAnchor="end" fill="#8a4b12" fontSize="8">{`${tick}.00%`}</text>
+              </g>
+            ))}
+            <polyline points={planLine} fill="none" stroke="#1a7a2a" strokeWidth="1.8" strokeDasharray="6 3" />
+            {actualPts.length > 1 ? <polyline points={actualPts.join(" ")} fill="none" stroke="#2a4dff" strokeWidth="1.8" strokeDasharray="5 3" /> : null}
+            {actualPts.length === 1 ? <circle cx={Number(actualPts[0].split(",")[0])} cy={Number(actualPts[0].split(",")[1])} r="2.4" fill="#2a4dff" /> : null}
+          </svg>
+          {underChart([
+            { label: `Plan - ${meta.tag}`, color: "#1a7a2a", dashed: true, values: chartPlan },
+            { label: `Actual - ${meta.tag}`, color: "#2a4dff", dashed: true, values: chartActual },
+          ])}
+        </div>
+        <div style={{ border: "1px solid #111", flexShrink: 0 }}>
+          <svg viewBox="0 0 900 148" className="w-full" style={{ display: "block", height: 168 }} preserveAspectRatio="xMidYMid meet">
+            <text x="450" y="14" textAnchor="middle" fill="#111" fontSize="12" fontFamily="Vazirmatn, Tahoma, sans-serif">{fa ? "جدول درصد پیشرفت فیزیکی (طی دوره)" : "Physical progress this period"}</text>
+            <rect x={plot.left} y={plot.top} width={plot.width} height={plot.height} fill="#fff" stroke="#111" />
+            {[0, 5, 10, 15, 20].map((tick) => {
+              const y = plot.top + ((periodMax - tick) / periodMax) * plot.height;
+              return (
+                <g key={tick}>
+                  <line x1={plot.left} y1={y} x2={plot.left + plot.width} y2={y} stroke="#ddd" />
+                  <text x={plot.left - 4} y={y + 3} textAnchor="end" fill="#8a4b12" fontSize="8">{`${tick}.00%`}</text>
+                </g>
+              );
+            })}
+            {periodPlan.map((value, index) => {
+              const groupW = plot.width / Math.max(cols.length, 1);
+              const x = plot.left + index * groupW + groupW * 0.12;
+              const h = (Math.max(value ?? 0, 0) / periodMax) * plot.height;
+              const actual = periodActual[index];
+              const ah = (Math.max(actual ?? 0, 0) / periodMax) * plot.height;
+              return (
+                <g key={cols[index].key}>
+                  <rect x={x} y={plot.top + plot.height - h} width={groupW * 0.34} height={h} fill="#1a7a2a" />
+                  {actual === undefined ? null : (
+                    <rect x={x + groupW * 0.38} y={plot.top + plot.height - ah} width={groupW * 0.34} height={ah} fill="#2a4dff" />
+                  )}
+                </g>
+              );
+            })}
+          </svg>
+          {underChart([
+            { label: `Plan - ${meta.tag}`, color: "#1a7a2a", values: periodPlan },
+            { label: focus === "epc" ? "Contractor-Actual - EPC" : `Actual - ${meta.tag}`, color: "#2a4dff", values: periodActual },
+          ])}
+        </div>
+        <table className="w-full border-collapse" style={{ tableLayout: "fixed", flexShrink: 0 }}>
+          <thead>
+            <tr>
+              <th style={{ ...th, width: "14%" }}>Days</th>
+              {cols.map((col, index) => (
+                <th key={col.key} style={th}>{col.key === "stat" || col.key === "finish" ? col.title : digits(index, fa)}</th>
+              ))}
+            </tr>
+            <tr>
+              <th style={th}>Month</th>
+              {cols.map((col) => (
+                <th key={col.key} style={th}>{col.key === "stat" || col.key === "finish" ? col.title : digits(col.title, fa)}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.label}>
+                <td style={{ ...labelTd, color: row.color }}>{row.label}</td>
+                {row.values.map((value, index) => (
+                  <td key={`${row.label}-${index}`} style={td}>{cell(value, row.color)}</td>
+                ))}
+              </tr>
+            ))}
+            <tr>
+              <td colSpan={cols.length + 1} style={{ ...td, height: 6, background: "#6e6e6e" }} />
+            </tr>
+            {periodRows.map((row) => (
+              <tr key={`p-${row.label}`}>
+                <td style={{ ...labelTd, color: row.color }}>{row.label}</td>
+                {row.values.map((value, index) => (
+                  <td key={`${row.label}-p-${index}`} style={td}>{cell(value, row.color)}</td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </MonthlySheet>
+  );
+}
+
+function eachIso(from: string, to: string) {
+  const out: string[] = [];
+  if (!from || !to || from > to) return out;
+  let cur = from;
+  while (cur <= to) {
+    out.push(cur);
+    const next = new Date(`${cur}T00:00:00Z`);
+    next.setUTCDate(next.getUTCDate() + 1);
+    cur = next.toISOString().slice(0, 10);
+    if (out.length > 400) break;
+  }
+  return out;
+}
+
+function calendarDays(from: string, to: string) {
+  return eachIso(from, to).length;
+}
+
+function weekdayName(iso: string, fa: boolean, short = false) {
+  const faNames = ["یکشنبه", "دوشنبه", "سه‌شنبه", "چهارشنبه", "پنجشنبه", "جمعه", "شنبه"];
+  const faShort = ["ی", "د", "س", "چ", "پ", "ج", "ش"];
+  const enNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const day = new Date(`${iso}T00:00:00Z`).getUTCDay();
+  if (short) return fa ? faShort[day] : enNames[day];
+  return fa ? faNames[day] : enNames[day];
+}
+
+function MonthlyWeatherSheet({ lang, model }: { lang: Lang; model?: PexModel }) {
+  const fa = lang === "fa";
+  const start = model?.project.start ?? "";
+  const finish = model?.project.baselineEnd ?? "";
+  const dataDate = model?.dataDate ?? "";
+  const periodFrom = model?.openPeriod?.from ?? "";
+  const periodTo = model?.openPeriod?.to ?? dataDate;
+  const end = dataDate || periodTo;
+  const daysShown = periodFrom && periodTo
+    ? eachIso(periodFrom, periodTo)
+    : end
+      ? eachIso(addIso(end, -29), end)
+      : [];
+  const duration = start && finish ? calendarDays(start, finish) : undefined;
+  const elapsed = start && dataDate ? calendarDays(start, dataDate) : undefined;
+  const remaining = duration !== undefined && elapsed !== undefined ? Math.max(0, duration - elapsed) : undefined;
+  const active = start && dataDate ? workingDaysBetween(start, dataDate) : undefined;
+  const inactiveMonth = periodFrom && periodTo
+    ? eachIso(periodFrom, periodTo).filter((iso) => !isWorkingDay(iso)).length
+    : undefined;
+  const dash = "—";
+  const cell: CSSProperties = {
+    border: "1px solid #8aa0b4",
+    padding: "2px 1px",
+    fontSize: 6.5,
+    textAlign: "center",
+    background: "#fff",
+    whiteSpace: "nowrap",
+  };
+  const labelCell: CSSProperties = { ...cell, background: "#e8eef2", fontWeight: 700, textAlign: "start", width: "7.8%", fontSize: 7 };
+  const navy: CSSProperties = {
+    background: "#1f4e79",
+    color: "#fff",
+    textAlign: "center",
+    fontWeight: 700,
+    fontSize: 12,
+    padding: "4px 6px",
+    border: "1px solid #163a5a",
+  };
+  const calRows: { label: string; value: number | undefined }[] = [
+    { label: fa ? "مدت پروژه" : "Project duration", value: duration },
+    { label: fa ? "تعداد روزهای سپری شده" : "Elapsed days", value: elapsed },
+    { label: fa ? "تعداد روزهای فعال پروژه تاکنون" : "Active days to date", value: active },
+    { label: fa ? "تعداد روزهای غیر فعال پروژه در ماه جاری" : "Inactive days this month", value: inactiveMonth },
+    { label: fa ? "تعداد روزهای باقیمانده" : "Remaining days", value: remaining },
+  ];
+  const pieTotal = Math.max(duration ?? 0, 1);
+  const elapsedFrac = (elapsed ?? 0) / pieTotal;
+  const piePath = (from: number, to: number, r: number, cx: number, cy: number) => {
+    const a0 = -Math.PI / 2 + from * 2 * Math.PI;
+    const a1 = -Math.PI / 2 + to * 2 * Math.PI;
+    const x0 = cx + r * Math.cos(a0);
+    const y0 = cy + r * Math.sin(a0);
+    const x1 = cx + r * Math.cos(a1);
+    const y1 = cy + r * Math.sin(a1);
+    const large = to - from > 0.5 ? 1 : 0;
+    return `M ${cx} ${cy} L ${x0} ${y0} A ${r} ${r} 0 ${large} 1 ${x1} ${y1} Z`;
+  };
+  const stack = [
+    { value: elapsed ?? 0, color: "#f4d03f", label: fa ? `تعداد روزهای سپری شده: ${elapsed ?? dash}` : `Elapsed: ${elapsed ?? dash}` },
+    { value: active ?? 0, color: "#fdebd0", label: fa ? `تعداد روزهای فعال پروژه تاکنون: ${active ?? dash}` : `Active: ${active ?? dash}` },
+    { value: inactiveMonth ?? 0, color: "#e67e22", label: fa ? `تعداد روزهای غیر فعال پروژه در ماه جاری: ${inactiveMonth ?? dash}` : `Inactive: ${inactiveMonth ?? dash}` },
+  ];
+  const stackSum = stack.reduce((s, item) => s + item.value, 0) || 1;
+
+  return (
+    <MonthlySheet title={fa ? "وضعیت جوی و کاری" : "Weather and working conditions"} dense landscape>
+      <div className="h-full overflow-auto bg-white px-[1%] py-[0.6%] font-sans text-[#152536]" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        <div style={{ background: "#b8f3f8", border: "1px solid #1f4e79", color: "#1f4e79", textAlign: "center", fontWeight: 800, fontSize: 14, padding: "5px 8px" }}>
+          {fa ? "خلاصه گزارش وضعیت آب و هوا" : "Weather status summary"}
+        </div>
+        <table className="w-full border-collapse" style={{ tableLayout: "fixed" }}>
+          <thead>
+            <tr>
+              <th colSpan={daysShown.length + 2} style={navy}>{fa ? "وضعیت دما" : "Temperature status"}</th>
+            </tr>
+            <tr>
+              <th style={labelCell}>{fa ? "ردیف" : "No."}</th>
+              <th style={labelCell}>{fa ? "وضعیت" : "Status"}</th>
+              {daysShown.map((iso) => (
+                <th key={iso} style={{ ...cell, background: "#e8eef2", fontWeight: 700, whiteSpace: "pre-line", lineHeight: 1.15 }}>
+                  {digits(isoToJalali(iso).slice(5), fa)}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style={labelCell}>{digits(1, fa)}</td>
+              <td style={labelCell}>{fa ? "روز های ماه" : "Weekday"}</td>
+              {daysShown.map((iso) => {
+                const off = !isWorkingDay(iso);
+                return (
+                  <td key={iso} style={{ ...cell, background: off ? "#c00000" : "#fff", color: off ? "#fff" : "#152536", fontWeight: 700 }}>
+                    {weekdayName(iso, fa, true)}
+                  </td>
+                );
+              })}
+            </tr>
+            <tr>
+              <td style={labelCell}>{digits(2, fa)}</td>
+              <td style={labelCell}>{fa ? "وضعیت آب و هوا" : "Weather"}</td>
+              {daysShown.map((iso) => <td key={iso} style={cell}>{dash}</td>)}
+            </tr>
+            <tr>
+              <td style={labelCell}>{digits(3, fa)}</td>
+              <td style={labelCell}>{fa ? "وضعیت کارگاه" : "Site status"}</td>
+              {daysShown.map((iso) => (
+                <td key={iso} style={cell}>{isWorkingDay(iso) ? (fa ? "فعال" : "Active") : (fa ? "غیرفعال" : "Idle")}</td>
+              ))}
+            </tr>
+            <tr>
+              <td style={{ ...labelCell, color: "#1f4e79" }}>{digits(4, fa)}</td>
+              <td style={{ ...labelCell, color: "#1f4e79" }}>{fa ? "حداقل دما" : "Min temp"}</td>
+              {daysShown.map((iso) => <td key={iso} style={{ ...cell, color: "#1f4e79" }}>{dash}</td>)}
+            </tr>
+            <tr>
+              <td style={{ ...labelCell, color: "#c00000" }}>{digits(5, fa)}</td>
+              <td style={{ ...labelCell, color: "#c00000" }}>{fa ? "حداکثر دما" : "Max temp"}</td>
+              {daysShown.map((iso) => <td key={iso} style={{ ...cell, color: "#c00000" }}>{dash}</td>)}
+            </tr>
+            <tr>
+              <td style={{ ...labelCell, color: "#1a7a2a" }}>{digits(6, fa)}</td>
+              <td style={{ ...labelCell, color: "#1a7a2a" }}>{fa ? "میانگین دما" : "Avg temp"}</td>
+              {daysShown.map((iso) => <td key={iso} style={{ ...cell, color: "#1a7a2a" }}>{dash}</td>)}
+            </tr>
+            <tr>
+              <td style={labelCell} />
+              <td style={labelCell}>{fa ? "وضعیت" : "OK"}</td>
+              {daysShown.map((iso) => (
+                <td key={iso} style={cell}>
+                  {isWorkingDay(iso) ? <span style={{ color: "#1f9d4a", fontSize: 14 }}>✓</span> : <span style={{ color: "#c00000", fontSize: 14 }}>✕</span>}
+                </td>
+              ))}
+            </tr>
+          </tbody>
+        </table>
+        <svg viewBox="0 0 1000 200" className="w-full" style={{ display: "block", width: "100%", aspectRatio: "1000 / 200", height: "auto", flexShrink: 0 }} preserveAspectRatio="xMidYMid meet">
+          <rect x="156" y="10" width="836" height="162" fill="#fff" stroke="#1f4e79" />
+          {[0, 10, 20, 30, 40, 50, 60, 70, 80].map((tick) => {
+            const y = 10 + ((80 - tick) / 80) * 162;
+            return (
+              <g key={tick}>
+                <line x1="156" y1={y} x2="992" y2={y} stroke="#e6e6e6" />
+                <text x="150" y={y + 3} textAnchor="end" fill="#333" fontSize="9">{tick}</text>
+              </g>
+            );
+          })}
+          {daysShown.map((iso, index) => {
+            const x = 156 + ((index + 0.5) / Math.max(daysShown.length, 1)) * 836;
+            return (
+              <text key={iso} x={x} y="188" textAnchor="middle" fill="#333" fontSize="7">{digits(isoToJalali(iso).slice(5), fa)}</text>
+            );
+          })}
+          <g fontSize="9" fill="#333">
+            <line x1="700" y1="22" x2="720" y2="22" stroke="#1f4e79" />
+            <circle cx="710" cy="22" r="3" fill="#fff" stroke="#1f4e79" />
+            <text x="726" y="25">{fa ? "حداقل دما" : "Min"}</text>
+            <line x1="800" y1="22" x2="820" y2="22" stroke="#c00000" />
+            <rect x="806" y="18" width="8" height="8" fill="#fff" stroke="#c00000" />
+            <text x="826" y="25">{fa ? "حداکثر دما" : "Max"}</text>
+            <line x1="900" y1="22" x2="920" y2="22" stroke="#1a7a2a" />
+            <rect x="906" y="19" width="8" height="6" fill="#fff" stroke="#1a7a2a" />
+            <text x="926" y="25">{fa ? "میانگین دما" : "Avg"}</text>
+          </g>
+        </svg>
+        <div style={{ display: "flex", gap: 16, alignItems: "stretch", flex: 1, minHeight: 0 }}>
+        <table className="border-collapse" style={{ width: 360, maxWidth: "38%", flexShrink: 0, tableLayout: "fixed" }}>
+          <thead>
+            <tr><th colSpan={2} style={{ ...navy, fontSize: 15, padding: "7px 8px" }}>{fa ? "تقویم پروژه" : "Project calendar"}</th></tr>
+          </thead>
+          <tbody>
+            {calRows.map((row) => (
+              <tr key={row.label}>
+                <td style={{ ...labelCell, width: "70%", fontSize: 13, padding: "7px 8px", whiteSpace: "normal" }}>{row.label}</td>
+                <td style={{ ...cell, width: "30%", fontSize: 13, padding: "7px 8px", fontWeight: 700 }}>{row.value === undefined ? dash : `${digits(row.value, fa)} ${fa ? "روز" : "days"}`}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <div style={{ display: "flex", gap: 12, flex: 1, minHeight: 120 }}>
+          <svg viewBox="0 0 360 220" style={{ flex: 1.2, height: "100%" }} preserveAspectRatio="xMidYMid meet">
+            <path d={piePath(0, elapsedFrac, 90, 160, 110)} fill="#5dade2" stroke="#fff" />
+            <path d={piePath(elapsedFrac, 1, 90, 160, 110)} fill="#1f4e79" stroke="#fff" />
+            <text x="160" y="108" textAnchor="middle" fill="#fff" fontSize="10">{fa ? `سپری‌شده: ${elapsed ?? dash}` : `Elapsed: ${elapsed ?? dash}`}</text>
+            <rect x="8" y="200" width="10" height="10" fill="#1f4e79" />
+            <text x="22" y="209" fontSize="9">{fa ? `مدت پروژه: ${duration ?? dash}` : `Duration: ${duration ?? dash}`}</text>
+            <rect x="160" y="200" width="10" height="10" fill="#5dade2" />
+            <text x="174" y="209" fontSize="9">{fa ? `سپری‌شده: ${elapsed ?? dash}` : `Elapsed: ${elapsed ?? dash}`}</text>
+          </svg>
+          <svg viewBox="0 0 280 220" style={{ flex: 0.8, height: "100%" }} preserveAspectRatio="xMidYMid meet">
+            {(() => {
+              let y = 12;
+              return stack.map((item) => {
+                const h = (item.value / stackSum) * 196;
+                const node = (
+                  <g key={item.label}>
+                    <rect x="18" y={y} width="70" height={Math.max(h, 0)} fill={item.color} stroke="#bbb" />
+                    <line x1="88" y1={y + h / 2} x2="108" y2={y + h / 2} stroke="#888" />
+                    <text x="112" y={y + h / 2 + 4} fontSize="9" fill="#333">{item.label}</text>
+                  </g>
+                );
+                y += h;
+                return node;
+              });
+            })()}
+          </svg>
+        </div>
+        </div>
+      </div>
+    </MonthlySheet>
+  );
+}
+
+function addIso(iso: string, days: number) {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+
+type ManpowerKind = "section" | "role" | "total";
+const DIRECT_MANPOWER: { description: string; kind: ManpowerKind }[] = [
+  { description: "Civil & Building", kind: "section" },
+  { description: "Foreman civil", kind: "role" },
+  { description: "Bar Bender", kind: "role" },
+  { description: "Bolt Man", kind: "role" },
+  { description: "Form Worker / Carpenter", kind: "role" },
+  { description: "Concrete Worker", kind: "role" },
+  { description: "Concrete Pump Operator", kind: "role" },
+  { description: "Asphalt Worker", kind: "role" },
+  { description: "Batching Plant Operator", kind: "role" },
+  { description: "Brick Layer / Mason", kind: "role" },
+  { description: "Tiler", kind: "role" },
+  { description: "Painter / Plasterer", kind: "role" },
+  { description: "Plumber", kind: "role" },
+  { description: "Iron Worker", kind: "role" },
+  { description: "Water Proofing Worker", kind: "role" },
+  { description: "Others Civil", kind: "role" },
+  { description: "Steel Structure", kind: "section" },
+  { description: "Foreman Structure", kind: "role" },
+  { description: "Technician", kind: "role" },
+  { description: "Assembler/Cutter", kind: "role" },
+  { description: "Steel / Iron Worker", kind: "role" },
+  { description: "Welder", kind: "role" },
+  { description: "Welder Helper", kind: "role" },
+  { description: "Others Structure", kind: "role" },
+  { description: "Piping", kind: "section" },
+  { description: "Foreman Piping", kind: "role" },
+  { description: "Fitter Helper", kind: "role" },
+  { description: "Tack Welder", kind: "role" },
+  { description: "Pipe Welder ( ARC )", kind: "role" },
+  { description: "Welder Helper", kind: "role" },
+  { description: "Assembler", kind: "role" },
+  { description: "Electrical & Instrumentation", kind: "section" },
+  { description: "Foreman Electrical", kind: "role" },
+  { description: "Technician - Electrical", kind: "role" },
+  { description: "Technical Worker", kind: "role" },
+  { description: "Paint & Insulation", kind: "section" },
+  { description: "Foreman painting", kind: "role" },
+  { description: "Sand Blaster", kind: "role" },
+  { description: "Shot Blaster", kind: "role" },
+  { description: "Painter", kind: "role" },
+  { description: "Insulator - Pipe", kind: "role" },
+  { description: "General", kind: "section" },
+  { description: "Controller", kind: "role" },
+  { description: "Equipment Operator", kind: "role" },
+  { description: "Rigger", kind: "role" },
+  { description: "Scaffolder", kind: "role" },
+  { description: "Skilled Labor", kind: "role" },
+  { description: "Common Labor", kind: "role" },
+  { description: "Helper", kind: "role" },
+  { description: "Heavy Vehicle Driver", kind: "role" },
+  { description: "Machinery Maintenance", kind: "role" },
+  { description: "Worker", kind: "role" },
+  { description: "Total Direct", kind: "total" },
+];
+const INDIRECT_MANPOWER: { description: string; kind: ManpowerKind }[] = [
+  { description: "Management", kind: "section" },
+  { description: "Project Manager / Director", kind: "role" },
+  { description: "Site Manager / Deputy", kind: "role" },
+  { description: "Construction", kind: "section" },
+  { description: "Civil & Steel Structure - Supervisor", kind: "role" },
+  { description: "Civil & Steel Structure - Technicians Executive", kind: "role" },
+  { description: "Surveying - Engineers", kind: "role" },
+  { description: "Surveying - Helper", kind: "role" },
+  { description: "Insulation & Paint - Supervisor", kind: "role" },
+  { description: "Technical Office", kind: "section" },
+  { description: "Technical Office Manager / Deputy", kind: "role" },
+  { description: "Technical Office - Engineers", kind: "role" },
+  { description: "Technical Office - Technicians", kind: "role" },
+  { description: "Planning", kind: "section" },
+  { description: "Planning & Control Manager / Deputy", kind: "role" },
+  { description: "Planning & Control - Technicians", kind: "role" },
+  { description: "QA / QC", kind: "section" },
+  { description: "QC Manager / Deputy", kind: "role" },
+  { description: "QC - Technicians", kind: "role" },
+  { description: "Concrete Lab.", kind: "role" },
+  { description: "Soil Mechanic Lab.", kind: "role" },
+  { description: "NDT Controller / Radiography", kind: "role" },
+  { description: "Document Controller", kind: "role" },
+  { description: "HSE", kind: "section" },
+  { description: "HSE Manager / Deputy", kind: "role" },
+  { description: "HSE - Supervisor", kind: "role" },
+  { description: "HSE - Officer", kind: "role" },
+  { description: "Safety officer", kind: "role" },
+  { description: "Clinic Doctor", kind: "role" },
+  { description: "Clinic Nurse", kind: "role" },
+  { description: "Material Control", kind: "section" },
+  { description: "Material Control Manager / Deputy", kind: "role" },
+  { description: "Warehouse - Material Man", kind: "role" },
+  { description: "Material Helper", kind: "role" },
+  { description: "Administration", kind: "section" },
+  { description: "Admin. Manager / Deputy", kind: "role" },
+  { description: "Admin./Clerk", kind: "role" },
+  { description: "Administrative", kind: "role" },
+  { description: "Finance", kind: "section" },
+  { description: "Finance Manager", kind: "role" },
+  { description: "Finance / Accountant", kind: "role" },
+  { description: "Logistics", kind: "section" },
+  { description: "Logistics Manager / Deputy", kind: "role" },
+  { description: "Local Procurement / Purchaser", kind: "role" },
+  { description: "Maintenance / General Services - Site", kind: "role" },
+  { description: "Maintenance / General Services - Camp", kind: "role" },
+  { description: "Security Manager / Deputy", kind: "role" },
+  { description: "Security Officer", kind: "role" },
+  { description: "Guard", kind: "role" },
+  { description: "Well guard", kind: "role" },
+  { description: "Light Vehicle Driver", kind: "role" },
+  { description: "Services & Kitchen worker", kind: "role" },
+  { description: "Total IN Direct", kind: "total" },
+];
+type MachineryKind = "asset" | "total";
+const MACHINERY_ONE: { mainGroup: string; subGroup: string; description: string; kind: MachineryKind }[] = [
+  { mainGroup: "Civil", subGroup: "Heavy", description: "Excavator", kind: "asset" },
+  { mainGroup: "Civil", subGroup: "Heavy", description: "Pichor / Jack Hammer", kind: "asset" },
+  { mainGroup: "Civil", subGroup: "Heavy", description: "Bulldozer", kind: "asset" },
+  { mainGroup: "Civil", subGroup: "Heavy", description: "Loader", kind: "asset" },
+  { mainGroup: "Civil", subGroup: "Heavy", description: "Grader", kind: "asset" },
+  { mainGroup: "Civil", subGroup: "Heavy", description: "Compact Roller / Vibrating Roller", kind: "asset" },
+  { mainGroup: "Civil", subGroup: "Semi-Heavy", description: "Truck Mixer", kind: "asset" },
+  { mainGroup: "Civil", subGroup: "Semi-Heavy", description: "Concrete & Grout Mixer", kind: "asset" },
+  { mainGroup: "Civil", subGroup: "Semi-Heavy", description: "Concrete Pump", kind: "asset" },
+  { mainGroup: "Civil", subGroup: "Semi-Heavy", description: "Truck 1", kind: "asset" },
+  { mainGroup: "Civil", subGroup: "Semi-Heavy", description: "Dumper", kind: "asset" },
+  { mainGroup: "Civil", subGroup: "Semi-Heavy", description: "Bob cat / Back hoe", kind: "asset" },
+  { mainGroup: "Civil", subGroup: "Semi-Heavy", description: "Compactor", kind: "asset" },
+  { mainGroup: "Civil", subGroup: "Workshop", description: "Hand Mixer", kind: "asset" },
+  { mainGroup: "Civil", subGroup: "Workshop", description: "Batching Plant", kind: "asset" },
+  { mainGroup: "Civil", subGroup: "Workshop", description: "Cement Silo", kind: "asset" },
+  { mainGroup: "Civil", subGroup: "Workshop", description: "Concrete Laboratory", kind: "asset" },
+  { mainGroup: "Civil", subGroup: "Workshop", description: "Vibrator", kind: "asset" },
+  { mainGroup: "Civil", subGroup: "Workshop", description: "Rebar Cutting", kind: "asset" },
+  { mainGroup: "Civil", subGroup: "Workshop", description: "Bar Bending", kind: "asset" },
+  { mainGroup: "Civil", subGroup: "Workshop", description: "Grinding Machine", kind: "asset" },
+  { mainGroup: "General", subGroup: "Heavy", description: "Crane ≥ 50 Ton", kind: "asset" },
+  { mainGroup: "General", subGroup: "Heavy", description: "Tower Crane", kind: "asset" },
+  { mainGroup: "General", subGroup: "Heavy", description: "Tractor / Loader Tractor", kind: "asset" },
+  { mainGroup: "General", subGroup: "Heavy", description: "Trailer", kind: "asset" },
+  { mainGroup: "General", subGroup: "Heavy", description: "Truck", kind: "asset" },
+  { mainGroup: "General", subGroup: "Heavy", description: "Boom Truck", kind: "asset" },
+  { mainGroup: "General", subGroup: "Semi-Heavy", description: "Lift Truck", kind: "asset" },
+  { mainGroup: "General", subGroup: "Semi-Heavy", description: "Water Tank Lorry", kind: "asset" },
+  { mainGroup: "General", subGroup: "Workshop", description: "Fuel Tank Lorry", kind: "asset" },
+  { mainGroup: "General", subGroup: "Workshop", description: "Diesel generator(150-200 kv)", kind: "asset" },
+  { mainGroup: "General", subGroup: "Workshop", description: "Crane ≤ 50 Ton", kind: "asset" },
+  { mainGroup: "General", subGroup: "Workshop", description: "Air Less", kind: "asset" },
+  { mainGroup: "General", subGroup: "Workshop", description: "Scaffolding Pipes & Board ( ML )", kind: "asset" },
+  { mainGroup: "General", subGroup: "Workshop", description: "Water Pump", kind: "asset" },
+  { mainGroup: "General", subGroup: "Workshop", description: "Elevator", kind: "asset" },
+  { mainGroup: "General", subGroup: "Workshop", description: "Survey Camera - Leica", kind: "asset" },
+  { mainGroup: "General", subGroup: "Workshop", description: "Survey Camera - Nivo", kind: "asset" },
+  { mainGroup: "General", subGroup: "Workshop", description: "Survey Camera - Theodolite", kind: "asset" },
+  { mainGroup: "General", subGroup: "Workshop", description: "GPS", kind: "asset" },
+  { mainGroup: "General", subGroup: "Workshop", description: "Water Tank", kind: "asset" },
+  { mainGroup: "General", subGroup: "Workshop", description: "Diesel Tank (10000 L)", kind: "asset" },
+  { mainGroup: "", subGroup: "", description: "", kind: "total" },
+];
+const MACHINERY_TWO: { mainGroup: string; subGroup: string; description: string; kind: MachineryKind }[] = [
+  { mainGroup: "Equipment", subGroup: "Workshop", description: "CuttingMachine", kind: "asset" },
+  { mainGroup: "Equipment", subGroup: "Workshop", description: "SandBlastMachine", kind: "asset" },
+  { mainGroup: "Equipment", subGroup: "Workshop", description: "Waterjet", kind: "asset" },
+  { mainGroup: "Equipment", subGroup: "Workshop", description: "WeldingTrans", kind: "asset" },
+  { mainGroup: "Equipment", subGroup: "Workshop", description: "Rectifier", kind: "asset" },
+  { mainGroup: "Equipment", subGroup: "Workshop", description: "StressReliefMachine(PWHTEq.)", kind: "asset" },
+  { mainGroup: "Equipment", subGroup: "Workshop", description: "AirCompressor", kind: "asset" },
+  { mainGroup: "Equipment", subGroup: "Workshop", description: "UltrasonicEquipment", kind: "asset" },
+  { mainGroup: "Equipment", subGroup: "Workshop", description: "MagnetTest(Detector/BlackLight)", kind: "asset" },
+  { mainGroup: "Equipment", subGroup: "Workshop", description: "VacumBoxTester", kind: "asset" },
+  { mainGroup: "Equipment", subGroup: "Workshop", description: "HydrotestWaterPump", kind: "asset" },
+  { mainGroup: "Equipment", subGroup: "Workshop", description: "PlasmaCuttingMachine", kind: "asset" },
+  { mainGroup: "Equipment", subGroup: "Workshop", description: "SawMachine", kind: "asset" },
+  { mainGroup: "Equipment", subGroup: "Workshop", description: "Gouge", kind: "asset" },
+  { mainGroup: "Equipment", subGroup: "Workshop", description: "Shegell", kind: "asset" },
+  { mainGroup: "Equipment", subGroup: "Workshop", description: "JunctionBox", kind: "asset" },
+  { mainGroup: "Equipment", subGroup: "Workshop", description: "Oxygen-AcetyleneCutter", kind: "asset" },
+  { mainGroup: "Equipment", subGroup: "Workshop", description: "AngleCutter", kind: "asset" },
+  { mainGroup: "Equipment", subGroup: "Workshop", description: "RollingMachine", kind: "asset" },
+  { mainGroup: "Equipment", subGroup: "Workshop", description: "ThreadingMachine", kind: "asset" },
+  { mainGroup: "Equipment", subGroup: "Workshop", description: "Grinder", kind: "asset" },
+  { mainGroup: "Equipment", subGroup: "Workshop", description: "Punch/Press", kind: "asset" },
+  { mainGroup: "Equipment", subGroup: "Workshop", description: "ElectrodeDryOven", kind: "asset" },
+  { mainGroup: "Equipment", subGroup: "Workshop", description: "ElectrodePortableOven", kind: "asset" },
+  { mainGroup: "Equipment", subGroup: "Workshop", description: "Jack-Horizontal", kind: "asset" },
+  { mainGroup: "Equipment", subGroup: "Workshop", description: "Jack-Vertical", kind: "asset" },
+  { mainGroup: "Equipment", subGroup: "Workshop", description: "DrillingMachine", kind: "asset" },
+  { mainGroup: "Equipment", subGroup: "Workshop", description: "Blower", kind: "asset" },
+  { mainGroup: "Equipment", subGroup: "Workshop", description: "ChainBlock", kind: "asset" },
+  { mainGroup: "Equipment", subGroup: "Workshop", description: "ElectricWinch", kind: "asset" },
+  { mainGroup: "Vehicle", subGroup: "", description: "Bus/Minibus", kind: "asset" },
+  { mainGroup: "Vehicle", subGroup: "", description: "Car", kind: "asset" },
+  { mainGroup: "Vehicle", subGroup: "", description: "Ambulance", kind: "asset" },
+  { mainGroup: "Facility", subGroup: "Workshop", description: "Container/Conex", kind: "asset" },
+  { mainGroup: "Office", subGroup: "Workshop", description: "Computer", kind: "asset" },
+  { mainGroup: "Office", subGroup: "Workshop", description: "Printer", kind: "asset" },
+  { mainGroup: "Other", subGroup: "Workshop", description: "FireProofMachine", kind: "asset" },
+  { mainGroup: "Other", subGroup: "Workshop", description: "Weldingmachine", kind: "asset" },
+  { mainGroup: "Other", subGroup: "Workshop", description: "TagMachine", kind: "asset" },
+  { mainGroup: "Other", subGroup: "Workshop", description: "Projector", kind: "asset" },
+  { mainGroup: "Other", subGroup: "Workshop", description: "Electricscissors", kind: "asset" },
+  { mainGroup: "", subGroup: "", description: "", kind: "total" },
+];
+
+function periodDays(model?: PexModel) {
+  const periodFrom = model?.openPeriod?.from ?? "";
+  const periodTo = model?.openPeriod?.to ?? model?.dataDate ?? "";
+  if (periodFrom && periodTo) return eachIso(periodFrom, periodTo);
+  const end = model?.dataDate || "";
+  return end ? eachIso(addIso(end, -29), end) : [];
+}
+
+function MonthlyManpowerStatsSheet({ lang, model }: { lang: Lang; model?: PexModel }) {
+  const fa = lang === "fa";
+  const days = periodDays(model);
+  const dayCols = days.length * 2;
+  const valueCount = dayCols + 4;
+  const cell = "border border-[#bcbcbc] px-0 py-0 align-middle";
+  const headerCell = `${cell} bg-[#dedede] text-center font-medium text-[#233b55]`;
+  const table = (title: string, rows: { description: string; kind: ManpowerKind }[]) => (
+    <div style={{ display: "flex", flexDirection: "column", minHeight: 0, flex: 1 }}>
+      <div className="flex h-[18px] shrink-0 items-center justify-start border-y border-[#a9a9a9] bg-[#c4c4c4] px-1 text-[10px] font-semibold text-[#254e78]">{title}</div>
+      <div className="min-h-0 flex-1 overflow-auto">
+        <table className="border-collapse bg-white font-sans text-[7px] leading-none text-[#152536]" style={{ tableLayout: "fixed", minWidth: 180 + days.length * 44 + 120 }}>
+          <colgroup>
+            <col style={{ width: 160 }} />
+            {Array.from({ length: dayCols }, (_, index) => <col key={`d-${index}`} style={{ width: 22 }} />)}
+            {Array.from({ length: 4 }, (_, index) => <col key={`s-${index}`} style={{ width: 30 }} />)}
+          </colgroup>
+          <thead>
+            <tr className="h-[14px]">
+              <th rowSpan={3} className={`${headerCell} text-[10px] font-semibold text-[#111111]`}>Job Description</th>
+              {days.map((iso) => <th key={iso} colSpan={2} className={headerCell}>{digits(isoToJalali(iso).slice(5), fa)}</th>)}
+              <th colSpan={2} rowSpan={2} className={`${headerCell} font-semibold`}>WEEK</th>
+              <th colSpan={2} rowSpan={2} className={`${headerCell} font-semibold`}>Up to Now</th>
+            </tr>
+            <tr className="h-[14px]">
+              {days.map((iso) => <th key={`w-${iso}`} colSpan={2} className={headerCell}>{weekdayName(iso, true, true)}</th>)}
+            </tr>
+            <tr className="h-[14px]">
+              {days.flatMap((iso) => [
+                <th key={`${iso}-p`} className={`${headerCell} text-[7px] font-bold`}>Present</th>,
+                <th key={`${iso}-r`} className={`${headerCell} text-[7px] font-bold`}>Rest</th>,
+              ])}
+              <th className={`${headerCell} text-[7px] font-bold`}>Present</th>
+              <th className={`${headerCell} text-[7px] font-bold`}>Rest</th>
+              <th className={`${headerCell} text-[7px] font-bold`}>Present</th>
+              <th className={`${headerCell} text-[7px] font-bold`}>Rest</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row, rowIndex) => (
+              <tr key={`${title}-${rowIndex}`} className={`h-[12px] ${row.kind !== "role" ? "bg-[#d5d5d5]" : "bg-white"}`}>
+                <td className={`${cell} px-1 ${row.kind === "section" ? "font-semibold text-[#111111]" : row.kind === "total" ? "font-bold text-[#7116b3]" : "text-[#152536]"}`}>{row.description}</td>
+                {Array.from({ length: valueCount }, (_, valueIndex) => (
+                  <td key={valueIndex} className={`${cell} ${valueIndex >= dayCols && valueIndex < dayCols + 2 ? "bg-[#f0f0f0]" : ""} ${valueIndex >= dayCols + 2 ? "bg-[#e6e6e6]" : ""}`} />
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+  return (
+    <MonthlySheet title={fa ? "آمار نیروی انسانی" : "Manpower statistics"} dense landscape>
+      <div className="h-full overflow-auto bg-white font-sans text-[#152536]" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {table("Direct Manpower", DIRECT_MANPOWER)}
+        {table("Indirect Manpower", INDIRECT_MANPOWER)}
+      </div>
+    </MonthlySheet>
+  );
+}
+
+function MonthlyMachineryStatsSheet({ lang, model }: { lang: Lang; model?: PexModel }) {
+  const fa = lang === "fa";
+  const days = periodDays(model);
+  const dayCols = days.length * 3;
+  const valueCount = dayCols + 6;
+  const cell = "border border-[#c4c4c4] px-0 py-0 align-middle";
+  const headerCell = `${cell} bg-[#dedede] text-center text-[8px] font-medium text-[#263a55]`;
+  const rowSpan = (rows: typeof MACHINERY_ONE, rowIndex: number, field: "mainGroup" | "subGroup") => {
+    const row = rows[rowIndex];
+    let count = 1;
+    for (let index = rowIndex + 1; index < rows.length; index += 1) {
+      const next = rows[index];
+      if (next.kind === "total" || next.mainGroup !== row.mainGroup || next[field] !== row[field]) break;
+      count += 1;
+    }
+    return count;
+  };
+  const table = (rows: typeof MACHINERY_ONE) => (
+    <div style={{ display: "flex", flexDirection: "column", minHeight: 0, flex: 1 }}>
+      <div className="flex h-[18px] shrink-0 items-center justify-start border-y border-[#a9a9a9] bg-[#c4c4c4] px-1 text-[10px] font-semibold text-[#254e78]">Machinery&EquipmentDescription</div>
+      <div className="min-h-0 flex-1 overflow-auto">
+        <table className="border-collapse bg-white font-sans text-[7px] leading-none text-[#152536]" style={{ tableLayout: "fixed", minWidth: 200 + days.length * 48 + 150 }}>
+          <colgroup>
+            <col style={{ width: 18 }} />
+            <col style={{ width: 18 }} />
+            <col style={{ width: 140 }} />
+            {Array.from({ length: dayCols }, (_, index) => <col key={`m-${index}`} style={{ width: 16 }} />)}
+            {Array.from({ length: 6 }, (_, index) => <col key={`ms-${index}`} style={{ width: 22 }} />)}
+          </colgroup>
+          <thead>
+            <tr className="h-[16px]">
+              <th rowSpan={3} className={headerCell} />
+              <th rowSpan={3} className={headerCell} />
+              <th rowSpan={3} className={`${headerCell} text-[10px] font-semibold text-[#111111]`}>Description</th>
+              {days.map((iso) => <th key={iso} colSpan={3} className={headerCell}>{digits(isoToJalali(iso).slice(5), fa)}</th>)}
+              <th colSpan={3} rowSpan={2} className={`${headerCell} font-semibold`}>Week</th>
+              <th colSpan={3} rowSpan={2} className={`${headerCell} font-semibold`}>UpToNow</th>
+            </tr>
+            <tr className="h-[14px]">
+              {days.map((iso) => <th key={`mw-${iso}`} colSpan={3} className={`${headerCell} text-[7px]`}>{weekdayName(iso, true, true)}</th>)}
+            </tr>
+            <tr className="h-[54px]">
+              {Array.from({ length: dayCols }, (_, index) => <th key={`st-${index}`} className={`${headerCell} p-0`}><span className="inline-block whitespace-nowrap [writing-mode:vertical-rl] rotate-180">{["Active", "Inactive", "Inrepair"][index % 3]}</span></th>)}
+              {Array.from({ length: 6 }, (_, index) => <th key={`sst-${index}`} className={`${headerCell} p-0`}><span className="inline-block whitespace-nowrap [writing-mode:vertical-rl] rotate-180">{["Active", "Inactive", "Inrepair"][index % 3]}</span></th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row, rowIndex) => {
+              const totalRow = row.kind === "total";
+              const firstMain = !totalRow && (rowIndex === 0 || rows[rowIndex - 1].mainGroup !== row.mainGroup);
+              const firstSub = !totalRow && (rowIndex === 0 || rows[rowIndex - 1].mainGroup !== row.mainGroup || rows[rowIndex - 1].subGroup !== row.subGroup);
+              return (
+                <tr key={rowIndex} className={`h-[13px] ${totalRow ? "bg-[#d3d3d3] font-bold text-[#7116b3]" : "bg-white"}`}>
+                  {totalRow ? <><td className={`${cell} bg-[#d3d3d3]`} /><td className={`${cell} bg-[#d3d3d3]`} /></> : firstMain ? <td rowSpan={rowSpan(rows, rowIndex, "mainGroup")} className={`${cell} bg-[#e0e0e0] px-0 text-center`}><span className="block whitespace-nowrap py-1 text-[7px] font-semibold text-[#142b45] [writing-mode:vertical-rl] rotate-180">{row.mainGroup}</span></td> : null}
+                  {totalRow ? <td className={`${cell} bg-[#d3d3d3]`} /> : firstSub ? <td rowSpan={rowSpan(rows, rowIndex, "subGroup")} className={`${cell} bg-[#e7e7e7] px-0 text-center`}><span className="block whitespace-nowrap py-1 text-[7px] font-semibold text-[#142b45] [writing-mode:vertical-rl] rotate-180">{row.subGroup}</span></td> : null}
+                  <td className={`${cell} px-1 ${totalRow ? "text-[#7116b3]" : "text-[#152536]"}`}>{row.description}</td>
+                  {Array.from({ length: valueCount }, (_, valueIndex) => (
+                    <td key={valueIndex} className={`${cell} ${valueIndex >= dayCols && valueIndex < dayCols + 3 ? "bg-[#f0f0f0]" : ""} ${valueIndex >= dayCols + 3 ? "bg-[#e5e5e5]" : ""}`} />
+                  ))}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+  return (
+    <MonthlySheet title={fa ? "آمار تجهیزات و ماشین‌آلات" : "Equipment and machinery statistics"} dense landscape>
+      <div className="h-full overflow-auto bg-white font-sans text-[#152536]" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {table(MACHINERY_ONE)}
+        {table(MACHINERY_TWO)}
+      </div>
+    </MonthlySheet>
+  );
+}
+
+function MonthlyResourceChartsSheet({ lang, model }: { lang: Lang; model?: PexModel }) {
+  const fa = lang === "fa";
+  const periodFrom = model?.openPeriod?.from ?? "";
+  const periodTo = model?.openPeriod?.to ?? model?.dataDate ?? "";
+  const days = periodFrom && periodTo ? eachIso(periodFrom, periodTo) : [];
+  const empty = days.map(() => undefined as number | undefined);
+  const plot = { left: 36, top: 18, width: 950, height: 72 };
+  const yAt = (v: number, max: number) => plot.top + ((max - v) / max) * plot.height;
+  const xGroup = (index: number) => plot.left + (index / Math.max(days.length, 1)) * plot.width;
+  const groupW = plot.width / Math.max(days.length, 1);
+  const th: CSSProperties = {
+    border: "1px solid #8aa0b4",
+    padding: "1px 2px",
+    fontSize: 6.5,
+    textAlign: "center",
+    background: "#fff",
+    fontWeight: 700,
+    whiteSpace: "nowrap",
+  };
+  const td: CSSProperties = { ...th, fontWeight: 400 };
+  const under = (rows: { label: string; color: string; kind: "fill" | "line"; values: (number | undefined)[] }[]) => (
+    <table className="w-full border-collapse" style={{ tableLayout: "fixed", margin: 0 }}>
+      <thead>
+        <tr>
+          <th style={{ ...th, width: "16%" }} />
+          {days.map((_, index) => (
+            <th key={index} style={th}>{digits(index + 1, fa)}</th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((row) => (
+          <tr key={row.label}>
+            <td style={{ ...td, textAlign: "start", paddingInline: 4 }}>
+              <span style={{ display: "inline-block", width: 12, height: row.kind === "line" ? 0 : 8, marginInlineEnd: 4, verticalAlign: "middle", background: row.kind === "fill" ? row.color : undefined, borderTop: row.kind === "line" ? `2px solid ${row.color}` : undefined }} />
+              {row.label}
+            </td>
+            {row.values.map((value, index) => (
+              <td key={`${row.label}-${index}`} style={td}>{value === undefined ? "" : digits(value, fa)}</td>
+            ))}
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+  const axis = (max: number, ticks: number[]) => (
+    <>
+      <rect x={plot.left} y={plot.top} width={plot.width} height={plot.height} fill="#fff" stroke="#1f4e79" />
+      {ticks.map((tick) => (
+        <g key={tick}>
+          <line x1={plot.left} y1={yAt(tick, max)} x2={plot.left + plot.width} y2={yAt(tick, max)} stroke="#eee" />
+          <text x={plot.left - 4} y={yAt(tick, max) + 3} textAnchor="end" fill="#333" fontSize="8">{tick}</text>
+        </g>
+      ))}
+      {days.map((_, index) => (
+        <text key={index} x={xGroup(index) + groupW / 2} y={plot.top + plot.height + 11} textAnchor="middle" fill="#333" fontSize="7">{digits(index + 1, fa)}</text>
+      ))}
+    </>
+  );
+
+  return (
+    <MonthlySheet title={fa ? "نمودارهای نیروی انسانی و ماشین‌آلات ، مصالح" : "Manpower, machinery and material charts"} dense landscape>
+      <div className="h-full overflow-auto bg-white px-[0.5%] py-[0.4%] font-sans text-[#152536]" style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+        <div style={{ background: "#b8f3f8", border: "1px solid #1f4e79", color: "#1f4e79", textAlign: "center", fontWeight: 800, fontSize: 13, padding: "4px 6px" }}>
+          {fa ? "نمودار های نیروی انسانی و ماشین آلات ، مصالح" : "Manpower, machinery and material charts"}
+        </div>
+        <div style={{ background: "#1f4e79", color: "#fff", textAlign: "center", fontWeight: 700, fontSize: 12, padding: "3px 6px" }}>
+          {fa ? "نمودار وضعیت منابع" : "Resource status chart"}
+        </div>
+        <div style={{ border: "1px solid #1f4e79", flexShrink: 0 }}>
+          <svg viewBox="0 0 1000 108" className="w-full" style={{ display: "block", width: "100%", aspectRatio: "1000 / 108", height: "auto" }} preserveAspectRatio="xMidYMid meet">
+            {axis(20, [0, 10, 20])}
+          </svg>
+          {under([
+            { label: fa ? "جمع تجهیزات موتوری سبک" : "Light motor equipment", color: "#6b3fa0", kind: "fill", values: empty },
+            { label: fa ? "جمع تجهیزات غیر موتوری" : "Non-motor equipment", color: "#c00000", kind: "fill", values: empty },
+            { label: fa ? "جمع کل" : "Total", color: "#e8d5a3", kind: "fill", values: empty },
+          ])}
+        </div>
+        <div style={{ border: "1px solid #1f4e79", flexShrink: 0 }}>
+          <svg viewBox="0 0 1000 108" className="w-full" style={{ display: "block", width: "100%", aspectRatio: "1000 / 108", height: "auto" }} preserveAspectRatio="xMidYMid meet">
+            {axis(20, [0, 10, 20])}
+            <rect x="360" y="6" width="12" height="8" fill="#4472c4" />
+            <text x="376" y="13" fontSize="8" fill="#1f4e79">{fa ? "جمع نیروهای غیرمستقیم" : "Indirect labor"}</text>
+            <rect x="520" y="6" width="12" height="8" fill="#c00000" />
+            <text x="536" y="13" fontSize="8" fill="#c00000">{fa ? "جمع نیروهای مستقیم" : "Direct labor"}</text>
+            <line x1="680" y1="10" x2="700" y2="10" stroke="#70ad47" />
+            <polygon points="690,6 694,10 690,14 686,10" fill="#70ad47" />
+            <text x="706" y="13" fontSize="8" fill="#2e7d32">{fa ? "جمع کل" : "Total"}</text>
+          </svg>
+          {under([
+            { label: fa ? "جمع نیروهای غیرمستقیم" : "Indirect labor", color: "#4472c4", kind: "fill", values: empty },
+            { label: fa ? "جمع نیروهای مستقیم" : "Direct labor", color: "#c00000", kind: "fill", values: empty },
+            { label: fa ? "جمع کل" : "Total", color: "#70ad47", kind: "line", values: empty },
+          ])}
+        </div>
+        <div style={{ border: "1px solid #1f4e79", flex: 1, minHeight: 70 }}>
+          <svg viewBox="0 0 1000 120" className="w-full" style={{ display: "block", width: "100%", height: "100%" }} preserveAspectRatio="xMidYMid meet">
+            <rect x="48" y="8" width="940" height="100" fill="#fff" stroke="#1f4e79" />
+            {[0, 20, 40, 60, 80, 100].map((tick) => {
+              const y = 8 + ((100 - tick) / 100) * 100;
+              return (
+                <g key={tick}>
+                  <line x1="48" y1={y} x2="988" y2={y} stroke="#eee" />
+                  <text x="44" y={y + 3} textAnchor="end" fill="#333" fontSize="8">{`${tick}%`}</text>
+                </g>
+              );
+            })}
+          </svg>
+        </div>
+      </div>
+    </MonthlySheet>
+  );
+}
+
+function ReportBanner({ text, navy = false }: { text: string; navy?: boolean }) {
+  return (
+    <div style={{
+      background: navy ? "#1f4e79" : "#b8f3f8",
+      color: navy ? "#fff" : "#1f4e79",
+      textAlign: "center",
+      fontWeight: navy ? 700 : 800,
+      fontSize: navy ? 12 : 14,
+      padding: navy ? "4px 6px" : "5px 8px",
+      border: "1px solid #1f4e79",
+    }}>{text}</div>
+  );
+}
+
+function MonthlyMaterialsSheet({ lang }: { lang: Lang }) {
+  const fa = lang === "fa";
+  const cols = fa
+    ? ["ردیف", "شرح مصالح", "واحد", "مقدار موردنیاز", "پیشرفت برنامه‌ای", "وارد شده تا ماه قبل", "پای کار ماه قبل", "ورودی این ماه", "مصرفی این ماه", "موجودی پای کار", "مقدار تأمین شده", "پیشرفت واقعی", "تاریخ ورود کالا و مصالح"]
+    : ["No.", "Description", "Unit", "Required", "Plan %", "Received to last month", "On site last month", "This month in", "This month used", "On site now", "Supplied", "Actual %", "Arrival date"];
+  const th: CSSProperties = { background: "#1f4e79", color: "#fff", border: "1px solid #163a5a", padding: "6px 3px", fontSize: 8, fontWeight: 700, textAlign: "center", whiteSpace: "normal" };
+  const td: CSSProperties = { border: "1px solid #8aa0b4", background: "#fff" };
+  return (
+    <MonthlySheet title={fa ? "خلاصه گزارش کالا و مصالح" : "Materials and goods summary"} dense landscape>
+      <div className="h-full overflow-hidden bg-white font-sans text-[#152536]" style={{ display: "flex", flexDirection: "column" }}>
+        <ReportBanner text={fa ? "خلاصه گزارش کالا و مصالح" : "Materials and goods summary"} />
+        <ReportBanner navy text={fa ? "کالا و مصالح" : "Materials"} />
+        <table className="w-full border-collapse" style={{ tableLayout: "fixed", flex: 1 }}>
+          <colgroup>
+            <col style={{ width: 32 }} />
+            {cols.slice(1).map((col) => <col key={col} />)}
+          </colgroup>
+          <thead>
+            <tr>{cols.map((col, c) => <th key={col} style={{ ...th, width: c === 0 ? 32 : undefined }}>{col}</th>)}</tr>
+          </thead>
+          <tbody>
+            {Array.from({ length: 12 }, (_, i) => (
+              <tr key={i}>
+                {cols.map((col, c) => (
+                  <td key={col} style={{ ...td, textAlign: "center", fontSize: c === 0 ? 13 : undefined, fontWeight: c === 0 ? 700 : undefined, fontFamily: c === 0 ? "Vazirmatn, Tahoma, sans-serif" : undefined }}>{c === 0 ? digits(i + 1, true) : ""}</td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </MonthlySheet>
+  );
+}
+
+function AnalysisBox({ label, value, border }: { label: string; value: string; border?: string }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "flex-end", minWidth: 0 }}>
+      <div style={{ border: `1px solid ${border ?? "#8aa0b4"}`, minWidth: 72, height: 34, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 12, background: "#fff", padding: "0 8px" }}>{value}</div>
+      <span style={{ fontSize: 11, color: "#1f4e79" }}>{label}</span>
+    </div>
+  );
+}
+
+function MonthlyResourceAnalysisSheet({ lang, model }: { lang: Lang; model?: PexModel }) {
+  const fa = lang === "fa";
+  const dash = "—";
+  const start = model?.project.start ?? "";
+  const finish = model?.project.baselineEnd ?? "";
+  const dataDate = model?.dataDate ?? "";
+  const duration = start && finish ? calendarDays(start, finish) : undefined;
+  const elapsed = start && dataDate ? calendarDays(start, dataDate) : undefined;
+  const timePct = duration && elapsed !== undefined ? (elapsed / duration) * 100 : undefined;
+  const planned = model?.plannedPct;
+  const actual = model?.overallPct;
+  const variance = planned !== undefined && actual !== undefined ? actual - planned : undefined;
+  const section = (title: string, rows: ReactNode) => (
+    <div style={{ borderBottom: "1px solid #cfd8e3", padding: "8px 4px 10px" }}>
+      <div style={{ textAlign: "end", fontWeight: 800, color: "#1f4e79", fontSize: 13, marginBottom: 8 }}>{title}</div>
+      {rows}
+    </div>
+  );
+  return (
+    <MonthlySheet title={fa ? "گزارش تحلیلی مدیریت منابع" : "Resource-management analysis"} dense landscape>
+      <div className="h-full overflow-auto bg-white px-[0.8%] py-[0.5%] font-sans text-[#152536]" style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+        <ReportBanner text={fa ? "گزارش تحلیلی مدیریت منابع" : "Resource-management analysis"} />
+        <ReportBanner navy text={fa ? "گزارش مدیریت منابع" : "Resource management report"} />
+        {section(fa ? "وضعیت نیروی انسانی" : "Manpower status", (
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+            {["میانگین نیروی انسانی مستقیم (دوره قبل)", "آخرین وضعیت نیروی انسانی مستقیم", "افزایش/کاهش نیروی انسانی مستقیم"].map((label) => (
+              <AnalysisBox key={label} label={fa ? label : label} value={dash} />
+            ))}
+            {["میانگین نیروی انسانی غیرمستقیم (دوره قبل)", "آخرین وضعیت نیروی انسانی غیرمستقیم", "افزایش/کاهش نیروی انسانی غیرمستقیم"].map((label) => (
+              <AnalysisBox key={label} label={label} value={dash} />
+            ))}
+            {["میانگین کل نفرات (مستقیم/غیرمستقیم) (دوره قبل)", "آخرین وضعیت کل نفرات (مستقیم/غیرمستقیم)", "افزایش/کاهش کل نفرات (مستقیم/غیرمستقیم)"].map((label) => (
+              <AnalysisBox key={label} label={label} value={dash} border="#1f4e79" />
+            ))}
+          </div>
+        ))}
+        {section(fa ? "وضعیت ماشین آلات/تجهیزات" : "Equipment status", (
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+            {["میانگین تجهیزات موتوری (دوره قبل)", "آخرین وضعیت تجهیزات موتوری سبک", "افزایش/کاهش تجهیزات موتوری سبک (دوره قبل)", "میانگین تجهیزات غیر موتوری (دوره قبل)", "آخرین وضعیت تجهیزات غیر موتوری", "افزایش/کاهش تجهیزات غیر موتوری (دوره قبل)", "میانگین سایرماشین آلات (دوره قبل)", "آخرین وضعیت سایرماشین آلات", "افزایش/کاهش سایرماشین آلات (دوره قبل)"].map((label) => (
+              <AnalysisBox key={label} label={label} value={dash} />
+            ))}
+            {["میانگین کل ماشین آلات (دوره قبل)", "آخرین وضعیت کل ماشین آلات", "افزایش/کاهش کل ماشین آلات (دوره قبل)"].map((label) => (
+              <AnalysisBox key={label} label={label} value={dash} border="#1f4e79" />
+            ))}
+          </div>
+        ))}
+        {section(fa ? "وضعیت تدارکات کالا، مواد و مصالح" : "Materials procurement status", (
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 8 }}>
+            <AnalysisBox label={fa ? "پیشرفت برنامه‌ای/تجمعی تا دوره قبل" : "Plan to last period"} value={dash} />
+            <AnalysisBox label={fa ? "پیشرفت برنامه‌ای/تجمعی تاکنون" : "Plan to date"} value={planned === undefined ? dash : pctCell(planned, fa)} />
+            <AnalysisBox label={fa ? "پیشرفت برنامه‌ای - این دوره" : "Plan this period"} value={dash} />
+            <AnalysisBox label={fa ? "زمان کل پروژه - روز" : "Project duration - days"} value={duration === undefined ? dash : digits(duration, fa)} />
+            <AnalysisBox label={fa ? "پیشرفت واقعی/تجمعی تا دوره قبل" : "Actual to last period"} value={dash} />
+            <AnalysisBox label={fa ? "پیشرفت واقعی/تجمعی تاکنون" : "Actual to date"} value={actual === undefined ? dash : pctCell(actual, fa)} />
+            <AnalysisBox label={fa ? "پیشرفت واقعی - این دوره" : "Actual this period"} value={dash} />
+            <AnalysisBox label={fa ? "زمان سپری شده - روز" : "Elapsed days"} value={elapsed === undefined ? dash : digits(elapsed, fa)} />
+            <AnalysisBox label={fa ? "میزان انحراف/تجمعی تا دوره قبل" : "Variance to last period"} value={dash} border="#c00000" />
+            <AnalysisBox label={fa ? "میزان انحراف/تجمعی تاکنون" : "Variance to date"} value={variance === undefined ? dash : pctCell(variance, fa)} border="#c00000" />
+            <AnalysisBox label={fa ? "میزان انحراف - این دوره" : "Variance this period"} value={dash} border="#c00000" />
+            <AnalysisBox label={fa ? "درصد زمان سپری شده" : "Elapsed time %"} value={timePct === undefined ? dash : pctCell(timePct, fa)} border="#1a7a2a" />
+          </div>
+        ))}
+      </div>
+    </MonthlySheet>
+  );
+}
+
+function MonthlyKeyActivitiesSheet({ lang }: { lang: Lang }) {
+  const fa = lang === "fa";
+  return (
+    <MonthlySheet title={fa ? "اهم فعالیت‌های پروژه" : "Key project activities"} dense>
+      <div className="h-full overflow-hidden bg-white font-sans text-[#152536]" style={{ display: "flex", flexDirection: "column" }}>
+        <ReportBanner text={fa ? "اهم فعالیت های پروژه" : "Key project activities"} />
+        <ReportBanner navy text={fa ? "شرح فعالیت های ماه جاری" : "Current-month activities"} />
+        <div style={{ flex: 1, background: "#fff", border: "1px solid #1f4e79", borderTop: "none" }} />
+      </div>
+    </MonthlySheet>
+  );
+}
+
+function MonthlyIssuesSheet({ lang }: { lang: Lang }) {
+  const fa = lang === "fa";
+  const th: CSSProperties = { background: "#1f4e79", color: "#fff", border: "1px solid #163a5a", padding: "6px", fontSize: 13, fontWeight: 700, textAlign: "center" };
+  const td: CSSProperties = { border: "1px solid #8aa0b4", background: "#fff" };
+  return (
+    <MonthlySheet title={fa ? "گزارش مشکلات و پیشنهادات" : "Issues and recommendations"} dense>
+      <div className="h-full overflow-hidden bg-white font-sans text-[#152536]" style={{ display: "flex", flexDirection: "column" }}>
+        <ReportBanner navy text={fa ? "اهم مشکلات پروژه که منجر به تاخیر در انجام بموقع فعالیت های اجرائی و خرید کالای پروژه گردیده است" : "Key issues causing delay in execution and procurement"} />
+        <table className="w-full border-collapse" style={{ tableLayout: "fixed", flex: 1 }}>
+          <thead>
+            <tr>
+              <th style={{ ...th, width: "50%" }}>{fa ? "مشکلات در حین اجرا پروژه" : "Issues during execution"}</th>
+              <th style={{ ...th, width: "50%" }}>{fa ? "راه کار ها و پیشنهادات" : "Actions and recommendations"}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {Array.from({ length: 14 }, (_, i) => (
+              <tr key={i}><td style={td} /><td style={td} /></tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </MonthlySheet>
+  );
+}
+
+function MonthlyCorrespondenceSheet({ lang }: { lang: Lang }) {
+  const fa = lang === "fa";
+  const th: CSSProperties = { background: "#1f4e79", color: "#fff", border: "1px solid #163a5a", padding: "4px 3px", fontSize: 10, fontWeight: 700, textAlign: "center" };
+  const td: CSSProperties = { border: "1px solid #8aa0b4", background: "#fff", fontSize: 10 };
+  const block = (title: string, dateH: string, noH: string, count: number) => (
+    <>
+      <tr>
+        <th style={{ ...th, width: 32, fontSize: 9 }}>{fa ? "ردیف" : "No."}</th>
+        <th style={{ ...th, width: "58%" }}>{title}</th>
+        <th style={{ ...th, width: "18%" }}>{dateH}</th>
+        <th style={{ ...th, width: "20%" }}>{noH}</th>
+      </tr>
+      {Array.from({ length: count }, (_, i) => (
+        <tr key={`${title}-${i}`}>
+          <td style={{ ...td, width: 32, textAlign: "center", fontSize: 13, fontWeight: 700, fontFamily: "Vazirmatn, Tahoma, sans-serif" }}>{digits(i + 1, true)}</td>
+          <td style={td} />
+          <td style={td} />
+          <td style={td} />
+        </tr>
+      ))}
+    </>
+  );
+  return (
+    <MonthlySheet title={fa ? "گزارش جلسات پیشبرد پروژه و مکاتبات" : "Progress meetings and correspondence"} dense landscape>
+      <div className="h-full overflow-hidden bg-white font-sans text-[#152536]" style={{ display: "flex", flexDirection: "column" }}>
+        <ReportBanner text={fa ? "گزارش جلسات پیشبرد پروژه و مکاتبات" : "Progress meetings and correspondence"} />
+        <ReportBanner navy text={fa ? "گزارشات" : "Reports"} />
+        <table className="w-full border-collapse" style={{ tableLayout: "fixed", flex: 1 }}>
+          <colgroup>
+            <col style={{ width: 32 }} />
+            <col />
+            <col />
+            <col />
+          </colgroup>
+          <tbody>
+            {block(fa ? "موضوع مکاتبات به کارفرما" : "Letters to employer", fa ? "تاریخ نامه" : "Date", fa ? "شماره نامه" : "Letter no.", 8)}
+            {block(fa ? "موضوع مکاتبات وارده از کارفرما" : "Letters from employer", fa ? "تاریخ نامه" : "Date", fa ? "شماره نامه" : "Letter no.", 6)}
+            {block(fa ? "موضوع صورتجلسات و گواهی انجام کار" : "Minutes and work certificates", fa ? "تاریخ صورتجلسه" : "Minutes date", fa ? "شماره صورتجلسه" : "Minutes no.", 6)}
+          </tbody>
+        </table>
+      </div>
+    </MonthlySheet>
+  );
+}
+
+function MonthlyWorkStoppageSheet({ lang }: { lang: Lang }) {
+  const fa = lang === "fa";
+  const cols = fa
+    ? ["ردیف", "فعالیت متوقف شده", "علت توقف", "تاریخ توقف", "تاریخ شروع مجدد", "مسئول اجرا", "شماره نامه ارسالی به کارفرما", "تاریخ ارسال نامه به کارفرما", "تائید کننده", "توضیحات"]
+    : ["No.", "Stopped activity", "Cause", "Stop date", "Restart date", "Responsible", "Letter no. to employer", "Letter date", "Approver", "Notes"];
+  const th: CSSProperties = { background: "#1f4e79", color: "#fff", border: "1px solid #163a5a", padding: "6px 3px", fontSize: 8, fontWeight: 700, textAlign: "center", whiteSpace: "normal" };
+  const td: CSSProperties = { border: "1px solid #8aa0b4", background: "#fff" };
+  return (
+    <MonthlySheet title={fa ? "گزارش توقف کاری" : "Work-stoppage report"} dense landscape>
+      <div className="h-full overflow-hidden bg-white font-sans text-[#152536]" style={{ display: "flex", flexDirection: "column" }}>
+        <ReportBanner text={fa ? "گزارش توقف کاری" : "Work-stoppage report"} />
+        <ReportBanner navy text={fa ? "توقفات" : "Stoppages"} />
+        <table className="w-full border-collapse" style={{ tableLayout: "fixed", flex: 1 }}>
+          <colgroup>
+            <col style={{ width: 32 }} />
+            {cols.slice(1).map((col) => <col key={col} />)}
+          </colgroup>
+          <thead>
+            <tr>{cols.map((col, c) => <th key={col} style={{ ...th, width: c === 0 ? 32 : undefined }}>{col}</th>)}</tr>
+          </thead>
+          <tbody>
+            {Array.from({ length: 12 }, (_, i) => (
+              <tr key={i}>
+                {cols.map((col, c) => (
+                  <td key={col} style={{ ...td, textAlign: "center", fontSize: c === 0 ? 13 : undefined, fontWeight: c === 0 ? 700 : undefined, fontFamily: c === 0 ? "Vazirmatn, Tahoma, sans-serif" : undefined }}>{c === 0 ? digits(i + 1, true) : ""}</td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </MonthlySheet>
+  );
+}
+
+function headerTable(cols: string[], rows: number, _fa: boolean, fill?: (r: number, c: number) => string) {
+  const th: CSSProperties = { background: "#1f4e79", color: "#fff", border: "1px solid #163a5a", padding: "6px 3px", fontSize: 8, fontWeight: 700, textAlign: "center", whiteSpace: "normal" };
+  const td: CSSProperties = { border: "1px solid #8aa0b4", background: "#fff", fontSize: 10, textAlign: "center" };
+  const rowNo: CSSProperties = { ...td, width: 32, fontSize: 13, fontWeight: 700, fontFamily: "Vazirmatn, Tahoma, sans-serif" };
+  return (
+    <table className="w-full border-collapse" style={{ tableLayout: "fixed", flex: 1 }}>
+      <colgroup>
+        <col style={{ width: 32 }} />
+        {cols.slice(1).map((col) => <col key={col} />)}
+      </colgroup>
+      <thead>
+        <tr>{cols.map((col, c) => <th key={col} style={{ ...th, width: c === 0 ? 32 : undefined, fontSize: c === 0 ? 9 : 8 }}>{col}</th>)}</tr>
+      </thead>
+      <tbody>
+        {Array.from({ length: rows }, (_, r) => (
+          <tr key={r}>
+            {cols.map((col, c) => (
+              <td key={col} style={c === 0 ? rowNo : td}>{fill ? fill(r, c) : c === 0 ? digits(r + 1, true) : ""}</td>
+            ))}
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+function MonthlyChangeWorkSheet({ lang }: { lang: Lang }) {
+  const fa = lang === "fa";
+  const cols = fa
+    ? ["ردیف", "فعالیت قابل تغییر", "علت تغییر", "تاریخ تغییر", "تاریخ شروع", "مسئول اجرا", "فعالیت جدید", "شماره نامه ارسالی به کارفرما", "تائید کننده", "تاریخ ارسال نامه به", "توضیحات"]
+    : ["No.", "Activity", "Cause", "Change date", "Start date", "Responsible", "New activity", "Letter no.", "Approver", "Letter date", "Notes"];
+  return (
+    <MonthlySheet title={fa ? "گزارش تغییر کار" : "Change-of-work report"} dense landscape>
+      <div className="h-full overflow-hidden bg-white font-sans text-[#152536]" style={{ display: "flex", flexDirection: "column" }}>
+        <ReportBanner text={fa ? "گزارش تغییر کار" : "Change-of-work report"} />
+        <ReportBanner navy text={fa ? "تغییر کار" : "Change of work"} />
+        {headerTable(cols, 12, fa)}
+      </div>
+    </MonthlySheet>
+  );
+}
+
+function MonthlyDelayedActivitiesSheet({ lang, model }: { lang: Lang; model?: PexModel }) {
+  const fa = lang === "fa";
+  const cols = fa
+    ? ["ردیف", "WBS", "شرح فعالیت دارای تاخیر", "شروع برنامه‌ای", "پایان برنامه‌ای", "دلیل تاخیر", "برنامه جهت برطرف کردن تاخیر", "تاریخ شروع واقعی", "تاریخ پایان واقعی", "واریانس شروع", "واریانس پایان"]
+    : ["No.", "WBS", "Delayed activity", "Plan start", "Plan finish", "Delay reason", "Recovery plan", "Actual start", "Actual finish", "Start var.", "Finish var."];
+  const delayed = (model?.rows ?? []).filter((row) => row.physicalPct + 0.5 < row.plannedPct);
+  const date = (iso?: string) => (iso ? digits(isoToJalali(iso), fa) : "");
+  const slip = (actual?: string, plan?: string) => {
+    if (!actual || !plan) return "";
+    return digits(calendarDays(plan, actual) - 1, fa);
+  };
+  const th: CSSProperties = { background: "#1f4e79", color: "#fff", border: "1px solid #163a5a", padding: "6px 3px", fontSize: 8, fontWeight: 700, textAlign: "center", whiteSpace: "normal" };
+  const td: CSSProperties = { border: "1px solid #8aa0b4", background: "#fff", fontSize: 9, textAlign: "center" };
+  const rowNo: CSSProperties = { ...td, width: 32, fontSize: 13, fontWeight: 700, fontFamily: "Vazirmatn, Tahoma, sans-serif" };
+  const pad = Math.max(8, delayed.length);
+  return (
+    <MonthlySheet title={fa ? "گزارش فعالیت های متاثر از تاخیرات" : "Activities affected by delays"} dense landscape>
+      <div className="h-full overflow-hidden bg-white font-sans text-[#152536]" style={{ display: "flex", flexDirection: "column" }}>
+        <ReportBanner text={fa ? "گزارش فعالیت های متاثر از تاخیرات" : "Activities affected by delays"} />
+        <ReportBanner navy text={fa ? "گزارش فعالیت های دارای تاخیر" : "Delayed activities"} />
+        <table className="w-full border-collapse" style={{ tableLayout: "fixed", flex: 1 }}>
+          <colgroup>
+            <col style={{ width: 32 }} />
+            {cols.slice(1).map((col) => <col key={col} />)}
+          </colgroup>
+          <thead>
+            <tr>{cols.map((col, c) => <th key={col} style={{ ...th, width: c === 0 ? 32 : undefined, fontSize: c === 0 ? 9 : 8 }}>{col}</th>)}</tr>
+          </thead>
+          <tbody>
+            {Array.from({ length: pad }, (_, i) => {
+              const row = delayed[i];
+              const cells = row
+                ? [digits(i + 1, true), row.wbs, fa ? row.nameFa : row.nameEn, date(row.baselineStart), date(row.baselineFinish), "", "", date(row.actualStart), date(row.actualFinish), slip(row.actualStart, row.baselineStart), slip(row.actualFinish, row.baselineFinish)]
+                : [digits(i + 1, true), ...cols.slice(1).map(() => "")];
+              return (
+                <tr key={row?.id ?? i}>
+                  {cells.map((cell, c) => <td key={c} style={{ ...(c === 0 ? rowNo : td), textAlign: c === 2 ? "start" : "center" }}>{cell}</td>)}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </MonthlySheet>
+  );
+}
+
+function MonthlySiteVisitSheet({ lang }: { lang: Lang }) {
+  const fa = lang === "fa";
+  const cols = fa
+    ? ["ردیف", "موضوع بازدید", "تاریخ بازدید", "شماره جلسه", "بازدید کنندگان", "خلاصه نتایج بازدید"]
+    : ["No.", "Subject", "Date", "Meeting no.", "Visitors", "Summary"];
+  return (
+    <MonthlySheet title={fa ? "گزارش بازدید کارشناسان فنی کارفرما از کارگاه" : "Employer technical site-visit report"} dense landscape>
+      <div className="h-full overflow-hidden bg-white font-sans text-[#152536]" style={{ display: "flex", flexDirection: "column" }}>
+        <ReportBanner text={fa ? "گزارش بازدید کارشناسان فنی کارفرما از کارگاه" : "Employer technical site-visit report"} />
+        <ReportBanner navy text={fa ? "وضعیت بازدید" : "Visit status"} />
+        {headerTable(cols, 12, fa)}
+      </div>
+    </MonthlySheet>
+  );
+}
+
+function MonthlyHseSheet({ lang }: { lang: Lang }) {
+  const fa = lang === "fa";
+  const cols = fa ? ["ردیف", "اهم اقدامات انجام شده واحد ایمنی در پروژه"] : ["No.", "Key HSE actions on the project"];
+  return (
+    <MonthlySheet title={fa ? "گزارش مدیریت HSE" : "HSE management report"} dense>
+      <div className="h-full overflow-hidden bg-white font-sans text-[#152536]" style={{ display: "flex", flexDirection: "column" }}>
+        <ReportBanner text={fa ? "گزارش مدیریت HSE" : "HSE management report"} />
+        <ReportBanner navy text={fa ? "ایمنی و محیط زیست" : "HSE"} />
+        {headerTable(cols, 16, fa)}
+      </div>
+    </MonthlySheet>
+  );
+}
+
+function MonthlyPhotoReportSheet({ lang }: { lang: Lang }) {
+  const fa = lang === "fa";
+  return (
+    <MonthlySheet title={fa ? "گزارش مصور" : "Photographic report"} dense>
+      <div className="h-full overflow-hidden bg-white px-[0.8%] py-[0.5%] font-sans text-[#152536]" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        <div style={{ textAlign: "end", fontSize: 12, color: "#1f4e79", fontWeight: 700 }}>{fa ? "گزارش مصور" : "Photo report"}</div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gridTemplateRows: "repeat(4, 1fr)", gap: 8, flex: 1, minHeight: 0 }}>
+          {Array.from({ length: 8 }, (_, i) => (
+            <div key={i} style={{ display: "flex", flexDirection: "column", border: "1px solid #1f4e79", minHeight: 0 }}>
+              <div style={{ flex: 1, background: "#eef2f5" }} />
+              <div style={{ borderTop: "1px solid #1f4e79", padding: "4px 6px", fontSize: 9, minHeight: 28 }} />
+            </div>
+          ))}
+        </div>
       </div>
     </MonthlySheet>
   );
@@ -2713,7 +4276,27 @@ export default function MonthlyReportWorkspace({ lang, model }: Props) {
     tab === "pmsDdr" ||
     tab === "pmsStatus" ||
     tab === "pmsProc" ||
+    tab === "pmsPsr" ||
     tab === "pmsConst" ||
+    tab === "physCurve" ||
+    tab === "physCurveE" ||
+    tab === "physCurveP" ||
+    tab === "physCurveC" ||
+    tab === "weather" ||
+    tab === "manpowerStats" ||
+    tab === "machineryStats" ||
+    tab === "resourceCharts" ||
+    tab === "materials" ||
+    tab === "resourceAnalysis" ||
+    tab === "keyActivities" ||
+    tab === "issues" ||
+    tab === "correspondence" ||
+    tab === "workStoppage" ||
+    tab === "changeWork" ||
+    tab === "delayedActivities" ||
+    tab === "siteVisit" ||
+    tab === "hse" ||
+    tab === "photoReport" ||
     tab.startsWith("divider-");
   const dividerChapter = tab.startsWith("divider-")
     ? MONTHLY_INDEX_CHAPTERS[Number(tab.slice("divider-".length)) - 1]
@@ -2757,14 +4340,14 @@ export default function MonthlyReportWorkspace({ lang, model }: Props) {
           فیلدها زیر هم چیده شوند. تنها نیاز ما پنهان‌شدن در چاپ است و
           همان در داخل media print انجام شده.
         */
-        @page { size: A4 ${tab === "pmsMdr" || tab === "pmsDdr" || tab === "pmsStatus" ? "landscape" : "portrait"}; margin: 6mm; }
+        @page { size: A4 ${tab === "pmsMdr" || tab === "pmsDdr" || tab === "pmsStatus" || tab === "pmsProc" || tab === "pmsPsr" || tab === "pmsConst" || tab === "physCurve" || tab === "physCurveE" || tab === "physCurveP" || tab === "physCurveC" || tab === "weather" || tab === "manpowerStats" || tab === "machineryStats" || tab === "resourceCharts" || tab === "materials" || tab === "resourceAnalysis" || tab === "correspondence" || tab === "workStoppage" || tab === "changeWork" || tab === "delayedActivities" || tab === "siteVisit" ? "landscape" : "portrait"}; margin: 6mm; }
         @media print {
           html, body { margin: 0 !important; padding: 0 !important; background: #fff !important; }
           body * { visibility: hidden !important; }
           #monthly-report-print-root, #monthly-report-print-root * { visibility: visible !important; }
           #monthly-report-print-root {
             position: fixed !important; inset: 0 auto auto 0 !important; box-sizing: border-box !important;
-            width: ${tab === "pmsMdr" || tab === "pmsDdr" || tab === "pmsStatus" ? "285mm" : "198mm"} !important; height: ${tab === "pmsMdr" || tab === "pmsDdr" || tab === "pmsStatus" ? "198mm" : "285mm"} !important; min-width: 0 !important; max-width: none !important;
+            width: ${tab === "pmsMdr" || tab === "pmsDdr" || tab === "pmsStatus" || tab === "pmsProc" || tab === "pmsPsr" || tab === "pmsConst" || tab === "physCurve" || tab === "physCurveE" || tab === "physCurveP" || tab === "physCurveC" || tab === "weather" || tab === "manpowerStats" || tab === "machineryStats" || tab === "resourceCharts" || tab === "materials" || tab === "resourceAnalysis" || tab === "correspondence" || tab === "workStoppage" || tab === "changeWork" || tab === "delayedActivities" || tab === "siteVisit" ? "285mm" : "198mm"} !important; height: ${tab === "pmsMdr" || tab === "pmsDdr" || tab === "pmsStatus" || tab === "pmsProc" || tab === "pmsPsr" || tab === "pmsConst" || tab === "physCurve" || tab === "physCurveE" || tab === "physCurveP" || tab === "physCurveC" || tab === "weather" || tab === "manpowerStats" || tab === "machineryStats" || tab === "resourceCharts" || tab === "materials" || tab === "resourceAnalysis" || tab === "correspondence" || tab === "workStoppage" || tab === "changeWork" || tab === "delayedActivities" || tab === "siteVisit" ? "198mm" : "285mm"} !important; min-width: 0 !important; max-width: none !important;
             aspect-ratio: auto !important; margin: 0 !important; box-shadow: none !important;
             print-color-adjust: exact !important; -webkit-print-color-adjust: exact !important;
           }
@@ -2875,7 +4458,27 @@ export default function MonthlyReportWorkspace({ lang, model }: Props) {
       {tab === "pmsDdr" && <MonthlyEngineeringProgressSheet lang={lang} model={m} kind="ddr" />}
       {tab === "pmsStatus" && <MonthlyEngineeringStatusSheet lang={lang} model={m} />}
       {tab === "pmsProc" && <MonthlyPmsProgressSheet lang={lang} model={m} wbsId="2" />}
+      {tab === "pmsPsr" && <MonthlyPsrSheet lang={lang} model={m} />}
       {tab === "pmsConst" && <MonthlyPmsProgressSheet lang={lang} model={m} wbsId="3" />}
+      {tab === "physCurve" && <MonthlyPhysCurveSheet lang={lang} model={m} focus="epc" />}
+      {tab === "physCurveE" && <MonthlyPhysCurveSheet lang={lang} model={m} focus="e" />}
+      {tab === "physCurveP" && <MonthlyPhysCurveSheet lang={lang} model={m} focus="p" />}
+      {tab === "physCurveC" && <MonthlyPhysCurveSheet lang={lang} model={m} focus="c" />}
+      {tab === "weather" && <MonthlyWeatherSheet lang={lang} model={m} />}
+      {tab === "manpowerStats" && <MonthlyManpowerStatsSheet lang={lang} model={m} />}
+      {tab === "machineryStats" && <MonthlyMachineryStatsSheet lang={lang} model={m} />}
+      {tab === "resourceCharts" && <MonthlyResourceChartsSheet lang={lang} model={m} />}
+      {tab === "materials" && <MonthlyMaterialsSheet lang={lang} />}
+      {tab === "resourceAnalysis" && <MonthlyResourceAnalysisSheet lang={lang} model={m} />}
+      {tab === "keyActivities" && <MonthlyKeyActivitiesSheet lang={lang} />}
+      {tab === "issues" && <MonthlyIssuesSheet lang={lang} />}
+      {tab === "correspondence" && <MonthlyCorrespondenceSheet lang={lang} />}
+      {tab === "workStoppage" && <MonthlyWorkStoppageSheet lang={lang} />}
+      {tab === "changeWork" && <MonthlyChangeWorkSheet lang={lang} />}
+      {tab === "delayedActivities" && <MonthlyDelayedActivitiesSheet lang={lang} model={m} />}
+      {tab === "siteVisit" && <MonthlySiteVisitSheet lang={lang} />}
+      {tab === "hse" && <MonthlyHseSheet lang={lang} />}
+      {tab === "photoReport" && <MonthlyPhotoReportSheet lang={lang} />}
       {tab === "summary" && <MonthlySummarySheet cover={cover} lang={lang} model={m} />}
 
       {/*
