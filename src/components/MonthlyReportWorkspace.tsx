@@ -39,6 +39,8 @@ type CoverFields = {
   analysisTitle: string;
   preparedBy: string;
   preparedUnit: string;
+  /** مسئول کنترل پروژه — همان «Project Control: [...]» انتهای کاور. */
+  projectControl: string;
 };
 
 const DEFAULT_COVER: CoverFields = {
@@ -50,6 +52,7 @@ const DEFAULT_COVER: CoverFields = {
   analysisTitle: "گزارش تحلیل پروژه",
   preparedBy: "تهیه شده،",
   preparedUnit: "واحد برنامه‌ریزی و کنترل پروژه",
+  projectControl: "",
 };
 
 const STORAGE_PREFIX = "monthly-report:";
@@ -259,6 +262,25 @@ function MonthlyCoverSheet({
           </div>
         </div>
       )}
+
+      {/*
+        انتهای صفحه: مسئول کنترل پروژه — «Project Control: [...]».
+        برچسب انگلیسی همان‌طور که در صفحهٔ مرجع بود باقی می‌ماند و مقدار
+        داخل براکت روی خود کاور قابل تایپ است (مثل بقیهٔ متن‌های کاور).
+        dir=ltr تا ترتیب «Project Control: [نام]» درست بنشیند.
+      */}
+      <div className="absolute inset-x-0 bottom-[2%] flex items-center gap-1 px-[7%] font-sans text-[clamp(9px,1.2vw,11px)]" dir="ltr">
+        <span className="tx3">Project Control:</span>
+        <span className="text-[#1b4672]">[</span>
+        <input
+          aria-label={fa ? "مسئول کنترل پروژه" : "Project control"}
+          value={cover.projectControl}
+          onChange={(event) => onChange({ projectControl: event.target.value })}
+          placeholder={fa ? "نام مسئول" : "Name"}
+          className="w-40 border-0 border-b border-dotted border-[#4a5b6b] bg-transparent px-1 py-0.5 text-center font-medium text-[#1b4672] outline-none focus:bg-white/60"
+        />
+        <span className="text-[#1b4672]">]</span>
+      </div>
     </article>
   );
 }
