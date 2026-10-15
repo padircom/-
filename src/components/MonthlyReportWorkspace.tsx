@@ -19,6 +19,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { type Lang } from "../data/framework";
 import { buildPexModel, type PexModel } from "../services/pexModel";
 import PeriodicReportWorkspace from "./PeriodicReportWorkspace";
+import { WeeklyReportDatePicker } from "./WeeklyReportWorkspace";
 
 export type MonthlyReportTab = "cover" | "summary" | "templates";
 
@@ -30,23 +31,34 @@ type Props = {
 /** فیلدهای متنی کاور — همان چیزی که کاربر روی صفحه تایپ می‌کند. */
 type CoverFields = {
   reportNo: string;
+  reportDate: string;
+  periodStart: string;
+  periodEnd: string;
   projectTitle: string;
   analysisTitle: string;
   preparedBy: string;
   preparedUnit: string;
-  periodEnd: string;
 };
 
 const DEFAULT_COVER: CoverFields = {
   reportNo: "MPR-001",
+  reportDate: "",
+  periodStart: "",
+  periodEnd: "",
   projectTitle: "",
   analysisTitle: "گزارش تحلیل پروژه",
   preparedBy: "تهیه شده،",
   preparedUnit: "واحد برنامه‌ریزی و کنترل پروژه",
-  periodEnd: "",
 };
 
 const STORAGE_PREFIX = "monthly-report:";
+
+/** تب‌های شیت ماهانه — همان الگوی WEEKLY_REPORT_TABS در گزارش هفتگی. */
+const MONTHLY_REPORT_TABS: { id: MonthlyReportTab; fa: string; en: string }[] = [
+  { id: "cover", fa: "کاور", en: "Cover" },
+  { id: "summary", fa: "خلاصه", en: "Summary" },
+  { id: "templates", fa: "قالب و خروجی", en: "Templates & export" },
+];
 
 /* ── قالب‌بندی عدد: فارسی/لاتین ── */
 const digits = (v: string | number, fa: boolean) =>
@@ -359,7 +371,12 @@ export default function MonthlyReportWorkspace({ lang, model }: Props) {
 
   /* بارگذاری تنظیمات ذخیره‌شدهٔ همین پروژه. */
   useEffect(() => {
-    let loaded: CoverFields = { ...DEFAULT_COVER, periodEnd: m?.openPeriod?.to ?? "" };
+    let loaded: CoverFields = {
+      ...DEFAULT_COVER,
+      reportDate: m?.openPeriod?.to ?? "",
+      periodStart: m?.openPeriod?.from ?? "",
+      periodEnd: m?.openPeriod?.to ?? "",
+    };
     try {
       const raw = localStorage.getItem(storageKey);
       if (raw) loaded = { ...loaded, ...(JSON.parse(raw) as Partial<CoverFields>) };
@@ -368,6 +385,9 @@ export default function MonthlyReportWorkspace({ lang, model }: Props) {
     }
     setCover(loaded);
   }, [storageKey, m?.openPeriod?.to]);
+
+  /* فقط شیت‌های سندی چاپ می‌شوند؛ تب قالب/خروجی صفحهٔ کاغذی نیست. */
+  const printable = tab === "cover" || tab === "summary";
 
   const patch = (next: Partial<CoverFields>) => setCover((c) => ({ ...c, ...next }));
 
@@ -411,39 +431,36 @@ export default function MonthlyReportWorkspace({ lang, model }: Props) {
         }
       `}</style>
 
-      {/* ─── نوار ابزار (چاپ نمی‌شود) ─── */}
+      {/* ─── هدر بالا — عیناً ساختار هدر گزارش هفتگی ─── */}
       <div className="monthly-report-no-print flex flex-wrap items-end gap-2 rounded-xl border b-line-soft bg-black/10 p-2 text-[10px]">
-        <div className="flex items-center gap-1">
-          {([
-            { id: "cover" as const, fa: "کاور", en: "Cover" },
-            { id: "summary" as const, fa: "خلاصهٔ ماهانه", en: "Monthly summary" },
-            { id: "templates" as const, fa: "قالب و خروجی", en: "Templates & export" },
-          ] as const).map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              onClick={() => setTab(t.id)}
-              className={`rounded-lg px-2.5 py-1.5 transition ${tab === t.id ? "toggle-on tx1" : "border b-line-soft tx3"}`}
-            >
-              {fa ? t.fa : t.en}
-            </button>
-          ))}
-        </div>
         <label className="flex flex-col gap-1">
-          <span className="tx3">{fa ? "شمارهٔ گزارش" : "Report No."}</span>
+          <span className="tx3">{fa ? "شماره گزارش" : "Report No."}</span>
           <input
             value={cover.reportNo}
-            onChange={(e) => patch({ reportNo: e.target.value })}
+            onChange={(event) => patch({ reportNo: event.target.value })}
             dir="ltr"
-            className="w-40 rounded-lg border b-line-soft bg-black/20 px-2 py-1.5 font-mono tx1 outline-none focus:border-[var(--accent)]"
+            className="w-52 rounded-lg border b-line-soft bg-black/20 px-2 py-1.5 font-mono tx1 outline-none focus:border-[var(--accent)]"
+          />
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="tx3">{fa ? "تاریخ گزارش" : "Report date"}</span>
+          <WeeklyReportDatePicker value={cover.reportDate} rtl={fa} onChange={(value) => patch({ reportDate: value })} />
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="tx3">{fa ? "شروع دوره" : "Period start"}</span>
+          <input
+            type="date"
+            value={cover.periodStart}
+            onChange={(event) => patch({ periodStart: event.target.value })}
+            className="rounded-lg border b-line-soft bg-black/20 px-2 py-1.5 tx1 outline-none focus:border-[var(--accent)]"
           />
         </label>
         <label className="flex flex-col gap-1">
           <span className="tx3">{fa ? "پایان دوره" : "Period end"}</span>
           <input
             type="date"
-            value={cover.periodEnd || period?.to || ""}
-            onChange={(e) => patch({ periodEnd: e.target.value })}
+            value={cover.periodEnd}
+            onChange={(event) => patch({ periodEnd: event.target.value })}
             className="rounded-lg border b-line-soft bg-black/20 px-2 py-1.5 tx1 outline-none focus:border-[var(--accent)]"
           />
         </label>
@@ -464,12 +481,33 @@ export default function MonthlyReportWorkspace({ lang, model }: Props) {
           <button
             type="button"
             onClick={() => window.print()}
-            className="rounded-lg border b-line-soft bg-black/15 px-3 py-1.5 tx2 transition hover:tx1"
+            disabled={!printable}
+            className="rounded-lg border b-line-soft bg-black/15 px-3 py-1.5 tx2 transition hover:tx1 disabled:cursor-not-allowed disabled:opacity-40"
           >
             🖨 {fa ? "چاپ شیت جاری (A4)" : "Print current sheet (A4)"}
           </button>
         </span>
       </div>
+
+      {/* نوار تب شیت‌ها — همان نوار گزارش هفتگی */}
+      <nav
+        className="monthly-report-no-print flex flex-wrap items-center gap-1 rounded-xl bg-black/15 p-1"
+        role="tablist"
+        aria-label={fa ? "شیت‌های گزارش ماهانه" : "Monthly report sheets"}
+      >
+        {MONTHLY_REPORT_TABS.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            role="tab"
+            aria-selected={tab === item.id}
+            onClick={() => setTab(item.id)}
+            className={`rounded-lg px-2.5 py-1.5 text-[10px] transition ${tab === item.id ? "toggle-on tx1" : "tx3 hover:tx1"}`}
+          >
+            {fa ? item.fa : item.en}
+          </button>
+        ))}
+      </nav>
 
       {/* ─── شیت‌ها ─── */}
       {tab === "cover" && <MonthlyCoverSheet cover={cover} lang={lang} model={m} onChange={patch} />}
