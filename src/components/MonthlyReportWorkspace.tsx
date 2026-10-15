@@ -444,7 +444,7 @@ export default function MonthlyReportWorkspace({ lang, model }: Props) {
         </label>
         <label className="flex flex-col gap-1">
           <span className="tx3">{fa ? "تاریخ گزارش" : "Report date"}</span>
-          <WeeklyReportDatePicker value={cover.reportDate} rtl={fa} onChange={(value) => patch({ reportDate: value })} />
+          <WeeklyReportDatePicker value={cover.reportDate} rtl={fa} onChange={(value) => patch({ reportDate: value })} compact />
         </label>
         <label className="flex flex-col gap-1">
           <span className="tx3">{fa ? "شروع دوره" : "Period start"}</span>
@@ -452,7 +452,7 @@ export default function MonthlyReportWorkspace({ lang, model }: Props) {
             type="date"
             value={cover.periodStart}
             onChange={(event) => patch({ periodStart: event.target.value })}
-            className="w-32 rounded-lg border b-line-soft bg-black/20 px-2 py-1.5 tx1 outline-none focus:border-[var(--accent)]"
+            className="h-7 w-32 rounded-lg border b-line-soft bg-black/20 px-3 py-1 tx1 outline-none focus:border-[var(--accent)]"
           />
         </label>
         <label className="flex flex-col gap-1">
@@ -461,7 +461,7 @@ export default function MonthlyReportWorkspace({ lang, model }: Props) {
             type="date"
             value={cover.periodEnd}
             onChange={(event) => patch({ periodEnd: event.target.value })}
-            className="w-32 rounded-lg border b-line-soft bg-black/20 px-2 py-1.5 tx1 outline-none focus:border-[var(--accent)]"
+            className="h-7 w-32 rounded-lg border b-line-soft bg-black/20 px-3 py-1 tx1 outline-none focus:border-[var(--accent)]"
           />
         </label>
         {period && (
