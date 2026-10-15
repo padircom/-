@@ -452,7 +452,7 @@ export default function MonthlyReportWorkspace({ lang, model }: Props) {
             type="date"
             value={cover.periodStart}
             onChange={(event) => patch({ periodStart: event.target.value })}
-            className="rounded-lg border b-line-soft bg-black/20 px-2 py-1.5 tx1 outline-none focus:border-[var(--accent)]"
+            className="w-32 rounded-lg border b-line-soft bg-black/20 px-2 py-1.5 tx1 outline-none focus:border-[var(--accent)]"
           />
         </label>
         <label className="flex flex-col gap-1">
@@ -461,7 +461,7 @@ export default function MonthlyReportWorkspace({ lang, model }: Props) {
             type="date"
             value={cover.periodEnd}
             onChange={(event) => patch({ periodEnd: event.target.value })}
-            className="rounded-lg border b-line-soft bg-black/20 px-2 py-1.5 tx1 outline-none focus:border-[var(--accent)]"
+            className="w-32 rounded-lg border b-line-soft bg-black/20 px-2 py-1.5 tx1 outline-none focus:border-[var(--accent)]"
           />
         </label>
         {period && (
