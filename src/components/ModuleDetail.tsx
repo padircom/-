@@ -49,13 +49,11 @@ const D1_PAGE_SUBS: Record<string, { id: string; title: Bi; tab: EdmsTab; sql: s
 /** Extra submodules only on the d2 inner page — not in the main right sidebar. */
 const D2_PAGE_SUBS: Record<string, { id: string; title: Bi; tab: PexTab; sql: string[] }[]> = {
   "d2-p2": [
-    /* گانت تعاملی، ردیابی مایلستون، تحلیل مسیر بحرانی و نگاه‌به‌جلو
-     * از اینجا حذف شدند و به تب‌های موازی داخل «برنامه پایه» رفتند.
-     *
-     * دلیل: هر چهار نما روی همان یک برنامهٔ زمان‌بندی کار می‌کنند.
-     * وقتی چهار ورودی جدا در سایدبار بودند، کاربر برای مقایسهٔ مسیر
-     * بحرانی با مایلستون باید دو بار از صفحه بیرون و تو می‌رفت و
-     * زمینهٔ کارش را از دست می‌داد. */
+    /* داشبورد کنترل پیشرفت — ورودی مستقیم به تب «داشبورد». تا پیش از
+     * این فقط نقشهٔ گردش‌کار به زیربخش‌ها می‌رفت و هیچ گره و هیچ نگاشت
+     * سرِ این تب نبود؛ یعنی داشبورد ساخته شده بود ولی از رابط کاربری
+     * قابل رسیدن نبود. این ورودی همان تب است، نه نمای تازه‌ای. */
+    { id: "d2-p2-dash", title: { fa: "داشبورد کنترل پیشرفت", en: "Progress control dashboard" }, tab: "dashboard", sql: [] },
   ],
   "d2-p4": [
     { id: "d2-p4-wa", title: { fa: "حوزهٔ کاری پیمانکاران (WBS → پیمانکار)", en: "Contractor Work Areas" }, tab: "workAreas", sql: ["cpm_work_area"] },
@@ -70,6 +68,7 @@ const D2_PAGE_SUBS: Record<string, { id: string; title: Bi; tab: PexTab; sql: st
 };
 
 const D2_TAB_BY_SUB: Record<string, PexTab> = {
+  "d2-p2-dash": "dashboard",
   "d2-p2-ws": "workshop",
   /* ساختار شکست از سایدبار حذف شد و تبی داخل کارگاه است. نگاشت
    * می‌ماند تا پیوندهای قدیمی به تب درست هدایت شوند، نه صفحهٔ سفید. */

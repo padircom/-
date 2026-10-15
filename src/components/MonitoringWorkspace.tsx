@@ -7,6 +7,7 @@ import ReportBuilderPanel from './ReportBuilderPanel';
 import DrillDownPanel from './DrillDownPanel';
 import AiAssistantPanel from './AiAssistantPanel';
 import { PowerBiAction } from './ConnectorActions';
+import { ProgressDonut, SpiDial, TriBar, VarianceTrend, jalaliLabel } from './ControlCharts';
 
 export type MonitorTab = 'dash' | 'wpd' | 'evm' | 'kpi' | 'phi' | 'var' | 'ews' | 'action' | 'forecast' | 'reports' | 'builder' | 'drill' | 'ai' | 'scurve' | 'exec';
 type Props = { lang: Lang; projectId: string; initialTab?: MonitorTab; subId?: string; hideTabs?: boolean };
@@ -24,12 +25,22 @@ function LiveMonitoring({lang,projectId,initialTab,subId,hideTabs,userId}:Props 
   const [horizon,setHorizon]=useState(30);
   const [auto,setAuto]=useState(false);
   const [revision,setRevision]=useState(0);
+  /** تصویر EVM انتخاب‌شده برای ویجت‌های کنترل؛ خالی = آخرین تصویر. */
+  const [snapId,setSnapId]=useState('');
   const [data,setData]=useState<MonitoringData|null>(null);
   const [error,setError]=useState('');
   const [loading,setLoading]=useState(false);
   const [receivedHorizon,setReceivedHorizon]=useState<number|null>(null);
   const generation=useRef(0);
   useEffect(()=>setTab(initialTab??SUB[subId??'']??'dash'),[initialTab,subId]);
+  /* اگر تصویر انتخاب‌شده دیگر در فهرست نبود (تصویر تازه رسید یا حذف شد)،
+   * انتخاب به آخرین تصویر برمی‌گردد — نه به حالت خالی که ویجت‌ها را
+   * بی‌داده می‌گذارد. */
+  useEffect(()=>{
+    const h=data?.evm.history??[];
+    if(!h.length){ if(snapId) setSnapId(''); return; }
+    if(!h.some(x=>x.id===snapId)) setSnapId(h[h.length-1].id);
+  },[data,snapId]);
   useEffect(()=>{
     let cancelled=false; let timer:ReturnType<typeof setTimeout>|undefined;
     const seq=++generation.current;
@@ -53,7 +64,9 @@ function LiveMonitoring({lang,projectId,initialTab,subId,hideTabs,userId}:Props 
   const state=(s:string)=>{const label=STATES[s];return label?text(...label):s;};
   const sourceName=(s:string)=>SOURCE_LABELS[s]?text(...SOURCE_LABELS[s]):s;
   const button='rounded-lg border b-line-soft px-3 py-2 text-xs tx1 disabled:opacity-40';
-  const p=current?.evm.latest;
+  /* تصویر انتخاب‌شده مرجع ویجت‌های کنترل و بخش EVM است؛ پیش‌فرض آخرین. */
+  const snapHistory=current?.evm.history??[];
+  const p=(snapHistory.find(h=>h.id===snapId)??current?.evm.latest)??null;
   const showEvm=['dash','evm','var','forecast','exec'].includes(tab);
   const showSummary=['dash','kpi','exec'].includes(tab);
   const exportData=()=>{
@@ -65,6 +78,21 @@ function LiveMonitoring({lang,projectId,initialTab,subId,hideTabs,userId}:Props 
     <header className="glass-dark rounded-xl p-3 flex flex-wrap items-center gap-3">
       <div className="flex-1"><h3 className="tx1 font-semibold">{text('پایش و کنترل — دادهٔ واقعی پروژه','Monitoring — persisted project data')}</h3><p className="text-xs tx3" dir="ltr">{projectId}</p></div>
       <button className={button} disabled={loading} onClick={()=>setRevision(v=>v+1)}>{text('تازه‌سازی','Refresh')}</button>
+      {/* انتخابگر تاریخ داده: هر گزینه یک تصویر EVM ثبت‌شده و سازگاراست.
+       * فهرست خالی یا تک‌گزینه‌ای یعنی سوییچ معنا ندارد. */}
+      <label className="text-xs tx3 flex items-center gap-2">
+        {text('تاریخ داده','Data date')}
+        <select className="bg-[var(--row)] tx1 rounded-lg border b-line-soft p-2" value={snapId}
+          disabled={loading||snapHistory.length<2}
+          onChange={e=>setSnapId(e.target.value)}
+          title={text('تصاویر EVM ثبت‌شدهٔ این پروژه','Stored EVM snapshots of this project')}>
+          {[...snapHistory].reverse().map(h=>(
+            <option key={h.id} value={h.id} dir="ltr">
+              {jalaliLabel(h.dataDate,lang)}{h.integrity==='verified'?'':' ⚠'}
+            </option>
+          ))}
+        </select>
+      </label>
       {/* خروجی/اتصال Power BI از پنل حذف‌شدهٔ «منابع داده» به صفحهٔ داشبوردها و
         * گزارشات منتقل شد؛ وضعیت اتصال از همان قرارداد سلامت سرور می‌آید. */}
       <PowerBiAction lang={lang} canExport={Boolean(current)} onExport={exportData} />
@@ -86,8 +114,12 @@ function LiveMonitoring({lang,projectId,initialTab,subId,hideTabs,userId}:Props 
         <p>{text('این نما فقط‌خواندنی است. شاخص‌های جاری حوزه‌ها لزوماً هم‌تاریخ با تصویر EVM نیستند؛ بازخوانی، تاریخ داده را جلو نمی‌برد.','Read-only. Domain counts and the EVM snapshot can have different data dates; refresh does not advance the source data date.')}</p>
         <p>{text('ارقام فقط محدودهٔ مجاز شما را پوشش می‌دهند؛ نبود مجوز با صفر برابر نیست.','Figures cover only your authorized scope; restricted is not zero.')}</p>
       </section>
+      {/* داشبورد کنترل: سنجهٔ SPI، دونات پیشرفت، مقایسهٔ PV/EV/AC و روند
+          انحراف — همه از تصویر EVM انتخاب‌شده بالای صفحه. نبود تصویر
+          یعنی ویجت خالی، نه مقدار ساختگی. */}
+      {tab==='dash'&&<ControlDashboard p={p} history={snapHistory} lang={lang} fmt={fmt}/>}
       {showEvm&&<section className="glass-dark rounded-xl p-3 space-y-3">
-        <div className="flex flex-wrap gap-3 text-xs tx2"><h4>EVM · {state(current.evm.state)}</h4><span>{text('تاریخ داده: ','Data date: ')}{p?.dataDate??'—'}</span><span dir="ltr">{p?.formulaVersion??'—'} · {p?.id??'—'}</span></div>
+        <div className="flex flex-wrap gap-3 text-xs tx2"><h4>EVM · {state(current.evm.state)}</h4><span>{text('تاریخ داده: ','Data date: ')}{jalaliLabel(p?.dataDate??null,lang)}</span><span dir="ltr">{p?.formulaVersion??'—'} · {p?.id??'—'}</span></div>
         <p className="text-xs tx3">{text('سازگاری تصویر: ','Snapshot integrity: ')}{p?.integrity??'—'} · {text('ردیف بی‌تاریخ / آینده کنارگذاشته‌شده: ','Undated / future rows excluded: ')}{fmt(current.evm.excludedUndatedOrFuture)}</p>
         {p?.stale&&<p className="text-amber-400 text-xs">{text('این تصویر بیش از ۳۰ روز قدمت دارد.','This snapshot is over 30 days old.')}</p>}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">{(tab==='forecast'?['eac','etc','vac']:tab==='var'?['spi','cpi','sv','cv']:['pv','ev','ac','bac','spi','cpi','sv','cv']).map(k=><div key={k} className="rounded-lg border b-line-soft p-3"><div className="text-xs tx3">{k.toUpperCase()}</div><div className="text-xl tx1 tabular-nums" dir="ltr">{fmt(p?.[k as 'pv'])}</div></div>)}</div>
@@ -104,8 +136,138 @@ function LiveMonitoring({lang,projectId,initialTab,subId,hideTabs,userId}:Props 
     </>}
   </div>;
 }
-function Items({title,items,lang}:{title:string;items:MonitoringItem[];lang:Lang}) {
-  return <section className="glass-dark rounded-xl p-3 space-y-2"><h4 className="text-sm tx1">{title}</h4>{!items.length&&<p className="tx3 text-xs">{lang==='fa'?'مورد قابل مشاهده‌ای در این افق نیست؛ وضعیت منبع را در جدول پوشش بررسی کنید.':'No visible items in this horizon; check source coverage.'}</p>}{items.map(i=><article key={`${i.table}:${i.id}`} className="rounded-lg border b-line-soft p-2 flex flex-wrap gap-3 text-xs tx2"><strong>{i.code} — {i.title}</strong><span dir="ltr">{i.dueDate??'—'}</span><span className={i.status==='overdue'||i.critical?'text-amber-300':''}>{i.status}{i.critical?' · !':''}</span>{i.table==='Activity'&&<span>{lang==='fa'?'پیشرفت مصوب: ':'Approved: '}{i.approvedPct===null?'—':`${i.approvedPct}%`}</span>}<small className="tx3" dir="ltr">{i.table} · {i.id}</small></article>)}</section>;
+/** نقطهٔ EVM ثبت‌شده — همان چیزی که evmPoint برمی‌گرداند. */
+type EvmPoint = MonitoringData['evm']['history'][number];
+
+/**
+ * داشبورد کنترل — نمای یک‌نگاهِ همان اعدادی که در بخش‌های پایین همین
+ * صفحه به‌صورت خام می‌آیند. عمداً موتور تازه ندارد: اگر فردا محاسبهٔ SPI
+ * در سرویس عوض شود، اینجا هم عوض می‌شود.
+ */
+function ControlDashboard({p,history,lang,fmt}:{p:EvmPoint|null;history:EvmPoint[];lang:Lang;fmt:(n:number|null|undefined)=>string}) {
+  const fa=lang==='fa'; const text=(a:string,b:string)=>fa?a:b;
+  /* مقایسهٔ دو تصویر: پیش‌فرض، تصویر پیش از تصویر انتخاب‌شده. اگر انتخاب
+   * روی نخستین تصویر باشد، مقایسه به تصویر آخر می‌رود — نه به خودش. */
+  const [cmpId,setCmpId]=useState('');
+  useEffect(()=>{
+    if(history.length<2){ if(cmpId) setCmpId(''); return; }
+    const i=history.findIndex(h=>h.id===p?.id);
+    const fallback=history[(i<=0?history.length:i)-1];
+    if(!history.some(h=>h.id===cmpId)||cmpId===p?.id) setCmpId(fallback.id);
+  },[history,p,cmpId]);
+  const cmp=history.find(h=>h.id===cmpId)??null;
+  const cmpRows:[string,number|null,number|null,boolean][]=[
+    ['PV',p?.pv??null,cmp?.pv??null,false],
+    ['EV',p?.ev??null,cmp?.ev??null,false],
+    ['AC',p?.ac??null,cmp?.ac??null,false],
+    ['BAC',p?.bac??null,cmp?.bac??null,false],
+    ['SPI',p?.spi??null,cmp?.spi??null,true],
+    ['CPI',p?.cpi??null,cmp?.cpi??null,true],
+    ['SV',p?.sv??null,cmp?.sv??null,true],
+    ['CV',p?.cv??null,cmp?.cv??null,true],
+  ];
+  return (
+    <section className="space-y-3">
+      <div className="grid gap-3 md:grid-cols-3">
+        <article className="glass-dark rounded-xl p-3">
+          <h4 className="text-sm tx1 mb-1">{text('شاخص عملکرد زمان‌بندی','Schedule performance')}</h4>
+          <SpiDial value={p?.spi??null} lang={lang}/>
+          <p className="text-[10px] tx3 mt-1">{text('SPI = EV ÷ PV از تصویر انتخاب‌شده. آستانهٔ هشدار: کمتر از ۰٫۹۵.','SPI = EV ÷ PV of the selected snapshot. Alert threshold: below 0.95.')}</p>
+        </article>
+        <article className="glass-dark rounded-xl p-3">
+          <h4 className="text-sm tx1 mb-1">{text('پیشرفت کسب‌شده در مقابل برنامه‌ای','Earned vs planned')}</h4>
+          <ProgressDonut pv={p?.pv??null} ev={p?.ev??null} bac={p?.bac??null} lang={lang}/>
+          <p className="text-[10px] tx3 mt-1">{text('حلقهٔ سبز نسبت به کل BAC؛ حلقهٔ آبی برنامهٔ همان بازه.','Green ring against total BAC; blue ring is the planned share.')}</p>
+        </article>
+        <article className="glass-dark rounded-xl p-3">
+          <h4 className="text-sm tx1 mb-1">{text('مقایسهٔ برنامه‌ای / کسب‌شده / واقعی','Planned / earned / actual')}</h4>
+          <TriBar pv={p?.pv??null} ev={p?.ev??null} ac={p?.ac??null} lang={lang}/>
+        </article>
+      </div>
+      <article className="glass-dark rounded-xl p-3">
+        <h4 className="text-sm tx1 mb-2">{text('روند انحراف زمان‌بندی','Schedule variance trend')}</h4>
+        <VarianceTrend history={history} lang={lang}/>
+      </article>
+      {/* پیش‌بینی فقط مقدار ثبت‌شده است — مدل تازه ساخته نمی‌شود. */}
+      <article className="glass-dark rounded-xl p-3">
+        <h4 className="text-sm tx1 mb-2">{text('پیش‌بینی ثبت‌شده','Stored forecast')}</h4>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {([
+            ['bac',text('بودجهٔ تصویب‌شده','Budget at completion')],
+            ['eac',text('تخمین در اتمام','Estimate at completion')],
+            ['etc',text('تخمین تکمیل','Estimate to complete')],
+            ['vac',text('انحراف تکمیل','Variance at completion')],
+          ] as const).map(([k,label])=>(
+            <div key={k} className="rounded-lg border b-line-soft p-2">
+              <div className="text-[10px] tx3">{label}</div>
+              <div className="mt-0.5 text-base tx1 tabular-nums" dir="ltr">{fmt(p?.[k]??null)}</div>
+            </div>
+          ))}
+        </div>
+        <p className="mt-2 text-[10px] tx3">
+          {text('EAC فقط مقدار ثبت‌شده در تصویر انتخاب‌شده است؛ ETC = EAC − AC و VAC = BAC − EAC. هیچ مدل پیش‌بینی تازه‌ای ساخته نمی‌شود و نبود تصویر یعنی نبود عدد.','EAC is only the value stored in the selected snapshot; ETC = EAC − AC and VAC = BAC − EAC. No new forecast model is fabricated; no snapshot means no number.')}
+        </p>
+      </article>
+
+      {/* مقایسهٔ دو تصویر — همان «آخرین به‌روزرسانی / قبل» اسلاید جدول.
+          تغییرات از روی ردیف‌های ثبت‌شده حساب می‌شوند، نه از یک مدل. */}
+      <article className="glass-dark rounded-xl p-3">
+        <div className="mb-2 flex flex-wrap items-center gap-2">
+          <h4 className="text-sm tx1">{text('مقایسهٔ دو تصویر','Two-snapshot comparison')}</h4>
+          <label className="ms-auto flex items-center gap-2 text-[10px] tx3">
+            {text('مقایسه با','Compare with')}
+            <select className="bg-[var(--row)] tx1 rounded-lg border b-line-soft p-1.5 text-[11px]" value={cmpId}
+              disabled={history.length<2} onChange={e=>setCmpId(e.target.value)}>
+              {history.filter(h=>h.id!==p?.id).map(h=>(
+                <option key={h.id} value={h.id} dir="ltr">{jalaliLabel(h.dataDate,lang)}{h.integrity==='verified'?'':' ⚠'}</option>
+              ))}
+            </select>
+          </label>
+        </div>
+        {history.length<2?(
+          <p className="py-4 text-center text-[10.5px] tx4">
+            {text('برای مقایسه، دست‌کم دو تصویر EVM ثبت‌شده لازم است.','At least two stored EVM snapshots are required to compare.')}
+          </p>
+        ):(
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[420px] border-collapse text-[11px]">
+              <thead>
+                <tr className="border-b b-line text-[9.5px] tx3">
+                  <th className="p-2 text-start">{text('شاخص','Metric')}</th>
+                  <th className="p-2 text-center">{text('تصویر انتخاب‌شده','Selected')}</th>
+                  <th className="p-2 text-center">{text('تصویر مقایسه','Comparison')}</th>
+                  <th className="p-2 text-center">{text('تغییر','Change')}</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y b-line-soft">
+                {cmpRows.map(([k,a,b,better])=>{
+                  const d=a!==null&&b!==null?a-b:null;
+                  const col=d===null?undefined:d>0?(better?'#8FE3C8':undefined):d<0?(better?'#FF9F9F':undefined):undefined;
+                  return (
+                    <tr key={k} className="glass-row">
+                      <td className="p-2 tx2" dir="ltr">{k}</td>
+                      <td className="p-2 text-center tx1 tabular-nums" dir="ltr">{fmt(a)}</td>
+                      <td className="p-2 text-center tx2 tabular-nums" dir="ltr">{fmt(b)}</td>
+                      <td className="p-2 text-center tabular-nums" dir="ltr" style={{color:col}}>
+                        {d===null?'—':`${d>0?'+':''}${fmt(d)}`}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <p className="mt-2 text-[10px] tx3">
+          {text('تغییر از روی ردیف‌های ثبت‌شده حساب می‌شود؛ تصویر بدون تأییدسازگاری (⚠) ممکن است مقادیر خالی داشته باشد و در مقایسه «—» بماند.','Changes are computed from stored rows; a snapshot without verified integrity (⚠) may carry null values and stays "—" in the comparison.')}
+        </p>
+      </article>
+      {!p&&<p className="text-xs tx3">{text('تصویر EVM ثبت‌شده‌ای برای این پروژه نیست؛ ویجت‌ها خالی‌اند و هیچ مقدار ساختگی نمایش داده نمی‌شود.','No stored EVM snapshot for this project; widgets stay empty and no synthetic value is shown.')}</p>}
+    </section>
+  );
+}
+
+function Items({title,items,lang}:{title:string;items:MonitoringItem[];lang:Lang}) {  return <section className="glass-dark rounded-xl p-3 space-y-2"><h4 className="text-sm tx1">{title}</h4>{!items.length&&<p className="tx3 text-xs">{lang==='fa'?'مورد قابل مشاهده‌ای در این افق نیست؛ وضعیت منبع را در جدول پوشش بررسی کنید.':'No visible items in this horizon; check source coverage.'}</p>}{items.map(i=><article key={`${i.table}:${i.id}`} className="rounded-lg border b-line-soft p-2 flex flex-wrap gap-3 text-xs tx2"><strong>{i.code} — {i.title}</strong><span dir="ltr">{jalaliLabel(i.dueDate,lang)}</span><span className={i.status==='overdue'||i.critical?'text-amber-300':''}>{i.status}{i.critical?' · !':''}</span>{i.table==='Activity'&&<span>{lang==='fa'?'پیشرفت مصوب: ':'Approved: '}{i.approvedPct===null?'—':`${i.approvedPct}%`}</span>}<small className="tx3" dir="ltr">{i.table} · {i.id}</small></article>)}</section>;
 }
 function SnapshotTrend({data,lang}:{data:MonitoringData;lang:Lang}) {
   const points=data.evm.history.slice(-60);
@@ -115,5 +277,5 @@ function SnapshotTrend({data,lang}:{data:MonitoringData;lang:Lang}) {
   const x=(p:typeof points[number])=>30+((Date.parse(p.dataDate??data.today)-first)/Math.max(86400000,last-first))*620;
   const y=(n:number)=>185-(n/max)*160;
   const colours={pv:'#7fb2ff',ev:'#34d399',ac:'#fbbf24'};
-  return <section className="glass-dark rounded-xl p-3 space-y-3"><h4 className="text-sm tx1">{lang==='fa'?'روند حداکثر ۶۰ تصویر آخر؛ نه منحنی برنامهٔ ساخته‌شده':'Up to 60 latest snapshots; not an invented planned curve'}</h4>{!points.length?<p className="tx3 text-xs">{lang==='fa'?'تصویر قابل مشاهده‌ای وجود ندارد.':'No visible snapshots.'}</p>:<><svg viewBox="0 0 680 210" className="w-full max-h-64" role="img" aria-label="PV EV AC snapshot trend"><path d="M30 20 V185 H650" stroke="currentColor" fill="none" opacity=".3"/>{(['pv','ev','ac'] as const).map(key=><g key={key}>{points.map((p,i)=>{const value=p[key],prev=points[i-1];return value===null?null:<g key={p.id}><circle cx={x(p)} cy={y(value)} r="3" fill={colours[key]}/>{prev&&prev.formulaVersion===p.formulaVersion&&prev[key]!==null&&<line x1={x(prev)} y1={y(prev[key]!)} x2={x(p)} y2={y(value)} stroke={colours[key]}/>}</g>;})}</g>)}</svg><div className="flex gap-4 text-xs">{Object.entries(colours).map(([k,v])=><span key={k} style={{color:v}}>{k.toUpperCase()}</span>)}</div><div className="overflow-x-auto"><table className="w-full text-xs tx2"><thead><tr><th>DataDate</th><th>PV</th><th>EV</th><th>AC</th><th>Status</th></tr></thead><tbody>{points.map(p=><tr key={p.id}><td>{p.dataDate}</td><td>{p.pv??'—'}</td><td>{p.ev??'—'}</td><td>{p.ac??'—'}</td><td>{p.state}</td></tr>)}</tbody></table></div></>}</section>;
+  return <section className="glass-dark rounded-xl p-3 space-y-3"><h4 className="text-sm tx1">{lang==='fa'?'روند حداکثر ۶۰ تصویر آخر؛ نه منحنی برنامهٔ ساخته‌شده':'Up to 60 latest snapshots; not an invented planned curve'}</h4>{!points.length?<p className="tx3 text-xs">{lang==='fa'?'تصویر قابل مشاهده‌ای وجود ندارد.':'No visible snapshots.'}</p>:<><svg viewBox="0 0 680 210" className="w-full max-h-64" role="img" aria-label="PV EV AC snapshot trend"><path d="M30 20 V185 H650" stroke="currentColor" fill="none" opacity=".3"/>{(['pv','ev','ac'] as const).map(key=><g key={key}>{points.map((p,i)=>{const value=p[key],prev=points[i-1];return value===null?null:<g key={p.id}><circle cx={x(p)} cy={y(value)} r="3" fill={colours[key]}/>{prev&&prev.formulaVersion===p.formulaVersion&&prev[key]!==null&&<line x1={x(prev)} y1={y(prev[key]!)} x2={x(p)} y2={y(value)} stroke={colours[key]}/>}</g>;})}</g>)}</svg><div className="flex gap-4 text-xs">{Object.entries(colours).map(([k,v])=><span key={k} style={{color:v}}>{k.toUpperCase()}</span>)}</div><div className="overflow-x-auto"><table className="w-full text-xs tx2"><thead><tr><th>DataDate</th><th>PV</th><th>EV</th><th>AC</th><th>Status</th></tr></thead><tbody>{points.map(p=><tr key={p.id}><td>{jalaliLabel(p.dataDate,lang)}</td><td>{p.pv??'—'}</td><td>{p.ev??'—'}</td><td>{p.ac??'—'}</td><td>{p.state}</td></tr>)}</tbody></table></div></>}</section>;
 }

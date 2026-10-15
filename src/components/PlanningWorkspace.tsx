@@ -16,6 +16,7 @@ import BaselineSCurvePanel from "./BaselineSCurvePanel";
 import CpmWorkspace from "./CpmWorkspace";
 import DailyReportWorkspace from "./DailyReportWorkspace";
 import WeeklyReportWorkspace from "./WeeklyReportWorkspace";
+import MonthlyReportWorkspace from "./MonthlyReportWorkspace";
 import DprProgressFallback from "./DprProgressFallback";
 import DprSupportTables from "./DprSupportTables";
 import { isDprFormatActive, isDprSupportBoxActive } from "../data/dprScope";
@@ -225,16 +226,25 @@ export default function PlanningWorkspace({
     return c;
   }, [m]);
 
+  /* SPI زمان‌بندی از پیشرفت وزنی موتور: واقعی ÷ برنامه‌ای در Data Date.
+   * آستانه‌ها همان آستانهٔ EVM برنامه‌اند (کمتر از ۰٫۹۵ هشدار). مخرج
+   * صفر یعنی نامعلوم — عدد ساختگی گذاشته نمی‌شود. */
+  const spi = m.plannedPct > 0 ? Math.round((m.overallPct / m.plannedPct) * 1000) / 1000 : null;
+  const spiColor = spi === null ? undefined : spi < 0.95 ? "#FF9F9F" : spi < 1 ? "#FFD48A" : "#8FE3C8";
+
   const kpis = useMemo(
     () => [
       { k: rtl ? "پیشرفت واقعی" : "Actual", v: `${m.overallPct}%`, c: "#8FE3C8" },
       { k: rtl ? "برنامه‌ای" : "Planned", v: `${m.plannedPct}%`, c: "#7FB2FF" },
       { k: rtl ? "انحراف" : "Variance", v: `${m.variance.deltaPct > 0 ? "+" : ""}${m.variance.deltaPct}`, c: m.variance.status === "behind" ? "#FF9F9F" : "#8FE3C8" },
+      /* SPI به‌صورت نسبت (۰٫۹۵ آستانهٔ هشدار) — همان قرارداد تب EVM
+       * پایش، نه درصد؛ وگرنه یک شاخص در دو ماژول دو معنا پیدا می‌کند. */
+      ...(spi === null ? [] : [{ k: "SPI", v: spi.toFixed(2), c: spiColor }]),
       { k: "PPC", v: `${m.ppcPct}%`, c: "#C9A7FF" },
       { k: rtl ? "سلامت زمان‌بندی" : "Health", v: String(m.dcma.healthScore), c: m.dcma.healthScore < 80 ? "#FFD48A" : "#8FE3C8" },
       { k: rtl ? "جریمه برآوردی" : "Penalty est.", v: `${Math.round(m.totalPenalty / 1000)}k`, c: "#FF9F9F" },
     ],
-    [rtl, m]
+    [rtl, m, spi, spiColor]
   );
 
   /** قالب مقدار بر پایهٔ واحد؛ بدون آن عدد بی‌معناست. */
@@ -289,8 +299,63 @@ export default function PlanningWorkspace({
     worst: blAll.reduce((w, r) => Math.max(w, r.slip), 0),
   }), [blAll]);
 
+  /** بیشترین لغزش (روز کاری) فعالیت‌های هر بسته WBS — نشانگر تأخیر روی
+   * میله. همان فرمول ردیف «لغزش» جدول انطباق با پایه تا دو عدد از یک
+   * محاسبه واگرا نشوند. */
+  /* فهرست فعالیت‌های نمای پیشرفت: جستجوی متنی + بازهٔ دورهٔ باز.
+   * بازه یک فیلتر حوزه است، نه تاریخچهٔ پیشرفت — ثبت پیشرفت تاریخ ندارد
+   * و «پیشرفت دوره‌ای» بدون آن، عدد ساختگی می‌شود. */
+  const [actQuery, setActQuery] = useState("");
+  const [actScope, setActScope] = useState<"all" | "period">("all");
+
+  /** لغزش هر فعالیت (روز کاری) — یک محاسبه برای همهٔ نمای‌ها. */
+  const rowSlip = useMemo(
+    () =>
+      Object.fromEntries(
+        m.rows
+          .filter((r) => r.baselineFinish)
+          .map((r) => [r.id, workingDaysBetween(r.baselineFinish as string, r.ef) - 1]),
+      ) as Record<string, number>,
+    [m],
+  );
+
+  /** فعالیت‌های نمای پیشرفت: جستجو + بازهٔ دورهٔ باز، عقب‌افتاده‌ها اول. */
+  const actVisible = useMemo(() => {
+    const q = actQuery.trim().toLowerCase();
+    const period = m.openPeriod;
+    return m.rows
+      .filter((r) => {
+        if (actScope === "period" && period && !(r.es <= period.to && r.ef >= period.from)) return false;
+        if (!q) return true;
+        return (
+          r.id.toLowerCase().includes(q) ||
+          r.nameFa.includes(actQuery.trim()) ||
+          r.nameEn.toLowerCase().includes(q) ||
+          r.wbs.includes(q)
+        );
+      })
+      .map((r) => {
+        const variance = Math.round((r.physicalPct - r.plannedPct) * 10) / 10;
+        return { ...r, variance, slip: rowSlip[r.id] ?? 0 };
+      })
+      /* عقب‌افتاده‌ها اول — همان قاعدهٔ فهرست مایلستون (بیشترین لغزش
+       * بالا). کاربر برای پیدا کردن مشکل می‌آید، نه برای دیدن ردیف سالم. */
+      .sort((a, b) => a.variance - b.variance || a.id.localeCompare(b.id));
+  }, [m, actQuery, actScope, rowSlip]);
+
+  const wbsSlip = useMemo(() => {
+    const out: Record<string, number> = {};
+    for (const w of m.wbsRollup) {
+      out[w.id] = m.rows
+        .filter((r) => r.wbs === w.id && r.baselineFinish)
+        .reduce((mx, r) => Math.max(mx, workingDaysBetween(r.baselineFinish as string, r.ef) - 1), 0);
+    }
+    return out;
+  }, [m]);
+
   /* ردیابی مایلستون: فیلتر، مرتب‌سازی و جمع‌بندی. */
   const [msFilter, setMsFilter] = useState<"all" | "AtRisk" | "Delayed" | "Achieved">("all");
+
 
   const msVisible = useMemo(() => {
     const list = msFilter === "all"
@@ -325,11 +390,10 @@ export default function PlanningWorkspace({
           <span className="grid h-8 w-8 place-items-center rounded-lg border border-emerald-400/40 bg-emerald-400/10 text-[16px]">🧭</span>
           <div className="min-w-0 flex-1">
             <h3 className="text-[13px] font-semibold tx1">
-              {rtl ? "برنامه‌ریزی و اجرای عملیات (PEX)" : "Planning & Execution (PEX)"}
+              {rtl ? "برنامه‌ریزی و اجرای عملیات" : "Planning & Execution"}
             </h3>
           </div>
           <span className="rounded-lg border b-line-soft px-2 py-1 text-[10px] tx3" dir="ltr">{m.project.code} · DataDate {dataDate}</span>
-          <span className="rounded-lg border border-emerald-400/30 bg-emerald-400/10 px-2 py-1 text-[10px] text-emerald-200" dir="ltr">{m.cpm.formulaVersion}</span>
         </div>
       </section>
 
@@ -384,7 +448,7 @@ export default function PlanningWorkspace({
 
         {tab === "dashboard" && (
           <div className="fade-rise space-y-2">
-            <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-6">
+            <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
               {kpis.map((c) => (
                 <div key={c.k} className="glass-dark rounded-2xl p-3">
                   <div className="text-[9.5px] font-extralight tx3">{c.k}</div>
@@ -393,7 +457,7 @@ export default function PlanningWorkspace({
               ))}
             </div>
 
-            <div className="grid gap-2 md:grid-cols-3">
+            <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
               <div className="glass-dark rounded-2xl p-3">
                 <div className="text-[11.5px] font-normal tx1">{rtl ? "ویجت مایلستون" : "Milestone widget"}</div>
                 <div className="mt-2 flex flex-wrap gap-1.5">
@@ -420,6 +484,20 @@ export default function PlanningWorkspace({
               </div>
 
               <div className="glass-dark rounded-2xl p-3">
+                <div className="text-[11.5px] font-normal tx1">{rtl ? "پیش‌بینی پایان" : "Finish forecast"}</div>
+                <p className="mt-2 text-[15px] font-semibold tabular-nums tx1" dir="ltr" style={{ color: m.snapshot.drift > 0 ? "#FF9F9F" : m.snapshot.drift < 0 ? "#8FE3C8" : undefined }}>
+                  {m.cpm.projectFinish}
+                </p>
+                <p className="mt-1 text-[10px] tx3">
+                  {rtl ? "پایان پایه" : "Baseline finish"} <span dir="ltr" className="tabular-nums">{m.baseline.projectFinish}</span>
+                </p>
+                <p className="mt-1 text-[11px] tabular-nums" dir="ltr" style={{ color: m.snapshot.drift > 0 ? "#FF9F9F" : m.snapshot.drift < 0 ? "#8FE3C8" : undefined }}>
+                  {rtl ? "رانش" : "Drift"} {m.snapshot.drift > 0 ? "+" : ""}{m.snapshot.drift} {rtl ? "روز کاری" : "wd"}
+                </p>
+                <p className="mt-1 text-[9.5px] tx4">{rtl ? "از CPM جاری در Data Date — نه عدد دستی" : "From current CPM at data date — not hand-entered"}</p>
+              </div>
+
+              <div className="glass-dark rounded-2xl p-3">
                 <div className="text-[11.5px] font-normal tx1">{rtl ? "منحنی S" : "S-curve"}</div>
                 <div className="mt-2 flex h-12 items-end gap-1">
                   {PEX_SCURVE.map((p) => (
@@ -432,19 +510,237 @@ export default function PlanningWorkspace({
             </div>
 
             <div className="glass-dark rounded-2xl p-3">
-              <div className="mb-2 text-[11.5px] tx1">{rtl ? "پیشرفت بسته‌های کاری" : "Work package progress"}</div>
-              {m.wbsRollup.map((w) => (
-                <div key={w.id} className="mb-2 last:mb-0">
-                  <div className="flex justify-between text-[10.5px] tx2">
-                    <span>{w.id} · {rtl ? w.nameFa : w.nameEn} · {rtl ? "وزن" : "w"} {(w.weight * 100).toFixed(1)}%</span>
-                    <span dir="ltr">{w.actualPct}% / {w.plannedPct}%</span>
+              <div className="mb-2 flex flex-wrap items-center gap-2">
+                <span className="text-[11.5px] tx1">{rtl ? "پیشرفت بسته‌های کاری" : "Work package progress"}</span>
+                <span className="ms-auto flex flex-wrap items-center gap-2.5 text-[9px] tx3">
+                  <span className="flex items-center gap-1"><i className="h-2 w-2 rounded-full" style={{ background: "#8FE3C8" }} />{rtl ? "واقعی" : "Actual"}</span>
+                  <span className="flex items-center gap-1"><i className="h-3 w-0 border-s-2 border-dashed" style={{ borderColor: "#7FB2FF" }} />{rtl ? "برنامه‌ای" : "Planned"}</span>
+                </span>
+              </div>
+              {m.wbsRollup.map((w) => {
+                /* انحراف یک بار حساب می‌شود و همان عدد، رنگ و نشانگر
+                 * تأخیر را تعیین می‌کند؛ دو محاسبهٔ جدا می‌تواند واگرا شود. */
+                const variance = Math.round((w.actualPct - w.plannedPct) * 10) / 10;
+                const behind = variance < -3;
+                const slip = wbsSlip[w.id] ?? 0;
+                return (
+                  <div key={w.id} className="mb-2.5 last:mb-0">
+                    <div className="flex items-center gap-2 text-[10.5px] tx2">
+                      <span className="min-w-0 flex-1 truncate">
+                        {w.id} · {rtl ? w.nameFa : w.nameEn} · {rtl ? "وزن" : "w"} {(w.weight * 100).toFixed(1)}%
+                      </span>
+                      {slip > 0 && (
+                        <span className="shrink-0 rounded-md px-1.5 py-0.5 text-[9px] tabular-nums" style={{ background: "#FF9F9F22", color: "#FF9F9F" }} dir="ltr">
+                          {rtl ? "تأخیر" : "slip"} +{slip}d
+                        </span>
+                      )}
+                      <span className="w-14 shrink-0 text-end tabular-nums" dir="ltr"
+                        style={{ color: behind ? "#FF9F9F" : variance > 3 ? "#8FE3C8" : undefined }}>
+                        {variance > 0 ? "+" : ""}
+                        {variance}%
+                      </span>
+                    </div>
+                    {/* میله روی محور ۰ تا ۱۰۰؛ نشانگر خط‌چین جای هدف است. */}
+                    <div className="relative mt-1 h-2.5 w-full rounded bg-white/10">
+                      <div className="h-2.5 rounded" style={{ width: `${w.actualPct}%`, background: behind ? "#FFD48A" : "#8FE3C8" }} />
+                      <span className="absolute top-[-2px] h-3.5 w-0 border-s-2 border-dashed" style={{ insetInlineStart: `${w.plannedPct}%`, borderColor: "#7FB2FF" }} />
+                    </div>
                   </div>
-                  <div className="mt-1 h-2 w-full rounded bg-white/10">
-                    <div className="h-2 rounded" style={{ width: `${w.actualPct}%`, background: w.actualPct + 3 < w.plannedPct ? "#FFD48A" : "#8FE3C8" }} />
-                  </div>
-                </div>
-              ))}
+                );
+              })}
+              <div className="mt-1 flex justify-between text-[8.5px] tx4 tabular-nums" dir="ltr">
+                <span>۰</span><span>۲۰</span><span>۴۰</span><span>۶۰</span><span>۸۰</span><span>۱۰۰</span>
+              </div>
+              <p className="mt-1.5 text-[9px] tx4">
+                {rtl
+                  ? "واقعی ÷ برنامه‌ای در Data Date · انحراف کمتر از ۳ واحد منفی = عقب‌افتاده"
+                  : "Actual vs planned at data date · variance below −3 units = behind plan"}
+              </p>
             </div>
+
+            {/* نمای جدول WBS — همان اعداد میله‌های بالا، برای خواندن دقیق و
+                خروجی چاپی. جمع ردیف آخر با جمع وزنی موتور یکی است. */}
+            <details className="glass-dark rounded-2xl p-3">
+              <summary className="cursor-pointer text-[11.5px] tx1">
+                {rtl ? "جدول WBS" : "WBS table"}
+                <span className="ms-2 text-[9.5px] tx4">
+                  {rtl ? "تجمعی تا Data Date" : "Cumulative to data date"}
+                </span>
+              </summary>
+              <div className="thin-scroll mt-2 overflow-x-auto">
+                <table className="w-full min-w-[560px] border-collapse text-[10.5px]">
+                  <thead>
+                    <tr className="border-b b-line text-[9.5px] tx3">
+                      <th className="px-2 py-1.5 text-start" style={{ width: 56 }}>WBS</th>
+                      <th className="px-2 py-1.5 text-start">{rtl ? "نام" : "Name"}</th>
+                      <th className="px-2 py-1.5 text-center" style={{ width: 62 }}>{rtl ? "وزن از کل" : "Weight"}</th>
+                      <th className="px-2 py-1.5 text-center" style={{ width: 62 }}>{rtl ? "برنامه‌ای" : "Planned"}</th>
+                      <th className="px-2 py-1.5 text-center" style={{ width: 62 }}>{rtl ? "واقعی" : "Actual"}</th>
+                      <th className="px-2 py-1.5 text-center" style={{ width: 60 }}>{rtl ? "انحراف" : "Var"}</th>
+                      <th className="px-2 py-1.5 text-center" style={{ width: 52 }}>{rtl ? "فعالیت" : "Acts"}</th>
+                      <th className="px-2 py-1.5 text-center" style={{ width: 56 }}>{rtl ? "لغزش" : "Slip"}</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y b-line-soft">
+                    {m.wbsRollup.map((w) => {
+                      const variance = Math.round((w.actualPct - w.plannedPct) * 10) / 10;
+                      const slip = wbsSlip[w.id] ?? 0;
+                      return (
+                        <tr key={w.id} className="glass-row">
+                          <td className="px-2 py-1.5 font-mono tx3" dir="ltr">{w.id}</td>
+                          <td className="px-2 py-1.5 tx1"><span className="truncate">{rtl ? w.nameFa : w.nameEn}</span></td>
+                          <td className="px-2 py-1.5 text-center tabular-nums tx2" dir="ltr">{(w.weight * 100).toFixed(1)}%</td>
+                          <td className="px-2 py-1.5 text-center tabular-nums tx3" dir="ltr">{w.plannedPct}%</td>
+                          <td className="px-2 py-1.5 text-center tabular-nums tx1" dir="ltr">{w.actualPct}%</td>
+                          <td className="px-2 py-1.5 text-center tabular-nums" dir="ltr"
+                            style={{ color: variance < -3 ? "#FF9F9F" : variance > 3 ? "#8FE3C8" : undefined }}>
+                            {variance > 0 ? "+" : ""}
+                            {variance}
+                          </td>
+                          <td className="px-2 py-1.5 text-center tabular-nums tx3" dir="ltr">{w.count}</td>
+                          <td className="px-2 py-1.5 text-center tabular-nums" dir="ltr"
+                            style={{ color: slip > 0 ? "#FF9F9F" : slip < 0 ? "#8FE3C8" : undefined }}>
+                            {slip > 0 ? `+${slip}` : slip}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot>
+                    <tr className="border-t b-line text-[10px] tx1">
+                      <td className="px-2 py-1.5" colSpan={2}>{rtl ? "جمع پروژه" : "Project total"}</td>
+                      <td className="px-2 py-1.5 text-center tabular-nums" dir="ltr">
+                        {(m.wbsRollup.reduce((s2, w) => s2 + w.weight, 0) * 100).toFixed(1)}%
+                      </td>
+                      <td className="px-2 py-1.5 text-center tabular-nums" dir="ltr">{m.plannedPct}%</td>
+                      <td className="px-2 py-1.5 text-center tabular-nums" dir="ltr">{m.overallPct}%</td>
+                      <td className="px-2 py-1.5 text-center tabular-nums" dir="ltr"
+                        style={{ color: m.variance.deltaPct < 0 ? "#FF9F9F" : m.variance.deltaPct > 0 ? "#8FE3C8" : undefined }}>
+                        {m.variance.deltaPct > 0 ? "+" : ""}
+                        {m.variance.deltaPct}
+                      </td>
+                      <td className="px-2 py-1.5 text-center tabular-nums" dir="ltr">{m.rows.length}</td>
+                      <td className="px-2 py-1.5 text-center tabular-nums" dir="ltr">
+                        {Math.max(0, ...Object.values(rowSlip))}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+              <p className="mt-2 text-[9px] tx4">
+                {rtl
+                  ? "وزن هر WBS جمع وزن فعالیت‌هایش است و جمع کل باید ۱۰۰٪ بدهد؛ انحراف = واقعی − برنامه‌ای."
+                  : "Each WBS weight is the sum of its activity weights and must total 100%; variance = actual − planned. A lock on the weight means changing it needs a change request."}
+              </p>
+            </details>
+
+            {/* نمای پیشرفت فعالیت‌ها — همان دادهٔ WBS بالا، یک سطح ریزتر.
+                عقب‌افتاده‌ها اول: کاربر برای پیدا کردن مشکل می‌آید، نه
+                برای خواندن چهل ردیف سالم. */}
+            <details className="glass-dark rounded-2xl p-3">
+              <summary className="cursor-pointer text-[11.5px] tx1">
+                {rtl ? "وضعیت پیشرفت فعالیت‌ها" : "Activity progress status"}
+                <span className="ms-2 text-[9.5px] tx4">
+                  {actVisible.length} / {m.rows.length}
+                  {actVisible.filter((r) => r.variance < -3).length > 0 &&
+                    ` · ${rtl ? "عقب‌افتاده" : "behind"} ${actVisible.filter((r) => r.variance < -3).length}`}
+                </span>
+              </summary>
+
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <input
+                  type="search"
+                  value={actQuery}
+                  onChange={(e) => setActQuery(e.target.value)}
+                  placeholder={rtl ? "جستجوی کد، نام یا WBS…" : "Search code, name or WBS…"}
+                  className="min-w-[180px] flex-1 rounded-lg border b-line-soft bg-[var(--chip-bg)] px-2 py-1 text-[11px] tx1"
+                />
+                <div className="flex items-center gap-1">
+                  {([
+                    { id: "all" as const, fa: "همه", en: "All" },
+                    { id: "period" as const, fa: "بازهٔ دورهٔ باز", en: "Open period" },
+                  ] as const).map((v) => (
+                    <button
+                      key={v.id}
+                      type="button"
+                      onClick={() => setActScope(v.id)}
+                      className={`rounded-lg px-2 py-1 text-[10px] transition ${
+                        actScope === v.id ? "toggle-on tx1" : "border b-line-soft tx3"
+                      }`}
+                    >
+                      {rtl ? v.fa : v.en}
+                    </button>
+                  ))}
+                </div>
+                {m.openPeriod && (
+                  <span className="rounded-lg border b-line-soft px-2 py-1 text-[9.5px] tx3" dir="ltr">
+                    {rtl ? "دورهٔ باز" : "Open period"} {m.openPeriod.code} · {m.openPeriod.from} → {m.openPeriod.to}
+                  </span>
+                )}
+              </div>
+
+              {actVisible.length === 0 ? (
+                <p className="py-5 text-center text-[10.5px] tx4">
+                  {rtl ? "فعالیتی با این فیلتر نیست." : "No activity matches this filter."}
+                </p>
+              ) : (
+                <div className="thin-scroll mt-2 max-h-[380px] overflow-y-auto">
+                  <table className="w-full min-w-[620px] border-collapse text-[10.5px]">
+                    <thead className="sticky top-0 z-10 bg-[var(--bg-c)]">
+                      <tr className="border-b b-line text-[9.5px] tx3">
+                        <th className="px-2 py-1.5 text-start" style={{ width: 74 }}>{rtl ? "کد" : "Code"}</th>
+                        <th className="px-2 py-1.5 text-start">{rtl ? "فعالیت" : "Activity"}</th>
+                        <th className="px-2 py-1.5 text-center" style={{ width: 54 }}>{rtl ? "برنامه‌ای" : "Plan"}</th>
+                        <th className="px-2 py-1.5 text-center" style={{ width: 54 }}>{rtl ? "واقعی" : "Actual"}</th>
+                        <th className="px-2 py-1.5 text-center" style={{ width: 56 }}>{rtl ? "انحراف" : "Var"}</th>
+                        <th className="px-2 py-1.5 text-center" style={{ width: 48 }}>{rtl ? "لغزش" : "Slip"}</th>
+                        <th className="px-2 py-1.5 text-center" style={{ width: 104 }}>{rtl ? "نمودار" : "Bar"}</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y b-line-soft">
+                      {actVisible.map((r) => {
+                        const behind = r.variance < -3;
+                        return (
+                          <tr key={r.id} className="glass-row">
+                            <td className="px-2 py-1.5 font-mono tx3" dir="ltr">{r.id}</td>
+                            <td className="px-2 py-1.5 tx1">
+                              <span className="flex items-center gap-1.5">
+                                {r.critical && <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: "#FF9F9F" }} />}
+                                <span className="truncate">{rtl ? r.nameFa : r.nameEn}</span>
+                                <span className="shrink-0 text-[9px] tx4" dir="ltr">WBS {r.wbs}</span>
+                              </span>
+                            </td>
+                            <td className="px-2 py-1.5 text-center tabular-nums tx3" dir="ltr">{r.plannedPct}%</td>
+                            <td className="px-2 py-1.5 text-center tabular-nums tx1" dir="ltr">{r.physicalPct}%</td>
+                            <td className="px-2 py-1.5 text-center tabular-nums" dir="ltr"
+                              style={{ color: behind ? "#FF9F9F" : r.variance > 3 ? "#8FE3C8" : undefined }}>
+                              {r.variance > 0 ? "+" : ""}
+                              {r.variance}
+                            </td>
+                            <td className="px-2 py-1.5 text-center tabular-nums" dir="ltr"
+                              style={{ color: r.slip > 0 ? "#FF9F9F" : r.slip < 0 ? "#8FE3C8" : undefined }}>
+                              {r.slip > 0 ? `+${r.slip}` : r.slip}
+                            </td>
+                            <td className="px-2 py-1.5">
+                              <span className="relative block h-2 w-full rounded bg-white/10">
+                                <span className="absolute inset-y-0 start-0 rounded" style={{ width: `${r.physicalPct}%`, background: behind ? "#FFD48A" : "#8FE3C8" }} />
+                                <span className="absolute top-[-2px] h-3 w-0 border-s-2 border-dashed" style={{ insetInlineStart: `${r.plannedPct}%`, borderColor: "#7FB2FF" }} />
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              <p className="mt-2 text-[9px] tx4">
+                {rtl
+                  ? "همهٔ مقادیر تجمعی تا Data Date هستند؛ «بازهٔ دورهٔ باز» فقط حوزهٔ نمایش را محدود می‌کند، چون ثبت پیشرفت تاریخ ندارد و پیشرفت دوره‌ای بدون تاریخ، عدد ساختگی است."
+                  : "All values are cumulative to the data date; the open-period filter only narrows the scope — progress entries carry no date, so a period cut would be a fabricated number."}
+              </p>
+            </details>
           </div>
         )}
 
@@ -1157,30 +1453,8 @@ export default function PlanningWorkspace({
         )}
 
         {tab === "mpr" && (
-          <div className="fade-rise space-y-2">
-            <div className="grid gap-2 sm:grid-cols-4">
-              {[
-                { k: rtl ? "پیشرفت واقعی" : "Actual", v: `${m.overallPct}%` },
-                { k: rtl ? "برنامه‌ای" : "Planned", v: `${m.plannedPct}%` },
-                { k: rtl ? "وضعیت" : "Status", v: m.variance.status },
-                { k: rtl ? "دوره" : "Period", v: m.openPeriod.code },
-              ].map((x) => (
-                <div key={x.k} className="glass-dark rounded-2xl p-3">
-                  <div className="text-[9.5px] tx3">{x.k}</div>
-                  <div className="mt-1 text-[14px] tx1" dir="ltr">{x.v}</div>
-                </div>
-              ))}
-            </div>
-            <div className="glass-dark rounded-2xl p-3 text-[11px] tx2">
-              <p>{rtl ? "خلاصه ماهانه از داده تأییدشده تولید می‌شود:" : "Monthly summary from approved data:"}</p>
-              <ul className="mt-2 space-y-1 tx3">
-                <li>· {rtl ? "مایلستون‌های در تأخیر" : "Delayed milestones"}: {m.milestones.filter((x) => x.status === "Delayed").length}</li>
-                <li>· {rtl ? "جریمه انباشته" : "Accrued penalty"}: <span dir="ltr">{fmtNum(m.totalPenalty)} {m.project.currency}</span></li>
-                <li>· {rtl ? "رانش مسیر بحرانی" : "CP drift"}: <span dir="ltr">{m.snapshot.drift}d</span></li>
-                <li>· {rtl ? "سلامت زمان‌بندی (DCMA)" : "Schedule health (DCMA)"}: {m.dcma.healthScore}</li>
-                <li>· {rtl ? "دوره‌های بسته‌شده" : "Closed periods"}: {m.periods.filter((p) => p.closedAt).map((p) => p.code).join("، ") || "—"}</li>
-              </ul>
-            </div>
+          <div className="fade-rise">
+            <MonthlyReportWorkspace lang={lang} model={m} />
           </div>
         )}
 

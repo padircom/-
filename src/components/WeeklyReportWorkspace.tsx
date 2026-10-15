@@ -902,10 +902,13 @@ export function WeeklyReportDatePicker({
   value,
   rtl,
   onChange,
+  compact = false,
 }: {
   value: string;
   rtl: boolean;
   onChange: (value: string) => void;
+  /** حالت فشل — برای ماژول گزارش ماهانه که سه باکس تاریخ را هم‌سطح می‌کند. */
+  compact?: boolean;
 }) {
   const initialValue = normalizeJalaliDate(value, todayJalaliDate());
   const initialParts = parseJalaliDate(initialValue) ?? parseJalaliDate(todayJalaliDate())!;
@@ -987,7 +990,7 @@ export function WeeklyReportDatePicker({
 
   return (
     <div ref={pickerRef} className="relative" dir="ltr">
-      <div className="flex h-7 items-center rounded-lg border b-line-soft bg-black/20 px-1">
+      <div className={`flex h-7 items-center rounded-lg border b-line-soft bg-black/20 px-1 ${compact ? "w-32" : ""}`}>
         <input
           aria-label={rtl ? "تاریخ شمسی گزارش" : "Jalali report date"}
           aria-invalid={Boolean(error)}
@@ -997,7 +1000,7 @@ export function WeeklyReportDatePicker({
           onBlur={() => commitDate()}
           onKeyDown={(event) => { if (event.key === "Enter") commitDate(); }}
           placeholder={rtl ? "۱۴۰۵/۰۷/۱۱" : "1405/07/11"}
-          className={`w-28 bg-transparent px-2 py-1 text-center tabular-nums tx1 outline-none ${error ? "text-rose-300" : ""}`}
+          className={`${compact ? "min-w-0 flex-1" : "w-28"} bg-transparent px-2 py-1 text-center tabular-nums tx1 outline-none ${error ? "text-rose-300" : ""}`}
         />
         <button
           type="button"
