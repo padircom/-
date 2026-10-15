@@ -218,7 +218,7 @@ function MonthlyCoverSheet({
         />
       </div>
 
-      {/* بلوک میانی: گزارش پیشرفت + شماره گزارش + دوره + تهیه‌کننده */}
+      {/* بلوک میانی: عنوان گزارش + شماره گزارش + دوره گزارشی */}
       <div className="absolute left-[23%] top-[41.5%] w-[77%] px-3 text-center font-sans">
         <div className="text-[clamp(13px,2.1vw,19px)] font-bold tracking-[0.09em] text-[#183b5b]">
           {fa ? "گزارش پیشرفت" : "Progress Report"}
@@ -235,18 +235,6 @@ function MonthlyCoverSheet({
         <div className="mt-1 font-sans text-[clamp(10px,1.6vw,14px)]">
           {fa ? "دوره گزارشی؛ منتهی به" : "Reporting period; ending"} {digits(periodEnd, fa) || "—"}
         </div>
-        <CoverText
-          ariaLabel={fa ? "تهیه شده" : "Prepared by"}
-          value={cover.preparedBy}
-          onChange={(value) => onChange({ preparedBy: value })}
-          className="mt-[6.5%] text-[clamp(10px,1.5vw,14px)]"
-        />
-        <CoverText
-          ariaLabel={fa ? "واحد تهیه‌کننده" : "Preparing unit"}
-          value={cover.preparedUnit}
-          onChange={(value) => onChange({ preparedUnit: value })}
-          className="mt-[2.2%] text-[clamp(10px,1.5vw,14px)]"
-        />
       </div>
 
       {/* بلوک تاریخ پایین راست — همان جای کاور هفتگی */}
@@ -269,6 +257,26 @@ function MonthlyCoverSheet({
         داخل براکت روی خود کاور قابل تایپ است (مثل بقیهٔ متن‌های کاور).
         dir=ltr تا ترتیب «Project Control: [نام]» درست بنشیند.
       */}
+      {/*
+        پاصفحه راست: تهیه‌کننده و واحد — از بلوک میانی به اینجا آمدند.
+        text-start چون کاور dir=rtl است و start در راست‌به‌چپ یعنی «راست».
+        محل bottom-[2%] است، همان سطح سطر Project Control، پس تداخل ندارند.
+      */}
+      <div className="absolute bottom-[2%] right-[7%] w-[46%] font-sans text-[clamp(10px,1.5vw,14px)]">
+        <CoverText
+          ariaLabel={fa ? "تهیه شده" : "Prepared by"}
+          value={cover.preparedBy}
+          onChange={(value) => onChange({ preparedBy: value })}
+          className="text-start text-[clamp(10px,1.5vw,14px)]"
+        />
+        <CoverText
+          ariaLabel={fa ? "واحد تهیه‌کننده" : "Preparing unit"}
+          value={cover.preparedUnit}
+          onChange={(value) => onChange({ preparedUnit: value })}
+          className="mt-1 text-start text-[clamp(10px,1.5vw,14px)]"
+        />
+      </div>
+
       <div className="absolute inset-x-0 bottom-[2%] flex items-center gap-1 px-[7%] font-sans text-[clamp(9px,1.2vw,11px)]" dir="ltr">
         <span className="tx3">Project Control:</span>
         <span className="text-[#1b4672]">[</span>
