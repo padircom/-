@@ -2,18 +2,21 @@
  * گزارش ماهانه (MPR) — فضای کاری شیت‌محور، هم‌الگو با گزارش هفتگی.
  *
  * چرا شیت‌محور و نه کارت؟ چون خروجی ماهانه سند رسمی است: A4، قاب چاپ،
- * واترمارک شمارهٔ صفحه و کنترل کامل روی اینکه چه چیزی چاپ می‌شود.
- * گزارش هفتگی همین معماری را دارد (`WeeklySheet`) و اینجا عیناً تکرار
- * شده تا دو گزارش یک زبان بصری داشته باشند.
+ * و کنترل کامل روی اینکه چه چیزی چاپ می‌شود. گزارش هفتگی همین معماری را
+ * دارد و اینجا عیناً تکرار شده تا دو گزارش یک زبان بصری داشته باشند:
+ *
+ *   · کاور = ساختار WeeklyCoverSheet (نوار موزاییک کنار، دو بلوک متن،
+ *     بلوک تاریخ پایین راست) با محتوای ماهانه
+ *   · شیت‌های درونی = ساختار WeeklySheet (بنر عنوان آبی + موزاییک + بدنه)
  *
  * قاعدهٔ داده: اعداد از موتور برنامه‌ریزی می‌آیند (`PexModel`) و متنی که
- * کاربر تایپ می‌کند (شمارهٔ گزارش، عنوان پروژه) در localStorage می‌ماند.
+ * کاربر تایپ می‌کند (شمارهٔ گزارش، عنوان‌ها) در localStorage می‌ماند.
  * هیچ عددی اینجا synthesize نمی‌شود؛ اگر موتور داده‌ای نداده باشد، «—»
  * نشان داده می‌شود.
  */
 
-import { useEffect, useMemo, useState } from "react";
-import type { Lang } from "../data/framework";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { type Lang } from "../data/framework";
 import { buildPexModel, type PexModel } from "../services/pexModel";
 import PeriodicReportWorkspace from "./PeriodicReportWorkspace";
 
@@ -24,32 +27,110 @@ type Props = {
   model?: PexModel;
 };
 
+/** فیلدهای متنی کاور — همان چیزی که کاربر روی صفحه تایپ می‌کند. */
 type CoverFields = {
   reportNo: string;
-  periodEnd: string;
   projectTitle: string;
+  analysisTitle: string;
+  preparedBy: string;
   preparedUnit: string;
+  periodEnd: string;
 };
 
 const DEFAULT_COVER: CoverFields = {
   reportNo: "MPR-001",
-  periodEnd: "",
   projectTitle: "",
+  analysisTitle: "گزارش تحلیل پروژه",
+  preparedBy: "تهیه شده،",
   preparedUnit: "واحد برنامه‌ریزی و کنترل پروژه",
+  periodEnd: "",
 };
 
 const STORAGE_PREFIX = "monthly-report:";
 
+/* ── قالب‌بندی عدد: فارسی/لاتین ── */
 const digits = (v: string | number, fa: boolean) =>
   String(v).replace(/\d/g, (d) => (fa ? "۰۱۲۳۴۵۶۷۸۹"[Number(d)] : d));
 
 const num = (v: number | null | undefined, fa: boolean, fractionDigits = 1) =>
-  v === null || v === undefined ? "—" : digits(v.toLocaleString("en-US", { minimumFractionDigits: fractionDigits, maximumFractionDigits: fractionDigits }), fa);
+  v === null || v === undefined
+    ? "—"
+    : digits(v.toLocaleString("en-US", { minimumFractionDigits: fractionDigits, maximumFractionDigits: fractionDigits }), fa);
 
-/* ══════════════════════════ شیت کاور (صفحهٔ ۱) ══════════════════════════ */
+/**
+ * تاریخ میلادی ISO → اجزای تاریخ شمسی برای بلوک تاریخ کاور.
+ * با timeZone: UTC خوانده می‌شود تا در هیچ منطقهٔ زمانی یک روز جابجا نشود.
+ */
+function jalaliParts(iso: string, fa: boolean) {
+  if (!iso) return null;
+  const date = new Date(`${iso}T00:00:00Z`);
+  if (Number.isNaN(date.getTime())) return null;
+  const locale = fa ? "fa-IR" : "en-US";
+  const numeric = new Intl.DateTimeFormat(locale, { day: "numeric", month: "numeric", year: "numeric", timeZone: "UTC" }).formatToParts(date);
+  const pick = (type: string) => numeric.find((part) => part.type === type)?.value ?? "";
+  const monthName = new Intl.DateTimeFormat(locale, { month: "long", timeZone: "UTC" }).format(date);
+  return { day: pick("day"), monthNumber: pick("month"), year: pick("year"), monthName };
+}
 
-function CoverSheet({
-  cover, lang, model, onChange,
+/* ── ورودی متنی روی شیت (همان CoverText گزارش هفتگی) ── */
+function CoverText({
+  value,
+  onChange,
+  className = "",
+  ariaLabel,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  className?: string;
+  ariaLabel: string;
+}) {
+  return (
+    <input
+      aria-label={ariaLabel}
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      className={`w-full min-w-0 border-0 bg-transparent p-0 text-center text-inherit outline-none focus:bg-white/30 ${className}`}
+    />
+  );
+}
+
+/* ══════════════════════════ شیت درونی (همالگوی WeeklySheet) ══════════════════════════ */
+
+function MonthlySheet({ title, children, dense = false }: { title: string; children: ReactNode; dense?: boolean }) {
+  const contentSpacing = dense ? "pb-[1%] pt-[1.6%]" : "pb-[3%] pt-[2.4%]";
+  return (
+    <article
+      id="monthly-report-print-root"
+      aria-label={title}
+      className="monthly-report-sheet relative mx-auto aspect-[210/297] w-full min-w-[520px] max-w-[760px] overflow-hidden border-2 border-[#0000ff] bg-[#eef0f2] text-[#152536] shadow-xl print:aspect-auto print:h-[297mm] print:w-[210mm] print:min-w-0 print:max-w-none print:shadow-none"
+      dir="rtl"
+    >
+      {/* بنر عنوان + موزاییک کنار — امضای بصری شیت‌های هفتگی */}
+      <div className="absolute inset-x-0 top-0 h-[10.2%] border border-black bg-[#c7dcf0]">
+        <div className="absolute inset-y-0 left-0 grid w-[25%] grid-cols-2 grid-rows-2">
+          <div className="bg-[#91afd0]" />
+          <div className="bg-[#c7dcf0]" />
+          <div className="bg-[#c7dcf0]" />
+          <div className="bg-[#91afd0]" />
+        </div>
+        <h1 className="absolute inset-0 flex items-center justify-center px-[26%] text-center text-[clamp(15px,2.2vw,21px)] font-medium tracking-[0.015em] text-[#152536]">
+          {title}
+        </h1>
+      </div>
+      <div className={`absolute inset-x-0 bottom-0 top-[10.2%] overflow-hidden bg-[#eef0f2] px-[5.6%] ${contentSpacing}`}>
+        {children}
+      </div>
+    </article>
+  );
+}
+
+/* ══════════════════════════ کاور (همالگوی WeeklyCoverSheet) ══════════════════════════ */
+
+function MonthlyCoverSheet({
+  cover,
+  lang,
+  model,
+  onChange,
 }: {
   cover: CoverFields;
   lang: Lang;
@@ -57,8 +138,10 @@ function CoverSheet({
   onChange: (patch: Partial<CoverFields>) => void;
 }) {
   const fa = lang === "fa";
+  const project = model?.project;
   const period = model?.openPeriod;
   const periodEnd = cover.periodEnd || period?.to || model?.dataDate || "";
+  const dateParts = jalaliParts(periodEnd, fa);
 
   return (
     <article
@@ -67,105 +150,99 @@ function CoverSheet({
       className="monthly-report-sheet relative mx-auto aspect-[210/297] w-full min-w-[520px] max-w-[760px] overflow-hidden border-2 border-[#0000ff] bg-[#f3f6fa] text-[#172b3f] shadow-xl print:aspect-auto print:h-[297mm] print:w-[210mm] print:min-w-0 print:max-w-none print:shadow-none"
       dir="rtl"
     >
-      {/* ─── بلوک هدر: پروژه / گزارش تحلیل پروژه ─── */}
-      <div className="absolute inset-x-0 top-0 h-[11%] border border-black bg-[#c7dcf0]">
-        <div className="flex h-[54%] items-stretch border-b border-black">
-          <div className="w-[12%] border-e border-black" />
-          <div className="flex flex-1 items-center justify-center gap-1 px-2">
-            <span className="text-[clamp(9px,1.2vw,12px)]">{fa ? "پروژه:" : "Project:"}</span>
-            <input
-              aria-label={fa ? "نام پروژه" : "Project name"}
-              value={cover.projectTitle || model?.project.code || ""}
-              onChange={(e) => onChange({ projectTitle: e.target.value })}
-              placeholder={model?.project.code ?? "—"}
-              className="w-full max-w-[62%] border-0 bg-transparent text-center text-[clamp(10px,1.5vw,15px)] font-medium text-[#172b3f] outline-none focus:bg-white/60"
-            />
-          </div>
-          <div className="w-[12%] border-s border-black" />
-        </div>
-        <div className="flex h-[46%] items-center justify-center text-[clamp(11px,1.7vw,17px)] font-semibold tracking-wide">
-          {fa ? "گزارش تحلیل پروژه" : "Project Analysis Report"}
-        </div>
+      {/* نوار کنار + موزاییک — عیناً از کاور گزارش هفتگی */}
+      <div className="absolute inset-y-0 left-0 w-[23%] bg-[#eef3f8]" />
+      <div className="absolute left-0 top-[31%] grid w-[23%] grid-cols-2">
+        <div className="aspect-square bg-[#82a8c5]" />
+        <div className="aspect-square bg-transparent" />
+        <div className="aspect-square bg-[#507da3]" />
+        <div className="aspect-square bg-[#82a8c5]" />
+        <div className="aspect-square bg-[#82a8c5]" />
+        <div className="aspect-square bg-[#507da3]" />
+        <div className="aspect-square bg-transparent" />
+        <div className="aspect-square bg-[#82a8c5]" />
       </div>
 
-      {/* ─── عنوان مرکزی ─── */}
-      <div className="absolute inset-x-0 top-[24%] flex flex-col items-center gap-3 px-6 text-center">
-        <h1 className="text-[clamp(22px,4vw,38px)] font-extrabold tracking-[0.08em] text-[#183b5b]">
+      {/* بلوک بالا: نام پروژه + گزارش تحلیل پروژه */}
+      <div className="absolute left-[23%] top-[3.5%] w-[77%] px-3 text-center font-sans">
+        <CoverText
+          ariaLabel={fa ? "نام پروژه" : "Project title"}
+          value={cover.projectTitle || project?.nameFa || ""}
+          onChange={(value) => onChange({ projectTitle: value })}
+          className="text-[clamp(12px,2vw,19px)] font-medium"
+        />
+        <CoverText
+          ariaLabel={fa ? "گزارش تحلیل پروژه" : "Project analysis report"}
+          value={cover.analysisTitle}
+          onChange={(value) => onChange({ analysisTitle: value })}
+          className="mt-[2.2%] text-[clamp(12px,1.9vw,17px)] font-semibold"
+        />
+      </div>
+
+      {/* بلوک میانی: گزارش پیشرفت + شماره گزارش + دوره + تهیه‌کننده */}
+      <div className="absolute left-[23%] top-[41.5%] w-[77%] px-3 text-center font-sans">
+        <div className="text-[clamp(13px,2.1vw,19px)] font-bold tracking-[0.09em] text-[#183b5b]">
           {fa ? "گزارش پیشرفت" : "Progress Report"}
-        </h1>
-        <div className="flex items-center gap-2 text-[clamp(11px,1.6vw,15px)]">
-          <span>{fa ? "پروژه:" : "Project:"}</span>
-          <span className="min-w-[8rem] border-b border-dotted border-[#4a5b6b] px-2 pb-0.5">
-            {cover.projectTitle || model?.project.code || "—"}
-          </span>
         </div>
-        {period && (
-          <div className="text-[clamp(9px,1.2vw,12px)] tx3">
-            {fa ? "دورهٔ گزارش:" : "Reporting period:"}{" "}
-            <span dir="ltr" className="tabular-nums">{digits(period.code, fa)}</span>
-            {" · "}
-            <span dir="ltr" className="tabular-nums">{digits(period.from, fa)} → {digits(period.to, fa)}</span>
-          </div>
-        )}
-      </div>
-
-      {/* ─── واترمارک شمارهٔ صفحه (فقط روی صفحه، نه روی کاغذ) ─── */}
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute left-1/2 top-[46%] z-10 -translate-x-1/2 -translate-y-1/2 whitespace-nowrap font-sans text-[clamp(48px,10vw,76px)] font-light leading-none text-[#777777]/60 print:hidden"
-      >
-        Page 1
-      </div>
-
-      {/* ─── پاصفحه: شمارهٔ گزارش و دوره (چپ) · تهیه‌کننده (راست) ─── */}
-      <div className="absolute inset-x-0 bottom-[6%] flex items-start justify-between gap-4 px-[7%]">
-        <div className="space-y-1 text-end text-[clamp(10px,1.4vw,13px)]">
-          <div>{fa ? "تهیه شده،" : "Prepared by,"}</div>
-          <input
-            aria-label={fa ? "واحد تهیه‌کننده" : "Preparing unit"}
-            value={cover.preparedUnit}
-            onChange={(e) => onChange({ preparedUnit: e.target.value })}
-            className="w-52 border-0 border-b border-dotted border-[#4a5b6b] bg-transparent px-1 py-0.5 text-center text-[#172b3f] outline-none focus:bg-white/60"
+        <div className="mt-2 flex items-center justify-center gap-1 text-[clamp(10px,1.6vw,14px)]">
+          <span>{fa ? "شماره گزارش:" : "Report No.:"}</span>
+          <CoverText
+            ariaLabel={fa ? "شماره گزارش" : "Report number"}
+            value={cover.reportNo}
+            onChange={(value) => onChange({ reportNo: value })}
+            className="w-auto max-w-[62%] text-start"
           />
         </div>
-        <div className="space-y-3 text-[clamp(10px,1.4vw,13px)]">
-          <div className="flex items-center gap-2">
-            <span>{fa ? "شماره گزارش:" : "Report No.:"}</span>
-            <input
-              aria-label={fa ? "شماره گزارش" : "Report number"}
-              value={cover.reportNo}
-              onChange={(e) => onChange({ reportNo: e.target.value })}
-              dir="ltr"
-              className="w-28 border-0 border-b border-dotted border-[#4a5b6b] bg-transparent px-1 py-0.5 text-center tabular-nums text-[#172b3f] outline-none focus:bg-white/60"
-            />
+        <div className="mt-1 font-sans text-[clamp(8px,1.1vw,10px)]">
+          {fa ? "دوره گزارشی؛ منتهی به" : "Reporting period; ending"} {periodEnd || "—"}
+        </div>
+        <CoverText
+          ariaLabel={fa ? "تهیه شده" : "Prepared by"}
+          value={cover.preparedBy}
+          onChange={(value) => onChange({ preparedBy: value })}
+          className="mt-[6.5%] text-[clamp(10px,1.5vw,14px)]"
+        />
+        <CoverText
+          ariaLabel={fa ? "واحد تهیه‌کننده" : "Preparing unit"}
+          value={cover.preparedUnit}
+          onChange={(value) => onChange({ preparedUnit: value })}
+          className="mt-[2.2%] text-[clamp(10px,1.5vw,14px)]"
+        />
+      </div>
+
+      {/* بلوک تاریخ پایین راست — همان جای کاور هفتگی */}
+      {dateParts && (
+        <div className="absolute bottom-[10%] left-[61%] flex items-stretch gap-1 font-sans">
+          <div className="flex w-[clamp(58px,12vw,96px)] flex-col items-center justify-center border border-[#cbd5e1] bg-white/80 px-2 py-1">
+            <span className="text-[clamp(10px,1.3vw,14px)]">{dateParts.monthNumber}</span>
+            <span className="text-[clamp(30px,5vw,48px)] leading-none">{dateParts.day}</span>
           </div>
-          <div className="flex items-center gap-2">
-            <span>{fa ? "دوره گزارشی؛ منتهی به" : "Reporting period; ending"}</span>
-            <input
-              aria-label={fa ? "پایان دوره گزارشی" : "Reporting period end"}
-              type="date"
-              value={periodEnd}
-              onChange={(e) => onChange({ periodEnd: e.target.value })}
-              dir="ltr"
-              className="w-32 border-0 border-b border-dotted border-[#4a5b6b] bg-transparent px-1 py-0.5 text-center tabular-nums text-[#172b3f] outline-none focus:bg-white/60"
-            />
+          <div className="flex min-w-0 flex-col justify-center text-[clamp(12px,1.9vw,18px)]">
+            <span className="font-bold">{dateParts.monthName}</span>
+            <span className="mt-1">{dateParts.year}</span>
           </div>
         </div>
-      </div>
+      )}
     </article>
   );
 }
 
-/* ══════════════════════════ شیت خلاصهٔ ماهانه (صفحهٔ ۲) ══════════════════════════ */
+/* ══════════════════════════ شیت خلاصهٔ ماهانه ══════════════════════════ */
 
-function SummarySheet({
-  cover, lang, model,
+function MonthlySummarySheet({
+  cover,
+  lang,
+  model,
 }: {
   cover: CoverFields;
   lang: Lang;
   model?: PexModel;
 }) {
   const fa = lang === "fa";
+  const cell = "border border-[#b6bec6] px-1 py-0 text-start align-middle";
+  const headerCell = `${cell} text-center font-semibold text-[#172f46]`;
+  const periodEnd = cover.periodEnd || model?.openPeriod?.to || "—";
+
   const rows: { label: string; value: string; note?: string }[] = model
     ? [
         {
@@ -216,75 +293,53 @@ function SummarySheet({
     : [];
 
   return (
-    <article
-      id="monthly-report-print-root"
-      aria-label={fa ? "خلاصهٔ گزارش ماهانه" : "Monthly report summary"}
-      className="monthly-report-sheet relative mx-auto aspect-[210/297] w-full min-w-[520px] max-w-[760px] overflow-hidden border-2 border-[#0000ff] bg-[#f3f6fa] text-[#172b3f] shadow-xl print:aspect-auto print:h-[297mm] print:w-[210mm] print:min-w-0 print:max-w-none print:shadow-none"
-      dir="rtl"
-    >
-      <div className="absolute inset-x-0 top-0 h-[10%] border border-black bg-[#c7dcf0]">
-        <div className="flex h-full items-center justify-center text-[clamp(12px,1.9vw,18px)] font-semibold">
-          {fa ? "خلاصهٔ ماهانه" : "Monthly Summary"}
-        </div>
-      </div>
-
-      <div className="absolute inset-x-0 top-[12%] bottom-[10%] overflow-y-auto px-[8%] py-3">
-        <div className="mb-3 flex flex-wrap items-baseline gap-x-3 gap-y-1 text-[clamp(10px,1.4vw,13px)]">
-          <span className="font-semibold">{fa ? "شمارهٔ گزارش:" : "Report No.:"}</span>
-          <span dir="ltr" className="tabular-nums">{cover.reportNo || "—"}</span>
-          <span className="tx3">·</span>
-          <span className="font-semibold">{fa ? "پایان دوره:" : "Period end:"}</span>
-          <span dir="ltr" className="tabular-nums">{cover.periodEnd || model?.openPeriod?.to || "—"}</span>
+    <MonthlySheet title={fa ? "خلاصهٔ ماهانه" : "Monthly Summary"}>
+      <div className="flex h-full flex-col gap-[10px] overflow-hidden font-sans">
+        <div className="flex shrink-0 items-center justify-between text-[9.5px] text-[#152536]">
+          <span>
+            {fa ? "شمارهٔ گزارش:" : "Report No.:"} {cover.reportNo || "—"}
+          </span>
+          <span>
+            {fa ? "دوره گزارشی؛ منتهی به" : "Reporting period; ending"} {periodEnd}
+          </span>
         </div>
 
         {!model ? (
-          <p className="py-8 text-center text-[11px] tx4">
-            {fa ? "دادهٔ موتور برنامه‌ریزی در دسترس نیست؛ عددی نمایش داده نمی‌شود." : "Planning engine data is unavailable; no figure is shown."}
+          <p className="py-6 text-center text-[10px] text-[#5a6b7b]">
+            {fa
+              ? "دادهٔ موتور برنامه‌ریزی در دسترس نیست؛ عددی نمایش داده نمی‌شود."
+              : "Planning engine data is unavailable; no figure is shown."}
           </p>
         ) : (
-          <table className="w-full border-collapse text-[clamp(9px,1.25vw,12px)]">
+          <table className="w-full table-fixed border-collapse bg-white font-sans text-[9.5px] leading-[1.15] text-[#152536]">
             <thead>
-              <tr className="bg-[#91afd0]/40">
-                <th className="border border-[#4a5b6b] px-2 py-1.5 text-start font-semibold">{fa ? "شاخص" : "Metric"}</th>
-                <th className="border border-[#4a5b6b] px-2 py-1.5 text-center font-semibold">{fa ? "مقدار" : "Value"}</th>
-                <th className="border border-[#4a5b6b] px-2 py-1.5 text-start font-semibold">{fa ? "توضیح" : "Note"}</th>
+              <tr className="h-[20px] bg-[#dce7f0]">
+                <th className={headerCell}>{fa ? "شاخص" : "Metric"}</th>
+                <th className={headerCell}>{fa ? "مقدار" : "Value"}</th>
+                <th className={headerCell}>{fa ? "توضیح" : "Note"}</th>
               </tr>
             </thead>
             <tbody>
-              {rows.map((r) => (
-                <tr key={r.label} className="odd:bg-white/40">
-                  <td className="border border-[#4a5b6b] px-2 py-1.5">{r.label}</td>
-                  <td className="border border-[#4a5b6b] px-2 py-1.5 text-center font-semibold tabular-nums" dir="ltr">
-                    {r.value}
+              {rows.map((row, index) => (
+                <tr key={row.label} className={`h-[18px] ${index % 2 ? "bg-[#f7f9fb]" : "bg-white"}`}>
+                  <td className={cell}>{row.label}</td>
+                  <td className={`${cell} text-center font-semibold tabular-nums`} dir="ltr">
+                    {row.value}
                   </td>
-                  <td className="border border-[#4a5b6b] px-2 py-1.5 tx3">{r.note ?? ""}</td>
+                  <td className={`${cell} text-[#5a6b7b]`}>{row.note ?? ""}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         )}
 
-        <p className="mt-3 text-[9px] tx4">
+        <p className="mt-auto shrink-0 text-[8.5px] leading-[1.4] text-[#5a6b7b]">
           {fa
             ? "همهٔ مقادیر از موتور برنامه‌ریزی در Data Date خوانده شده‌اند؛ گزارش ماهانه از دادهٔ تأییدشده ساخته می‌شود و هیچ عددی دستی وارد نمی‌شود."
             : "All values come from the planning engine at the data date; the monthly report is built from approved data and no figure is hand-entered."}
         </p>
       </div>
-
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute left-1/2 top-[46%] z-10 -translate-x-1/2 -translate-y-1/2 whitespace-nowrap font-sans text-[clamp(48px,10vw,76px)] font-light leading-none text-[#777777]/60 print:hidden"
-      >
-        Page 2
-      </div>
-
-      <div className="absolute inset-x-0 bottom-0 h-[7%] border-t border-black bg-[#c7dcf0]">
-        <div className="flex h-full items-center justify-between px-[7%] text-[clamp(9px,1.2vw,11px)]">
-          <span>{fa ? "واحد برنامه‌ریزی و کنترل پروژه" : "Planning & Project Control Unit"}</span>
-          <span dir="ltr" className="tabular-nums">{cover.reportNo || "—"}</span>
-        </div>
-      </div>
-    </article>
+    </MonthlySheet>
   );
 }
 
@@ -333,7 +388,7 @@ export default function MonthlyReportWorkspace({ lang, model }: Props) {
           font-family: "Inter", "Vazirmatn", Arial, sans-serif;
           font-size: 10px;
           font-weight: 400;
-          line-height: 1.45;
+          line-height: 1.4;
           letter-spacing: 0;
           font-kerning: normal;
           font-synthesis: none;
@@ -417,8 +472,8 @@ export default function MonthlyReportWorkspace({ lang, model }: Props) {
       </div>
 
       {/* ─── شیت‌ها ─── */}
-      {tab === "cover" && <CoverSheet cover={cover} lang={lang} model={m} onChange={patch} />}
-      {tab === "summary" && <SummarySheet cover={cover} lang={lang} model={m} />}
+      {tab === "cover" && <MonthlyCoverSheet cover={cover} lang={lang} model={m} onChange={patch} />}
+      {tab === "summary" && <MonthlySummarySheet cover={cover} lang={lang} model={m} />}
 
       {/*
         قالب‌ها و خروجی: قبلاً در همین ماژول بود (PeriodicReportWorkspace) و به
