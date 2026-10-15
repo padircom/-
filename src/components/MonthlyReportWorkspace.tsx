@@ -362,7 +362,6 @@ export default function MonthlyReportWorkspace({ lang, model }: Props) {
 
   /* بدون prop هم کار می‌کند (گرهٔ نقشهٔ قابلیت‌ها): همان پیش‌فرض موتور. */
   const m = useMemo(() => model ?? buildPexModel("Cost", 0.6), [model]);
-  const period = m?.openPeriod;
 
   const storageKey = `${STORAGE_PREFIX}${m?.project.code ?? "default"}`;
   const [tab, setTab] = useState<MonthlyReportTab>("cover");
@@ -464,11 +463,6 @@ export default function MonthlyReportWorkspace({ lang, model }: Props) {
             className="h-7 w-32 rounded-lg border b-line-soft bg-black/20 px-3 py-1 tx1 outline-none focus:border-[var(--accent)]"
           />
         </label>
-        {period && (
-          <span className="rounded-lg border b-line-soft px-2 py-1.5 text-[9.5px] tx3" dir="ltr">
-            {fa ? "دورهٔ باز" : "Open period"} {period.code} · {period.from} → {period.to}
-          </span>
-        )}
         <span className="ms-auto flex items-center gap-1.5">
           {saved && <span className="text-[9px] tx4">{saved}</span>}
           <button
