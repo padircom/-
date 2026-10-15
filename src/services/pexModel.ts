@@ -207,5 +207,6 @@ export function buildPexModel(weightMode: WeightMode = "Cost", alpha = 1) {
     weightMode,
     totalPenalty: milestones.reduce((s, m) => s + m.penalty, 0),
     blockedCount: rows.reduce((s, r) => s + r.blockedSteps.length, 0),
+    scurve: PEX_SCURVE,
   };
 }
