@@ -414,7 +414,14 @@ export default function MonthlyReportWorkspace({ lang, model }: Props) {
           -webkit-font-smoothing: antialiased;
         }
         .monthly-report-sheet * { font-family: inherit; }
-        .monthly-report-no-print { display: revert; }
+        /*
+          توجه: هیچ قانون display خارج از @media print برای این کلاس نگذار.
+          مقدار revert روی div باعث می‌شود کلاس flex تیلویند را از کار
+          بیاندازد (این استایل در body و بعد از head رندر می‌شود و با
+          اولویت برابر، ترتیب بعدی را می‌برد) و کل هدر به block برگردد و
+          فیلدها زیر هم چیده شوند. تنها نیاز ما پنهان‌شدن در چاپ است و
+          همان در داخل media print انجام شده.
+        */
         @page { size: A4 portrait; margin: 6mm; }
         @media print {
           html, body { margin: 0 !important; padding: 0 !important; background: #fff !important; }
