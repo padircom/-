@@ -48,6 +48,7 @@
     "build:lossassist": "esbuild src/services/lossAiAssist.ts --bundle --outfile=server/lossAiLogic.js --format=esm --platform=node --target=node18",
     "build:cntrisk": "esbuild src/services/contractRisk.ts --bundle --outfile=server/contractRiskLogic.js --format=esm --platform=node --target=node18",
     "build:cntclause": "esbuild src/services/contractClauseAnalysis.ts --bundle --outfile=server/contractClauseLogic.js --format=esm --platform=node --target=node18",
+    "build:cntriskdoc": "esbuild src/services/contractRiskDocument.ts --bundle --outfile=server/contractRiskDocLogic.js --format=esm --platform=node --target=node18",
     "build:monitoring": "esbuild src/services/monitoringWorkspace.ts --bundle --outfile=server/monitoringWsLogic.js --format=esm --platform=node --target=node18",
     "build:sxws": "esbuild src/services/strategyExcellenceWorkspace.ts --bundle --outfile=server/sxWsLogic.js --format=esm --platform=node --target=node18",
     "build:cpmws": "esbuild src/services/cpmWorkspace.ts --bundle --outfile=server/cpmWsLogic.js --format=esm --platform=node --target=node18",

@@ -97,6 +97,22 @@ function Live({ lang, projectId, userId }: { lang: Lang; projectId: string; user
     await load();
   }
 
+  async function downloadReport(scope: 'all' | 'critical', format: 'word' | 'pdf') {
+    setBusy(true); setError(''); setNotice('');
+    try {
+      const res = await fetch(`${base}/report?scope=${scope}&format=${format}`, { headers: { ...(userId ? { 'x-user-id': userId } : {}) } });
+      if (!res.ok) { const j = await res.json().catch(() => null); throw new Error(j?.error?.message ?? `خطای ${res.status}`); }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = `contract-risk-report-${scope}.${format === 'pdf' ? 'pdf' : 'doc'}`;
+      document.body.appendChild(a); a.click();
+      setTimeout(() => { a.remove(); URL.revokeObjectURL(url); }, 1500);
+      setNotice('گزارش دانلود شد');
+    } catch (e) { setError(e instanceof Error ? e.message : 'خطا در تولید گزارش'); }
+    setBusy(false);
+  }
+
   const s = ws?.summary;
   const overdue = (d?: string | null, status?: string) => Boolean(d && ws && d < ws.today && status !== 'done' && status !== 'cancelled' && status !== 'waived');
   const inputCls = 'glass-row w-full rounded-lg px-2 py-1.5 text-[11px] tx1 outline-none';
@@ -455,7 +471,15 @@ function Live({ lang, projectId, userId }: { lang: Lang; projectId: string; user
       {!loading && ws && section === 'reports' && (
         <div className="glass rounded-2xl p-3">
           <h4 className="mb-1 text-[12px] font-medium tx1">گزارش‌ها و خروجی‌های مدیریتی</h4>
-          <p className="text-[11px] tx3">خروجی Word/PDF گزارش جامع ریسک قراردادی (شامل ریسک‌های بحرانی، ماتریس، تعهدات سررسیدگذشته، اقدامات معوق، باقیمانده‌ها، بندهای نیازمند اصلاح و پیوندهای تأخیر/خسارت) در فاز ۴ این ماژول فعال می‌شود و از همین داده‌های واقعی ساخته خواهد شد.</p>
+          <p className="mb-2 text-[11px] tx3">گزارش از داده‌های واقعی همین لحظه ساخته می‌شود (۱۳ فصل: خلاصهٔ مدیریتی، ماتریس، ریسک‌های بحرانی، باقیمانده‌ها، تعهدات سررسیدگذشته، اقدامات معوق، بندهای نیازمند اصلاح، مقایسهٔ سوابق قرارداد، پیوند تأخیر/خسارت، روند و یافته‌های بندها). تاریخ تهیه و فیلتر اعمال‌شده داخل سند درج می‌شود.</p>
+          <div className="flex flex-wrap gap-2">
+            {([['all', 'گزارش جامع'], ['critical', 'گزارش ریسک‌های بحرانی و بالا']] as const).map(([scope, t]) => (
+              <span key={scope} className="flex gap-1.5">
+                <button type="button" className={btnCls} disabled={busy} onClick={() => void downloadReport(scope, 'word')}>{t} — Word</button>
+                <button type="button" className={ghostCls} disabled={busy} onClick={() => void downloadReport(scope, 'pdf')}>{t} — PDF</button>
+              </span>
+            ))}
+          </div>
         </div>
       )}
 

@@ -10,6 +10,7 @@
  */
 import { evaluateContractRisk, summarizeContractRiskPortfolio, DEFAULT_SCORING_CONFIG, CONTRACT_RISK_CATEGORIES } from "./contractRiskLogic.js";
 import { analyzeContractText, compareContractVersions } from "./contractClauseLogic.js";
+import { buildContractRiskReport } from "./contractRiskDocLogic.js";
 
 const locks = new Map();
 async function serial(key, work) {
@@ -222,6 +223,52 @@ export function registerContractRiskRoutes(app, { repo, subjects, evaluate }) {
     const updated = await r.patch("ContractClauseFinding", row.Id, { ReviewStatus: status, ReviewedBy: req.cntSubject.id, ReviewedAt: new Date().toISOString() }, req.cntSubject.id, row.RowVersion);
     return { finding: updated };
   }));
+
+  /* ── گزارش جامع/بحرانی ریسک قراردادی (Word/PDF از دادهٔ واقعی) ── */
+  app.get(base + "/report", need("cnt.risk.view"), async (req, res, next) => {
+    try {
+      const r = await repo();
+      const w = where(req.params.projectId);
+      const [risks, actions, obligations, improvements, findings, assessments, contracts, amendments, delayEvents, claims] = await Promise.all([
+        r.list("ContractRiskRegister", { where: w, limit: 5000 }).catch(() => []),
+        r.list("ContractRiskAction", { where: w, limit: 5000 }).catch(() => []),
+        r.list("ContractObligation", { where: w, limit: 5000 }).catch(() => []),
+        r.list("ContractImprovement", { where: w, limit: 5000 }).catch(() => []),
+        r.list("ContractClauseFinding", { where: w, limit: 5000 }).catch(() => []),
+        r.list("ContractRiskAssessment", { where: w, limit: 5000 }).catch(() => []),
+        r.list("ContractMaster", { where: w, limit: 500 }).catch(() => []),
+        r.list("ContractAmendment", { where: w, limit: 1000 }).catch(() => []),
+        r.list("DelayEvent", { where: w, limit: 2000 }).catch(() => []),
+        r.list("Claim", { where: w, limit: 2000 }).catch(() => []),
+      ]);
+      const { config, approved } = await scoringConfig(r, req);
+      const doc = buildContractRiskReport({
+        projectId: req.params.projectId,
+        scope: req.query.scope === "critical" ? "critical" : "all",
+        contractCode: req.query.contract ? String(req.query.contract) : null,
+        category: req.query.category ? String(req.query.category) : null,
+        risks, actions, obligations, improvements, findings, assessments, contracts, amendments,
+        links: {
+          delayEvents: delayEvents.map((d) => ({ code: d.Code, titleFa: d.TitleFa, status: d.Status })),
+          claims: claims.map((c) => ({ code: c.Code, titleFa: c.SubjectFa ?? c.TitleFa ?? "", status: c.Status, amount: c.ClaimAmount ?? c.EstimatedAmount ?? null, approvedAmount: c.ApprovedAmount ?? null })),
+        },
+        generatedAt: new Date().toISOString(), generatedBy: req.cntSubject.id,
+        scoringVersionNote: `${config.version}${approved ? " (قاعدهٔ سازمانی مصوب)" : " (روش پیش‌فرض — نیازمند تصویب قاعدهٔ سازمانی)"}`,
+      });
+      const format = req.query.format === "pdf" ? "pdf" : "word";
+      if (format === "pdf") {
+        let pdf;
+        try { const { htmlToPdf } = await import("./pdfRenderer.js"); pdf = await htmlToPdf(doc.body); }
+        catch { return res.status(501).json({ ok: false, error: { code: "CNTRISK_PDF_UNAVAILABLE", message: "موتور تولید PDF واقعی روی این سرور در دسترس نیست؛ خروجی Word در دسترس است", traceId: req.requestId } }); }
+        res.setHeader("content-type", "application/pdf");
+        res.setHeader("content-disposition", `attachment; filename="${doc.filename.replace(/\.doc$/, ".pdf")}"`);
+        return res.send(pdf);
+      }
+      res.setHeader("content-type", doc.contentType);
+      res.setHeader("content-disposition", `attachment; filename="${doc.filename}"`);
+      return res.send(doc.body);
+    } catch (e) { next(e); }
+  });
 
   app.post(base + "/compare", need("cnt.risk.view"), run(async (r, req) => {
     const b = req.body ?? {};
