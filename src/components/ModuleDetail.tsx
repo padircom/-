@@ -61,8 +61,6 @@ const D2_PAGE_SUBS: Record<string, { id: string; title: Bi; tab: PexTab; sql: st
     { id: "d2-p4-dis", title: { fa: "گزارش‌های دیسیپلینی", en: "Discipline Reports" }, tab: "discipline", sql: ["cpm_discipline_report", "cpm_discipline_line"] },
   ],
   "d2-p6": [
-    { id: "d2-p6-rep", title: { fa: "تولید گزارش", en: "Report Generator" }, tab: "reports", sql: ["pex_report_template"] },
-    { id: "d2-p6-tpl", title: { fa: "طراح قالب + AI", en: "Template Designer" }, tab: "template", sql: ["pex_report_template"] },
     { id: "d2-p6-al", title: { fa: "مرکز هشدار", en: "Alert Center" }, tab: "alerts", sql: ["pex_alert_rule"] },
   ],
 };
@@ -80,8 +78,6 @@ const D2_TAB_BY_SUB: Record<string, PexTab> = {
   "d2-p4-dis": "discipline",
   "d2-p5-s1": "weekly",
   "d2-p6-s1": "mpr",
-  "d2-p6-rep": "reports",
-  "d2-p6-tpl": "template",
   "d2-p6-al": "alerts",
 };
 
@@ -151,9 +147,10 @@ const D4_PAGE_SUBS: Record<string, { id: string; title: Bi; tab: D4Tab; sql: str
     { id: "d4-p3-imp", title: { fa: "اثر بر Baseline قفل", en: "Impact on locked BL" }, tab: "change", sql: ["Change_Request"] },
     { id: "d4-p3-ccb", title: { fa: "CCB و اختیار", en: "CCB + authority" }, tab: "ccb", sql: ["CCB_Meeting"] },
   ],
-  "d4-p4": [
-    { id: "d4-p4-tia", title: { fa: "تحلیل تأخیر ۵۰۹۰", en: "5090 delay analysis" }, tab: "delay", sql: ["Delay_Register"] },
-  ],
+  /* «d4-p4» ردیف اضافه ندارد: زیرفرآیند چارچوبی «تحلیل تأخیر» (d4-p4-s1)
+     همان تب delay را باز می‌کند و هر سه موتور ۵۰۹۰، ۱۳۰۰ و زمان‌بندی در آن
+     صفحه هست؛ ردیف «تحلیل تأخیر ۵۰۹۰» دقیقاً همان صفحه را باز می‌کرد و
+     فقط عنوان محدودتری داشت، پس حذف شد. */
   "d4-p5": [
     { id: "d4-p5-gate", title: { fa: "دروازه Baseline+DataDate", en: "BL + DataDate gate" }, tab: "claim", sql: ["Claim_Register"] },
     { id: "d4-p5-ntc", title: { fa: "Notice و نگهبان Time-Bar", en: "Notice + Time-Bar" }, tab: "notice", sql: ["Claim_Notice"] },
@@ -172,7 +169,6 @@ const D4_TAB_BY_SUB: Record<string, D4Tab> = {
   "d4-p3-imp": "change",
   "d4-p3-ccb": "ccb",
   "d4-p4-s1": "delay",
-  "d4-p4-tia": "delay",
   "d4-p5-s1": "claim",
   "d4-p5-gate": "claim",
   "d4-p5-ntc": "notice",
