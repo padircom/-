@@ -1008,7 +1008,7 @@ export const domains: Domain[] = [
 
       {
         id: "d4-p4",
-        title: { fa: "مدیریت هوشمند تأخیرات و تمدید مدت", en: "Smart Delay & Extension of Time Management" },
+        title: { fa: "مدیریت تأخیرات و تمدید مدت", en: "Delay & Extension of Time Management" },
         subs: [
 
           { id: "d4-p4-s1", title: { fa: "تحلیل تأخیر", en: "Delay Analysis" }, activity: { fa: "تحلیل تأخیر", en: "Delay analysis" }, source: "Primavera, Reports", sql: ["Delay_Register"], output: "Delay Report", connectsTo: "Claims Module", ai: "AI Delay Analysis" },
