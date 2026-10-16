@@ -44,6 +44,8 @@ const RULES: { kind: ClauseFindingKind; labelFa: string; patterns: RegExp[]; cat
 const EMPLOYER_OBLIGATION = /(کارفرما|دستگاه اجرایی|مشاور).{0,40}(موظف|مکلف|متعهد|باید)/;
 const CONTRACTOR_OBLIGATION = /(پیمانکار).{0,40}(موظف|مکلف|متعهد|باید)/;
 const HAS_DEADLINE = /(\d|یک|دو|سه|چهار|پنج|شش|هفت|هشت|نه|ده)\s*(روز|ماه|هفته)|\d{4}\/\d{2}\/\d{2}|مهلت\s*\d/;
+/* ارقام فارسی/عربی پیش از آزمون الگوها لاتین می‌شوند تا «۳۰ روز» هم مهلت شمرده شود. */
+const latinDigits = (s: string) => s.replace(/[۰-۹]/g, (d) => "۰۱۲۳۴۵۶۷۸۹".indexOf(d).toString()).replace(/[٠-٩]/g, (d) => "٠١٢٣٤٥٦٧٨٩".indexOf(d).toString());
 const VAGUE_TERMS = [/در اسرع وقت/, /در صورت لزوم/, /به تشخیص/, /حسب مورد/, /به\s*موقع/, /بدون تأخیر/];
 
 export type ClauseAnalysisResult = {
@@ -68,7 +70,7 @@ export function analyzeContractText(rawText: string, sourceLabel = "متن قر�
   warningsFa.push(...parsed.warningsFa);
   const findings: ClauseFinding[] = [];
   for (const clause of parsed.clauses) {
-    const body = `${clause.titleFa ?? ""} ${clause.bodyText}`;
+    const body = latinDigits(`${clause.titleFa ?? ""} ${clause.bodyText}`);
     const excerpt = clause.bodyText.slice(0, 900);
     const sourceRef = `${sourceLabel} — بند ${clause.clauseNo}، صفحه ${clause.pageNo}`;
     for (const rule of RULES) {

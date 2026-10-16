@@ -36,6 +36,7 @@ import * as jalaaliNs from "jalaali-js";
 import nodemailer from "nodemailer";
 import { createWorker } from "tesseract.js";
 import { registerRccWorkspaceRoutes } from "./rccWorkspaceApi.js";
+import { registerContractRiskRoutes } from "./contractRiskApi.js";
 import { registerDprDocRoutes } from "./dprDocApi.js";
 import { registerDprTablesRoutes } from "./dprTablesApi.js";
 import { registerFinWorkspaceRoutes } from "./finWorkspaceApi.js";
@@ -619,6 +620,14 @@ const DEDICATED_TABLE_ROUTES = {
   ClaimCalculationRun: "/api/rcc/:projectId/cost-items/:id/calculate",
   ClaimCostAllocation: "/api/rcc/:projectId/cost-items/:id/allocations",
   ClaimDocumentVersion: "/api/rcc/:projectId/claims/:id/loss-document",
+  /* PMO-CONTRACT-RISK-ENGINE-V1.0: ریسک قراردادی فقط از مسیر اختصاصی خودش. */
+  ContractRiskRegister: "/api/cnt-risk/:projectId/risks",
+  ContractRiskAssessment: "/api/cnt-risk/:projectId/risks/:id/reassess",
+  ContractRiskScoringRule: "/api/cnt-risk/:projectId/scoring-rules",
+  ContractClauseFinding: "/api/cnt-risk/:projectId/analyze",
+  ContractObligation: "/api/cnt-risk/:projectId/obligations",
+  ContractImprovement: "/api/cnt-risk/:projectId/improvements",
+  ContractRiskAction: "/api/cnt-risk/:projectId/actions",
   Correspondence: "/api/ckm/:projectId/letters",
   MeetingMinute: "/api/ckm/:projectId/meetings",
   MeetingAction: "/api/ckm/:projectId/meetings/:code/actions",
@@ -968,6 +977,7 @@ registerScmWorkspaceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: r
 registerHrmWorkspaceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
 registerEdmsWorkspaceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
 registerRccWorkspaceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
+registerContractRiskRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
 registerEqmWorkspaceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
 registerMonitoringWorkspaceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
 registerStrategyExcellenceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
