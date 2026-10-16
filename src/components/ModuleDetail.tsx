@@ -156,7 +156,7 @@ const D4_PAGE_SUBS: Record<string, { id: string; title: Bi; tab: D4Tab; sql: str
     { id: "d4-p5-ntc", title: { fa: "Notice و نگهبان Time-Bar", en: "Notice + Time-Bar" }, tab: "notice", sql: ["Claim_Notice"] },
     { id: "d4-p5-dsp", title: { fa: "مذاکره و اختلاف", en: "Negotiation & dispute" }, tab: "dispute", sql: ["Claim_Settlement"] },
     { id: "d4-p5-exe", title: { fa: "گراف EXEC", en: "EXEC graph" }, tab: "exec", sql: ["Trace_Link"] },
-    { id: "d4-p5-loss", title: { fa: "مدیریت هوشمند خسارات و دعاوی مالی پیمان", en: "Smart contract losses & financial claims" }, tab: "loss", sql: ["ClaimCostItem", "ClaimCalculationRule", "ClaimCalculationRun"] },
+    { id: "d4-p5-loss", title: { fa: "مدیریت خسارات و دعاوی مالی پیمان", en: "Contract losses & financial claims" }, tab: "loss", sql: ["ClaimCostItem", "ClaimCalculationRule", "ClaimCalculationRun"] },
   ],
 };
 

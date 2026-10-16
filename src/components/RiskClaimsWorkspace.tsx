@@ -363,7 +363,7 @@ function LiveRcc({ lang, projectId, subId, initialTab, hideTabs, userId }: Props
           const warnings = (workspace.overlapWarnings ?? []) as { kind: string; severity: string; messageFa: string }[];
           const nums = (v: unknown) => v === '' || v === undefined ? undefined : Number(v);
           return <section className="glass-dark rounded-xl p-3 space-y-3">
-            <h4 className="tx1 text-sm font-semibold">{label('مدیریت هوشمند خسارات و دعاوی مالی پیمان — مرکز کنترل ضرر و زیان', 'Smart contract losses & financial claims — loss control centre')}</h4>
+            <h4 className="tx1 text-sm font-semibold">{label('مدیریت خسارات و دعاوی مالی پیمان — مرکز کنترل ضرر و زیان', 'Contract losses & financial claims — loss control centre')}</h4>
             <div className="grid grid-cols-2 gap-2 md:grid-cols-5">{[
               [label('مجموع ثبت‌شده (برآورد)', 'Estimated total'), s.totals?.estimated ?? 0],
               [label('مجموع محاسبه‌شده', 'Calculated total'), s.totals?.calculated ?? 0],
