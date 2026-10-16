@@ -252,7 +252,7 @@ export function registerContractRiskRoutes(app, { repo, subjects, evaluate }) {
           delayEvents: delayEvents.map((d) => ({ code: d.Code, titleFa: d.TitleFa, status: d.Status })),
           claims: claims.map((c) => ({ code: c.Code, titleFa: c.SubjectFa ?? c.TitleFa ?? "", status: c.Status, amount: c.ClaimAmount ?? c.EstimatedAmount ?? null, approvedAmount: c.ApprovedAmount ?? null })),
         },
-        generatedAt: new Date().toISOString(), generatedBy: req.cntSubject.id,
+        generatedAt: new Date().toISOString(), generatedBy: req.cntSubject.id, categories: CONTRACT_RISK_CATEGORIES,
         scoringVersionNote: `${config.version}${approved ? " (قاعدهٔ سازمانی مصوب)" : " (روش پیش‌فرض — نیازمند تصویب قاعدهٔ سازمانی)"}`,
       });
       const format = req.query.format === "pdf" ? "pdf" : "word";
