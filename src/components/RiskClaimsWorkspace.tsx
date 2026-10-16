@@ -105,6 +105,9 @@ function LiveRcc({ lang, projectId, subId, initialTab, hideTabs, userId }: Props
   const [ruleForm, setRuleForm] = useState<Record<string, string>>({ Code: '', NameFa: '', Category: 'overhead', Kind: 'rate_qty_period', FormulaFa: '', SourceFa: '', Version: '1.0' });
   const [calcForm, setCalcForm] = useState<Record<string, string>>({ itemId: '', ruleId: '', rate: '', quantity: '', periodUnits: '', baseAmount: '', pct: '', dailyRate: '', days: '', directAmount: '', indirectAmount: '', manualAdjustment: '', manualReason: '' });
   const [allocForm, setAllocForm] = useState<Record<string, string>>({ itemId: '', eventId: '', pct: '', basis: '' });
+  const [assistText, setAssistText] = useState('');
+  const [assistResult, setAssistResult] = useState<{ suggestions: { kind: string; severity: string; messageFa: string }[]; draftDescriptionFa: string; llmNoteFa?: string } | null>(null);
+  const [assistBusy, setAssistBusy] = useState(false);
   const generation = useRef(0);
   const mounted = useRef(true);
   const kind: RccKind = tab === 'issue' ? 'issues' : tab === 'delay' ? 'delays' : ['claim', 'notice', 'dispute'].includes(tab) ? 'claims' : ['change', 'ccb'].includes(tab) ? 'changes' : 'risks';
@@ -391,6 +394,16 @@ function LiveRcc({ lang, projectId, subId, initialTab, hideTabs, userId }: Props
                 <button className={btn} disabled={busy || !allocForm.itemId || !allocForm.eventId || !allocForm.pct} onClick={() => void mutate(`/cost-items/${encodeURIComponent(allocForm.itemId)}/allocations`, 'POST', { DelayEventId: allocForm.eventId, AllocationPct: Number(allocForm.pct), Basis: allocForm.basis })}>{label('ثبت تخصیص', 'Add allocation')}</button>
               </div>}
               {warnings.length > 0 && <div className="space-y-1"><h5 className="tx1 text-xs font-semibold">{label('کنترل هم‌پوشانی (نامزد بررسی کارشناسی، نه حکم قطعی)', 'Overlap control (candidates, not verdicts)')}</h5>{warnings.map((w, i) => <p key={i} className={`rounded-lg p-2 text-xs ${w.severity === 'violation' ? 'bg-rose-500/10 text-rose-400' : 'bg-amber-500/10 text-amber-400'}`}>{w.messageFa}</p>)}</div>}
+              <div className="space-y-2">
+                <h5 className="tx1 text-xs font-semibold">{label('دستیار هوشمند خسارت — پیشنهادها (نیازمند بازبینی کارشناس؛ مبلغ یا استحقاق قطعی تولید نمی‌کند)', 'Loss AI assistant — suggestions (expert review required)')}</h5>
+                <textarea aria-label={label('متن سند برای استخراج', 'Document text for extraction')} className={inputClass} rows={3} placeholder={label('متن سند را برای استخراج مبلغ/تاریخ/شماره صورت‌وضعیت بچسبانید (اختیاری)', 'Paste document text to extract amounts/dates/statement numbers (optional)')} value={assistText} onChange={e => setAssistText(e.target.value)} />
+                <button className={btn} disabled={assistBusy} onClick={async () => { setAssistBusy(true); const res = await jsonRequest<{ suggestions: { kind: string; severity: string; messageFa: string }[]; draftDescriptionFa: string; llmNoteFa?: string }>(`${base}/claims/${encodeURIComponent(selectedClaim.Id)}/loss-assist`, userId, 'POST', { documentText: assistText }); if (res.ok) setAssistResult(res.data); else setLossNotice({ ok: false, text: res.message }); setAssistBusy(false); }}>{assistBusy ? label('در حال بررسی…', 'Analysing…') : label('اجرای دستیار هوشمند', 'Run assistant')}</button>
+                {assistResult && <div className="space-y-1">
+                  {assistResult.llmNoteFa && <p className="tx3 text-[11px]">{assistResult.llmNoteFa}</p>}
+                  {assistResult.suggestions.length ? assistResult.suggestions.map((sg, i) => <p key={i} className={`rounded-lg p-2 text-xs ${sg.severity === 'warning' ? 'bg-amber-500/10 text-amber-400' : 'bg-sky-500/10 text-sky-300'}`}>{sg.messageFa}</p>) : <p className="tx3 text-xs">{label('پیشنهادی ثبت نشد.', 'No suggestions.')}</p>}
+                  <label className="block text-[11px] tx3">{label('پیش‌نویس شرح خسارت (قابل ویرایش)', 'Draft loss description (editable)')}<textarea aria-label={label('پیش‌نویس شرح خسارت', 'Draft loss description')} className={inputClass} rows={4} defaultValue={assistResult.draftDescriptionFa} /></label>
+                </div>}
+              </div>
               <div className="flex flex-wrap items-center gap-2">
                 <span className="tx1 text-xs font-semibold">{label('لایحهٔ ضرر و زیان (پیش‌نویس تا تأیید مسئول)', 'Loss document (draft until approved)')}</span>
                 {(['word', 'pdf'] as const).map(format => <button type="button" key={format} className={btn} disabled={lossBusy !== null} onClick={() => void downloadLoss(selectedClaim.Id, format)}>{lossBusy === format ? label('در حال تولید…', 'Generating…') : format === 'word' ? label('دانلود Word', 'Download Word') : label('دانلود / چاپ PDF', 'Download / print PDF')}</button>)}

@@ -45,6 +45,7 @@
     "build:claimdoc": "esbuild src/services/claimDocument.ts --bundle --outfile=server/claimDocLogic.js --format=esm --platform=node --target=node18",
     "build:claimloss": "esbuild src/services/claimLoss.ts --bundle --outfile=server/claimLossLogic.js --format=esm --platform=node --target=node18",
     "build:lossdoc": "esbuild src/services/claimLossDocument.ts --bundle --outfile=server/claimLossDocLogic.js --format=esm --platform=node --target=node18",
+    "build:lossassist": "esbuild src/services/lossAiAssist.ts --bundle --outfile=server/lossAiLogic.js --format=esm --platform=node --target=node18",
     "build:monitoring": "esbuild src/services/monitoringWorkspace.ts --bundle --outfile=server/monitoringWsLogic.js --format=esm --platform=node --target=node18",
     "build:sxws": "esbuild src/services/strategyExcellenceWorkspace.ts --bundle --outfile=server/sxWsLogic.js --format=esm --platform=node --target=node18",
     "build:cpmws": "esbuild src/services/cpmWorkspace.ts --bundle --outfile=server/cpmWsLogic.js --format=esm --platform=node --target=node18",

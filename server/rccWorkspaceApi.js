@@ -4,6 +4,7 @@ import { calculateCircular1300, calculateCircular5090, analyseDelay } from './de
 import { buildClaimDocument } from './claimDocLogic.js';
 import { evaluateLossRule, evaluatePaymentDelayLoss, detectCostOverlaps, summarizeLossPortfolio, LOSS_CATEGORIES } from './claimLossLogic.js';
 import { buildClaimLossDocument } from './claimLossDocLogic.js';
+import { buildLossSuggestions } from './lossAiLogic.js';
 const locks = new Map();
 async function serial(key, work) {
   const previous = locks.get(key) ?? Promise.resolve();
@@ -539,6 +540,20 @@ export function registerRccWorkspaceRoutes(app, { repo, subjects, evaluate }) {
       return res.send(doc.body);
     } catch (err) { return next(err); }
   });
+  // ── دستیار هوشمند خسارت: پیشنهادهای قاعده‌محور (بدون تولید مبلغ/استحقاق قطعی) ──
+  app.post(base + '/claims/:id/loss-assist', need(['rcc.claim.view', 'rcc.delay.view']), route(async (r, req) => {
+    const claim = await find(r, req, 'Claim');
+    const delayEvents = await r.list('DelayEvent', { where: [...where(req.params.projectId), { column: 'ClaimCode', op: 'eq', value: claim.Code }], limit: 500 });
+    const eventIds = new Set(delayEvents.map(e => e.Id));
+    const costItems = (await r.list('ClaimCostItem', { where: where(req.params.projectId), limit: 5000 }).catch(() => [])).filter(i => eventIds.has(i.DelayEventId) || i.ClaimCode === claim.Code);
+    const runs = (await r.list('ClaimCalculationRun', { where: where(req.params.projectId), limit: 10000 }).catch(() => [])).filter(x => costItems.some(i => i.Id === x.ClaimCostItemId));
+    const allocations = (await r.list('ClaimCostAllocation', { where: where(req.params.projectId), limit: 10000 }).catch(() => [])).filter(a => costItems.some(i => i.Id === a.ClaimCostItemId));
+    const documents = await r.list('Document', { where: where(req.params.projectId), limit: 5000 }).catch(() => []);
+    const documentText = typeof req.body?.documentText === 'string' ? req.body.documentText.slice(0, 20000) : undefined;
+    const result = buildLossSuggestions({ claim, costItems, delayEvents, runs, allocations, documents, documentText });
+    await audit(r, req, 'Claim', claim, 'LOSS_ASSIST');
+    return { ...result, llmNoteFa: 'سرویس زبانی (Claude/OpenAI/DeepSeek) در این استقرار پیکربندی نشده است؛ پیشنهادها از موتور قاعده‌محور برنامه و دادهٔ واقعی پرونده تولید شده‌اند و نیازمند بازبینی کارشناس‌اند.' };
+  }));
   app.post(base + '/deadline-alerts/notify', need(['rcc.claim.view', 'rcc.delay.view']), route(async (r, req) => {
     const withinDays = Math.min(30, Math.max(0, Number(req.body?.withinDays ?? 7) || 0));
     const claims = await r.list('Claim', { where: where(req.params.projectId), limit: 5000 });

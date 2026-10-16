@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { evaluateLossRule, evaluatePaymentDelayLoss, detectCostOverlaps, summarizeLossPortfolio, LOSS_CATEGORIES } from './claimLossLogic.js';
+import { extractFromDocumentText, suggestLossCategory, buildLossSuggestions } from './lossAiLogic.js';
 
 const approvedRule = { Code: 'R-1', NameFa: 'سربار', Category: 'overhead', Kind: 'rate_qty_period', Version: '1.0', Status: 'approved', SourceFa: 'بند قرارداد' };
 
@@ -68,6 +69,34 @@ test('Overlap control: duplicate document, same amount+period, overhead overlap,
   assert.ok(kinds.includes('duplicate_amount_period'));
   assert.ok(kinds.includes('overhead_overlap'));
   assert.ok(kinds.includes('allocation_over_100'));
+});
+
+test('Loss AI assist: extraction finds amounts/dates/statement numbers without inventing values', () => {
+  const x = extractFromDocumentText('صورت وضعیت شماره ۷ به مبلغ 12,500,000,000 ریال در تاریخ 1405/05/10 تسلیم شد و قرارداد C-100 پرداخت گردید.');
+  assert.ok(x.amounts.some(a => a.value === 12500000000));
+  assert.ok(x.dates.includes('1405/05/10'));
+  assert.ok(x.statementNos.includes('7'));
+  assert.equal(extractFromDocumentText('متن بدون عدد').amounts.length, 0);
+});
+
+test('Loss AI assist: category suggestion and completeness/date checks are advisory only', () => {
+  assert.equal(suggestLossCategory('تمدید ضمانت‌نامه انجام تعهدات')?.code, 'guarantee_extension');
+  const out = buildLossSuggestions({
+    claim: { Code: 'C-9', TitleFa: 'پرونده آزمون', Clause: 'ماده ۵۰', Entitlement: '', Causation: '' },
+    costItems: [{ Id: 'i1', TitleFa: 'سربار کارگاه', LossCategory: 'overhead', Basis: '', DocumentRefs: [], PeriodFrom: '2025-12-01', PeriodTo: '2026-03-01', DelayEventId: 'e1', Amount: 10 }],
+    delayEvents: [{ Id: 'e1', Code: 'D-1', StartDate: '2026-01-01', FinishDate: '2026-01-31' }],
+    runs: [], allocations: [], documents: [],
+    documentText: 'مبلغ 5,000 ریال',
+  });
+  assert.equal(out.provider, 'rule');
+  assert.equal(out.llmConnected, false);
+  const kinds = out.suggestions.map(s => s.kind);
+  assert.ok(kinds.includes('missing_document'));
+  assert.ok(kinds.includes('missing_basis'));
+  assert.ok(kinds.includes('date_contradiction'));
+  assert.ok(kinds.includes('extraction'));
+  assert.ok(out.suggestions.every(s => s.needsExpertReview === true));
+  assert.ok(out.draftDescriptionFa.includes('پیش‌نویس'));
 });
 
 test('Portfolio summary keeps estimated/calculated/documented/proposed/approved strictly separate', () => {
