@@ -27,6 +27,7 @@ function Live({ lang, projectId, userId }: { lang: Lang; projectId: string; user
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [engine, setEngine] = useState<EngineState>({ kind: null, text: '' });
+  const [docBusy, setDocBusy] = useState<'word' | 'pdf' | null>(null);
   const [cpmResult, setCpmResult] = useState<{ projectDuration: number; criticalPath: string[]; results: { code: string; duration: number; es: number; ef: number; totalFloat: number; critical: boolean }[] } | null>(null);
   const [mipResult, setMipResult] = useState<{ code: string; family: string; feasibility: string; reasonFa: string }[] | null>(null);
   const [missionForm, setMissionForm] = useState({ TitleFa: '', PurposeFa: '', PeriodFrom: '', PeriodTo: '', AnalysisStandard: 'BOTH', ContractCode: '', ClaimCode: '', DelayEventCode: '' });
@@ -119,6 +120,30 @@ function Live({ lang, projectId, userId }: { lang: Lang; projectId: string; user
     return r;
   });
 
+  async function downloadReport(format: 'word' | 'pdf') {
+    if (!current || docBusy) return;
+    setDocBusy(format); setError(''); setNotice('');
+    try {
+      const response = await fetch(`/api/sched-recon/${encodeURIComponent(projectId)}/missions/${encodeURIComponent(current.Id)}/report?format=${format}`, { headers: { ...(userId ? { 'x-user-id': userId } : {}) } });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null) as { error?: { message?: string } } | null;
+        throw new Error(payload?.error?.message ?? label('تولید گزارش انجام نشد', 'Report generation failed'));
+      }
+      const blob = await response.blob();
+      const disposition = response.headers.get('content-disposition') ?? '';
+      const filename = disposition.match(/filename="([^"]+)"/)?.[1] ?? `SchedRecon-${current.Code}.${format === 'word' ? 'doc' : 'pdf'}`;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = filename; a.click();
+      URL.revokeObjectURL(url);
+      setNotice(format === 'word' ? label('گزارش Word (۱۸ فصل/۵۱ جدول + Auto-Cleanup) دریافت شد.', 'Word report downloaded.') : label('گزارش PDF دریافت شد.', 'PDF report downloaded.'));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : label('خطا در دریافت گزارش', 'Download failed'));
+    } finally {
+      if (mounted.current) setDocBusy(null);
+    }
+  }
+
   if (loading && !catalog) return <p className="tx3 p-4">{label('در حال بارگذاری…', 'Loading…')}</p>;
   if (error && !catalog) return <p role="alert" className="rounded-xl bg-rose-500/10 text-rose-400 p-3 text-sm">{error}</p>;
 
@@ -202,6 +227,9 @@ function Live({ lang, projectId, userId }: { lang: Lang; projectId: string; user
                   {can('sched.recon.approve') && current.Status === 'in_progress' && <button className={btn} disabled={busy} onClick={completeMission}>{label('تکمیل و بستن مأموریت (تأیید)', 'Complete mission (approve)')}</button>}
                   {can('sched.recon.edit') && ['draft', 'in_progress', 'on_hold'].includes(current.Status) && <button className={btn} disabled={busy} onClick={cancelMission}>{label('لغو مأموریت', 'Cancel mission')}</button>}
                   {can('sched.recon.edit') && current.Status === 'draft' && <button className={btn} disabled={busy} onClick={deleteMission}>{label('حذف پیش‌نویس', 'Delete draft')}</button>}
+                  <span className="mx-2 tx3 text-[10px]">|</span>
+                  <button className={btn} disabled={Boolean(docBusy)} onClick={() => void downloadReport('word')}>{docBusy === 'word' ? label('در حال تولید…', 'Generating…') : label('گزارش Word (۱۸ فصل/۵۱ جدول)', 'Word report (18 ch/51 tbl)')}</button>
+                  <button className={btn} disabled={Boolean(docBusy)} onClick={() => void downloadReport('pdf')}>{docBusy === 'pdf' ? label('در حال تولید…', 'Generating…') : label('گزارش / چاپ PDF', 'PDF report / print')}</button>
                 </div>
               </section>
 

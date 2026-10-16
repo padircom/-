@@ -36,6 +36,7 @@ import {
   computeCriticalPath,
   assessMipFeasibility,
 } from "./schedReconLogic.js";
+import { buildSchedReconReport } from "./schedReconDocLogic.js";
 
 const locks = new Map();
 async function serial(key, work) {
@@ -215,6 +216,33 @@ export function registerSchedReconRoutes(app, { repo, subjects, evaluate }) {
     await r.remove("PmisSchedReconMissions", row.Id);
     return { deleted: true, code: row.Code };
   }));
+
+  /* ── گزارش کارشناسی ۱۸ فصل/۵۱ جدول (Word با Auto-Cleanup، یا PDF واقعی) ── */
+  app.get(base + "/missions/:id/report", need("sched.recon.view"), async (req, res, next) => {
+    try {
+      const r = await repo();
+      const mission = await r.findOne("PmisSchedReconMissions", [...where(req.params.projectId), { column: "Id", op: "eq", value: req.params.id }]);
+      if (!mission) return res.status(404).json({ ok: false, error: { code: "SCHED_NOT_FOUND", message: "مأموریت در این پروژه یافت نشد", traceId: req.requestId } });
+      const format = req.query.format === "pdf" ? "pdf" : "word";
+      const children = {};
+      for (const t of SCHED_RECON_CHILD_TABLES) {
+        children[t] = await r.list(t, { where: [...where(req.params.projectId), { column: "MissionCode", op: "eq", value: mission.Code }], limit: 5000 }).catch(() => []);
+      }
+      const doc = buildSchedReconReport({ projectId: req.params.projectId, mission, children, format, generatedAt: new Date().toISOString(), generatedBy: req.schedSubject.id });
+      if (doc.issues.length) return res.status(422).json({ ok: false, error: { code: "SCHED_REPORT_GATE", message: doc.issues.join("؛ "), traceId: req.requestId } });
+      if (format === "pdf") {
+        let pdf;
+        try { const { htmlToPdf } = await import("./pdfRenderer.js"); pdf = await htmlToPdf(doc.body); }
+        catch { return res.status(501).json({ ok: false, error: { code: "SCHED_PDF_UNAVAILABLE", message: "موتور تولید PDF واقعی روی این سرور در دسترس نیست؛ خروجی Word در دسترس است", traceId: req.requestId } }); }
+        res.setHeader("content-type", "application/pdf");
+        res.setHeader("content-disposition", `attachment; filename="${doc.filename.replace(/\.html$/, ".pdf")}"`);
+        return res.send(pdf);
+      }
+      res.setHeader("content-type", doc.contentType);
+      res.setHeader("content-disposition", `attachment; filename="${doc.filename}"`);
+      return res.send(doc.body);
+    } catch (err) { return next(err); }
+  });
 
   /* ── اجرای موتورهای کارشناسی روی مأموریت (خروجی پیش‌نویس محاسباتی) ── */
 

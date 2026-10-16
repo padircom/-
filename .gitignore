@@ -20,6 +20,7 @@ server/ckmLogic.js
 server/rptLogic.js
 server/rbacLogic.js
 server/schedReconLogic.js
+server/schedReconDocLogic.js
 server/sqlLogic.js
 # موتور برنامه‌ریزی فاز ۵ تولید (بازتولید: npm run build:mfgplan)
 server/mfgPlanLogic.js
