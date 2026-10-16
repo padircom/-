@@ -151,8 +151,10 @@ const D4_PAGE_SUBS: Record<string, { id: string; title: Bi; tab: D4Tab; sql: str
      همان تب delay را باز می‌کند و هر سه موتور ۵۰۹۰، ۱۳۰۰ و زمان‌بندی در آن
      صفحه هست؛ ردیف «تحلیل تأخیر ۵۰۹۰» دقیقاً همان صفحه را باز می‌کرد و
      فقط عنوان محدودتری داشت، پس حذف شد. */
+  /* ردیف «دروازه Baseline+DataDate» (d4-p5-gate) حذف شد: دقیقاً همان تب
+     claim «بسته ادعا» (d4-p5-s1) را باز می‌کرد و کنترل Baseline/DataDate
+     داخل نهایی‌سازی همان بسته انجام می‌شود؛ صفحهٔ جدایی نداشت. */
   "d4-p5": [
-    { id: "d4-p5-gate", title: { fa: "دروازه Baseline+DataDate", en: "BL + DataDate gate" }, tab: "claim", sql: ["Claim_Register"] },
     { id: "d4-p5-ntc", title: { fa: "Notice و نگهبان Time-Bar", en: "Notice + Time-Bar" }, tab: "notice", sql: ["Claim_Notice"] },
     { id: "d4-p5-dsp", title: { fa: "مذاکره و اختلاف", en: "Negotiation & dispute" }, tab: "dispute", sql: ["Claim_Settlement"] },
     { id: "d4-p5-exe", title: { fa: "گراف EXEC", en: "EXEC graph" }, tab: "exec", sql: ["Trace_Link"] },
@@ -171,7 +173,6 @@ const D4_TAB_BY_SUB: Record<string, D4Tab> = {
   "d4-p3-ccb": "ccb",
   "d4-p4-s1": "delay",
   "d4-p5-s1": "claim",
-  "d4-p5-gate": "claim",
   "d4-p5-ntc": "notice",
   "d4-p5-dsp": "dispute",
   "d4-p5-exe": "exec",
