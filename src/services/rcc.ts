@@ -65,19 +65,6 @@ export function guardianTick(notices: Notice[], now = new Date()): GuardEvent[] 
   return out;
 }
 
-export function seedNotices(): Notice[] {
-  const t = Date.now();
-  const iso = (offset: number) => {
-    const d = new Date(t + offset * 86400000);
-    return d.toISOString().slice(0, 10);
-  };
-  return [
-    { id: "n1", claimId: "CLM-01", title: "EOT Long Lead", clause: "FIDIC 20.1 / Art.29", dueAt: iso(12), bodyFa: "پیش‌نویس اولیه" },
-    { id: "n2", claimId: "CLM-02", title: "Access delay", clause: "Art.30", dueAt: iso(2) },
-    { id: "n3", claimId: "CLM-03", title: "Weather window", clause: "Particular", dueAt: iso(-1) },
-  ];
-}
-
 export function depletionAlert(progressPct: number, opening: number, balance: number) {
   if (opening <= 0) return false;
   const usedPct = (1 - balance / opening) * 100;

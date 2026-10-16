@@ -36,6 +36,7 @@ import * as jalaaliNs from "jalaali-js";
 import nodemailer from "nodemailer";
 import { createWorker } from "tesseract.js";
 import { registerRccWorkspaceRoutes } from "./rccWorkspaceApi.js";
+import { registerContractRiskRoutes } from "./contractRiskApi.js";
 import { registerDprDocRoutes } from "./dprDocApi.js";
 import { registerDprTablesRoutes } from "./dprTablesApi.js";
 import { registerFinWorkspaceRoutes } from "./finWorkspaceApi.js";
@@ -611,6 +612,22 @@ const DEDICATED_TABLE_ROUTES = {
   Risk: "/api/rcc/:projectId/risks",
   ChangeRequest: "/api/rcc/:projectId/changes",
   Claim: "/api/rcc/:projectId/claims",
+  RccIssue: "/api/rcc/:projectId/issues",
+  DelayEvent: "/api/rcc/:projectId/delays",
+  DelayCalculation: "/api/rcc/:projectId/delay-calculations/:id/approve",
+  ClaimCostItem: "/api/rcc/:projectId/cost-items",
+  ClaimCalculationRule: "/api/rcc/:projectId/loss-rules",
+  ClaimCalculationRun: "/api/rcc/:projectId/cost-items/:id/calculate",
+  ClaimCostAllocation: "/api/rcc/:projectId/cost-items/:id/allocations",
+  ClaimDocumentVersion: "/api/rcc/:projectId/claims/:id/loss-document",
+  /* PMO-CONTRACT-RISK-ENGINE-V1.0: ریسک قراردادی فقط از مسیر اختصاصی خودش. */
+  ContractRiskRegister: "/api/cnt-risk/:projectId/risks",
+  ContractRiskAssessment: "/api/cnt-risk/:projectId/risks/:id/reassess",
+  ContractRiskScoringRule: "/api/cnt-risk/:projectId/scoring-rules",
+  ContractClauseFinding: "/api/cnt-risk/:projectId/analyze",
+  ContractObligation: "/api/cnt-risk/:projectId/obligations",
+  ContractImprovement: "/api/cnt-risk/:projectId/improvements",
+  ContractRiskAction: "/api/cnt-risk/:projectId/actions",
   Correspondence: "/api/ckm/:projectId/letters",
   MeetingMinute: "/api/ckm/:projectId/meetings",
   MeetingAction: "/api/ckm/:projectId/meetings/:code/actions",
@@ -960,6 +977,7 @@ registerScmWorkspaceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: r
 registerHrmWorkspaceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
 registerEdmsWorkspaceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
 registerRccWorkspaceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
+registerContractRiskRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
 registerEqmWorkspaceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
 registerMonitoringWorkspaceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
 registerStrategyExcellenceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
@@ -1372,6 +1390,88 @@ app.post("/api/health", async (req, res) => {
   } catch (err) {
     res.status(500).json({ ok: false, error: { code: "DB_TEST_FAILED", message: err.message, traceId: req.requestId } });
   }
+});
+
+/* دانلود خروجی کارگاه قرارداد.
+ * فایل ابتدا با یک نشانی یک‌بارمصرف و کوتاه‌عمر روی سرور نگه داشته
+ * می‌شود؛ سپس مرورگر آن را مستقیماً از سرور و با Content-Disposition
+ * می‌گیرد. دانلود Blob در قاب پیش‌نمایش ممکن است بی‌صدا مسدود شود. */
+const contractExportDownloads = new Map();
+const CONTRACT_EXPORT_TTL_MS = 60 * 1000;
+
+app.post("/api/contract-workshop/export-download", (req, res) => {
+  try {
+    const now = Date.now();
+    for (const [token, item] of contractExportDownloads) {
+      if (item.expiresAt <= now) contractExportDownloads.delete(token);
+    }
+
+    const format = String(req.body?.format || "").toLowerCase();
+    const requestedName = String(req.body?.fileName || "contract-wbs-export")
+      .replace(/[\\/:*?"<>|\u0000-\u001f]/g, "_")
+      .slice(0, 180);
+    let buffer;
+    let contentType;
+
+    if (format === "excel") {
+      const rows = req.body?.rows;
+      if (!Array.isArray(rows) || rows.length === 0 || rows.length > 2000 || rows.some((row) => !Array.isArray(row) || row.length > 50)) {
+        return res.status(400).json({ ok: false, error: { code: "E-EXPORT-ROWS", message: "Excel rows are invalid.", traceId: req.requestId } });
+      }
+      const safeRows = rows.map((row) => row.map((cell) => (
+        typeof cell === "number" && Number.isFinite(cell) ? cell : cell == null ? "" : String(cell).slice(0, 1000)
+      )));
+      const worksheet = XLSX.utils.aoa_to_sheet(safeRows);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "WBS");
+      buffer = XLSX.write(workbook, { bookType: "xlsx", type: "buffer" });
+      contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+    } else if (format === "xer" || format === "xml") {
+      const text = typeof req.body?.text === "string" ? req.body.text : "";
+      if (!text || text.length > 10 * 1024 * 1024) {
+        return res.status(400).json({ ok: false, error: { code: "E-EXPORT-TEXT", message: "Export text is invalid.", traceId: req.requestId } });
+      }
+      buffer = Buffer.from(text, "utf8");
+      contentType = format === "xer" ? "text/plain; charset=utf-8" : "application/xml; charset=utf-8";
+    } else {
+      return res.status(400).json({ ok: false, error: { code: "E-EXPORT-FORMAT", message: "Export format is not supported.", traceId: req.requestId } });
+    }
+
+    const token = crypto.randomUUID();
+    contractExportDownloads.set(token, {
+      buffer,
+      contentType,
+      fileName: requestedName,
+      expiresAt: now + CONTRACT_EXPORT_TTL_MS,
+    });
+
+    return res.json({
+      ok: true,
+      data: {
+        downloadUrl: `/api/contract-workshop/export-download/${token}`,
+        fileName: requestedName,
+        expiresInSeconds: CONTRACT_EXPORT_TTL_MS / 1000,
+      },
+      meta: { traceId: req.requestId, timestamp: new Date().toISOString() },
+    });
+  } catch (error) {
+    return res.status(500).json({ ok: false, error: { code: "E-EXPORT-CREATE", message: error.message, traceId: req.requestId } });
+  }
+});
+
+app.get("/api/contract-workshop/export-download/:token", (req, res) => {
+  const item = contractExportDownloads.get(req.params.token);
+  contractExportDownloads.delete(req.params.token);
+  if (!item || item.expiresAt <= Date.now()) {
+    return res.status(404).json({ ok: false, error: { code: "E-EXPORT-EXPIRED", message: "Download link has expired.", traceId: req.requestId } });
+  }
+
+  const asciiName = item.fileName.replace(/[^\x20-\x7e]/g, "_").replace(/"/g, "_") || "contract-wbs-export";
+  res.setHeader("Content-Type", item.contentType);
+  res.setHeader("Content-Length", item.buffer.length);
+  res.setHeader("Content-Disposition", `attachment; filename="${asciiName}"; filename*=UTF-8''${encodeURIComponent(item.fileName)}`);
+  res.setHeader("Cache-Control", "no-store");
+  return res.send(item.buffer);
 });
 
 app.get("/api/diagnostics/readiness", async (req, res) => {

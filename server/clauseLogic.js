@@ -436,6 +436,19 @@ var PATTERNS = [
     depthOf: (no) => no.split(".").length
   },
   {
+    /* زیربند حرفی پرانتزی: «(الف) ...» — سطح چهارم ساختار فارسی. */
+    style: "letter_item",
+    re: /^[ \t]*[（(](?<no>الف|[ب-ی]{1,2})[)][ \t]+/,
+    depthOf: () => 4
+  },
+  {
+    /* زیربند پرانتزی داخل بند: «(۱) ...» — سطح سوم ساختار فارسی.
+     * پیش از clause_en می‌آید تا «۱)» سرِخط، بند سطح‌یک شمرده نشود. */
+    style: "sub_item",
+    re: /^[ \t]*[（(](?<no>\d{1,2})[)][ \t]+/,
+    depthOf: () => 3
+  },
+  {
     style: "clause_en",
     /* عدد تنها در ابتدای خط: «7. Payment» — پرخطرترین الگو، آخر می‌آید */
     re: /^[ \t]*(?<no>\d{1,2})[.)][ \t]+(?=[^\d])/,
@@ -543,6 +556,8 @@ function parseClauses(rawText) {
   }
   const clauses = [];
   const seen = /* @__PURE__ */ new Set();
+  const depthByNo = /* @__PURE__ */ new Map();
+  let lastDepth2 = null;
   const numberedSoFar = /* @__PURE__ */ new Set();
   let lastAny = null;
   let lastTopLevel = null;
@@ -561,6 +576,10 @@ function parseClauses(rawText) {
     let parent = parentOf(no);
     if (a.head.style === "note") {
       parent = lastAny;
+    } else if (a.head.style === "sub_item") {
+      parent = lastDepth2 ?? lastAny;
+    } else if (a.head.style === "letter_item") {
+      parent = lastAny;
     } else if (a.head.style === "step_code") {
       parent = lastSection;
     } else if (parent) {
@@ -574,7 +593,13 @@ function parseClauses(rawText) {
     }
     if (a.head.style !== "step_code" && a.head.style !== "note") lastSection = no;
     numberedSoFar.add(no);
-    const depth = a.head.style === "note" ? 2 : a.head.depth;
+    const MAX_CLAUSE_DEPTH = 8;
+    const depth = Math.min(
+      MAX_CLAUSE_DEPTH,
+      a.head.style === "note" ? (parent ? depthByNo.get(parent) ?? 1 : 1) + 1 : a.head.depth
+    );
+    depthByNo.set(no, depth);
+    if (depth === 2) lastDepth2 = no;
     clauses.push({
       clauseNo: no,
       parentClauseNo: parent,

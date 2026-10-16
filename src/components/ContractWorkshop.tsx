@@ -136,6 +136,7 @@ export default function ContractWorkshop({ lang, projectCode = "PRJ", projectTit
   const secret = settings.aiApiKey;
   const [templateId] = useState<string>(seed.templateId);
   const [exportOpen, setExportOpen] = useState(false);
+  const [exportId, setExportId] = useState("pdf");
   const [templateOpen, setTemplateOpen] = useState(false);
   const exportAnchor = useRef<HTMLButtonElement>(null);
   const templateAnchor = useRef<HTMLButtonElement>(null);
@@ -231,6 +232,7 @@ export default function ContractWorkshop({ lang, projectCode = "PRJ", projectTit
     if (ext === "txt") {
       const text = await f.text();
       setRawText(text);
+      runExtract(text);
       setNote({ kind: "ok", text: rtl ? "متن خوانده شد." : "Text loaded." });
       return;
     }
@@ -247,6 +249,7 @@ export default function ContractWorkshop({ lang, projectCode = "PRJ", projectTit
       const archiveWarn = json?.data?.archiveErrorFa as string | undefined;
       if (text) {
         setRawText(text);
+        runExtract(text);
         setNote({
           kind: archiveWarn ? "warn" : "ok",
           text: archiveWarn
@@ -361,8 +364,8 @@ export default function ContractWorkshop({ lang, projectCode = "PRJ", projectTit
 
   /* ══════════ استخراج WBS ══════════ */
 
-  const onExtract = () => {
-    const source = rawText.trim();
+  const runExtract = (sourceText: string) => {
+    const source = sourceText.trim();
     if (!source) {
       setNote({ kind: "err", text: rtl ? "متنی برای استخراج نیست." : "Nothing to extract." });
       return;
@@ -417,6 +420,90 @@ export default function ContractWorkshop({ lang, projectCode = "PRJ", projectTit
     });
   };
 
+  const onExtract = () => runExtract(rawText);
+
+  /* خروجی JSON مدل را به گره‌های WBS تبدیل می‌کند؛ عمق از زنجیرهٔ والد
+   * حساب می‌شود (تا ۸). هر خروجی ناقص/نامعتبر null برمی‌گرداند تا
+   * کف قاعده‌محور بی‌صدا جای آن بنشیند. */
+  const parseAiNodes = (out: string): ExportNode[] | null => {
+    try {
+      const start = out.indexOf("[");
+      const end = out.lastIndexOf("]");
+      if (start < 0 || end <= start) return null;
+      const arr = JSON.parse(out.slice(start, end + 1)) as Record<string, unknown>[];
+      if (!Array.isArray(arr) || !arr.length) return null;
+      const byCode = new Map<string, Record<string, unknown>>();
+      for (const n of arr) if (n && typeof n.code === "string") byCode.set(n.code, n);
+      const depthOf = (code: string, guard = 0): number => {
+        const n = byCode.get(code);
+        const p = n && typeof n.parentCode === "string" ? n.parentCode : null;
+        if (!p || !byCode.has(p) || guard > 8) return 1;
+        return Math.min(8, depthOf(p, guard + 1) + 1);
+      };
+      return arr
+        .filter((n) => n && typeof n.code === "string")
+        .map((n) => ({
+          code: String(n.code),
+          parentCode: typeof n.parentCode === "string" && byCode.has(n.parentCode) ? n.parentCode : null,
+          titleFa: typeof n.titleFa === "string" ? n.titleFa : String(n.code),
+          titleEn: typeof n.titleEn === "string" ? n.titleEn : undefined,
+          depth: depthOf(String(n.code)),
+          weightFactor: typeof n.weightPct === "number" ? n.weightPct : null,
+          weightValue: null,
+          amount: null,
+          sourceRefFa: typeof n.sourceRef === "string" ? n.sourceRef : null,
+          actualPct: null,
+          plannedPct: null,
+        }));
+    } catch {
+      return null;
+    }
+  };
+
+  /* استخراج اصلی: اگر ارائه‌دهندهٔ AI و کلید تنظیم شده باشد، ساختار از
+   * مدل ساخته می‌شود (همان کاری که کاربر از Claude می‌گیرد)؛ وگرنه
+   * موتور قاعده‌محور. نتیجه صریح می‌گوید کدام موتور ساخته است. */
+  const onExtractWbs = async () => {
+    const source = rawText.trim();
+    if (!source) {
+      setNote({ kind: "err", text: rtl ? "متنی برای استخراج نیست." : "Nothing to extract." });
+      return;
+    }
+    if (provider === "mock" || provider === "rule" || !secret.trim()) {
+      runExtract(source);
+      setNote({
+        kind: "warn",
+        text: rtl
+          ? "ساختار با موتور قاعده‌محور ساخته شد. برای ساختار هوشمند شبیه Claude، ارائه‌دهنده و کلید AI را در «مدیریت سامانه ← هوش مصنوعی و یکپارچگی» تنظیم کنید."
+          : "Built with the rule engine. For Claude-like AI structure, configure an AI provider and key under System Management → AI & Integrations.",
+      });
+      return;
+    }
+    setBusy("wbs");
+    setNote(null);
+    try {
+      const res = await fetch("/api/ai/run", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-ai-key": secret },
+        body: JSON.stringify({ prompt: "wbs", context: { provider, templateId, text: source.slice(0, 24000) } }),
+      });
+      const json = await res.json().catch(() => null);
+      const aiNodes = typeof json?.data?.translated === "string" ? parseAiNodes(json.data.translated) : null;
+      if (aiNodes?.length) {
+        setNodes(aiNodes);
+        setNote({ kind: "ok", text: rtl ? `${aiNodes.length} گره با هوش مصنوعی از متن قرارداد ساخته شد.` : `${aiNodes.length} nodes built by AI from the contract text.` });
+      } else {
+        runExtract(source);
+        setNote({ kind: "warn", text: rtl ? "پاسخ AI قابل استفاده نبود؛ ساختار با موتور قاعده‌محور ساخته شد." : "AI response unusable; built with the rule engine instead." });
+      }
+    } catch {
+      runExtract(source);
+      setNote({ kind: "warn", text: rtl ? "اتصال به AI برقرار نشد؛ ساختار با موتور قاعده‌محور ساخته شد." : "AI unreachable; built with the rule engine instead." });
+    } finally {
+      setBusy(null);
+    }
+  };
+
   /* ══════════ خروجی ══════════ */
 
   const showExcel = () => {
@@ -449,6 +536,53 @@ export default function ContractWorkshop({ lang, projectCode = "PRJ", projectTit
       head: [rtl ? "کد" : "Code", rtl ? "شرح" : "Description", rtl ? "سطح" : "Level", rtl ? "مرجع" : "Source"],
       body: nodes.map((n) => [n.code, n.titleFa, n.depth, n.sourceRefFa ?? null]),
     });
+  };
+
+  /* ── دانلود واقعی از سرور: انتخاب قالب جدا، اجرا جدا ── */
+  const runExportDownload = async () => {
+    if (!nodes.length) return setNote({ kind: "err", text: rtl ? "ابتدا ساختار را بسازید." : "Build the structure first." });
+    try {
+      if (exportId === "pdf") { window.print(); return; }
+
+      const payload = exportId === "excel"
+        ? {
+            format: "excel",
+            fileName: exportFileName(letterhead, "wbs", "xlsx"),
+            rows: buildSheet("wbs", nodes, letterhead, [], lang).rows,
+          }
+        : exportId === "xer"
+          ? {
+              format: "xer",
+              fileName: exportFileName(letterhead, "wbs", "xer"),
+              text: buildXer(nodes, letterhead),
+            }
+          : {
+              format: "xml",
+              fileName: exportFileName(letterhead, "wbs", "xml"),
+              text: buildMspXml(nodes, letterhead),
+            };
+
+      const res = await fetch("/api/contract-workshop/export-download", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const json = await res.json().catch(() => null);
+      const downloadUrl = typeof json?.data?.downloadUrl === "string" ? json.data.downloadUrl : "";
+      if (!res.ok || !downloadUrl) throw new Error("Export download was not created.");
+
+      const a = document.createElement("a");
+      a.href = downloadUrl;
+      a.target = "_blank";
+      a.rel = "noopener";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+
+      setNote({ kind: "ok", text: rtl ? `دانلود خروجی «${rtl ? selectedFormat.fa : selectedFormat.en}» آغاز شد.` : "Export download started." });
+    } catch {
+      setNote({ kind: "err", text: rtl ? "ساخت فایل خروجی ناموفق بود." : "Export failed." });
+    }
   };
 
   /* ══════════ نوار فرمان ══════════ */
@@ -542,6 +676,7 @@ export default function ContractWorkshop({ lang, projectCode = "PRJ", projectTit
     { id: "msp", fa: "ام‌اس پراجکت", en: "MS Project", ext: ".xml", icon: "▣", run: () => showText("xml") },
     { id: "xml", fa: "ایکس‌ام‌ال خام", en: "Raw XML", ext: ".xml", icon: "⇗", run: () => showText("xml") },
   ];
+  const selectedFormat = EXPORT_FORMATS.find((f) => f.id === exportId) ?? EXPORT_FORMATS[1];
 
   /* ══════════ واردات ══════════ */
 
@@ -581,6 +716,24 @@ export default function ContractWorkshop({ lang, projectCode = "PRJ", projectTit
 
   return (
     <div dir={rtl ? "rtl" : "ltr"} className="fade-rise space-y-2">
+      <style>{`
+        .contract-print-only { display: none; }
+        @page { size: A4 portrait; margin: 6mm; }
+        @media print {
+          html, body { margin: 0 !important; padding: 0 !important; background: #fff !important; }
+          body * { visibility: hidden !important; }
+          #contract-wbs-print-root, #contract-wbs-print-root * { visibility: visible !important; }
+          #contract-wbs-print-root {
+            position: fixed !important; inset: 0 auto auto 0 !important; box-sizing: border-box !important;
+            width: 198mm !important; margin: 0 !important; box-shadow: none !important; background: #fff !important;
+            print-color-adjust: exact !important; -webkit-print-color-adjust: exact !important;
+          }
+          #contract-wbs-print-root .thin-scroll { max-height: none !important; overflow: visible !important; }
+          #contract-wbs-print-root thead { position: static !important; }
+          .contract-print-only { display: block !important; }
+          .contract-no-print { display: none !important; }
+        }
+      `}</style>
       {/* ترتیب کار: آماده‌سازی قرارداد و ساختار شکست، سپس دریافت برنامه.
           واردات فایل برنامه مستقلاً مجاز است؛ گام دوم را قفل نمی‌کنیم. */}
       <nav aria-label={rtl ? "مراحل کارگاه برنامه‌ریزی" : "Planning workshop steps"} className="flex items-stretch gap-2">
@@ -600,148 +753,96 @@ export default function ContractWorkshop({ lang, projectCode = "PRJ", projectTit
       </nav>
 
       {/* ابزارهای قرارداد فقط در گام اول نشان داده می‌شوند. */}
-      {step === "contract" && <div className="glass-dark flex flex-wrap items-center gap-2 rounded-2xl p-2.5 text-[9.5px]">
+      {step === "contract" && <div className="glass-dark flex flex-nowrap items-center gap-1.5 rounded-2xl p-2 text-[9px]">
         <button
           onClick={() => fileRef.current?.click()}
-          className="rounded-xl border px-2.5 py-1.5 tx1 transition hover:-translate-y-px"
+          className="shrink-0 whitespace-nowrap rounded-lg border px-2 py-1 tx1 transition hover:-translate-y-px"
           style={{ borderColor: "rgba(245,197,110,.5)", background: "rgba(245,197,110,.1)" }}
         >
           📄 {rtl ? "بارگذاری مدارک قراردادی" : "Upload contract"}
         </button>
         <input ref={fileRef} type="file" accept=".pdf,.docx,.txt" hidden onChange={(e) => onPickFile(e.target.files?.[0] ?? null)} />
-        {fileInfo.hasFile && <span className="flex min-w-0 items-center gap-1.5 rounded-lg border b-line-soft px-2 py-1 text-[9px] tx2">
-          <span className="max-w-[170px] truncate" title={fileName}>✓ {fileName}</span>
-          <span className="tx4">{fileInfo.sizeLabel}</span>
-          <button type="button" onClick={onClearFile} title={rtl ? "حذف فایل و ساختار" : "Remove file and structure"} className="rounded px-1 text-rose-300 hover:text-rose-200">✕</button>
+        {fileInfo.hasFile && <span className="flex min-w-[96px] flex-[0_1_168px] items-center gap-1 rounded-lg border b-line-soft px-1.5 py-1 text-[8.5px] tx2">
+          <span className="min-w-0 flex-1 truncate" title={fileName}>✓ {fileName}</span>
+          <span className="shrink-0 tx4">{fileInfo.sizeLabel}</span>
+          <button type="button" onClick={onClearFile} title={rtl ? "حذف فایل و ساختار" : "Remove file and structure"} className="shrink-0 rounded px-0.5 text-rose-300 hover:text-rose-200">✕</button>
         </span>}
 
-        <div className="mx-1 h-5 w-px" style={{ background: "var(--line)" }} />
+        <div className="h-5 w-px shrink-0" style={{ background: "var(--line)" }} />
 
         {/* پیش از این یک برچسب بی‌کار بود که هیچ کاری نمی‌کرد.
           * دکمه‌ای که کلیک می‌شود و هیچ اتفاقی نمی‌افتد بدتر از نبودنش
           * است، پس به همان کار واقعی این صفحه وصل شد. */}
         <button
-          onClick={onExtract}
+          onClick={() => void onExtractWbs()}
           /* فقط وقتی خودِ استخراج در جریان است غیرفعال می‌شود.
            * پیش از این هر کار دیگری (ترجمه، بارگذاری) دکمه را خاموش
            * می‌کرد و اگر آن کار در میانه رها می‌شد، دکمه خاموش
            * می‌ماند. */
           disabled={busy === "wbs"}
-          className="rounded-xl border px-2.5 py-1.5 tx1 transition hover:-translate-y-px disabled:opacity-50"
+          className="shrink-0 whitespace-nowrap rounded-lg border px-2 py-1 tx1 transition hover:-translate-y-px disabled:opacity-50"
           style={{ borderColor: "rgba(216,180,254,.5)", background: "rgba(216,180,254,.1)" }}
         >
           ✨ {rtl ? "استخراج WBS با AI" : "Extract WBS with AI"}
         </button>
 
-        <div className="mx-1 h-5 w-px" style={{ background: "var(--line)" }} />
-
-        {/* خروجی‌ها در یک کشو.
-          *
-          * پنج دکمهٔ کنار هم نیمی از نوار ابزار را می‌گرفتند، در حالی
-          * که کاربر هر بار فقط یکی را می‌خواهد. ضمناً دو دکمه (XML و
-          * MS Project) عملاً یک کار می‌کردند؛ در فهرست، هر قالب یک
-          * ردیف با توضیح خودش دارد و آن هم‌پوشانی دیده می‌شود. */}
-        <span className="tx3">{rtl ? "خروجی:" : "Export:"}</span>
-        <div className="relative">
+        {/* خروجی‌ها در یک خوشهٔ مستقل و یکپارچه می‌مانند تا هنگام
+          * کمبود عرض، کل خوشه با هم جابه‌جا شود و «پیش‌نمایش» تنها
+          * در ردیف بعد نیفتد. */}
+        <div className="ms-auto flex min-w-[278px] flex-[0_1_348px] flex-nowrap items-center gap-1 rounded-xl border b-line-soft bg-[var(--row)] p-1" aria-label={rtl ? "خروجی ساختار شکست" : "Breakdown export"}>
+        <span className="shrink-0 px-0.5 tx3">{rtl ? "خروجی:" : "Export:"}</span>
+        <div className="relative min-w-[104px] flex-1">
           <button
             ref={exportAnchor}
             onClick={() => { setTemplateOpen(false); setExportOpen((v) => !v); }}
-            className="connect-btn flex items-center gap-1.5 rounded-lg px-2.5 py-1"
+            aria-expanded={exportOpen}
+            className="flex w-full items-center gap-1 rounded-lg border border-sky-400/40 bg-sky-400/10 px-1.5 py-1 text-start transition hover:bg-sky-400/15"
             title={rtl ? "انتخاب قالب خروجی" : "Choose an export format"}
           >
-            <span>{rtl ? "انتخاب قالب" : "Choose format"}</span>
-            <span className="text-[8px] tx4">{exportOpen ? "▲" : "▼"}</span>
+            <span className="shrink-0 text-[11px]">{selectedFormat.icon}</span>
+            <span className="min-w-0 flex-1 truncate text-[9.5px] font-medium tx1">{rtl ? selectedFormat.fa : selectedFormat.en}</span>
+            <span className="shrink-0 rounded border b-line-soft px-1 py-px font-mono text-[7.5px] tx3" dir="ltr">{selectedFormat.ext}</span>
+            <span className="shrink-0 text-[7px] tx4">{exportOpen ? "▲" : "▼"}</span>
           </button>
 
           {exportOpen && (
-            <WorkshopMenu anchor={exportAnchor} width={280} rtl={rtl} onClose={() => setExportOpen(false)}>
-                {EXPORT_FORMATS.map((f) => (
-                  <button
-                    key={f.id}
-                    onClick={() => { setExportOpen(false); f.run(); }}
-                    className="flex w-full items-center gap-2 rounded-lg border b-line-soft bg-[var(--bg-c)] px-3 py-2.5 text-start text-[12px] font-medium text-[var(--ink)] transition hover:bg-[var(--row-hover)]"
-                  >
-                    <span className="w-4 text-center">{f.icon}</span>
-                    <span className="flex-1 text-[var(--ink)]">{rtl ? f.fa : f.en}</span>
-                    <span className="font-mono text-[10px] text-[var(--ink2)]" dir="ltr">{f.ext}</span>
-                  </button>
-                ))}
+            <WorkshopMenu anchor={exportAnchor} width={240} rtl={rtl} onClose={() => setExportOpen(false)}>
+                {EXPORT_FORMATS.map((f) => {
+                  const active = f.id === exportId;
+                  return (
+                    <button
+                      key={f.id}
+                      onClick={() => { setExportId(f.id); setExportOpen(false); }}
+                      aria-pressed={active}
+                      className={`flex w-full items-center gap-1.5 rounded-lg border px-2.5 py-2 text-start transition ${active ? "border-sky-400/60 bg-sky-400/12" : "b-line-soft bg-[var(--bg-c)] hover:bg-[var(--row-hover)]"}`}
+                    >
+                      <span className="w-4 shrink-0 text-center text-[13px]">{f.icon}</span>
+                      <span className="min-w-0 flex-1 truncate text-[11px] font-medium text-[var(--ink)]">{rtl ? f.fa : f.en}</span>
+                      <span className="rounded border b-line-soft px-1 py-0.5 font-mono text-[9px] text-[var(--ink2)]" dir="ltr">{f.ext}</span>
+                      {active && <span className="text-[11px] text-sky-300">✓</span>}
+                    </button>
+                  );
+                })}
             </WorkshopMenu>
           )}
         </div>
-
-        <div className="mx-1 h-5 w-px" style={{ background: "var(--line)" }} />
-
-        {/* دو دکمهٔ قالب در یک کشو.
-          *
-          * این دو گزینه‌های یک انتخاب‌اند نه دو فرمان جدا، پس کنار هم
-          * بودنشان القا می‌کرد که دو کار متفاوت انجام می‌دهند. در کشو،
-          * قالب فعال روی خود دکمه دیده می‌شود و توضیح هر گزینه هم جا
-          * می‌گیرد — به‌ویژه قفل بودن ستون‌های قالب ابلاغی که پیش از
-          * این فقط در tooltip بود. */}
-        <div className="relative">
-          <button
-            ref={templateAnchor}
-            onClick={() => { setExportOpen(false); setTemplateOpen((v) => !v); }}
-            className="connect-btn flex items-center gap-1.5 rounded-lg px-2.5 py-1"
-            title={rtl ? "انتخاب قالب ورود اطلاعات" : "Choose the import template"}
-          >
-            <span>⇧ {rtl ? "ورود به قالب" : "Import template"}</span>
-            <span className="tx2">
-              {rtl
-                ? (templateKind === "internal" ? "داخلی" : "ابلاغی")
-                : (templateKind === "internal" ? "internal" : "client")}
-            </span>
-            <span className="text-[8px] tx4">{templateOpen ? "▲" : "▼"}</span>
-          </button>
-
-          {templateOpen && (
-            <WorkshopMenu anchor={templateAnchor} width={310} rtl={rtl} onClose={() => setTemplateOpen(false)}>
-                {TEMPLATE_PROFILES.map((tp) => (
-                  <button
-                    key={tp.kind}
-                    onClick={() => { setTemplateKind(tp.kind); setTemplateOpen(false); }}
-                    className={`flex w-full flex-col gap-1 rounded-lg border b-line-soft bg-[var(--bg-c)] px-3 py-2.5 text-start transition hover:bg-[var(--row-hover)] ${
-                      templateKind === tp.kind ? "row-on" : ""
-                    }`}
-                  >
-                    <span className="flex items-center gap-1.5 text-[12px] font-medium text-[var(--ink)]">
-                      <span className="w-3 text-center ok-t">{templateKind === tp.kind ? "✓" : ""}</span>
-                      {rtl
-                        ? (tp.kind === "internal" ? "ورود به قالب داخلی" : "ورود قالب ابلاغی")
-                        : tp.title.en}
-                      {!tp.editableColumns && <span className="text-[8px] tx4">🔒</span>}
-                    </span>
-                    <span className="ps-[18px] text-[10.5px] leading-5 text-[var(--ink2)]">{rtl ? tp.note.fa : tp.note.en}</span>
-                  </button>
-                ))}
-            </WorkshopMenu>
-          )}
-        </div>
-
-        {/* زبان مقصد و ترجمهٔ تخصصی از داخل کارت به نوار ابزار آمدند.
-          * هر سه به همان مدرک بالا مربوط‌اند، پس کنار دکمهٔ بارگذاری و
-          * قالب ورود جای درست‌ترشان است. */}
-        <div className="flex items-center gap-1 rounded-lg border b-line-soft px-1 py-0.5">
-          {(["fa", "en"] as const).map((l) => (
-            <button
-              key={l}
-              onClick={() => setTargetLang(l)}
-              className={`rounded px-1.5 py-0.5 text-[9px] transition ${targetLang === l ? "toggle-on tx1" : "tx3 hover:tx1"}`}
-            >
-              {l === "fa" ? "فارسی" : "English"}
-            </button>
-          ))}
-        </div>
-
         <button
-          onClick={onTranslate}
-          disabled={busy === "translate"}
-          className="rounded-lg border px-2.5 py-1 tx1 transition hover:-translate-y-px disabled:opacity-50"
-          style={{ borderColor: "rgba(245,197,110,.5)", background: "rgba(245,197,110,.16)" }}
+          onClick={runExportDownload}
+          disabled={!nodes.length}
+          className="shrink-0 whitespace-nowrap rounded-lg border border-emerald-400/50 bg-emerald-400/15 px-2 py-1 text-[9.5px] font-medium text-emerald-200 transition hover:bg-emerald-400/25 disabled:opacity-40"
+          title={rtl ? "تولید و دانلود قالب انتخاب‌شده" : "Generate and download the selected format"}
         >
-          {busy === "translate" ? (rtl ? "در حال ترجمه…" : "Translating…") : (rtl ? "ترجمه تخصصی" : "Translate")}
+          ⬇ {rtl ? "دریافت خروجی" : "Download"}
         </button>
+        <button
+          onClick={() => selectedFormat.run()}
+          disabled={!nodes.length}
+          className="shrink-0 whitespace-nowrap rounded-lg border b-line-soft px-2 py-1 text-[9.5px] tx2 transition hover:tx1 disabled:opacity-40"
+          title={rtl ? "پیش‌نمایش قالب انتخاب‌شده" : "Preview the selected format"}
+        >
+          👁 {rtl ? "پیش‌نمایش" : "Preview"}
+        </button>
+        </div>
 
       </div>}
 
@@ -750,8 +851,9 @@ export default function ContractWorkshop({ lang, projectCode = "PRJ", projectTit
         {step === "contract" && (
           <div className="mt-3">
             <div className="space-y-2">
-          {/* خط وضعیت نازک */}
-          <div className="flex flex-wrap items-center gap-2 px-1 text-[8.5px] tx4">
+          {/* وضعیت سند و کنترل زبان در یک نوار فشرده؛ کنترل‌ها در
+            * انتهای همان نوار می‌نشینند و ردیف جدا اشغال نمی‌کنند. */}
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 rounded-xl border b-line-soft bg-[var(--row)] px-2 py-1.5 text-[8.5px] tx4">
             {saveWarn && <span className="text-amber-300">⚠ {saveWarn}</span>}
             <span className="ok-dim-t">●</span>
             <span dir="ltr">SQL Server (.\SQL2008EXPRESS)</span>
@@ -783,6 +885,28 @@ export default function ContractWorkshop({ lang, projectCode = "PRJ", projectTit
                 </span>
               </>
             )}
+            <div className="ms-auto flex shrink-0 flex-wrap items-center gap-1.5">
+            <span className="text-[8.5px] tx4">{rtl ? "زبان مقصد:" : "Target language:"}</span>
+            <div className="flex items-center gap-1 rounded-lg border b-line-soft px-1 py-0.5">
+              {(["fa", "en"] as const).map((l) => (
+                <button
+                  key={l}
+                  onClick={() => setTargetLang(l)}
+                  className={`rounded px-1.5 py-0.5 text-[9px] transition ${targetLang === l ? "toggle-on tx1" : "tx3 hover:tx1"}`}
+                >
+                  {l === "fa" ? "فارسی" : "English"}
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={onTranslate}
+              disabled={busy === "translate"}
+              className="rounded-lg border px-2.5 py-1 text-[9px] tx1 transition hover:-translate-y-px disabled:opacity-50"
+              style={{ borderColor: "rgba(245,197,110,.5)", background: "rgba(245,197,110,.16)" }}
+            >
+              {busy === "translate" ? (rtl ? "در حال ترجمه…" : "Translating…") : (rtl ? "ترجمه تخصصی" : "Translate")}
+            </button>
+            </div>
           </div>
 
           {note && (
@@ -803,20 +927,66 @@ export default function ContractWorkshop({ lang, projectCode = "PRJ", projectTit
             * تغییرش می‌دهد باید در یک نگاه باشند. پنجرهٔ چت جدا، کاربر
             * را وادار می‌کند بین دو جا نگاه کند و ربط دستور به نتیجه گم
             * می‌شود. */}
-          <div className="glass-dark rounded-2xl p-2">
-            <div className="mb-1.5 flex flex-wrap items-center gap-2 px-1 text-[9.5px]">
-              <span className="tx1">{rtl ? "ساختار شکست تولیدشده" : "Generated breakdown"}</span>
+          <div id="contract-wbs-print-root" className="glass-dark rounded-2xl p-2">
+            <div className="contract-print-only" style={{ marginBottom: 8 }}>
+              {(() => {
+                const sheet = buildSheet("wbs", nodes, letterhead, [], lang);
+                const head = sheet.rows.slice(0, sheet.headerRowIndex);
+                const titles = sheet.rows[sheet.headerRowIndex];
+                const body = sheet.rows.slice(sheet.headerRowIndex + 2);
+                return (
+                  <table className="w-full border-collapse" style={{ fontSize: 9 }}>
+                    <tbody>
+                      {head.map((r, i) => (
+                        <tr key={`h-${i}`}>
+                          {r.map((c, j) => (
+                            <td key={j} style={{ padding: "1px 4px", fontWeight: j % 2 === 0 ? 700 : 400 }}>{c === null || c === undefined || c === "" ? "" : String(c)}</td>
+                          ))}
+                        </tr>
+                      ))}
+                      <tr>
+                        {titles.map((t, i) => (
+                          <th key={i} style={{ border: "1px solid #999", background: "#dbe5f0", padding: "2px 4px", textAlign: "start" }}>{t === null ? "" : String(t)}</th>
+                        ))}
+                      </tr>
+                      {body.map((r, i) => (
+                        <tr key={`b-${i}`}>
+                          {r.map((c, j) => (
+                            <td key={j} style={{ border: "1px solid #bbb", padding: "1px 4px" }}>{c === null || c === undefined || c === "" ? "—" : String(c)}</td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                );
+              })()}
+            </div>
+            <div className="contract-no-print mb-2 flex flex-wrap items-center gap-1.5 border-b b-line-soft px-1 pb-2 text-[9.5px]">
+              <span className="text-[11px]">🌲</span>
+              <span className="font-semibold tx1">{rtl ? "ساختار شکست تولیدشده" : "Generated breakdown"}</span>
               {nodes.length > 0 && (
-                <span className="tx4">
-                  {rtl
-                    ? `${nodes.length} گره${clauses.length ? ` از ${clauses.length} بند` : ""}`
-                    : `${nodes.length} nodes`}
-                </span>
+                <>
+                  <span className="inline-flex items-center gap-1 rounded-full border border-emerald-300/30 bg-emerald-300/10 px-2 py-0.5 text-[8.5px] text-emerald-200">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-300" />
+                    {rtl ? "آمادهٔ خروجی" : "Ready to export"}
+                  </span>
+                  <span className="rounded-full border b-line-soft px-2 py-0.5 text-[8.5px] tx3">
+                    {rtl ? `${nodes.length} گره` : `${nodes.length} nodes`}
+                  </span>
+                  <span className="rounded-full border b-line-soft px-2 py-0.5 text-[8.5px] tx3">
+                    {rtl ? `حداکثر سطح ${Math.max(...nodes.map((n) => n.depth))}` : `Max level ${Math.max(...nodes.map((n) => n.depth))}`}
+                  </span>
+                  {clauses.length > 0 && (
+                    <span className="rounded-full border b-line-soft px-2 py-0.5 text-[8.5px] tx3">
+                      {rtl ? `از ${clauses.length} بند قرارداد` : `From ${clauses.length} clauses`}
+                    </span>
+                  )}
+                </>
               )}
               {history.length > 0 && (
                 <button
                   onClick={onUndo}
-                  className="ms-auto rounded-lg border b-line-soft px-2 py-0.5 text-[9px] tx3 transition hover:tx1"
+                  className="contract-no-print ms-auto rounded-lg border b-line-soft px-2 py-0.5 text-[9px] tx3 transition hover:tx1"
                   title={rtl ? "بازگشت یک گام" : "Undo one step"}
                 >
                   ↶ {rtl ? "بازگشت" : "Undo"}
@@ -833,34 +1003,49 @@ export default function ContractWorkshop({ lang, projectCode = "PRJ", projectTit
                 </span>
               </div>
             ) : (
-              <div className="thin-scroll max-h-[320px] overflow-auto rounded-xl border b-line-soft">
-                <table className="w-full min-w-[520px] border-collapse text-[9px]">
-                  <thead className="sticky top-0" style={{ background: "var(--bg-c)" }}>
+              <div className="contract-no-print thin-scroll max-h-[340px] overflow-auto rounded-xl border b-line-soft bg-[var(--bg-c)]">
+                <table className="w-full min-w-[520px] table-fixed border-collapse text-[9px]">
+                  <colgroup>
+                    <col style={{ width: "23%" }} />
+                    <col style={{ width: "42%" }} />
+                    <col style={{ width: "10%" }} />
+                    <col style={{ width: "25%" }} />
+                  </colgroup>
+                  <thead className="sticky top-0 z-10" style={{ background: "var(--bg-c)" }}>
                     <tr className="border-b b-line-soft text-[8.5px] tx3">
-                      <th className="px-2 py-1.5 text-start">{rtl ? "کد" : "Code"}</th>
-                      <th className="px-2 py-1.5 text-start">{rtl ? "شرح" : "Description"}</th>
-                      <th className="px-2 py-1.5 text-center">{rtl ? "سطح" : "Lvl"}</th>
-                      <th className="px-2 py-1.5 text-start">{rtl ? "مرجع در قرارداد" : "Source"}</th>
+                      <th className="px-2 py-2 text-start font-semibold">{rtl ? "کد" : "Code"}</th>
+                      <th className="px-2 py-2 text-start font-semibold">{rtl ? "شرح" : "Description"}</th>
+                      <th className="px-2 py-2 text-center font-semibold">{rtl ? "سطح" : "Lvl"}</th>
+                      <th className="px-2 py-2 text-start font-semibold">{rtl ? "مرجع در قرارداد" : "Source"}</th>
                     </tr>
                   </thead>
                   <tbody>
                     {nodes.slice(0, 300).map((n) => (
-                      <tr key={n.code} className="border-b b-line-soft last:border-0 glass-row">
-                        <td className="px-2 py-1 font-mono tx2" dir="ltr" style={{ paddingInlineStart: `${(n.depth - 1) * 12 + 8}px` }}>{n.code}</td>
-                        <td className="px-2 py-1 tx1">{n.titleFa}</td>
-                        <td className="px-2 py-1 text-center tx3">{n.depth}</td>
-                        <td className="px-2 py-1 tx4">{n.sourceRefFa ?? "—"}</td>
+                      <tr key={n.code} className={`border-b b-line-soft last:border-0 glass-row ${n.depth === 1 ? "bg-[var(--row)]" : ""}`}>
+                        <td className="px-2 py-1.5 tx2" style={{ paddingInlineStart: `${(n.depth - 1) * 12 + 8}px` }}>
+                          <span className="inline-block font-mono" dir="ltr">{n.code}</span>
+                        </td>
+                        <td className={`px-2 py-1.5 tx1 ${n.depth === 1 ? "font-semibold" : ""}`}>{n.titleFa}</td>
+                        <td className="px-2 py-1.5 text-center">
+                          <span className="inline-grid h-5 min-w-5 place-items-center rounded-full border b-line-soft px-1 text-[8px] tx3">{n.depth}</span>
+                        </td>
+                        <td className="px-2 py-1.5 tx4">{n.sourceRefFa ?? "—"}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
+                {nodes.length > 300 && (
+                  <div className="border-t b-line-soft px-2 py-1.5 text-center text-[8.5px] tx4">
+                    {rtl ? `نمایش ۳۰۰ گرهٔ نخست از ${nodes.length} گره` : `Showing the first 300 of ${nodes.length} nodes`}
+                  </div>
+                )}
               </div>
             )}
 
             {/* سه پیام آخر — نه پنجرهٔ چت کامل. این ابزار مهندسی است
               * نه پیام‌رسان. */}
             {history.length > 0 && (
-              <div className="mt-1.5 space-y-0.5 px-1">
+              <div className="contract-no-print mt-1.5 space-y-0.5 px-1">
                 {history.slice(-3).map((h, i) => (
                   <div key={i} className="flex flex-wrap items-start gap-1.5 text-[8.5px]">
                     <span className="inline-block tx4 rtl:rotate-180">›</span>
@@ -873,7 +1058,7 @@ export default function ContractWorkshop({ lang, projectCode = "PRJ", projectTit
             )}
 
             {/* نوار فرمان */}
-            <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+            <div className="contract-no-print mt-1.5 flex flex-wrap items-center gap-1.5">
               <span className="text-[12px]">💬</span>
               <input
                 value={command}
@@ -895,7 +1080,7 @@ export default function ContractWorkshop({ lang, projectCode = "PRJ", projectTit
             </div>
 
             {/* نمونه‌فرمان‌ها — کاربر باید بداند چه چیزی می‌تواند بگوید. */}
-            <div className="mt-1 flex flex-wrap gap-1 px-1">
+            <div className="contract-no-print mt-1 flex flex-wrap gap-1 px-1">
               {COMMAND_HINTS.map((h) => (
                 <button
                   key={h.en}
@@ -960,6 +1145,11 @@ export default function ContractWorkshop({ lang, projectCode = "PRJ", projectTit
           <div className="mb-2 flex flex-wrap items-center gap-2">
             <span className="text-[10.5px] tx1">{rtl ? "پیش‌نمایش" : "Preview"}</span>
             <span className="font-mono text-[9px] tx3" dir="ltr">{preview.title}</span>
+            {preview.kind === "table" && preview.title.endsWith(".pdf") && (
+              <button onClick={() => window.print()} className="rounded-lg border border-sky-400/40 bg-sky-400/10 px-2 py-0.5 text-[9px] text-sky-200 hover:bg-sky-400/20">
+                🖨 {rtl ? "چاپ / PDF" : "Print / PDF"}
+              </button>
+            )}
             <button onClick={() => setPreview(null)} className="ms-auto rounded-lg border b-line-soft px-2 py-0.5 text-[9px] tx3 hover:tx1">
               {rtl ? "بستن" : "Close"}
             </button>

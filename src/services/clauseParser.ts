@@ -29,6 +29,8 @@ export type ClauseStyle =
   | "numeric_dot"    // ۵.۲.۳
   | "article"        // ماده ۷
   | "paragraph"      // بند ب
+  | "sub_item"       // (۱) زیربند داخل بند
+  | "letter_item"    // (الف) زیربند حرفی داخل زیربند عددی
   | "note"           // تبصره ۲
   | "section_en"     // Article 7 / Section 3
   | "clause_en"      // 5.2.3 (لاتین)
@@ -144,6 +146,19 @@ const PATTERNS: PatternDef[] = [
     /* ۵.۲.۳ — دست‌کم یک نقطه لازم است تا با شمارهٔ صفحه اشتباه نشود */
     re: /^[ \t]*(?<no>\d+(?:\.\d+)+)[ \t]*[:.\-–)]?[ \t]+/,
     depthOf: (no) => no.split(".").length,
+  },
+  {
+    /* زیربند حرفی پرانتزی: «(الف) ...» — سطح چهارم ساختار فارسی. */
+    style: "letter_item",
+    re: /^[ \t]*[（(](?<no>الف|[ب-ی]{1,2})[)][ \t]+/,
+    depthOf: () => 4,
+  },
+  {
+    /* زیربند پرانتزی داخل بند: «(۱) ...» — سطح سوم ساختار فارسی.
+     * پیش از clause_en می‌آید تا «۱)» سرِخط، بند سطح‌یک شمرده نشود. */
+    style: "sub_item",
+    re: /^[ \t]*[（(](?<no>\d{1,2})[)][ \t]+/,
+    depthOf: () => 3,
   },
   {
     style: "clause_en",
@@ -333,6 +348,8 @@ export function parseClauses(rawText: string): ParseResult {
 
   const clauses: ParsedClause[] = [];
   const seen = new Set<string>();
+  const depthByNo = new Map<string, number>();
+  let lastDepth2: string | null = null;
   const numberedSoFar = new Set<string>();
   let lastAny: string | null = null;
   let lastTopLevel: string | null = null;
@@ -358,6 +375,12 @@ export function parseClauses(rawText: string): ParseResult {
     if (a.head.style === "note") {
       /* تبصره فرزند آخرین بند است، هر سبکی که داشته باشد. */
       parent = lastAny;
+    } else if (a.head.style === "sub_item") {
+      /* زیربند پرانتزی فرزند آخرین بند سطح دوم است. */
+      parent = lastDepth2 ?? lastAny;
+    } else if (a.head.style === "letter_item") {
+      /* زیربند حرفی فرزند آخرین زیربند عددی (سطح سوم) است. */
+      parent = lastAny;
     } else if (a.head.style === "step_code") {
       /* گام رویه‌ای فرزند سرفصلی است که پیش از آن آمده — مثلاً
        * C.P3.1 زیر بخش 5.2.2.3 «Contingency plan-3». */
@@ -381,7 +404,19 @@ export function parseClauses(rawText: string): ParseResult {
     if (a.head.style !== "step_code" && a.head.style !== "note") lastSection = no;
     numberedSoFar.add(no);
 
-    const depth = a.head.style === "note" ? 2 : a.head.depth;
+    /* تبصره یک سطح زیرِ والدش می‌نشیند (نه همیشه ۲) تا عمق‌های
+     * بالاتر از ۲ هم در درخت دیده شوند. سقف پشتیبانی: سطح ۸ —
+     * شماره‌گذاری سلسله‌ای (۵-۲-۳-...) ذاتاً نامحدود است و تا همان
+     * سقف نگه داشته می‌شود. */
+    const MAX_CLAUSE_DEPTH = 8;
+    const depth = Math.min(
+      MAX_CLAUSE_DEPTH,
+      a.head.style === "note"
+        ? (parent ? (depthByNo.get(parent) ?? 1) : 1) + 1
+        : a.head.depth,
+    );
+    depthByNo.set(no, depth);
+    if (depth === 2) lastDepth2 = no;
 
     clauses.push({
       clauseNo: no,

@@ -20,7 +20,6 @@ import { type Lang } from "../data/framework";
 import { toJalaali } from "jalaali-js";
 import { buildPexModel, type PexModel } from "../services/pexModel";
 import { isWorkingDay, plannedPercentAt, rollUp, workingDaysBetween } from "../services/planning";
-import PeriodicReportWorkspace from "./PeriodicReportWorkspace";
 import { WeeklyReportDatePicker } from "./WeeklyReportWorkspace";
 import iranMap from "../assets/iran-provinces-map.png";
 
@@ -50,6 +49,7 @@ export type MonthlyReportTab =
   | "physCurveE"
   | "physCurveP"
   | "physCurveC"
+  | "costCurve"
   | "weather"
   | "manpowerStats"
   | "machineryStats"
@@ -63,6 +63,7 @@ export type MonthlyReportTab =
   | "changeWork"
   | "delayedActivities"
   | "siteVisit"
+  | "shopDrawings"
   | "hse"
   | "photoReport"
   | `divider-${number}`;
@@ -212,7 +213,7 @@ const MONTHLY_CORE_TABS: { id: MonthlyReportTab; fa: string; en: string }[] = [
 
 const MONTHLY_TAIL_TABS: { id: MonthlyReportTab; fa: string; en: string }[] = [
   { id: "summary", fa: "خلاصه", en: "Summary" },
-  { id: "templates", fa: "قالب و خروجی", en: "Templates & export" },
+  { id: "templates", fa: "تحلیل گزارش", en: "Report analysis" },
 ];
 
 /**
@@ -357,6 +358,7 @@ const MONTHLY_REPORT_TABS: { id: MonthlyReportTab; fa: string; en: string }[] = 
   { id: "physCurveE", fa: "منحنی پیشرفت Engineering", en: "Engineering progress curve" },
   { id: "physCurveP", fa: "منحنی پیشرفت Procurement", en: "Procurement progress curve" },
   { id: "physCurveC", fa: "منحنی پیشرفت Construction", en: "Construction progress curve" },
+  { id: "costCurve", fa: "منحنی پیشرفت ریالی", en: "Cost progress curve" },
   {
     id: "divider-4",
     fa: chapterHeading(MONTHLY_INDEX_CHAPTERS[3], true),
@@ -385,6 +387,7 @@ const MONTHLY_REPORT_TABS: { id: MonthlyReportTab; fa: string; en: string }[] = 
     en: chapterHeading(MONTHLY_INDEX_CHAPTERS[5], false),
   },
   { id: "siteVisit", fa: "بازدید کارشناسان کارفرما", en: "Employer site visit" },
+  { id: "shopDrawings", fa: "نقشه‌های کارگاهی و ازبیلت", en: "Shop drawings & as-built" },
   {
     id: "divider-7",
     fa: chapterHeading(MONTHLY_INDEX_CHAPTERS[6], true),
@@ -671,7 +674,7 @@ function MonthlyIndexSheet({ lang }: { lang: Lang }) {
           row.kind === "chapter" ? (
             <h2
               key={row.key}
-              className="flex min-h-0 flex-1 items-center bg-[#f3e45a] px-2.5 text-start text-[clamp(10.5px,1.5vw,13px)] font-semibold leading-none"
+              className="flex min-h-0 flex-1 items-center bg-[#d9dee3] px-2.5 text-start text-[clamp(10.5px,1.5vw,13px)] font-semibold leading-none"
             >
               {fa ? row.fa : row.en}
             </h2>
@@ -2985,6 +2988,155 @@ function MonthlyPhysCurveSheet({ lang, model, focus }: { lang: Lang; model?: Pex
   );
 }
 
+/*
+ * منحنی و نمودار پیشرفت ریالی (جریان نقدینگی) — بند فصل سوم فهرست.
+ * برنامه: هزینهٔ هر فعالیت روی برنامهٔ پایه (BL-01) با همان فرض پخش خطی
+ * activityPlanAt که منحنی‌های فیزیکی استفاده می‌کنند؛ پس «برنامهٔ ریالی»
+ * کاملاً از موتور مشتق است. هزینهٔ واقعی (صورت‌وضعیت/پرداخت) در موتور
+ * داده‌ای ندارد، پس ردیف‌های Actual خالی می‌مانند — عددی ساخته نمی‌شود.
+ */
+function MonthlyCostCurveSheet({ lang, model }: { lang: Lang; model?: PexModel }) {
+  const fa = lang === "fa";
+  const start = model?.project.start ?? "";
+  const finish = model?.project.baselineEnd ?? "";
+  const currency = model?.project.currency ?? "";
+  const cols = start && finish ? scurveColumns(start, finish) : [];
+  const actRows = model?.rows ?? [];
+  const totalBudget = actRows.reduce((s, r) => s + r.cost, 0);
+  const planCostAt = (iso: string) => actRows.reduce((s, r) => s + (r.cost * activityPlanAt(r, iso)) / 100, 0);
+  const cumPlan = cols.map((col) => planCostAt(col.iso));
+  const periodPlan = deltas(cumPlan) ?? [];
+  const cumPct = cumPlan.map((v) => (totalBudget > 0 ? (v / totalBudget) * 100 : 0));
+  const money = (v: number | undefined) => (v === undefined ? "" : moneyCell(Math.round(v), fa));
+  const th: CSSProperties = { background: "#6e6e6e", color: "#fff", border: "1px solid #4a4a4a", padding: "2px 1px", fontSize: 6.5, fontWeight: 700, textAlign: "center", whiteSpace: "nowrap" };
+  const td: CSSProperties = { background: "#d4d4d4", border: "1px solid #9a9a9a", padding: "2px 1px", fontSize: 6.5, textAlign: "center", whiteSpace: "nowrap" };
+  const labelTd: CSSProperties = { ...td, textAlign: "start", fontWeight: 700, background: "#c8c8c8", padding: "2px 4px" };
+  const chartTh: CSSProperties = { border: "1px solid #111", padding: "1px 2px", fontSize: 6.5, textAlign: "center", background: "#fff", fontWeight: 700, whiteSpace: "nowrap" };
+  const chartTd: CSSProperties = { border: "1px solid #111", padding: "1px 2px", fontSize: 6.5, textAlign: "center", background: "#fff", whiteSpace: "nowrap" };
+  const plot = { left: 48, top: 22, width: 820, height: 118 };
+  const xAt = (index: number) => plot.left + (cols.length <= 1 ? 0 : (index / (cols.length - 1)) * plot.width);
+  const yAt = (pct: number, max = 100) => plot.top + ((max - pct) / max) * plot.height;
+  const planLine = cumPct.map((value, i) => `${xAt(i)},${yAt(value)}`).join(" ");
+  const periodMax = Math.max(5, ...periodPlan.map((v) => Math.abs((v ?? 0) / Math.max(totalBudget, 1)) * 100));
+  const underChart = (series: { label: string; color: string; dashed?: boolean; values: (string | undefined)[] }[]) => (
+    <table className="w-full border-collapse" style={{ tableLayout: "fixed", margin: 0 }}>
+      <thead>
+        <tr>
+          <th style={{ ...chartTh, width: "16%" }} />
+          {cols.map((col, index) => (
+            <th key={col.key} style={chartTh}>
+              <div>{col.key === "stat" || col.key === "finish" ? col.title : digits(col.title, fa)}</div>
+              <div>{digits(index + 1, fa)}</div>
+            </th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {series.map((row) => (
+          <tr key={row.label}>
+            <td style={{ ...chartTd, textAlign: "start", fontWeight: 700, paddingInline: 6 }}>
+              <span style={{ display: "inline-block", width: 16, marginInlineEnd: 6, verticalAlign: "middle", borderTop: row.dashed ? `2px dashed ${row.color}` : `7px solid ${row.color}` }} />
+              {row.label}
+            </td>
+            {row.values.map((value, index) => (
+              <td key={`${row.label}-${index}`} style={chartTd}>{value ?? ""}</td>
+            ))}
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+
+  return (
+    <MonthlySheet title={fa ? "منحنی و نمودار پیشرفت ریالی (جریان نقدینگی)" : "Cost progress curve (cash flow)"} dense landscape dir="ltr" titleDir="rtl">
+      <div className="h-full overflow-auto bg-white px-[0.5%] pt-[0.5%] pb-[0.4%] font-sans text-[#152536]" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <div style={{ border: "1px solid #111", flexShrink: 0 }}>
+          <svg viewBox="0 0 900 148" className="w-full" style={{ display: "block", height: 168 }} preserveAspectRatio="xMidYMid meet">
+            <text x="450" y="14" textAnchor="middle" fill="#111" fontSize="12" fontFamily="Vazirmatn, Tahoma, sans-serif">{fa ? "منحنی جریان نقدینگی تجمعی (برنامه‌ای)" : "Cumulative cash-flow curve (planned)"}</text>
+            <rect x={plot.left} y={plot.top} width={plot.width} height={plot.height} fill="#fff" stroke="#111" />
+            {[0, 25, 50, 75, 100].map((tick) => (
+              <g key={tick}>
+                <line x1={plot.left} y1={yAt(tick)} x2={plot.left + plot.width} y2={yAt(tick)} stroke="#ddd" />
+                <text x={plot.left - 4} y={yAt(tick) + 3} textAnchor="end" fill="#8a4b12" fontSize="8">{`${tick}.00%`}</text>
+              </g>
+            ))}
+            {cols.length > 1 ? <polyline points={planLine} fill="none" stroke="#1a7a2a" strokeWidth="1.8" strokeDasharray="6 3" /> : null}
+          </svg>
+          {underChart([
+            { label: "Plan - Cumulative", color: "#1a7a2a", dashed: true, values: cumPlan.map((v) => money(v)) },
+            { label: "Plan - Cumulative %", color: "#1a7a2a", dashed: true, values: cumPct.map((v) => pctCell(v, fa)) },
+            { label: "Actual - Cumulative", color: "#2a4dff", dashed: true, values: cols.map(() => undefined) },
+          ])}
+        </div>
+        <div style={{ border: "1px solid #111", flexShrink: 0 }}>
+          <svg viewBox="0 0 900 148" className="w-full" style={{ display: "block", height: 168 }} preserveAspectRatio="xMidYMid meet">
+            <text x="450" y="14" textAnchor="middle" fill="#111" fontSize="12" fontFamily="Vazirmatn, Tahoma, sans-serif">{fa ? "جریان نقدینگی طی دوره (برنامه‌ای)" : "Cash flow this period (planned)"}</text>
+            <rect x={plot.left} y={plot.top} width={plot.width} height={plot.height} fill="#fff" stroke="#111" />
+            {[0, 25, 50, 75, 100].map((tick) => {
+              const frac = tick / 100;
+              const y = plot.top + (1 - frac) * plot.height;
+              return (
+                <g key={tick}>
+                  <line x1={plot.left} y1={y} x2={plot.left + plot.width} y2={y} stroke="#ddd" />
+                  <text x={plot.left - 4} y={y + 3} textAnchor="end" fill="#8a4b12" fontSize="8">{`${(periodMax * frac).toFixed(2)}%`}</text>
+                </g>
+              );
+            })}
+            {periodPlan.map((value, index) => {
+              const pct = ((value ?? 0) / Math.max(totalBudget, 1)) * 100;
+              const groupW = plot.width / Math.max(cols.length, 1);
+              const x = plot.left + index * groupW + groupW * 0.12;
+              const h = (Math.max(pct, 0) / periodMax) * plot.height;
+              return <rect key={cols[index].key} x={x} y={plot.top + plot.height - h} width={groupW * 0.34} height={h} fill="#1a7a2a" />;
+            })}
+          </svg>
+          {underChart([
+            { label: "Plan - Period", color: "#1a7a2a", values: periodPlan.map((v) => money(v)) },
+            { label: "Actual - Period", color: "#2a4dff", values: cols.map(() => undefined) },
+          ])}
+        </div>
+        <table className="w-full border-collapse" style={{ tableLayout: "fixed", flexShrink: 0 }}>
+          <thead>
+            <tr>
+              <th style={{ ...th, width: "14%" }}>Month</th>
+              {cols.map((col) => (
+                <th key={col.key} style={th}>{col.key === "stat" || col.key === "finish" ? col.title : digits(col.title, fa)}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style={{ ...labelTd, color: "#1a7a2a" }}>{`Plan - Cumulative (${currency})`}</td>
+              {cumPlan.map((v, i) => <td key={i} style={td}>{money(v)}</td>)}
+            </tr>
+            <tr>
+              <td style={{ ...labelTd, color: "#1a7a2a" }}>{`Plan - Period (${currency})`}</td>
+              {periodPlan.map((v, i) => <td key={i} style={td}>{money(v)}</td>)}
+            </tr>
+            <tr>
+              <td style={{ ...labelTd, color: "#2a4dff" }}>{`Actual - Cumulative (${currency})`}</td>
+              {cols.map((col) => <td key={col.key} style={td} />)}
+            </tr>
+            <tr>
+              <td style={{ ...labelTd, color: "#b00000" }}>{`Variance (${currency})`}</td>
+              {cols.map((col) => <td key={col.key} style={td} />)}
+            </tr>
+            <tr>
+              <td style={{ ...labelTd }}>{fa ? "بودجهٔ کل (موتور)" : "Total budget (engine)"}</td>
+              <td style={td} colSpan={Math.max(cols.length, 1)}>{totalBudget > 0 ? `${moneyCell(Math.round(totalBudget), fa)} ${currency}` : "—"}</td>
+            </tr>
+          </tbody>
+        </table>
+        <p dir={fa ? "rtl" : "ltr"} style={{ fontSize: 8, color: "#5a6b7b", margin: 0 }}>
+          {fa
+            ? "منحنی برنامه‌ای از هزینهٔ فعالیت‌ها روی برنامهٔ پایه (BL-01) مشتق شده است. هزینهٔ واقعی در موتور داده‌ای ندارد؛ ردیف‌های Actual خالی می‌مانند تا صورت‌وضعیت‌های تأییدشده متصل شوند."
+            : "The planned curve is derived from activity costs on baseline BL-01. The engine holds no actual cost; Actual rows stay empty until approved IPCs are connected."}
+        </p>
+      </div>
+    </MonthlySheet>
+  );
+}
+
 function eachIso(from: string, to: string) {
   const out: string[] = [];
   if (!from || !to || from > to) return out;
@@ -4046,6 +4198,32 @@ function MonthlySiteVisitSheet({ lang }: { lang: Lang }) {
   );
 }
 
+/*
+ * گزارش بررسی نقشه‌های کارگاهی و ازبیلت — بند دوم فصل ششم فهرست.
+ * موتور دادهٔ بازبینی نقشه ندارد؛ قاب جدول با ردیف‌های خالی می‌آید و
+ * هیچ شماره/تاریخی از نمونهٔ اکسل کپی نمی‌شود.
+ */
+function MonthlyShopDrawingsSheet({ lang }: { lang: Lang }) {
+  const fa = lang === "fa";
+  const shopCols = fa
+    ? ["ردیف", "شماره نقشه", "عنوان نقشه", "رشته", "تاریخ دریافت", "تاریخ بررسی", "وضعیت بررسی", "نظرات / اقدام اصلاحی"]
+    : ["No.", "Drawing no.", "Drawing title", "Discipline", "Received", "Reviewed", "Review status", "Comments / corrective action"];
+  const asBuiltCols = fa
+    ? ["ردیف", "شماره نقشه", "عنوان نقشه", "رشته", "تاریخ دریافت ازبیلت", "تاریخ بررسی", "وضعیت بررسی", "نظرات / اقدام اصلاحی"]
+    : ["No.", "Drawing no.", "Drawing title", "Discipline", "As-built received", "Reviewed", "Review status", "Comments / corrective action"];
+  return (
+    <MonthlySheet title={fa ? "گزارش بررسی نقشه‌های کارگاهی و ازبیلت" : "Shop-drawing and as-built review"} dense landscape>
+      <div className="h-full overflow-hidden bg-white font-sans text-[#152536]" style={{ display: "flex", flexDirection: "column" }}>
+        <ReportBanner text={fa ? "گزارش بررسی نقشه‌های کارگاهی و ازبیلت" : "Shop-drawing and as-built review"} />
+        <ReportBanner navy text={fa ? "نقشه‌های کارگاهی" : "Shop drawings"} />
+        {headerTable(shopCols, 7, fa)}
+        <ReportBanner navy text={fa ? "نقشه‌های ازبیلت" : "As-built drawings"} />
+        {headerTable(asBuiltCols, 7, fa)}
+      </div>
+    </MonthlySheet>
+  );
+}
+
 function MonthlyHseSheet({ lang }: { lang: Lang }) {
   const fa = lang === "fa";
   const cols = fa ? ["ردیف", "اهم اقدامات انجام شده واحد ایمنی در پروژه"] : ["No.", "Key HSE actions on the project"];
@@ -4195,6 +4373,148 @@ function MonthlySummarySheet({
   );
 }
 
+/* ══════════════════════════ پنل تحلیل گزارش (فقط دادهٔ موتور) ══════════════════════════ */
+
+/**
+ * تحلیل گزارش ماهانه — جایگزین قالب/خروجی نمایشی قبلی.
+ * همهٔ اعداد از PexModel می‌آیند؛ متن تحلیل به‌صورت قاعده‌مند از همان
+ * واقعیت‌ها ساخته می‌شود (بدون عدد ساختگی و بدون تظاهر به AI بیرونی).
+ */
+function MonthlyAnalysisPanel({ lang, model }: { lang: Lang; model?: PexModel }) {
+  const fa = lang === "fa";
+  const [notes, setNotes] = useState("");
+  const [result, setResult] = useState<string | null>(null);
+  const m = model;
+
+  const facts: { label: string; value: string; tone: string }[] = m
+    ? [
+        { label: fa ? "پیشرفت واقعی" : "Actual progress", value: `${num(m.overallPct, fa)}%`, tone: "#34D399" },
+        { label: fa ? "پیشرفت برنامه‌ای" : "Planned progress", value: `${num(m.plannedPct, fa)}%`, tone: "#7FB2FF" },
+        { label: fa ? "انحراف پیشرفت" : "Progress variance", value: `${m.variance.deltaPct > 0 ? "+" : ""}${num(m.variance.deltaPct, fa)}%`, tone: m.variance.status === "behind" ? "#F87171" : "#34D399" },
+        { label: fa ? "مایلستون در تأخیر" : "Delayed milestones", value: `${digits(m.milestones.filter((x) => x.status === "Delayed").length, fa)} / ${digits(m.milestones.length, fa)}`, tone: "#FBBF24" },
+        { label: fa ? "سلامت زمان‌بندی (DCMA)" : "Schedule health (DCMA)", value: digits(m.dcma.healthScore, fa), tone: m.dcma.healthScore < 80 ? "#F87171" : "#34D399" },
+        { label: fa ? "گام مسدود بابت IR" : "Steps blocked by IR", value: digits(m.blockedCount, fa), tone: "#FBBF24" },
+      ]
+    : [];
+
+  const runAnalysis = () => {
+    if (!m) return;
+    const L: string[] = [];
+    const delayed = m.milestones.filter((x) => x.status === "Delayed");
+    const worst = [...m.wbsRollup].sort((a, b) => a.actualPct - a.plannedPct - (b.actualPct - b.plannedPct))[0];
+
+    L.push(fa ? "■ جمع‌بندی اجرایی" : "■ Executive summary");
+    L.push(
+      fa
+        ? `پیشرفت واقعی ${num(m.overallPct, fa)}٪ در برابر برنامهٔ ${num(m.plannedPct, fa)}٪ (انحراف ${num(m.variance.deltaPct, fa)}٪ — ${m.variance.status === "behind" ? "عقب‌افتاده" : "روی برنامه"}). ضعیف‌ترین بخش: ${worst ? `${fa ? worst.nameFa : worst.nameEn} با انحراف ${num(worst.actualPct - worst.plannedPct, fa)}٪` : "—"}.`
+        : `Actual ${m.overallPct}% vs planned ${m.plannedPct}% (variance ${m.variance.deltaPct}% — ${m.variance.status}). Weakest WBS: ${worst ? `${worst.nameEn} at ${Math.round((worst.actualPct - worst.plannedPct) * 10) / 10}%` : "—"}.`,
+    );
+
+    L.push(fa ? "■ مایلستون‌ها و جریمه" : "■ Milestones & penalty");
+    L.push(
+      delayed.length
+        ? delayed.map((x) => `• ${fa ? x.nameFa : x.nameEn}: ${fa ? "لغزش" : "slip"} ${digits(x.slipDays, fa)} ${fa ? "روز" : "d"}${x.penalty ? ` — ${fa ? "جریمه" : "penalty"} ${num(Math.round(x.penalty), fa, 0)} ${m.project.currency}` : ""}`).join("\n")
+        : fa ? "مایلستونی در تأخیر نیست." : "No delayed milestone.",
+    );
+
+    L.push(fa ? "■ فعالیت‌های نزدیک‌بحرانی (شناوری کم)" : "■ Near-critical activities (low float)");
+    L.push(
+      m.nearCritical.length
+        ? m.nearCritical.slice(0, 5).map((r) => `• ${r.id} — ${fa ? r.nameFa : r.nameEn} (${fa ? "شناوری" : "float"}: ${digits(r.totalFloat, fa)} ${fa ? "روز" : "d"}، پیشرفت ${num(r.physicalPct, fa)}٪ از ${num(r.plannedPct, fa)}٪ برنامه)`).join("\n")
+        : fa ? "فعالیتی در آستانهٔ بحرانی‌شدن نیست." : "No near-critical activity.",
+    );
+
+    L.push(fa ? "■ موانع و هشدارها" : "■ Blockers & alerts");
+    L.push(
+      (fa ? `گام‌های مسدود بابت IR: ${digits(m.blockedCount, fa)} — پیشرفت آن‌ها وارد EV نشده است.` : `Steps blocked by IR: ${m.blockedCount} — excluded from EV.`)
+      + (m.dcma.healthScore < 80 ? (fa ? ` سلامت زمان‌بندی ${digits(m.dcma.healthScore, fa)} (زیر ۸۰) است.` : ` Schedule health ${m.dcma.healthScore} (below 80).`) : "")
+      + (m.alerts.length ? `\n${m.alerts.slice(0, 5).map((a) => `• ${a.message}`).join("\n")}` : ""),
+    );
+
+    L.push(fa ? "■ تصمیم‌ها و اقدامات اصلاحی" : "■ Decisions & corrective actions");
+    const acts: string[] = [];
+    if (m.variance.status === "behind") acts.push(fa ? "برنامهٔ جبرانی (Recovery) برای ضعیف‌ترین بخش تصویب و Action Plan سی‌روزه به‌روز شود." : "Approve a recovery plan for the weakest WBS and refresh the 30-day action plan.");
+    if (delayed.length) acts.push(fa ? "برای مایلستون‌های در تأخیر، تاریخ جبرانی و مسئول مشخص شود؛ اثر جریمه در جریان نقدی دیده شود." : "Set recovery dates and owners for delayed milestones; reflect penalty in cash flow.");
+    if (m.blockedCount > 0) acts.push(fa ? "رفع فوری گام‌های مسدود IR تا پیشرفت واقعی در EV بنشیند." : "Unblock IR-gated steps so earned value reflects reality.");
+    if (m.dcma.healthScore < 80) acts.push(fa ? "بازبینی منطق شبکه و قیود زمان‌بندی (DCMA زیر ۸۰)." : "Review network logic and constraints (DCMA below 80).");
+    if (m.nearCritical.length) acts.push(fa ? "پایش روزانهٔ فعالیت‌های نزدیک‌بحرانی و تثبیت شناوری آن‌ها." : "Daily monitoring of near-critical activities to protect their float.");
+    if (!acts.length) acts.push(fa ? "روند فعلی حفظ شود؛ تصمیم خاصی لازم نیست." : "Sustain current trend; no special decision required.");
+    L.push(acts.map((a, i) => `${digits(i + 1, fa)}. ${a}`).join("\n"));
+
+    if (notes.trim()) L.push(`${fa ? "■ یادداشت مدیر پروژه" : "■ PM note"}\n${notes.trim()}`);
+    setResult(L.join("\n\n"));
+  };
+
+  return (
+    <div className="monthly-report-no-print flex flex-col gap-3" dir={fa ? "rtl" : "ltr"}>
+      <section className="glass-dark rounded-2xl px-3 py-2.5">
+        <h3 className="text-[12px] tx1">✨ {fa ? "تحلیل گزارش ماهانه" : "Monthly report analysis"}</h3>
+        <p className="text-[8.5px] tx3">{fa ? "فقط بر پایهٔ دادهٔ موتور برنامه‌ریزی؛ بدون عدد ساختگی" : "Built only on planning-engine data; no invented figures"}</p>
+      </section>
+      {!m ? (
+        <p className="py-6 text-center text-[10px] tx3">{fa ? "دادهٔ موتور در دسترس نیست." : "Engine data is unavailable."}</p>
+      ) : (
+        <>
+          <div className="grid grid-cols-3 gap-2 xl:grid-cols-6">
+            {facts.map((f) => (
+              <div key={f.label} className="glass-dark rounded-2xl p-3">
+                <div className="flex items-center gap-2">
+                  <i className="h-2 w-2 rounded-full" style={{ background: f.tone }} />
+                  <span className="truncate text-[9px] tx3">{f.label}</span>
+                </div>
+                <div className="mt-2 text-[16px] tabular-nums tx1" dir="ltr">{f.value}</div>
+              </div>
+            ))}
+          </div>
+          <div className="glass-dark rounded-2xl p-3">
+            <h4 className="mb-2 text-[11px] tx1">{fa ? "انحراف بخش‌ها (WBS)" : "WBS variance"}</h4>
+            <table className="w-full table-fixed border-collapse text-[10px] tx2">
+              <thead>
+                <tr className="tx3">
+                  <th className="px-2 py-1 text-start font-normal">{fa ? "بخش" : "WBS"}</th>
+                  <th className="px-2 py-1 text-center font-normal">{fa ? "برنامه" : "Planned"}</th>
+                  <th className="px-2 py-1 text-center font-normal">{fa ? "واقعی" : "Actual"}</th>
+                  <th className="px-2 py-1 text-center font-normal">{fa ? "انحراف" : "Variance"}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {m.wbsRollup.map((w) => {
+                  const v = w.actualPct - w.plannedPct;
+                  return (
+                    <tr key={w.id} className="border-t b-line-soft">
+                      <td className="px-2 py-1">{fa ? w.nameFa : w.nameEn}</td>
+                      <td className="px-2 py-1 text-center tabular-nums" dir="ltr">{num(w.plannedPct, fa)}%</td>
+                      <td className="px-2 py-1 text-center tabular-nums" dir="ltr">{num(w.actualPct, fa)}%</td>
+                      <td className="px-2 py-1 text-center tabular-nums" dir="ltr" style={{ color: v < -0.05 ? "#F87171" : "#34D399" }}>{v > 0 ? "+" : ""}{num(v, fa)}%</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <textarea
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder={fa ? "یادداشت‌ها و نکات مدیریتی این ماه…" : "Management notes for this month…"}
+            className="h-20 w-full resize-none rounded-xl border b-line-soft bg-[var(--row)] px-3 py-2 text-[10.5px] tx1 outline-none focus:border-[var(--accent)]"
+          />
+          <div>
+            <button type="button" onClick={runAnalysis} className="rounded-lg border border-fuchsia-400/55 bg-fuchsia-400/10 px-3 py-1.5 text-[10px] text-fuchsia-300 transition hover:bg-fuchsia-400/20">
+              {fa ? "تولید تحلیل از دادهٔ موتور" : "Generate analysis from engine data"}
+            </button>
+          </div>
+          <div className="glass rounded-2xl p-4">
+            <h4 className="text-[11px] tx1">{fa ? "خروجی تحلیل" : "Analysis output"}</h4>
+            <div className="mt-3 whitespace-pre-line rounded-xl border b-line-soft bg-black/10 p-4 text-[11px] leading-6 tx2">
+              {result ?? (fa ? "هنوز تحلیلی تولید نشده است." : "No analysis generated yet.")}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 /* ══════════════════════════ پوستهٔ فضای کاری ══════════════════════════ */
 
 export default function MonthlyReportWorkspace({ lang, model }: Props) {
@@ -4205,6 +4525,8 @@ export default function MonthlyReportWorkspace({ lang, model }: Props) {
 
   const storageKey = `${STORAGE_PREFIX}${m?.project.code ?? "default"}`;
   const [tab, setTab] = useState<MonthlyReportTab>("cover");
+  const [openChapter, setOpenChapter] = useState<string | null>(null);
+
   const [cover, setCover] = useState<CoverFields>(DEFAULT_COVER);
   const [contract, setContract] = useState<ContractFields>(DEFAULT_CONTRACT);
   const [geography, setGeography] = useState<GeographyFields>(DEFAULT_GEOGRAPHY);
@@ -4295,6 +4617,8 @@ export default function MonthlyReportWorkspace({ lang, model }: Props) {
     tab === "changeWork" ||
     tab === "delayedActivities" ||
     tab === "siteVisit" ||
+    tab === "shopDrawings" ||
+    tab === "costCurve" ||
     tab === "hse" ||
     tab === "photoReport" ||
     tab.startsWith("divider-");
@@ -4302,6 +4626,22 @@ export default function MonthlyReportWorkspace({ lang, model }: Props) {
     ? MONTHLY_INDEX_CHAPTERS[Number(tab.slice("divider-".length)) - 1]
     : undefined;
 
+  /*
+   * گروه‌بندی تب‌ها زیر فصل‌ها (برای برگشت آسان: MONTHLY_REPORT_TABS دست‌نخورده
+   * می‌ماند؛ فقط رندر ناوبری گروهی می‌شود). کاور/فهرست/خلاصه/قالب تکی می‌مانند.
+   */
+  type NavGroup = { id: string; items: typeof MONTHLY_REPORT_TABS };
+  const navGroups: NavGroup[] = [];
+  for (const item of MONTHLY_REPORT_TABS) {
+    const last = navGroups[navGroups.length - 1];
+    if (item.id.startsWith("divider-")) navGroups.push({ id: item.id, items: [item] });
+    else if (last && last.id.startsWith("divider-") && item.id !== "summary" && item.id !== "templates") last.items.push(item);
+    else navGroups.push({ id: item.id, items: [item] });
+  }
+  const tabLabel = (id: MonthlyReportTab) => {
+    const found = MONTHLY_REPORT_TABS.find((t) => t.id === id);
+    return found ? (fa ? found.fa : found.en) : "";
+  };
   const patch = (next: Partial<CoverFields>) => setCover((c) => ({ ...c, ...next }));
   const patchContract = (next: Partial<ContractFields>) => setContract((c) => ({ ...c, ...next }));
   const patchScope = (next: Partial<ScopeFields>) => setScope((c) => ({ ...c, ...next }));
@@ -4340,14 +4680,14 @@ export default function MonthlyReportWorkspace({ lang, model }: Props) {
           فیلدها زیر هم چیده شوند. تنها نیاز ما پنهان‌شدن در چاپ است و
           همان در داخل media print انجام شده.
         */
-        @page { size: A4 ${tab === "pmsMdr" || tab === "pmsDdr" || tab === "pmsStatus" || tab === "pmsProc" || tab === "pmsPsr" || tab === "pmsConst" || tab === "physCurve" || tab === "physCurveE" || tab === "physCurveP" || tab === "physCurveC" || tab === "weather" || tab === "manpowerStats" || tab === "machineryStats" || tab === "resourceCharts" || tab === "materials" || tab === "resourceAnalysis" || tab === "correspondence" || tab === "workStoppage" || tab === "changeWork" || tab === "delayedActivities" || tab === "siteVisit" ? "landscape" : "portrait"}; margin: 6mm; }
+        @page { size: A4 ${tab === "pmsMdr" || tab === "pmsDdr" || tab === "pmsStatus" || tab === "pmsProc" || tab === "pmsPsr" || tab === "pmsConst" || tab === "physCurve" || tab === "physCurveE" || tab === "physCurveP" || tab === "physCurveC" || tab === "weather" || tab === "manpowerStats" || tab === "machineryStats" || tab === "resourceCharts" || tab === "materials" || tab === "resourceAnalysis" || tab === "correspondence" || tab === "workStoppage" || tab === "changeWork" || tab === "delayedActivities" || tab === "siteVisit" || tab === "shopDrawings" || tab === "costCurve" ? "landscape" : "portrait"}; margin: 6mm; }
         @media print {
           html, body { margin: 0 !important; padding: 0 !important; background: #fff !important; }
           body * { visibility: hidden !important; }
           #monthly-report-print-root, #monthly-report-print-root * { visibility: visible !important; }
           #monthly-report-print-root {
             position: fixed !important; inset: 0 auto auto 0 !important; box-sizing: border-box !important;
-            width: ${tab === "pmsMdr" || tab === "pmsDdr" || tab === "pmsStatus" || tab === "pmsProc" || tab === "pmsPsr" || tab === "pmsConst" || tab === "physCurve" || tab === "physCurveE" || tab === "physCurveP" || tab === "physCurveC" || tab === "weather" || tab === "manpowerStats" || tab === "machineryStats" || tab === "resourceCharts" || tab === "materials" || tab === "resourceAnalysis" || tab === "correspondence" || tab === "workStoppage" || tab === "changeWork" || tab === "delayedActivities" || tab === "siteVisit" ? "285mm" : "198mm"} !important; height: ${tab === "pmsMdr" || tab === "pmsDdr" || tab === "pmsStatus" || tab === "pmsProc" || tab === "pmsPsr" || tab === "pmsConst" || tab === "physCurve" || tab === "physCurveE" || tab === "physCurveP" || tab === "physCurveC" || tab === "weather" || tab === "manpowerStats" || tab === "machineryStats" || tab === "resourceCharts" || tab === "materials" || tab === "resourceAnalysis" || tab === "correspondence" || tab === "workStoppage" || tab === "changeWork" || tab === "delayedActivities" || tab === "siteVisit" ? "198mm" : "285mm"} !important; min-width: 0 !important; max-width: none !important;
+            width: ${tab === "pmsMdr" || tab === "pmsDdr" || tab === "pmsStatus" || tab === "pmsProc" || tab === "pmsPsr" || tab === "pmsConst" || tab === "physCurve" || tab === "physCurveE" || tab === "physCurveP" || tab === "physCurveC" || tab === "weather" || tab === "manpowerStats" || tab === "machineryStats" || tab === "resourceCharts" || tab === "materials" || tab === "resourceAnalysis" || tab === "correspondence" || tab === "workStoppage" || tab === "changeWork" || tab === "delayedActivities" || tab === "siteVisit" || tab === "shopDrawings" || tab === "costCurve" ? "285mm" : "198mm"} !important; height: ${tab === "pmsMdr" || tab === "pmsDdr" || tab === "pmsStatus" || tab === "pmsProc" || tab === "pmsPsr" || tab === "pmsConst" || tab === "physCurve" || tab === "physCurveE" || tab === "physCurveP" || tab === "physCurveC" || tab === "weather" || tab === "manpowerStats" || tab === "machineryStats" || tab === "resourceCharts" || tab === "materials" || tab === "resourceAnalysis" || tab === "correspondence" || tab === "workStoppage" || tab === "changeWork" || tab === "delayedActivities" || tab === "siteVisit" || tab === "shopDrawings" || tab === "costCurve" ? "198mm" : "285mm"} !important; min-width: 0 !important; max-width: none !important;
             aspect-ratio: auto !important; margin: 0 !important; box-shadow: none !important;
             print-color-adjust: exact !important; -webkit-print-color-adjust: exact !important;
           }
@@ -4410,22 +4750,73 @@ export default function MonthlyReportWorkspace({ lang, model }: Props) {
 
       {/* نوار تب شیت‌ها — همان نوار گزارش هفتگی */}
       <nav
-        className="monthly-report-no-print flex flex-wrap items-center gap-1 rounded-xl bg-black/15 p-1"
+        className="monthly-report-no-print sticky top-2 z-20 flex flex-wrap items-center gap-1 rounded-xl bg-black/15 p-1 backdrop-blur"
         role="tablist"
         aria-label={fa ? "شیت‌های گزارش ماهانه" : "Monthly report sheets"}
       >
-        {MONTHLY_REPORT_TABS.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            role="tab"
-            aria-selected={tab === item.id}
-            onClick={() => setTab(item.id)}
-            className={`rounded-lg px-2.5 py-1.5 text-[10px] transition ${tab === item.id ? "toggle-on tx1" : "tx3 hover:tx1"}`}
-          >
-            {fa ? item.fa : item.en}
-          </button>
-        ))}
+        {navGroups.map((group) => {
+            const isChapter = group.id.startsWith("divider-");
+            if (!isChapter) {
+              const item = group.items[0];
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={tab === item.id}
+                  onClick={() => setTab(item.id)}
+                  className={`rounded-lg px-2.5 py-1.5 text-[10px] transition ${tab === item.id ? "toggle-on tx1" : "tx3 hover:tx1"}`}
+                >
+                  {fa ? item.fa : item.en}
+                </button>
+              );
+            }
+            const activeInside = group.items.some((t) => t.id === tab);
+            const open = openChapter === group.id;
+            const chapterTitle = tabLabel(group.id as MonthlyReportTab);
+            return (
+              <span key={group.id} className="relative">
+                <button
+                  type="button"
+                  aria-expanded={open}
+                  onClick={() => setOpenChapter(open ? null : group.id)}
+                  className={`rounded-lg px-2.5 py-1.5 text-[10px] transition ${activeInside || open ? "toggle-on tx1" : "tx3 hover:tx1"}`}
+                >
+                  {chapterTitle} ▾
+                </button>
+                {open && (
+                  <>
+                    <button type="button" aria-hidden tabIndex={-1} onClick={() => setOpenChapter(null)} className="fixed inset-0 z-30 cursor-default bg-transparent" />
+                    <span className="absolute top-full z-40 mt-1 flex max-h-72 min-w-44 flex-col gap-0.5 overflow-y-auto rounded-xl border b-line-soft p-1 shadow-2xl" style={{ insetInlineStart: 0, backgroundColor: "#2e4f73", color: "#ffffff" }}>
+                      <button
+                        type="button"
+                        role="tab"
+                        aria-selected={tab === group.id}
+                        onClick={() => { setTab(group.id as MonthlyReportTab); setOpenChapter(null); }}
+                        style={tab === group.id ? { color: "#ffffff", backgroundColor: "rgba(255,255,255,0.16)" } : { color: "#ffffff" }}
+                        className="rounded-lg px-2.5 py-1.5 text-start text-[10px] font-semibold transition hover:bg-white/10"
+                      >
+                        {fa ? `صفحهٔ ${chapterTitle}` : `${chapterTitle} divider`}
+                      </button>
+                      {group.items.slice(1).map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        role="tab"
+                        aria-selected={tab === item.id}
+                        onClick={() => { setTab(item.id); setOpenChapter(null); }}
+                        style={tab === item.id ? { color: "#ffffff", backgroundColor: "rgba(255,255,255,0.16)" } : { color: "#ffffff" }}
+                        className="rounded-lg px-2.5 py-1.5 text-start text-[10px] transition hover:bg-white/10"
+                      >
+                        {fa ? item.fa : item.en}
+                      </button>
+                      ))}
+                    </span>
+                  </>
+                )}
+              </span>
+            );
+          })}
       </nav>
 
       {/* ─── شیت‌ها ─── */}
@@ -4464,6 +4855,7 @@ export default function MonthlyReportWorkspace({ lang, model }: Props) {
       {tab === "physCurveE" && <MonthlyPhysCurveSheet lang={lang} model={m} focus="e" />}
       {tab === "physCurveP" && <MonthlyPhysCurveSheet lang={lang} model={m} focus="p" />}
       {tab === "physCurveC" && <MonthlyPhysCurveSheet lang={lang} model={m} focus="c" />}
+      {tab === "costCurve" && <MonthlyCostCurveSheet lang={lang} model={m} />}
       {tab === "weather" && <MonthlyWeatherSheet lang={lang} model={m} />}
       {tab === "manpowerStats" && <MonthlyManpowerStatsSheet lang={lang} model={m} />}
       {tab === "machineryStats" && <MonthlyMachineryStatsSheet lang={lang} model={m} />}
@@ -4477,20 +4869,13 @@ export default function MonthlyReportWorkspace({ lang, model }: Props) {
       {tab === "changeWork" && <MonthlyChangeWorkSheet lang={lang} />}
       {tab === "delayedActivities" && <MonthlyDelayedActivitiesSheet lang={lang} model={m} />}
       {tab === "siteVisit" && <MonthlySiteVisitSheet lang={lang} />}
+      {tab === "shopDrawings" && <MonthlyShopDrawingsSheet lang={lang} />}
       {tab === "hse" && <MonthlyHseSheet lang={lang} />}
       {tab === "photoReport" && <MonthlyPhotoReportSheet lang={lang} />}
       {tab === "summary" && <MonthlySummarySheet cover={cover} lang={lang} model={m} />}
 
-      {/*
-        قالب‌ها و خروجی: قبلاً در همین ماژول بود (PeriodicReportWorkspace) و به
-        تب منتقل شد تا شیت ماهانه تنها ورودی این گره نباشد، اما هیچ قابلیتی از
-        دست نرود.
-      */}
-      {tab === "templates" && (
-        <div className="monthly-report-no-print h-[620px] overflow-hidden rounded-2xl">
-          <PeriodicReportWorkspace lang={lang} kind="monthly" />
-        </div>
-      )}
+      {/* تحلیل گزارش: فقط دادهٔ موتور؛ قالب/خروجی نمایشی قبلی حذف شد. */}
+      {tab === "templates" && <MonthlyAnalysisPanel lang={lang} model={m} />}
     </section>
   );
 }

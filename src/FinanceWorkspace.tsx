@@ -270,75 +270,17 @@ function DualTemplateToggle({
   );
 }
 
-/* ==========================================================================
-   v2.3.1-Alpha — CIRCULAR 5090 EXTENSION CALCULATOR (Invoices workspace)
-   Implements t = (A * V) / B for delay extensions due to payment delays.
-   ========================================================================== */
-function Circular5090Widget({
-  lang, onAdvice,
-}: {
-  lang: Lang; onAdvice: (title: string, body?: string) => void;
-}) {
+/* محاسبه‌گر نمایشی قبلی ۵۰۹۰ حذف شد: فرمول ناقص، اعداد ثابت و متن لایحه
+ * قطعی بدون داده واقعی و تأیید کارشناس تولید می‌کرد. محاسبه معتبر فقط از
+ * موتور نسخه‌بندی‌شده تأخیرات در d4 انجام می‌شود. */
+function Circular5090Widget({ lang }: { lang: Lang; onAdvice: (title: string, body?: string) => void }) {
   const label = (fa: string, en: string) => (lang === 'fa' ? fa : en);
-  const fmt = (n: number | string) => (lang === 'fa' ? toFa(n) : String(n));
-
-  const [amountA, setAmountA] = useState(980); // delayed payment amount (B IRR)
-  const [periodV, setPeriodV] = useState(30);   // claim period (days)
-  const [contractB, setContractB] = useState(12400); // total contract value (B IRR)
-
-  const safeB = Math.max(contractB, 1);
-  const tDays = Number(((amountA * periodV) / safeB).toFixed(2));
-
-  const build5090Letter = () => {
-    return lang === 'fa'
-      ? `لایحه رسمی درخواست تمدید مدت پیمان بر مبنای بخشنامه شماره ۵۰۹۰ سازمان برنامه و بودجه و ماده ۳۰ شرایط عمومی پیمان:\n\nموضوع: درخواست تمدید مدت پیمان به دلیل تأخیرات تأدیه وجوه صورت‌وضعیت‌ها\n\nبا سلام و احترام،\nپیرو قرارداد فی‌مابین به مبلغ کل ${fmt(contractB)} میلیارد ریال و با توجه به تأخیرات ایجادشده در پرداخت مبلغ ${fmt(amountA)} میلیارد ریال در دوره صورت‌وضعیت ${fmt(periodV)} روزه، مستند به فرمول صریح بخشنامه ۵۰۹۰ (t = A × V / B)، مدت زمان مستحق تمدید پیمان معادل ${fmt(tDays)} روز تقویمی برآورد می‌گردد. خواهشمند است دستور فرمایید نسبت به بررسی و اعمال این تمدید مدت در راستای ماده ۳۰ شرایط عمومی پیمان اقدامات مقتضی مبذول فرمایند.\n\nبا تجدید احترام`
-      : `Official EOT Claim Brief per PMO Circular No. 5090 & Article 30 of General Conditions of Contract:\n\nSubject: Request for Contract Extension Due to Payment Delays\n\nDear Sirs,\nReferring to the contract valued at ${contractB}B IRR and noting the delayed payment of ${amountA}B IRR over the ${periodV}-day claim period, pursuant to Circular 5090 formula (t = A × V / B), the entitled contract extension is computed as ${tDays} calendar days. Kindly review and apply this extension pursuant to Article 30 of the General Conditions of Contract.\n\nSincerely`;
-  };
-
   return (
-    <div className="rounded-xl bg-gradient-to-br from-teal-50 to-cyan-50 border border-teal-300 p-3 mt-2">
-      <div className="flex items-center justify-between gap-2 mb-2">
-        <div>
-          <h4 className="text-[11px] font-black text-teal-900 leading-tight">
-            {label('محاسبه تمدید مدت پیمان — بخشنامه ۵۰۹۰ و ماده ۳۰', 'Contract Extension Calculator — Circular 5090 & Article 30')}
-          </h4>
-          <div className="text-[9px] font-mono text-cyan-800 mt-0.5" dir="ltr">t = (A × V) / B</div>
-        </div>
-        <span className="px-2 py-0.5 rounded-md bg-teal-600 text-white font-mono text-[10px] font-black">
-          t = {fmt(tDays)} {label('روز', 'days')}
-        </span>
-      </div>
-
-      <div className="grid grid-cols-3 gap-1.5 mb-2">
-        <label className="block">
-          <span className="block text-[8px] font-black text-slate-600 mb-0.5">{label('مبلغ تأخیر (A)', 'Delay Amount (A)')}</span>
-          <input type="number" value={amountA} onChange={(e) => setAmountA(Number(e.target.value) || 0)} className="w-full rounded-lg border border-slate-300 bg-white px-2 py-1 text-[10px] font-mono outline-none" dir="ltr" />
-        </label>
-        <label className="block">
-          <span className="block text-[8px] font-black text-slate-600 mb-0.5">{label('دوره (V - روز)', 'Period (V - days)')}</span>
-          <input type="number" value={periodV} onChange={(e) => setPeriodV(Number(e.target.value) || 0)} className="w-full rounded-lg border border-slate-300 bg-white px-2 py-1 text-[10px] font-mono outline-none" dir="ltr" />
-        </label>
-        <label className="block">
-          <span className="block text-[8px] font-black text-slate-600 mb-0.5">{label('مبلغ کل (B - BAC)', 'Total Contract (B)')}</span>
-          <input type="number" value={contractB} onChange={(e) => setContractB(Number(e.target.value) || 1)} className="w-full rounded-lg border border-slate-300 bg-white px-2 py-1 text-[10px] font-mono outline-none" dir="ltr" />
-        </label>
-      </div>
-
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-[9px] text-slate-600 leading-snug">
-          {label('مبنا: ضوابط تمدید مدت پیمان به‌دلیل تأخیرات مالی کارفرما', 'Basis: Contract extension rules for client financial delays')}
-        </span>
-        <button
-          onClick={() => onAdvice(
-            label('لایحه رسمی تأخیرات — بخشنامه ۵۰۹۰ و ماده ۳۰', 'Official EOT Claim Brief — Circular 5090 & Article 30'),
-            build5090Letter()
-          )}
-          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-teal-600 hover:bg-teal-700 text-white text-[9.5px] font-bold transition flex-shrink-0"
-        >
-          <Lightbulb className="w-3 h-3" />
-          {label('لایحه رسمی ۵۰۹۰ / ماده ۳۰', 'Official 5090 / Art.30 Brief')}
-        </button>
-      </div>
+    <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 mt-2 text-amber-900">
+      <h4 className="text-[11px] font-black leading-tight">{label('محاسبه بخشنامه ۵۰۹۰ از این نما غیرفعال است', 'Circular 5090 calculation is disabled in this view')}</h4>
+      <p className="mt-1 text-[9.5px] leading-relaxed">
+        {label('نتیجه تمدید مدت فقط با صورت‌وضعیت واقعی، تاریخ تسلیم و پرداخت، مدت و مبلغ اولیه پیمان، نسخه ضابطه و تأیید کارشناس در ماژول تأخیرات محاسبه می‌شود. این نما عدد یا لایحه قطعی تولید نمی‌کند.', 'Extension is calculated only in the delay module from the real statement, submission/payment dates, initial contract duration and amount, the versioned rule and expert approval. This view produces no final number or brief.')}
+      </p>
     </div>
   );
 }
