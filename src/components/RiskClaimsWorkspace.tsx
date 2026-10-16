@@ -5,17 +5,18 @@ import { jsonRequest } from '../services/apiClient';
 import { DELAY_METHODS, IMPACT_DIMS, RBS, scoreColor } from '../services/rcc';
 import { type ClaimLifecycleAction, type RccKind, type RccRow, type RccWorkspace } from '../services/rccWorkspace';
 import { buildConcurrencyTimeline } from '../services/delayAnalysis';
+import { LOSS_CATEGORIES, lossCategoryFa } from '../services/claimLoss';
 import JalaliDateInput from './JalaliDateInput';
 
-export type D4Tab = 'matrix' | 'register' | 'reserve' | 'issue' | 'change' | 'ccb' | 'delay' | 'claim' | 'notice' | 'dispute' | 'invest' | 'exec';
+export type D4Tab = 'matrix' | 'register' | 'reserve' | 'issue' | 'change' | 'ccb' | 'delay' | 'claim' | 'notice' | 'dispute' | 'invest' | 'exec' | 'loss';
 type Props = { lang: Lang; projectId: string; subId?: string; initialTab?: D4Tab; hideTabs?: boolean };
 const TABS: [D4Tab, string, string][] = [
   ['matrix', 'ماتریس', 'Matrix'], ['register', 'ثبت ریسک', 'Risks'], ['reserve', 'ذخیره و پایش', 'Reserve & monitor'], ['issue', 'مسئله و هشدار زود', 'Issues & EWS'],
   ['change', 'تغییر', 'Changes'], ['ccb', 'تصویب تغییر', 'CCB'],
-  ['claim', 'ادعا', 'Claims'], ['notice', 'اعلان قراردادی', 'Notices'], ['delay', 'تحلیل تأخیر', 'Delay analysis'], ['exec', 'خلاصه', 'Summary'],
+  ['claim', 'ادعا', 'Claims'], ['notice', 'اعلان قراردادی', 'Notices'], ['delay', 'تحلیل تأخیر', 'Delay analysis'], ['loss', 'خسارات و لایحه ضرر و زیان', 'Loss & damages'], ['exec', 'خلاصه', 'Summary'],
 ];
 function tabFromSub(sub = ''): D4Tab {
-  const explicit: Record<string, D4Tab> = { 'd4-p1-rsv': 'reserve', 'd4-p1-iss': 'issue', 'd4-p1-mx': 'matrix', 'd4-p3-ccb': 'ccb', 'd4-p5-ntc': 'notice', 'd4-p5-tb': 'notice', 'd4-p5-dsp': 'dispute', 'd4-p5-exe': 'exec' };
+  const explicit: Record<string, D4Tab> = { 'd4-p1-rsv': 'reserve', 'd4-p1-iss': 'issue', 'd4-p1-mx': 'matrix', 'd4-p3-ccb': 'ccb', 'd4-p5-ntc': 'notice', 'd4-p5-tb': 'notice', 'd4-p5-dsp': 'dispute', 'd4-p5-exe': 'exec', 'd4-p5-loss': 'loss' };
   return explicit[sub] ?? (sub.startsWith('d4-p3') ? 'change' : sub.startsWith('d4-p4') ? 'delay' : sub.startsWith('d4-p5') ? 'claim' : 'register');
 }
 const FIELDS: Record<RccKind, [string, string, string, string?][]> = {
@@ -95,9 +96,15 @@ function LiveRcc({ lang, projectId, subId, initialTab, hideTabs, userId }: Props
   const [delayCalc, setDelayCalc] = useState<Record<string, string>>({ engine: 'circular5090', statementKind: 'interim' });
   const [delayApprovalNote, setDelayApprovalNote] = useState('');
   const [delayReviewNote, setDelayReviewNote] = useState('');
-  const [costForm, setCostForm] = useState<Record<string, unknown>>({ CostType: 'overhead', TitleFa: '', Amount: '', Currency: '', Basis: '', PeriodFrom: '', PeriodTo: '', DocumentRefs: [] });
+  const [costForm, setCostForm] = useState<Record<string, unknown>>({ CostType: 'overhead', TitleFa: '', Amount: '', Currency: '', Basis: '', PeriodFrom: '', PeriodTo: '', DocumentRefs: [], CostNature: '', Quantity: '', Rate: '', UnitFa: '', DocumentedAmount: '', ApprovedAmount: '', ResourceKind: '', ResourceNameFa: '', WorkedUnits: '', IdleUnits: '' });
   const [eotBusy, setEotBusy] = useState<'word' | 'pdf' | null>(null);
   const [eotNotice, setEotNotice] = useState<{ ok: boolean; text: string } | null>(null);
+  const [lossClaimCode, setLossClaimCode] = useState('');
+  const [lossBusy, setLossBusy] = useState<'word' | 'pdf' | null>(null);
+  const [lossNotice, setLossNotice] = useState<{ ok: boolean; text: string } | null>(null);
+  const [ruleForm, setRuleForm] = useState<Record<string, string>>({ Code: '', NameFa: '', Category: 'overhead', Kind: 'rate_qty_period', FormulaFa: '', SourceFa: '', Version: '1.0' });
+  const [calcForm, setCalcForm] = useState<Record<string, string>>({ itemId: '', ruleId: '', rate: '', quantity: '', periodUnits: '', baseAmount: '', pct: '', dailyRate: '', days: '', directAmount: '', indirectAmount: '', manualAdjustment: '', manualReason: '' });
+  const [allocForm, setAllocForm] = useState<Record<string, string>>({ itemId: '', eventId: '', pct: '', basis: '' });
   const generation = useRef(0);
   const mounted = useRef(true);
   const kind: RccKind = tab === 'issue' ? 'issues' : tab === 'delay' ? 'delays' : ['claim', 'notice', 'dispute'].includes(tab) ? 'claims' : ['change', 'ccb'].includes(tab) ? 'changes' : 'risks';
@@ -170,6 +177,33 @@ function LiveRcc({ lang, projectId, subId, initialTab, hideTabs, userId }: Props
       if (mounted.current) { setEotNotice({ ok: false, text: message }); setError(message); }
     } finally {
       if (mounted.current) setEotBusy(null);
+    }
+  }
+  async function downloadLoss(claimId: string, format: 'word' | 'pdf') {
+    if (lossBusy) return;
+    setLossBusy(format); setLossNotice(null);
+    try {
+      const response = await fetch(`${base}/claims/${encodeURIComponent(claimId)}/loss-document?format=${format}`, { headers: { ...(userId ? { 'x-user-id': userId } : {}) } });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null) as { error?: { message?: string } } | null;
+        throw new Error(payload?.error?.message || label('تولید لایحهٔ ضرر و زیان انجام نشد', 'Loss document generation failed'));
+      }
+      const blob = await response.blob();
+      if (!blob.size) throw new Error(label('فایل خروجی خالی است', 'Generated file is empty'));
+      const filename = response.headers.get('content-disposition')?.match(/filename="([^"]+)"/)?.[1] ?? `LossClaim.${format === 'word' ? 'doc' : 'pdf'}`;
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url; anchor.download = filename; anchor.style.display = 'none';
+      document.body.appendChild(anchor); anchor.click();
+      window.setTimeout(() => anchor.remove(), 1000);
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      if (mounted.current) setLossNotice({ ok: true, text: label(`دانلود آغاز شد: ${filename} (نسخهٔ پیش‌نویس لایحه ثبت شد)`, `Download started: ${filename}`) });
+      void load();
+    } catch (downloadError) {
+      const message = downloadError instanceof Error ? downloadError.message : label('تولید لایحهٔ ضرر و زیان انجام نشد', 'Loss document generation failed');
+      if (mounted.current) setLossNotice({ ok: false, text: message });
+    } finally {
+      if (mounted.current) setLossBusy(null);
     }
   }
   function runIssue(action: (typeof ISSUE_ACTIONS)[number]) {
@@ -315,7 +349,72 @@ function LiveRcc({ lang, projectId, subId, initialTab, hideTabs, userId }: Props
             [label('نزدیک‌ترین مهلت', 'Next due'), workspace.issueSummary.nextDueAt ?? '—'],
           ].map(([title, value]) => <div key={String(title)} className="rounded-lg border b-line-soft p-3"><div className="tx3 text-[11px]">{title}</div><div className="tx1 mt-1 text-base font-semibold" dir="ltr">{value}</div></div>)}</div>
         </section>}
-        {hidden ? <p className="tx3 text-sm">{label('مجوز مشاهدهٔ این داده‌ها را ندارید.', 'You do not have permission to view these records.')}</p> : <section className="space-y-2">
+        {tab === 'loss' && !workspace.delaysHidden && (() => {
+          const s = (workspace.lossSummary ?? {}) as { totals?: Record<string, number>; cases?: { claimCode: string; estimated: number; calculated: number; documented: number; proposed: number; approvedInternal: number; accepted: number | null; finalDetermined: number | null; itemsCount: number; itemsWithoutDocs: number; itemsNeedingReview: number; readyForDocument: boolean }[]; activeCases?: number; incompleteDocs?: number; needsReview?: number; readyForDocument?: number; pendingApproval?: number };
+          const selectedClaim = workspace.claims.find(c => c.Code === lossClaimCode) ?? workspace.claims[0];
+          const caseRow = s.cases?.find(c => c.claimCode === selectedClaim?.Code);
+          const claimEventIds = new Set(workspace.delays.filter(d => d.ClaimCode === selectedClaim?.Code).map(d => d.Id));
+          const items = workspace.claimCostItems.filter(i => i.ClaimCode === selectedClaim?.Code || claimEventIds.has(i.DelayEventId));
+          const latestRun = (itemId: string) => [...workspace.lossRuns].filter(r => r.ClaimCostItemId === itemId).sort((a, b) => String(b.CalculatedAt ?? '').localeCompare(String(a.CalculatedAt ?? '')))[0];
+          const versions = workspace.lossDocumentVersions.filter(v => v.ClaimId === selectedClaim?.Id);
+          const warnings = (workspace.overlapWarnings ?? []) as { kind: string; severity: string; messageFa: string }[];
+          const nums = (v: unknown) => v === '' || v === undefined ? undefined : Number(v);
+          return <section className="glass-dark rounded-xl p-3 space-y-3">
+            <h4 className="tx1 text-sm font-semibold">{label('مدیریت هوشمند خسارات و دعاوی مالی پیمان — مرکز کنترل ضرر و زیان', 'Smart contract losses & financial claims — loss control centre')}</h4>
+            <div className="grid grid-cols-2 gap-2 md:grid-cols-5">{[
+              [label('مجموع ثبت‌شده (برآورد)', 'Estimated total'), s.totals?.estimated ?? 0],
+              [label('مجموع محاسبه‌شده', 'Calculated total'), s.totals?.calculated ?? 0],
+              [label('مجموع مستند', 'Documented total'), s.totals?.documented ?? 0],
+              [label('پیشنهادی مطالبه', 'Proposed total'), s.totals?.proposed ?? 0],
+              [label('تأییدشدهٔ داخلی', 'Internally approved'), s.totals?.approvedInternal ?? 0],
+              [label('پرونده‌های فعال', 'Active cases'), s.activeCases ?? 0],
+              [label('مدارک ناقص', 'Incomplete documents'), s.incompleteDocs ?? 0],
+              [label('نیازمند بررسی کارشناسی', 'Needs expert review'), s.needsReview ?? 0],
+              [label('آمادهٔ تهیه لایحه', 'Ready for document'), s.readyForDocument ?? 0],
+              [label('سوابق تولید لایحه', 'Document versions'), workspace.lossDocumentVersions.length],
+            ].map(([title, value]) => <div key={String(title)} className="rounded-lg border b-line-soft p-3"><div className="tx3 text-[11px]">{title}</div><div className="tx1 mt-1 text-base font-semibold" dir="ltr">{String(value)}</div></div>)}</div>
+            <div className="flex flex-wrap gap-1.5">{workspace.claims.map(c => <button key={c.Id} className={`${btn} ${selectedClaim?.Id === c.Id ? 'toggle-on' : ''}`} onClick={() => setLossClaimCode(c.Code)}>{c.Code}</button>)}</div>
+            {selectedClaim && <>
+              <p className="tx2 text-xs"><strong className="tx1">{selectedClaim.Code} — {selectedClaim.TitleFa}</strong> · {label('تفکیک مبالغ (تبدیل بدون سابقه انجام نمی‌شود):', 'Separated amounts:')} {label('برآورد', 'Est.')} <span dir="ltr">{caseRow?.estimated ?? '—'}</span> · {label('محاسبه‌شده', 'Calc.')} <span dir="ltr">{caseRow?.calculated ?? '—'}</span> · {label('مستند', 'Doc.')} <span dir="ltr">{caseRow?.documented ?? '—'}</span> · {label('تأیید داخلی', 'Appr.')} <span dir="ltr">{caseRow?.approvedInternal ?? '—'}</span> · {label('پذیرش طرف مقابل', 'Accepted')} <span dir="ltr">{caseRow?.accepted ?? '—'}</span> · {label('نهایی', 'Final')} <span dir="ltr">{caseRow?.finalDetermined ?? '—'}</span></p>
+              <div className="space-y-1">{items.length ? items.map(item => { const run = latestRun(item.Id); return <p key={item.Id} className="rounded-lg border b-line-soft p-2 text-xs tx2">{label(lossCategoryFa(item.LossCategory ?? item.CostType), item.CostType)} — {item.TitleFa} · {label('ثبت‌شده', 'Recorded')} <span dir="ltr">{String(item.Amount)}</span> · {label('محاسبه', 'Calc')} <span dir="ltr">{run ? (run.FinalAmount ?? label('نیازمند بررسی', 'Needs review')) : '—'}</span> · {label('اسناد', 'Docs')} {Array.isArray(item.DocumentRefs) ? item.DocumentRefs.length : 0}{has('rcc.delay.calculate') && <button className={btn} disabled={busy} onClick={() => setCalcForm(f => ({ ...f, itemId: item.Id }))}>{label('انتخاب برای محاسبه', 'Select to calculate')}</button>}{has('rcc.delay.edit') && <button className={btn} disabled={busy} onClick={() => setAllocForm(f => ({ ...f, itemId: item.Id }))}>{label('تخصیص', 'Allocate')}</button>}</p>; }) : <span className="tx3 text-xs">{label('برای این پرونده قلم خسارتی ثبت نشده است؛ از تب تحلیل تأخیر، رویداد پیوندشده را باز و آیتم هزینه ثبت کنید.', 'No loss item for this case; open the linked delay event and add a cost item.')}</span>}</div>
+              {has('rcc.delay.calculate') && <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+                <label className="text-[11px] tx3">{label('قلم خسارت', 'Loss item')}<select aria-label={label('قلم خسارت', 'Loss item')} className={inputClass} value={calcForm.itemId} onChange={e => setCalcForm(f => ({ ...f, itemId: e.target.value }))}><option value="">—</option>{items.map(i => <option key={i.Id} value={i.Id}>{i.TitleFa}</option>)}</select></label>
+                <label className="text-[11px] tx3">{label('قاعدهٔ محاسبه', 'Rule')}<select aria-label={label('قاعدهٔ محاسبه', 'Rule')} className={inputClass} value={calcForm.ruleId} onChange={e => setCalcForm(f => ({ ...f, ruleId: e.target.value }))}><option value="">—</option>{workspace.lossRules.map(r => <option key={r.Id} value={r.Id}>{r.Code} v{r.Version ?? '1.0'} — {r.NameFa} ({r.Status === 'approved' ? label('تأییدشده', 'approved') : label('تأییدنشده', 'not approved')})</option>)}</select></label>
+                {(['rate', 'quantity', 'periodUnits', 'baseAmount', 'pct', 'dailyRate', 'days', 'directAmount', 'indirectAmount'] as const).map(k => <label key={k} className="text-[11px] tx3">{label({ rate: 'نرخ', quantity: 'تعداد/مقدار', periodUnits: 'دوره', baseAmount: 'مبلغ مبنا', pct: 'درصد', dailyRate: 'نرخ روزانه', days: 'روز', directAmount: 'مستقیم', indirectAmount: 'غیرمستقیم' }[k], k)}<input aria-label={k} className={inputClass} type="number" step="any" value={calcForm[k]} onChange={e => setCalcForm(f => ({ ...f, [k]: e.target.value }))} /></label>)}
+                <label className="text-[11px] tx3">{label('اصلاح دستی (با دلیل)', 'Manual adjustment (with reason)')}<span className="flex gap-1"><input aria-label={label('اصلاح دستی', 'Adjustment')} className={inputClass} type="number" step="any" value={calcForm.manualAdjustment} onChange={e => setCalcForm(f => ({ ...f, manualAdjustment: e.target.value }))} /><input aria-label={label('دلیل اصلاح', 'Reason')} className={inputClass} value={calcForm.manualReason} onChange={e => setCalcForm(f => ({ ...f, manualReason: e.target.value }))} /></span></label>
+                <button className={btn} disabled={busy || !calcForm.itemId || !calcForm.ruleId} onClick={() => void mutate(`/cost-items/${encodeURIComponent(calcForm.itemId)}/calculate`, 'POST', { ruleId: calcForm.ruleId, inputs: { rate: nums(calcForm.rate), quantity: nums(calcForm.quantity), periodUnits: nums(calcForm.periodUnits), baseAmount: nums(calcForm.baseAmount), pct: nums(calcForm.pct), dailyRate: nums(calcForm.dailyRate), days: nums(calcForm.days), directAmount: nums(calcForm.directAmount), indirectAmount: nums(calcForm.indirectAmount) }, manualAdjustment: nums(calcForm.manualAdjustment) ?? 0, manualReason: calcForm.manualReason })}>{label('اجرای محاسبه (ثبت نسخه‌دار)', 'Run calculation')}</button>
+              </div>}
+              {has('rcc.delay.edit') && <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+                <label className="text-[11px] tx3">{label('رویداد مقصد تخصیص', 'Target event')}<select aria-label={label('رویداد مقصد تخصیص', 'Target event')} className={inputClass} value={allocForm.eventId} onChange={e => setAllocForm(f => ({ ...f, eventId: e.target.value }))}><option value="">—</option>{workspace.delays.map(d => <option key={d.Id} value={d.Id}>{d.Code} — {d.TitleFa}</option>)}</select></label>
+                <label className="text-[11px] tx3">{label('درصد تخصیص', 'Allocation %')}<input aria-label={label('درصد تخصیص', 'Allocation %')} className={inputClass} type="number" step="any" value={allocForm.pct} onChange={e => setAllocForm(f => ({ ...f, pct: e.target.value }))} /></label>
+                <label className="text-[11px] tx3">{label('مبنای تخصیص (برای بیش از ۱۰۰٪ الزامی)', 'Basis (required above 100%)')}<input aria-label={label('مبنای تخصیص', 'Basis')} className={inputClass} value={allocForm.basis} onChange={e => setAllocForm(f => ({ ...f, basis: e.target.value }))} /></label>
+                <button className={btn} disabled={busy || !allocForm.itemId || !allocForm.eventId || !allocForm.pct} onClick={() => void mutate(`/cost-items/${encodeURIComponent(allocForm.itemId)}/allocations`, 'POST', { DelayEventId: allocForm.eventId, AllocationPct: Number(allocForm.pct), Basis: allocForm.basis })}>{label('ثبت تخصیص', 'Add allocation')}</button>
+              </div>}
+              {warnings.length > 0 && <div className="space-y-1"><h5 className="tx1 text-xs font-semibold">{label('کنترل هم‌پوشانی (نامزد بررسی کارشناسی، نه حکم قطعی)', 'Overlap control (candidates, not verdicts)')}</h5>{warnings.map((w, i) => <p key={i} className={`rounded-lg p-2 text-xs ${w.severity === 'violation' ? 'bg-rose-500/10 text-rose-400' : 'bg-amber-500/10 text-amber-400'}`}>{w.messageFa}</p>)}</div>}
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="tx1 text-xs font-semibold">{label('لایحهٔ ضرر و زیان (پیش‌نویس تا تأیید مسئول)', 'Loss document (draft until approved)')}</span>
+                {(['word', 'pdf'] as const).map(format => <button type="button" key={format} className={btn} disabled={lossBusy !== null} onClick={() => void downloadLoss(selectedClaim.Id, format)}>{lossBusy === format ? label('در حال تولید…', 'Generating…') : format === 'word' ? label('دانلود Word', 'Download Word') : label('دانلود / چاپ PDF', 'Download / print PDF')}</button>)}
+                <span className="tx3 text-xs">{label('نسخه‌های تولیدشده:', 'Versions:')} <span dir="ltr">{versions.map(v => 'v' + String(v.Version)).join('، ') || '—'}</span></span>
+              </div>
+              {lossNotice && <p role={lossNotice.ok ? 'status' : 'alert'} className={`rounded-xl p-3 text-xs ${lossNotice.ok ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'}`}>{lossNotice.text}</p>}
+            </>}
+            <div className="space-y-2">
+              <h5 className="tx1 text-xs font-semibold">{label('کتابخانهٔ قواعد محاسبه (ClaimCalculationRules) — قاعدهٔ تأییدنشده مبنای قطعی نیست', 'Calculation rules library — unapproved rules are not final basis')}</h5>
+              <div className="space-y-1">{workspace.lossRules.length ? workspace.lossRules.map(r => <p key={r.Id} className="rounded-lg border b-line-soft p-2 text-xs tx2"><span dir="ltr">{r.Code} v{r.Version ?? '1.0'}</span> — {r.NameFa} · {label(lossCategoryFa(r.Category), r.Category)} · {r.Status}{r.Status !== 'approved' && has('rcc.delay.approve') && <button className={btn} disabled={busy} onClick={() => void mutate(`/loss-rules/${encodeURIComponent(r.Id)}/approve`, 'POST', { note: label('قاعده و منبع بررسی شد', 'Rule and source reviewed') })}>{label('تأیید قاعده', 'Approve rule')}</button>}</p>) : <span className="tx3 text-xs">{label('قاعده‌ای ثبت نشده است.', 'No rule recorded.')}</span>}</div>
+              {has('rcc.delay.edit') && <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+                <label className="text-[11px] tx3">{label('کد قاعده', 'Rule code')}<input aria-label={label('کد قاعده', 'Rule code')} className={inputClass} value={ruleForm.Code} onChange={e => setRuleForm(f => ({ ...f, Code: e.target.value }))} /></label>
+                <label className="text-[11px] tx3">{label('نام قاعده', 'Rule name')}<input aria-label={label('نام قاعده', 'Rule name')} className={inputClass} value={ruleForm.NameFa} onChange={e => setRuleForm(f => ({ ...f, NameFa: e.target.value }))} /></label>
+                <label className="text-[11px] tx3">{label('دسته', 'Category')}<select aria-label={label('دسته', 'Category')} className={inputClass} value={ruleForm.Category} onChange={e => setRuleForm(f => ({ ...f, Category: e.target.value }))}>{LOSS_CATEGORIES.map(c => <option key={c.code} value={c.code}>{label(c.fa, c.en)}</option>)}</select></label>
+                <label className="text-[11px] tx3">{label('نوع فرمول', 'Formula kind')}<select aria-label={label('نوع فرمول', 'Formula kind')} className={inputClass} value={ruleForm.Kind} onChange={e => setRuleForm(f => ({ ...f, Kind: e.target.value }))}><option value="rate_qty_period">{label('نرخ × مقدار × دوره', 'Rate × qty × period')}</option><option value="amount_pct">{label('درصد از مبلغ مبنا', 'Percent of base')}</option><option value="daily_rate_days">{label('نرخ روزانه × روز', 'Daily rate × days')}</option><option value="actual_sum">{label('جمع هزینهٔ واقعی مستقیم+غیرمستقیم', 'Actual direct+indirect')}</option></select></label>
+                <label className="text-[11px] tx3">{label('شرح فرمول', 'Formula')}<input aria-label={label('شرح فرمول', 'Formula')} className={inputClass} value={ruleForm.FormulaFa} onChange={e => setRuleForm(f => ({ ...f, FormulaFa: e.target.value }))} /></label>
+                <label className="text-[11px] tx3">{label('منبع قراردادی/ضابطه‌ای (الزامی)', 'Source (required)')}<input aria-label={label('منبع', 'Source')} className={inputClass} value={ruleForm.SourceFa} onChange={e => setRuleForm(f => ({ ...f, SourceFa: e.target.value }))} /></label>
+                <label className="text-[11px] tx3">{label('نسخه', 'Version')}<input aria-label={label('نسخه', 'Version')} className={inputClass} value={ruleForm.Version} onChange={e => setRuleForm(f => ({ ...f, Version: e.target.value }))} /></label>
+                <button className={btn} disabled={busy || !ruleForm.Code.trim() || !ruleForm.NameFa.trim() || !ruleForm.SourceFa.trim()} onClick={() => void mutate('/loss-rules', 'POST', ruleForm)}>{label('ثبت قاعده (نیازمند تأیید)', 'Add rule (needs approval)')}</button>
+              </div>}
+            </div>
+          </section>;
+        })()}
+        {tab !== 'loss' && (hidden ? <p className="tx3 text-sm">{label('مجوز مشاهدهٔ این داده‌ها را ندارید.', 'You do not have permission to view these records.')}</p> : <section className="space-y-2">
           {!displayRows.length && <p className="tx3 text-sm p-3">{label('رکوردی برای این نما ثبت نشده؛ دادهٔ نمونه خودکار درج نمی‌شود.', 'No records in this view. Sample data is never inserted automatically.')}</p>}
           {displayRows.map(row => <article key={row.Id} className="glass-dark rounded-xl p-3 space-y-2 text-xs tx2">
             <div className="flex flex-wrap items-center gap-3"><strong className="tx1">{row.Code} — {row.TitleFa}</strong><span>{kind === 'claims' ? label(CLAIM_STATUS[row.Status]?.[0] ?? row.Status, CLAIM_STATUS[row.Status]?.[1] ?? row.Status) : kind === 'issues' ? label(ISSUE_STATUS[row.Status]?.[0] ?? row.Status, ISSUE_STATUS[row.Status]?.[1] ?? row.Status) : kind === 'delays' ? label(DELAY_STATUS[row.Status]?.[0] ?? row.Status, DELAY_STATUS[row.Status]?.[1] ?? row.Status) : row.Status}</span><span dir="ltr">v{row.RowVersion}</span><button className={btn} onClick={() => select(row)}>{label('جزئیات / انتخاب', 'Details / select')}</button></div>
@@ -336,8 +435,8 @@ function LiveRcc({ lang, projectId, subId, initialTab, hideTabs, userId }: Props
               {row.Status === 'draft' && Array.isArray(row.submissionIssues) && row.submissionIssues.length > 0 && <p className="text-amber-400">{label('موارد ناقص برای نهایی‌سازی:', 'Missing before finalization:')} {row.submissionIssues.length}</p>}
             </>}
           </article>)}
-        </section>}
-        {(has(EDIT[kind]) || editing) && <form className="glass-dark rounded-xl p-4 space-y-3" onSubmit={e => { e.preventDefault(); void mutate(`/${kind}${editing ? '/' + encodeURIComponent(editing.Id) : ''}`, editing ? 'PATCH' : 'POST', { ...form, ...(editing ? { RowVersion: editing.RowVersion } : {}) }); }}>
+        </section>)}
+        {tab !== 'loss' && (has(EDIT[kind]) || editing) && <form className="glass-dark rounded-xl p-4 space-y-3" onSubmit={e => { e.preventDefault(); void mutate(`/${kind}${editing ? '/' + encodeURIComponent(editing.Id) : ''}`, editing ? 'PATCH' : 'POST', { ...form, ...(editing ? { RowVersion: editing.RowVersion } : {}) }); }}>
           <div className="flex gap-3 tx1 text-sm"><h4>{editing ? label('رکورد انتخاب‌شده', 'Selected record') : label('ثبت جدید', 'Create record')}</h4><button type="button" className={btn} onClick={() => { setEditing(null); setForm(fresh(kind, workspace.today)); }}>{label('فرم جدید', 'New form')}</button></div>
           <fieldset disabled={busy || locked || !has(EDIT[kind])} className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {FIELDS[kind].map(([key, a, b, type]) => <label key={key} className="text-[11px] tx3">{label(a, b)}{kind === 'claims' && key === 'BaselineId'
@@ -431,7 +530,13 @@ function LiveRcc({ lang, projectId, subId, initialTab, hideTabs, userId }: Props
             <h5 className="tx1 text-xs font-semibold">{label('ادعای مالی و هزینه‌های تمدید (Prolongation Costs)', 'Monetary / prolongation cost items')}</h5>
             {(() => { const items = (workspace.claimCostItems ?? []).filter(item => item.DelayEventId === editing.Id); return items.length ? <div className="space-y-1">{items.map(item => <p key={item.Id} className="rounded-lg border b-line-soft p-2 text-xs tx2">{label(({ guarantee_extension: 'تمدید ضمانت‌نامه‌ها', site_facilities: 'تجهیز کارگاه', overhead: 'پرسنل ثابت/سربار', suspension: 'هزینهٔ تعلیق', other: 'سایر' } as Record<string, string>)[item.CostType] ?? item.CostType, item.CostType)} — {item.TitleFa} · <span dir="ltr">{String(item.Amount)}</span>{item.Currency ? ` ${String(item.Currency)}` : ''} · {String(item.Status)}{has('rcc.delay.edit') && <button className={btn} disabled={busy} onClick={() => void mutate(`/cost-items/${encodeURIComponent(item.Id)}`, 'DELETE', undefined)}>{label('حذف', 'Delete')}</button>}</p>)}</div> : <p className="tx3 text-xs">{label('آیتم هزینه‌ای برای این رویداد ثبت نشده است.', 'No cost item recorded for this event.')}</p>; })()}
             {has('rcc.delay.edit') && <div className="grid gap-2 md:grid-cols-3">
-              <label className="text-[11px] tx3">{label('نوع هزینه', 'Cost type')}<select aria-label={label('نوع هزینه', 'Cost type')} className={inputClass} value={String(costForm.CostType ?? 'overhead')} onChange={e => setCostForm(f => ({ ...f, CostType: e.target.value }))}><option value="guarantee_extension">{label('تمدید ضمانت‌نامه‌ها', 'Guarantee extension')}</option><option value="site_facilities">{label('هزینهٔ تجهیز کارگاه', 'Site facilities')}</option><option value="overhead">{label('پرسنل ثابت / سربار', 'Fixed staff / overhead')}</option><option value="suspension">{label('هزینهٔ تعلیق', 'Suspension')}</option><option value="other">{label('سایر', 'Other')}</option></select></label>
+              <label className="text-[11px] tx3">{label('دستهٔ خسارت', 'Loss category')}<select aria-label={label('دستهٔ خسارت', 'Loss category')} className={inputClass} value={String(costForm.CostType ?? 'overhead')} onChange={e => setCostForm(f => ({ ...f, CostType: e.target.value }))}>{LOSS_CATEGORIES.map(c => <option key={c.code} value={c.code}>{label(c.fa, c.en)}</option>)}</select></label>
+              <label className="text-[11px] tx3">{label('ماهیت هزینه', 'Cost nature')}<select aria-label={label('ماهیت هزینه', 'Cost nature')} className={inputClass} value={String(costForm.CostNature ?? '')} onChange={e => setCostForm(f => ({ ...f, CostNature: e.target.value }))}><option value="">{label('نامشخص', 'Unspecified')}</option><option value="direct">{label('مستقیم', 'Direct')}</option><option value="indirect">{label('غیرمستقیم', 'Indirect')}</option></select></label>
+              <label className="text-[11px] tx3">{label('مبلغ مستندشده', 'Documented amount')}<input aria-label={label('مبلغ مستندشده', 'Documented amount')} className={inputClass} type="number" min="0" step="any" value={String(costForm.DocumentedAmount ?? '')} onChange={e => setCostForm(f => ({ ...f, DocumentedAmount: e.target.value === '' ? '' : Number(e.target.value) }))} /></label>
+              <label className="text-[11px] tx3">{label('مبلغ تأییدشدهٔ داخلی', 'Internally approved amount')}<input aria-label={label('مبلغ تأییدشدهٔ داخلی', 'Internally approved amount')} className={inputClass} type="number" min="0" step="any" value={String(costForm.ApprovedAmount ?? '')} onChange={e => setCostForm(f => ({ ...f, ApprovedAmount: e.target.value === '' ? '' : Number(e.target.value) }))} /></label>
+              <label className="text-[11px] tx3">{label('مقدار / نرخ', 'Quantity / rate')}<span className="flex gap-1"><input aria-label={label('مقدار', 'Quantity')} className={inputClass} type="number" min="0" step="any" value={String(costForm.Quantity ?? '')} onChange={e => setCostForm(f => ({ ...f, Quantity: e.target.value === '' ? '' : Number(e.target.value) }))} /><input aria-label={label('نرخ', 'Rate')} className={inputClass} type="number" min="0" step="any" value={String(costForm.Rate ?? '')} onChange={e => setCostForm(f => ({ ...f, Rate: e.target.value === '' ? '' : Number(e.target.value) }))} /></span></label>
+              <label className="text-[11px] tx3">{label('واحد / منبع', 'Unit / resource')}<span className="flex gap-1"><input aria-label={label('واحد', 'Unit')} className={inputClass} value={String(costForm.UnitFa ?? '')} onChange={e => setCostForm(f => ({ ...f, UnitFa: e.target.value }))} /><select aria-label={label('نوع منبع', 'Resource kind')} className={inputClass} value={String(costForm.ResourceKind ?? '')} onChange={e => setCostForm(f => ({ ...f, ResourceKind: e.target.value }))}><option value="">{label('بدون منبع', 'No resource')}</option><option value="labor">{label('نیروی انسانی', 'Labour')}</option><option value="machinery">{label('ماشین‌آلات', 'Machinery')}</option><option value="other">{label('سایر', 'Other')}</option></select></span></label>
+              <label className="text-[11px] tx3">{label('نام منبع / کارکرد و توقف', 'Resource name / worked & idle')}<span className="flex gap-1"><input aria-label={label('نام منبع', 'Resource name')} className={inputClass} value={String(costForm.ResourceNameFa ?? '')} onChange={e => setCostForm(f => ({ ...f, ResourceNameFa: e.target.value }))} /><input aria-label={label('کارکرد', 'Worked units')} className={inputClass} type="number" min="0" step="any" value={String(costForm.WorkedUnits ?? '')} onChange={e => setCostForm(f => ({ ...f, WorkedUnits: e.target.value === '' ? '' : Number(e.target.value) }))} /><input aria-label={label('توقف', 'Idle units')} className={inputClass} type="number" min="0" step="any" value={String(costForm.IdleUnits ?? '')} onChange={e => setCostForm(f => ({ ...f, IdleUnits: e.target.value === '' ? '' : Number(e.target.value) }))} /></span></label>
               <label className="text-[11px] tx3">{label('عنوان هزینه', 'Cost title')}<input aria-label={label('عنوان هزینه', 'Cost title')} className={inputClass} value={String(costForm.TitleFa ?? '')} onChange={e => setCostForm(f => ({ ...f, TitleFa: e.target.value }))} /></label>
               <label className="text-[11px] tx3">{label('مبلغ', 'Amount')}<input aria-label={label('مبلغ', 'Amount')} className={inputClass} type="number" min="0" step="any" value={String(costForm.Amount ?? '')} onChange={e => setCostForm(f => ({ ...f, Amount: e.target.value === '' ? '' : Number(e.target.value) }))} /></label>
               <label className="text-[11px] tx3">{label('واحد پول', 'Currency')}<input aria-label={label('واحد پول', 'Currency')} className={inputClass} value={String(costForm.Currency ?? '')} onChange={e => setCostForm(f => ({ ...f, Currency: e.target.value }))} /></label>

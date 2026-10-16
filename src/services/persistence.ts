@@ -508,7 +508,7 @@ export const SCHEMA: TableDef[] = [
     module: "d4",
     title: { fa: "ریسک", en: "Risk" },
     pk: "Id",
-    columns: [id(), req("ProjectId", "text", { len: 60 }), req("Code", "text", { len: 40 }), req("TitleFa", "text", { len: 400 }), req("Category", "text", { len: 40 }), req("Probability", "int"), req("Impact", "int"), c("Score", "int"), req("Status", "text", { len: 30 }), c("Owner", "text", { len: 120 }), c("Response", "text", { len: 1000 }), c("Cause", "text", { len: 1000 }), c("Event", "text", { len: 1000 }), c("Effect", "text", { len: 1000 }), c("SourceRef", "text", { len: 200 })],
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("Code", "text", { len: 40 }), req("TitleFa", "text", { len: 400 }), req("Category", "text", { len: 40 }), req("Probability", "int"), req("Impact", "int"), c("Score", "int"), req("Status", "text", { len: 30 }), c("Owner", "text", { len: 120 }), c("Response", "text", { len: 1000 }), c("Cause", "text", { len: 1000 }), c("Event", "text", { len: 1000 }), c("Effect", "text", { len: 1000 }), c("SourceRef", "text", { len: 200 }), c("WbsCode", "text", { len: 60 }), c("ActivityCode", "text", { len: 60 }), c("BaselineId", "text", { len: 60 }), c("ReserveAmount", "decimal", { precision: 18, scale: 2 }), c("ReserveUsedAmount", "decimal", { precision: 18, scale: 2 }), c("ReserveStatus", "text", { len: 30 }), c("NextReviewDate", "date"), c("LastReviewedAt", "datetime"), c("LastReviewedBy", "text", { len: 60 }), c("MonitoringNote", "text", { len: 1000 })],
     indexes: [{ name: "UX_Risk_Code", columns: ["ProjectId", "Code"], unique: true }],
     foreignKeys: [{ column: "ProjectId", refTable: "Project", refColumn: "Id", onDelete: "CASCADE" }],
   },
@@ -517,7 +517,7 @@ export const SCHEMA: TableDef[] = [
     module: "d4",
     title: { fa: "درخواست تغییر", en: "Change request" },
     pk: "Id",
-    columns: [id(), req("ProjectId", "text", { len: 60 }), req("Code", "text", { len: 40 }), req("TitleFa", "text", { len: 400 }), req("RaisedBy", "text", { len: 60 }), req("RaisedAt", "date"), c("CostImpact", "decimal", { precision: 18, scale: 2 }), c("TimeImpactDays", "int"), req("Status", "text", { len: 30 }), c("ApprovedBy", "text", { len: 60 }), c("ApprovedAt", "datetime"), c("Reason", "text", { len: 1000 }), c("Assessment", "json"), c("DecisionReason", "text", { len: 1000 })],
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("Code", "text", { len: 40 }), req("TitleFa", "text", { len: 400 }), req("RaisedBy", "text", { len: 60 }), req("RaisedAt", "date"), c("CostImpact", "decimal", { precision: 18, scale: 2 }), c("TimeImpactDays", "int"), req("Status", "text", { len: 30 }), c("ApprovedBy", "text", { len: 60 }), c("ApprovedAt", "datetime"), c("Reason", "text", { len: 1000 }), c("Assessment", "json"), c("DecisionReason", "text", { len: 1000 }), c("WbsCode", "text", { len: 60 }), c("ActivityCode", "text", { len: 60 }), c("BaselineId", "text", { len: 60 }), c("ApplicationStatus", "text", { len: 30 }), c("AppliedBaselineId", "text", { len: 60 }), c("ApplicationNote", "text", { len: 1000 }), c("AppliedBy", "text", { len: 60 }), c("AppliedAt", "datetime")],
     indexes: [{ name: "UX_ChangeRequest_Code", columns: ["ProjectId", "Code"], unique: true }],
   },
   {
@@ -525,8 +525,74 @@ export const SCHEMA: TableDef[] = [
     module: "d4",
     title: { fa: "ادعا", en: "Claim" },
     pk: "Id",
-    columns: [id(), req("ProjectId", "text", { len: 60 }), req("Code", "text", { len: 40 }), req("TitleFa", "text", { len: 400 }), req("NoticeDate", "date"), c("SubmittedAt", "date"), c("Amount", "decimal", { precision: 18, scale: 2 }), c("ExtensionDays", "int"), req("Status", "text", { len: 30 }), req("TimeBarred", "bool", { default: "0" }), c("EventDate", "date"), c("NoticeDays", "int"), c("NoticeDeliveredAt", "datetime"), c("NoticeRef", "text", { len: 200 }), c("Clause", "text", { len: 200 }), c("EvidenceRef", "text", { len: 1000 }), c("Entitlement", "text", { len: 1000 }), c("Causation", "text", { len: 1000 }), c("QuantumNote", "text", { len: 1000 }), c("BaselineId", "text", { len: 60 }), c("DataDate", "date"), c("SubmittedBy", "text", { len: 60 })],
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("Code", "text", { len: 40 }), req("TitleFa", "text", { len: 400 }), req("NoticeDate", "date"), c("SubmittedAt", "date"), c("Amount", "decimal", { precision: 18, scale: 2 }), c("ProposedAmount", "decimal", { precision: 18, scale: 2, comment: "مبلغ پیشنهادی مطالبه؛ جدا از برآورد و تأیید" }), c("ExtensionDays", "int"), req("Status", "text", { len: 30 }), req("TimeBarred", "bool", { default: "0" }), c("EventDate", "date"), c("NoticeDays", "int"), c("NoticeDeliveredAt", "datetime"), c("NoticeRef", "text", { len: 200 }), c("Clause", "text", { len: 200 }), c("EvidenceRef", "text", { len: 1000 }), c("Entitlement", "text", { len: 1000 }), c("Causation", "text", { len: 1000 }), c("QuantumNote", "text", { len: 1000 }), c("BaselineId", "text", { len: 60 }), c("DataDate", "date"), c("SubmittedBy", "text", { len: 60 }), c("ReviewNote", "text", { len: 1000 }), c("ReviewBy", "text", { len: 60 }), c("ReviewAt", "datetime"), c("NegotiationNote", "text", { len: 1000 }), c("NegotiationBy", "text", { len: 60 }), c("NegotiationAt", "datetime"), c("DeterminedAmount", "decimal", { precision: 18, scale: 2 }), c("DeterminedDays", "int"), c("DeterminationNote", "text", { len: 1000 }), c("DeterminedBy", "text", { len: 60 }), c("DeterminedAt", "datetime"), c("RejectionNote", "text", { len: 1000 }), c("RejectedBy", "text", { len: 60 }), c("RejectedAt", "datetime"), c("SettlementAmount", "decimal", { precision: 18, scale: 2 }), c("SettlementDays", "int"), c("SettlementNote", "text", { len: 1000 }), c("SettledBy", "text", { len: 60 }), c("SettledAt", "datetime"), c("DisputeNote", "text", { len: 1000 }), c("DisputedBy", "text", { len: 60 }), c("DisputedAt", "datetime"), c("WithdrawalNote", "text", { len: 1000 }), c("WithdrawnBy", "text", { len: 60 }), c("WithdrawnAt", "datetime"), c("ClosureNote", "text", { len: 1000 }), c("ClosedBy", "text", { len: 60 }), c("ClosedAt", "datetime")],
     indexes: [{ name: "UX_Claim_Code", columns: ["ProjectId", "Code"], unique: true }],
+  },
+  {
+    name: "RccIssue",
+    module: "d4",
+    title: { fa: "مسئله و هشدار زودهنگام", en: "Issue and early warning" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("Code", "text", { len: 40 }), req("TitleFa", "text", { len: 400 }), c("Description", "text", { len: 1000 }), c("Severity", "text", { len: 20 }), req("Status", "text", { len: 30 }), c("Owner", "text", { len: 120 }), c("DueDate", "date"), c("RiskCode", "text", { len: 40 }), c("WbsCode", "text", { len: 60 }), c("ActivityCode", "text", { len: 60 }), c("SourceRef", "text", { len: 200 }), c("EscalationLevel", "int"), c("EscalationNote", "text", { len: 1000 }), c("EscalatedBy", "text", { len: 60 }), c("EscalatedAt", "datetime"), c("ResolutionNote", "text", { len: 1000 }), c("ResolvedBy", "text", { len: 60 }), c("ResolvedAt", "datetime"), c("ClosedBy", "text", { len: 60 }), c("ClosedAt", "datetime")],
+    indexes: [{ name: "UX_RccIssue_Code", columns: ["ProjectId", "Code"], unique: true }],
+    foreignKeys: [{ column: "ProjectId", refTable: "Project", refColumn: "Id", onDelete: "CASCADE" }],
+  },
+
+  {
+    name: "DelayEvent",
+    module: "d4",
+    title: { fa: "رویداد تأخیر و Extension of Time", en: "Delay event / EOT" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("Code", "text", { len: 40 }), req("TitleFa", "text", { len: 400 }), req("Category", "text", { len: 40 }), req("SourceParty", "text", { len: 40 }), req("StartDate", "date"), req("FinishDate", "date"), c("NoticedDate", "date"), c("Status", "text", { len: 30 }), c("ContractCode", "text", { len: 60 }), c("ClaimCode", "text", { len: 40 }), c("RiskCode", "text", { len: 40 }), c("IssueCode", "text", { len: 40 }), c("WbsCode", "text", { len: 60 }), c("ActivityCode", "text", { len: 60 }), c("BaselineId", "text", { len: 60 }), c("IpcId", "text", { len: 60 }), c("ClauseRef", "text", { len: 200 }), c("EvidenceRef", "text", { len: 1000 }), c("EvidenceRefs", "json"), c("EstimatedDelayDays", "int"), c("CompletionImpactDays", "int"), c("IsCritical", "bool", { default: "0" }), c("RootCauseFa", "text", { len: 1000 }), c("ReviewNote", "text", { len: 1000 }), c("ReviewedBy", "text", { len: 60 }), c("ReviewedAt", "datetime")],
+    indexes: [{ name: "UX_DelayEvent_Code", columns: ["ProjectId", "Code"], unique: true }, { name: "IX_DelayEvent_Claim", columns: ["ProjectId", "ClaimCode"] }],
+  },
+  {
+    name: "DelayCalculation",
+    module: "d4",
+    title: { fa: "محاسبهٔ تأخیر و تمدید مدت", en: "Delay calculation" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("DelayEventId", "text", { len: 60 }), req("Engine", "text", { len: 40 }), req("RuleVersion", "text", { len: 80 }), c("Method", "text", { len: 40 }), req("Inputs", "json"), req("Result", "json"), req("Status", "text", { len: 30 }), c("RawValueDays", "decimal", { precision: 18, scale: 6 }), c("FinalValueDays", "decimal", { precision: 18, scale: 6 }), c("CalculatedBy", "text", { len: 60 }), c("CalculatedAt", "datetime"), c("ApprovedBy", "text", { len: 60 }), c("ApprovedAt", "datetime"), c("ApprovalNote", "text", { len: 1000 })],
+    indexes: [{ name: "IX_DelayCalculation_Event", columns: ["ProjectId", "DelayEventId", "Engine"] }],
+  },
+  {
+    name: "ClaimCostItem",
+    module: "d4",
+    title: { fa: "آیتم هزینهٔ ادعای مالی (Prolongation)", en: "Monetary claim cost item" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("DelayEventId", "text", { len: 60 }), c("ClaimCode", "text", { len: 40 }), req("CostType", "text", { len: 30, comment: "guarantee_extension|site_facilities|overhead|suspension|other" }), req("TitleFa", "text", { len: 400 }), req("Amount", "decimal", { precision: 18, scale: 2, default: "0" }), c("Currency", "text", { len: 10 }), c("Basis", "text", { len: 1000 }), c("PeriodFrom", "date"), c("PeriodTo", "date"), c("DocumentRefs", "json"), c("Status", "text", { len: 20, default: "'draft'" }), c("LossCategory", "text", { len: 40, comment: "PMO-CLAIMS-LOSS-ENGINE-V1.0 category code" }), c("CostNature", "text", { len: 10, comment: "direct|indirect" }), c("Quantity", "decimal", { precision: 18, scale: 4 }), c("Rate", "decimal", { precision: 18, scale: 4 }), c("UnitFa", "text", { len: 60 }), c("DocumentedAmount", "decimal", { precision: 18, scale: 2 }), c("ApprovedAmount", "decimal", { precision: 18, scale: 2 }), c("RuleCode", "text", { len: 60 }), c("ResourceKind", "text", { len: 20, comment: "none|labor|machinery|other" }), c("ResourceNameFa", "text", { len: 300 }), c("WorkedUnits", "decimal", { precision: 18, scale: 2 }), c("IdleUnits", "decimal", { precision: 18, scale: 2 })],
+    indexes: [{ name: "IX_ClaimCostItem_Event", columns: ["ProjectId", "DelayEventId"] }],
+  },
+  {
+    name: "ClaimCalculationRule",
+    module: "d4",
+    title: { fa: "قاعدهٔ محاسبهٔ خسارت", en: "Loss calculation rule" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("Code", "text", { len: 60 }), req("NameFa", "text", { len: 300 }), req("Category", "text", { len: 40 }), req("Kind", "text", { len: 30, comment: "rate_qty_period|amount_pct|daily_rate_days|actual_sum" }), c("FormulaFa", "text", { len: 1000 }), c("SourceFa", "text", { len: 1000 }), c("Version", "text", { len: 20, default: "'1.0'" }), req("Status", "text", { len: 20, comment: "draft|needs_review|approved|obsolete|inactive" }), c("EffectiveFrom", "date"), c("ApprovedBy", "text", { len: 60 }), c("ApprovedAt", "datetime")],
+    indexes: [{ name: "UX_ClaimCalculationRule_Code", columns: ["ProjectId", "Code", "Version"], unique: true }],
+  },
+  {
+    name: "ClaimCalculationRun",
+    module: "d4",
+    title: { fa: "اجرای محاسبهٔ خسارت (append-only)", en: "Loss calculation run" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("ClaimCostItemId", "text", { len: 60 }), c("RuleId", "text", { len: 60 }), c("RuleCode", "text", { len: 60 }), c("RuleVersion", "text", { len: 20 }), req("Engine", "text", { len: 40, default: "'claim-loss-v1'" }), req("Inputs", "json"), req("Status", "text", { len: 20, comment: "calculated|needs_review" }), c("RawAmount", "decimal", { precision: 18, scale: 2 }), c("FinalAmount", "decimal", { precision: 18, scale: 2 }), c("ManualAdjustment", "decimal", { precision: 18, scale: 2, default: "0" }), c("ManualReason", "text", { len: 1000 }), c("Issues", "json"), c("CalculatedBy", "text", { len: 60 }), c("CalculatedAt", "datetime")],
+    indexes: [{ name: "IX_ClaimCalculationRun_Item", columns: ["ProjectId", "ClaimCostItemId"] }],
+  },
+  {
+    name: "ClaimCostAllocation",
+    module: "d4",
+    title: { fa: "تخصیص هزینه میان رویدادها", en: "Cost allocation across events" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("ClaimCostItemId", "text", { len: 60 }), req("DelayEventId", "text", { len: 60 }), req("AllocationPct", "decimal", { precision: 7, scale: 2 }), c("Basis", "text", { len: 1000 })],
+    indexes: [{ name: "IX_ClaimCostAllocation_Item", columns: ["ProjectId", "ClaimCostItemId"] }],
+  },
+  {
+    name: "ClaimDocumentVersion",
+    module: "d4",
+    title: { fa: "نسخهٔ لایحهٔ ضرر و زیان", en: "Loss document version" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("ClaimId", "text", { len: 60 }), c("ClaimCode", "text", { len: 40 }), req("Version", "int"), req("Format", "text", { len: 10, comment: "word|pdf" }), req("Status", "text", { len: 20, default: "'draft'", comment: "پیش‌نویس تا تأیید مسئول" }), c("Totals", "json"), c("GeneratedBy", "text", { len: 60 }), c("GeneratedAt", "datetime")],
+    indexes: [{ name: "IX_ClaimDocumentVersion_Claim", columns: ["ProjectId", "ClaimId", "Version"] }],
   },
 
   /* ── d5 مالی ── */
@@ -6416,6 +6482,44 @@ export const MIGRATIONS: Migration[] = [
       tableDdl(table, "mssql"),
       ...(table.indexes ?? []).map((index) => indexDdl(table, index, "mssql")),
     ]),
+  },
+  {
+    version: "0062", name: "rcc_claim_lifecycle_live",
+    statements: ["ReviewNote", "ReviewBy", "ReviewAt", "NegotiationNote", "NegotiationBy", "NegotiationAt", "DeterminedAmount", "DeterminedDays", "DeterminationNote", "DeterminedBy", "DeterminedAt", "RejectionNote", "RejectedBy", "RejectedAt", "SettlementAmount", "SettlementDays", "SettlementNote", "SettledBy", "SettledAt", "DisputeNote", "DisputedBy", "DisputedAt", "WithdrawalNote", "WithdrawnBy", "WithdrawnAt", "ClosureNote", "ClosedBy", "ClosedAt"].map((col) => addColumnDdl("Claim", col, "mssql")),
+  },
+  {
+    version: "0063", name: "rcc_wbs_baseline_links",
+    statements: [
+      ...["WbsCode", "ActivityCode", "BaselineId"].map((col) => addColumnDdl("Risk", col, "mssql")),
+      ...["WbsCode", "ActivityCode", "BaselineId", "ApplicationStatus", "AppliedBaselineId", "ApplicationNote", "AppliedBy", "AppliedAt"].map((col) => addColumnDdl("ChangeRequest", col, "mssql")),
+    ],
+  },
+  {
+    version: "0064", name: "rcc_reserve_issue_ews_live",
+    statements: [
+      ...["ReserveAmount", "ReserveUsedAmount", "ReserveStatus", "NextReviewDate", "LastReviewedAt", "LastReviewedBy", "MonitoringNote"].map((col) => addColumnDdl("Risk", col, "mssql")),
+      ...(() => { const table = tableDef("RccIssue"); return [tableDdl(table, "mssql"), ...(table.indexes ?? []).map((index) => indexDdl(table, index, "mssql"))]; })(),
+    ],
+  },
+  {
+    version: "0065", name: "delay_events_and_calculations",
+    statements: ["DelayEvent", "DelayCalculation"].flatMap((name) => { const table = tableDef(name); return [tableDdl(table, "mssql"), ...(table.indexes ?? []).map((index) => indexDdl(table, index, "mssql"))]; }),
+  },
+  {
+    version: "0066", name: "delay_event_edms_document_refs",
+    statements: [addColumnDdl("DelayEvent", "EvidenceRefs", "mssql")],
+  },
+  {
+    version: "0067", name: "claim_cost_items",
+    statements: [(() => { const table = tableDef("ClaimCostItem"); return [tableDdl(table, "mssql"), ...(table.indexes ?? []).map((index) => indexDdl(table, index, "mssql"))]; })()].flat(),
+  },
+  {
+    version: "0068", name: "claim_loss_engine_tables",
+    statements: ["ClaimCalculationRule", "ClaimCalculationRun", "ClaimCostAllocation", "ClaimDocumentVersion"].flatMap((name) => { const table = tableDef(name); return [tableDdl(table, "mssql"), ...(table.indexes ?? []).map((index) => indexDdl(table, index, "mssql"))]; }),
+  },
+  {
+    version: "0069", name: "claim_loss_item_fields",
+    statements: [...["LossCategory", "CostNature", "Quantity", "Rate", "UnitFa", "DocumentedAmount", "ApprovedAmount", "RuleCode", "ResourceKind", "ResourceNameFa", "WorkedUnits", "IdleUnits"].map((col) => addColumnDdl("ClaimCostItem", col, "mssql")), addColumnDdl("Claim", "ProposedAmount", "mssql")],
   },
 ];
 
