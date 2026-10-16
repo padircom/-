@@ -23,6 +23,7 @@ import {
   ANALYSIS_STANDARDS,
   CHILD_TABLE_SPECS,
   CLAIM_DOC_SCHEDULE_TABLE_RANGE,
+  NETWORK_VALIDATION_THRESHOLDS,
   validateMissionInput,
   validateChildRow,
   validateStep,
@@ -31,6 +32,9 @@ import {
   computeMissionProgress,
   newMissionCode,
   newRecordCode,
+  validateNetworkLogic,
+  computeCriticalPath,
+  assessMipFeasibility,
 } from "./schedReconLogic.js";
 
 const locks = new Map();
@@ -73,8 +77,9 @@ export function registerSchedReconRoutes(app, { repo, subjects, evaluate }) {
   };
 
   /* ── کاتالوگ قاعده‌محور: مراحل، پروتکل‌ها، شمارش‌ها (فقط‌خواندنی) ── */
-  app.get(base + "/catalog", need("sched.recon.view"), run(async () => ({
+  app.get(base + "/catalog", need("sched.recon.view"), run(async (r, req) => ({
     module: FORENSIC_SCHED_MODULE_ID,
+    permissions: ["sched.recon.view", "sched.recon.edit", "sched.recon.approve"].filter((p) => can(req, p)),
     version: FORENSIC_SCHED_VERSION,
     llmConnected: SCHED_RECON_LLM_CONNECTED,
     steps: RECON_STEPS,
@@ -211,8 +216,123 @@ export function registerSchedReconRoutes(app, { repo, subjects, evaluate }) {
     return { deleted: true, code: row.Code };
   }));
 
-  /* ── رکوردهای فرزند: فهرست / ایجاد / ویرایش / حذف ── */
-  const childTable = (req) => {
+  /* ── اجرای موتورهای کارشناسی روی مأموریت (خروجی پیش‌نویس محاسباتی) ── */
+
+  /* NetworkLogicValidator: روی دیکشنری فعالیت + منطق شبکهٔ همان مأموریت می‌دود
+   * و یافته‌ها را به‌جای نتایج خودکار قبلی بازنویسی می‌کند (یافته‌های انسانی
+   * معتبر باقی می‌مانند — AutoDetected=false). */
+  app.post(base + "/missions/:id/run-validation", need("sched.recon.edit"), run(async (r, req) => {
+    const mission = await findMission(r, req);
+    if (["completed", "cancelled"].includes(mission.Status)) throw error(409, "SCHED_STATUS", "مأموریت بسته‌شده قابل پردازش نیست");
+    const mw = [...where(req.params.projectId), { column: "MissionCode", op: "eq", value: mission.Code }];
+    const [activities, logicRows, oldFindings] = await Promise.all([
+      r.list("PmisSchedReconActivities", { where: mw, limit: 5000 }).catch(() => []),
+      r.list("PmisSchedReconLogic", { where: mw, limit: 5000 }).catch(() => []),
+      r.list("PmisSchedReconValidations", { where: mw, limit: 5000 }).catch(() => []),
+    ]);
+    if (activities.length === 0) throw error(409, "SCHED_STEP", "ابتدا دیکشنری فعالیت‌ها (مرحلهٔ ۵) را ثبت کنید");
+    const { findings, stats } = validateNetworkLogic(activities, logicRows);
+    for (const old of oldFindings.filter((f) => f.AutoDetected === true)) await r.remove("PmisSchedReconValidations", old.Id);
+    const created = [];
+    for (const f of findings) {
+      created.push(await r.create("PmisSchedReconValidations", {
+        Code: newRecordCode("VALD"), MissionCode: mission.Code, ProjectId: req.params.projectId,
+        CheckKind: f.CheckKind, Severity: f.Severity, ActivityCode: f.ActivityCode ?? null, DetailFa: f.DetailFa,
+        AutoDetected: true, Resolution: "open",
+      }, req.schedSubject.id, "schedRecon"));
+    }
+    return { stats, thresholds: NETWORK_VALIDATION_THRESHOLDS, findingsCreated: created.length, findingsReplaced: oldFindings.filter((f) => f.AutoDetected === true).length, noteFa: "یافته‌ها پیش‌نویس محاسباتی‌اند و بدون تعیین تکلیف کارشناس (Resolution) قطعی نیستند." };
+  }));
+
+  /* CriticalPathReconstructionEngine: CPM روی شبکهٔ بازسازی‌شده + ثبت مسیر در
+   * مقطع‌های زمانیِ مشخص‌شده (یا بدون مقطع: SnapshotCode=null). */
+  app.post(base + "/missions/:id/run-critical-path", need("sched.recon.edit"), run(async (r, req) => {
+    const mission = await findMission(r, req);
+    if (["completed", "cancelled"].includes(mission.Status)) throw error(409, "SCHED_STATUS", "مأموریت بسته‌شده قابل پردازش نیست");
+    const mw = [...where(req.params.projectId), { column: "MissionCode", op: "eq", value: mission.Code }];
+    const [activities, logicRows, snapshots] = await Promise.all([
+      r.list("PmisSchedReconActivities", { where: mw, limit: 5000 }).catch(() => []),
+      r.list("PmisSchedReconLogic", { where: mw, limit: 5000 }).catch(() => []),
+      r.list("PmisSchedReconSnapshots", { where: mw, limit: 5000 }).catch(() => []),
+    ]);
+    if (activities.length === 0) throw error(409, "SCHED_STEP", "ابتدا دیکشنری فعالیت‌ها (مرحلهٔ ۵) را ثبت کنید");
+    if (logicRows.length === 0) throw error(409, "SCHED_STEP", "ابتدا منطق شبکه (مرحلهٔ ۷) را ثبت کنید");
+    const result = computeCriticalPath(activities, logicRows);
+    if (!result.ok) {
+      const msg = { loop: `حلقهٔ منطقی در شبکه (گذر از «${result.loopMember ?? "?"}») — ابتدا با تأیید کارشناس رفع شود`, empty: "شبکهٔ فعالیت خالی است", broken_chain: "هیچ رابطهٔ معتبری بین فعالیت‌ها نیست؛ منطق شبکه ناقص است" }[result.reason];
+      throw error(409, "SCHED_CPM", msg);
+    }
+    let snapshotCode = String(req.body?.snapshotCode ?? "").trim() || null;
+    if (snapshotCode && !snapshots.some((s) => s.Code === snapshotCode)) throw error(404, "SCHED_NOT_FOUND", "مقطع زمانی انتخاب‌شده در این مأموریت وجود ندارد");
+    if (!snapshotCode) {
+      /* مسیر بحرانی همیشه «به‌ازای» یک مقطع ثبت می‌شود؛ اگر کاربر مقطع نداد،
+       * مقطع خودکارِ «وضعیت جاری مدل» به تاریخ امروز upsert می‌شود (CutoffDate
+       * واقعیِ امروز، بدون عدد ساختگی) تا زنجیرهٔ منبع گزارش احفظ شود. */
+      snapshotCode = "AUTO-CURRENT";
+      const auto = snapshots.find((s) => s.Code === snapshotCode);
+      const autoPayload = { CutoffDate: new Date().toISOString().slice(0, 10), NoteFa: "مقطع خودکار اجرای موتور — وضعیت جاری مدل بازسازی‌شده." };
+      if (auto) await r.patch("PmisSchedReconSnapshots", auto.Id, autoPayload, req.schedSubject.id, auto.RowVersion);
+      else await r.create("PmisSchedReconSnapshots", {
+        Code: snapshotCode, MissionCode: mission.Code, ProjectId: req.params.projectId,
+        LabelFa: "وضعیت جاری مدل بازسازی‌شده (خودکار)", CutoffDate: autoPayload.CutoffDate, DataKind: "other",
+        Status: "open", CreatedBy: req.schedSubject.id, CreatedAt: new Date().toISOString(),
+      }, req.schedSubject.id, "schedRecon");
+    }
+    const row = await r.create("PmisSchedReconCriticalPaths", {
+      Code: newRecordCode("CRPA"), MissionCode: mission.Code, ProjectId: req.params.projectId,
+      SnapshotCode: snapshotCode, PathRank: 1,
+      ActivityCodes: JSON.stringify(result.criticalPath),
+      TotalDuration: result.projectDuration,
+      DrivingLogic: JSON.stringify(result.results.map((x) => ({ code: x.code, es: x.es, ef: x.ef, float: x.totalFloat, critical: x.critical }))),
+      ChangeKind: null,
+      NoteFa: `محاسبهٔ خودکار CPM (${result.results.filter((x) => x.critical).length} فعالیت بحرانی از ${result.results.length}) — پیش‌نویس، نیازمند تأیید کارشناس.`,
+    }, req.schedSubject.id, "schedRecon");
+    return { computed: { projectDuration: result.projectDuration, criticalPath: result.criticalPath, results: result.results, drivingOrder: result.drivingOrder }, snapshotCode, stored: row.Id, snapshotsAvailable: snapshots.map((s) => s.Code) };
+  }));
+
+  /* AACE29R03ProtocolMapper: امکان‌سنجی ۹ پروتکل بر اساس موجودیت واقعی دادهٔ
+   * مأموریت؛ نتیجه در PmisSchedReconMipMappings بازنویسی می‌شود و انتخاب نهایی
+   * روش (SelectedFlag) دست‌نخورده و منحصر کارشناس می‌ماند. */
+  app.post(base + "/missions/:id/run-mip-assessment", need("sched.recon.edit"), run(async (r, req) => {
+    const mission = await findMission(r, req);
+    if (["completed", "cancelled"].includes(mission.Status)) throw error(409, "SCHED_STATUS", "مأموریت بسته‌شده قابل پردازش نیست");
+    const mw = [...where(req.params.projectId), { column: "MissionCode", op: "eq", value: mission.Code }];
+    const [activities, logicRows, snapshots, extractions, durations, calendars, evaluations, existing] = await Promise.all(
+      ["PmisSchedReconActivities", "PmisSchedReconLogic", "PmisSchedReconSnapshots", "PmisSchedReconExtractions", "PmisSchedReconDurations", "PmisSchedReconCalendars", "PmisSchedReconEvaluations", "PmisSchedReconMipMappings"].map((t) => r.list(t, { where: mw, limit: 5000 }).catch(() => [])),
+    );
+    const assessments = assessMipFeasibility({
+      activities: activities.length,
+      activitiesWithActualDates: activities.filter((a) => a.ActualStart || a.ActualFinish).length,
+      logicRows: logicRows.length,
+      snapshots: snapshots.length,
+      extractions: extractions.length,
+      durations: durations.length,
+      calendars: calendars.length,
+      evaluationsConfirmed: evaluations.filter((e) => e.Status === "confirmed").length,
+      decisionRepair: evaluations.some((e) => e.Decision === "repair" && e.Status === "confirmed"),
+      decisionReconstruction: evaluations.some((e) => e.Decision === "reconstruction" && e.Status === "confirmed"),
+    });
+    const rows = [];
+    for (const a of assessments) {
+      const cur = existing.filter((x) => x.MipCode === a.code).sort((x, y) => String(y.Code).localeCompare(String(x.Code)))[0] ?? null;
+      const payload = {
+        Family: a.family, Feasibility: a.feasibility, FeasibilityReasonFa: a.reasonFa,
+        RequiredDataJson: JSON.stringify(a.required), ProvidedDataJson: JSON.stringify(a.provided),
+        NoteFa: `امکان‌سنجی خودکار ${new Date().toISOString().slice(0, 10)} — انتخاب نهایی روش با کارشناس است.`,
+      };
+      if (cur) {
+        rows.push(await r.patch("PmisSchedReconMipMappings", cur.Id, payload, req.schedSubject.id, cur.RowVersion));
+      } else {
+        rows.push(await r.create("PmisSchedReconMipMappings", {
+          Code: newRecordCode("MIPM"), MissionCode: mission.Code, ProjectId: req.params.projectId,
+          MipCode: a.code, ...payload, SelectedFlag: false,
+        }, req.schedSubject.id, "schedRecon"));
+      }
+    }
+    return { assessments: assessments.map((a) => ({ code: a.code, family: a.family, feasibility: a.feasibility, reasonFa: a.reasonFa, required: a.required, provided: a.provided })), upserted: rows.length };
+  }));
+
+  /* ── رکوردهای فرزند: فهرست / ایجاد / ویرایش / حذف ── */  const childTable = (req) => {
     const t = String(req.params.table ?? "");
     if (!CHILD_SET.has(t)) throw error(404, "SCHED_TABLE", "جدول فرزند نامعتبر است");
     return t;

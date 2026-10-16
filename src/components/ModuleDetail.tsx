@@ -148,10 +148,12 @@ const D4_PAGE_SUBS: Record<string, { id: string; title: Bi; tab: D4Tab; sql: str
     { id: "d4-p3-imp", title: { fa: "اثر بر Baseline قفل", en: "Impact on locked BL" }, tab: "change", sql: ["Change_Request"] },
     { id: "d4-p3-ccb", title: { fa: "CCB و اختیار", en: "CCB + authority" }, tab: "ccb", sql: ["CCB_Meeting"] },
   ],
-  /* «d4-p4» ردیف اضافه ندارد: زیرفرآیند چارچوبی «تحلیل تأخیر» (d4-p4-s1)
-     همان تب delay را باز می‌کند و هر سه موتور ۵۰۹۰، ۱۳۰۰ و زمان‌بندی در آن
-     صفحه هست؛ ردیف «تحلیل تأخیر ۵۰۹۰» دقیقاً همان صفحه را باز می‌کرد و
-     فقط عنوان محدودتری داشت، پس حذف شد. */
+  /* زیرفرآیند چارچوبی «تحلیل تأخیر» (d4-p4-s1) همان تب delay را باز می‌کند؛
+     ردیف «بازسازی کارشناسی زمان‌بندی» (PMO-FORENSIC-SCHEDULE-ENGINE-V1.0)
+     صفحهٔ جدای خودش را دارد: زیربنای کارشناسی موتورهای ۵۰۹۰/۱۳۰۰ است. */
+  "d4-p4": [
+    { id: "d4-p4-fsr", title: { fa: "بازسازی و تحلیل زمان‌بندی ادعا", en: "Forensic schedule reconstruction" }, tab: "recon", sql: ["PmisSchedReconMissions", "PmisSchedReconActivities", "PmisSchedReconLogic", "PmisSchedReconCriticalPaths"] },
+  ],
   /* ردیف «دروازه Baseline+DataDate» (d4-p5-gate) حذف شد: دقیقاً همان تب
      claim «بسته ادعا» (d4-p5-s1) را باز می‌کرد و کنترل Baseline/DataDate
      داخل نهایی‌سازی همان بسته انجام می‌شود؛ صفحهٔ جدایی نداشت. */
@@ -173,6 +175,7 @@ const D4_TAB_BY_SUB: Record<string, D4Tab> = {
   "d4-p3-imp": "change",
   "d4-p3-ccb": "ccb",
   "d4-p4-s1": "delay",
+  "d4-p4-fsr": "recon",
   "d4-p5-s1": "claim",
   "d4-p5-ntc": "notice",
   "d4-p5-dsp": "dispute",

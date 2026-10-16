@@ -7,16 +7,17 @@ import { type ClaimLifecycleAction, type RccKind, type RccRow, type RccWorkspace
 import { buildConcurrencyTimeline } from '../services/delayAnalysis';
 import { LOSS_CATEGORIES, lossCategoryFa } from '../services/claimLoss';
 import JalaliDateInput from './JalaliDateInput';
+import SchedReconWorkspace from './SchedReconWorkspace';
 
-export type D4Tab = 'matrix' | 'register' | 'reserve' | 'issue' | 'change' | 'ccb' | 'delay' | 'claim' | 'notice' | 'dispute' | 'invest' | 'exec' | 'loss';
+export type D4Tab = 'matrix' | 'register' | 'reserve' | 'issue' | 'change' | 'ccb' | 'delay' | 'claim' | 'notice' | 'dispute' | 'invest' | 'exec' | 'loss' | 'recon';
 type Props = { lang: Lang; projectId: string; subId?: string; initialTab?: D4Tab; hideTabs?: boolean };
 const TABS: [D4Tab, string, string][] = [
   ['matrix', 'ماتریس', 'Matrix'], ['register', 'ثبت ریسک', 'Risks'], ['reserve', 'ذخیره و پایش', 'Reserve & monitor'], ['issue', 'مسئله و هشدار زود', 'Issues & EWS'],
   ['change', 'تغییر', 'Changes'], ['ccb', 'تصویب تغییر', 'CCB'],
-  ['claim', 'ادعا', 'Claims'], ['notice', 'اعلان قراردادی', 'Notices'], ['delay', 'تحلیل تأخیر', 'Delay analysis'], ['loss', 'خسارات و لایحه ضرر و زیان', 'Loss & damages'], ['exec', 'خلاصه', 'Summary'],
+  ['claim', 'ادعا', 'Claims'], ['notice', 'اعلان قراردادی', 'Notices'], ['delay', 'تحلیل تأخیر', 'Delay analysis'], ['loss', 'خسارات و لایحه ضرر و زیان', 'Loss & damages'], ['recon', 'بازسازی زمان‌بندی ادعا', 'Forensic schedule reconstruction'], ['exec', 'خلاصه', 'Summary'],
 ];
 function tabFromSub(sub = ''): D4Tab {
-  const explicit: Record<string, D4Tab> = { 'd4-p1-rsv': 'reserve', 'd4-p1-iss': 'issue', 'd4-p1-mx': 'matrix', 'd4-p3-ccb': 'ccb', 'd4-p5-ntc': 'notice', 'd4-p5-tb': 'notice', 'd4-p5-dsp': 'dispute', 'd4-p5-exe': 'exec', 'd4-p5-loss': 'loss' };
+  const explicit: Record<string, D4Tab> = { 'd4-p1-rsv': 'reserve', 'd4-p1-iss': 'issue', 'd4-p1-mx': 'matrix', 'd4-p3-ccb': 'ccb', 'd4-p4-fsr': 'recon', 'd4-p5-ntc': 'notice', 'd4-p5-tb': 'notice', 'd4-p5-dsp': 'dispute', 'd4-p5-exe': 'exec', 'd4-p5-loss': 'loss' };
   return explicit[sub] ?? (sub.startsWith('d4-p3') ? 'change' : sub.startsWith('d4-p4') ? 'delay' : sub.startsWith('d4-p5') ? 'claim' : 'register');
 }
 const FIELDS: Record<RccKind, [string, string, string, string?][]> = {
@@ -269,7 +270,7 @@ function LiveRcc({ lang, projectId, subId, initialTab, hideTabs, userId }: Props
     {error && <p role="alert" className="rounded-xl bg-rose-500/10 text-rose-400 p-3 text-sm">{error}</p>}
     {loading && <p className="tx3">{label('در حال بارگذاری…', 'Loading…')}</p>}
     {!loading && workspace && <>
-      {tab === 'invest' ? <section className="glass-dark rounded-xl p-4 tx2 text-sm">
+      {tab === 'recon' ? <SchedReconWorkspace lang={lang} projectId={projectId} /> : tab === 'invest' ? <section className="glass-dark rounded-xl p-4 tx2 text-sm">
         {label('این ابزار هنوز به گردش‌کار ماندگار متصل نیست. اعداد و دکمه‌های نمونهٔ قبلی حذف شده‌اند؛ برای ثبت عملیاتی از ریسک، تغییر و ادعا استفاده کنید.', 'This tool is not yet connected to a persisted workflow. Previous demo values and actions have been removed. Use risks, changes and claims for operational records.')}
       </section> : tab === 'exec' ? <section className="grid grid-cols-2 gap-3 md:grid-cols-4">{(['risks', 'changes', 'claims', 'issues'] as const).map(k => <div className="glass-dark rounded-xl p-4 tx1" key={k}>{k}: {workspace[`${k}Hidden`] ? label('بدون مجوز', 'Restricted') : workspace[k].length}</div>)}</section> : <>
         {tab === 'matrix' && !workspace.risksHidden && <section className="glass-dark rounded-xl p-3 grid grid-cols-5 gap-2">{[5, 4, 3, 2, 1].flatMap(p => [1, 2, 3, 4, 5].map(i => <div key={`${p}-${i}`} className="rounded-lg p-3 text-center text-sm" style={{ border: `1px solid ${scoreColor(p * i)}`, color: scoreColor(p * i) }}><div>P{p} × I{i}</div>{workspace.risks.filter(r => r.Probability === p && r.Impact === i).length}</div>))}</section>}

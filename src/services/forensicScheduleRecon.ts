@@ -307,3 +307,353 @@ export function validateChildRow(table: keyof typeof CHILD_TABLE_SPECS, body: Re
   }
   return { ok: errors.length === 0, errors };
 }
+
+/* ═══════════════════ فاز ۲ — موتورهای کارشناسی (قاعده‌محور) ═══════════════════
+ * همهٔ خروجی‌ها «پیش‌نویس محاسباتی»‌اند و بدون تأیید کارشناس قطعی نیستند.
+ * هیچ موتوری مبلغ خسارت یا مدت تمدید تولید نمی‌کند؛ خروجی فقط زمان‌بندی
+ * بازسازی‌شده، یافتهٔ اعتبارسنجی و امکان‌سنجی روش است. */
+
+export type ReconActivityLite = {
+  Code: string;
+  ActivityId?: string | null;
+  TitleFa?: string | null;
+  OriginalDuration?: number | null;
+  ActualDuration?: number | null;
+  PctComplete?: number | null;
+  StatusFlag?: string | null;
+  PlannedStart?: string | null;
+  PlannedFinish?: string | null;
+  ActualStart?: string | null;
+  ActualFinish?: string | null;
+};
+export type ReconLogicLite = {
+  Code: string;
+  PredecessorCode: string;
+  SuccessorCode: string;
+  RelType: string;
+  Lag?: number | null;
+  ReconstructionBasis?: string | null;
+  Flag?: string | null;
+};
+
+export type ValidationFinding = {
+  CheckKind: (typeof CHECK_KINDS)[number];
+  Severity: (typeof CHECK_SEVERITIES)[number];
+  ActivityCode?: string | null;
+  LogicCode?: string | null;
+  DetailFa: string;
+};
+
+/* آستانه‌های قاعده‌محور اعتبارسنجی — شفاف و قابل‌بازبینی (نه عدد جادویی در کد). */
+export const NETWORK_VALIDATION_THRESHOLDS = {
+  /** |Lag| بیش از این کسری از مدت پیش‌نیاز «سوء‌استفادهٔ Lag» تلقی می‌شود. */
+  lagFractionOfPredDuration: 0.5,
+  /** سقف مطلق روز Lag که از آن بزرگ‌تر، هشدار سوء‌استفاده صادر می‌شود. */
+  lagAbsoluteLimitDays: 30,
+} as const;
+
+const actKey = (a: ReconActivityLite): string => String(a.Code ?? "").trim();
+const logicRef = (v: unknown): string => String(v ?? "").trim();
+const titleOf = (a: ReconActivityLite): string => a.TitleFa ?? a.ActivityId ?? a.Code;
+const durOf = (a: ReconActivityLite): number => {
+  const v = a.OriginalDuration ?? a.ActualDuration;
+  const n = Number(v);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+};
+
+function dedupeFindings(findings: ValidationFinding[]): ValidationFinding[] {
+  const seen = new Set<string>();
+  return findings.filter((f) => {
+    const k = `${f.CheckKind}|${f.Severity}|${f.ActivityCode ?? ""}|${f.LogicCode ?? ""}`;
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+}
+
+/**
+ * NetworkLogicValidator — تشخیص آنومالی شبکهٔ بازسازی‌شده:
+ * روابط شکسته (ارجاع به فعالیت ناموجود)، انتهای باز، حلقه (Loop)،
+ * سوء‌استفادهٔ Lag و ترتیب اجرای نامتعارف (out-of-sequence).
+ */
+export function validateNetworkLogic(activities: ReconActivityLite[], logicRows: ReconLogicLite[]): { findings: ValidationFinding[]; stats: { activityCount: number; relationCount: number; openStarts: number; openFinishes: number; broken: number } } {
+  const findings: ValidationFinding[] = [];
+  const codes = new Map<string, ReconActivityLite>();
+  const aliases = new Map<string, ReconActivityLite>();
+  for (const a of activities) {
+    codes.set(actKey(a), a);
+    if (a.ActivityId) aliases.set(String(a.ActivityId).trim(), a);
+  }
+  const resolve = (ref: string): ReconActivityLite | undefined => codes.get(ref) ?? aliases.get(ref);
+
+  /* ۱) روابط شکسته/معلق */
+  let broken = 0;
+  const usable: ReconLogicLite[] = [];
+  for (const l of logicRows) {
+    const p = resolve(logicRef(l.PredecessorCode));
+    const s = resolve(logicRef(l.SuccessorCode));
+    if (!p || !s) {
+      broken += 1;
+      findings.push({
+        CheckKind: "dangling_logic", Severity: "critical", LogicCode: l.Code,
+        DetailFa: `رابطهٔ ${l.RelType} ارجاع نامعتبر دارد (${!p ? "پیش‌نیاز" : "پس‌نیاز"} یافت نشد)؛ بدون اصلاح ارجاع، مسیر بحرانی قابل محاسبه نیست.`,
+      });
+    } else if (actKey(p) === actKey(s)) {
+      broken += 1;
+      findings.push({ CheckKind: "dangling_logic", Severity: "major", LogicCode: l.Code, DetailFa: `رابطهٔ خودارجاعی روی «${titleOf(p)}» مجاز نیست.` });
+    } else {
+      usable.push(l);
+    }
+    if (l.Flag === "broken") {
+      findings.push({ CheckKind: "dangling_logic", Severity: "major", LogicCode: l.Code, DetailFa: `رابطه توسط ثبت‌کننده «شکسته» علامت خورده؛ باید اصلاح یا حذف شود.` });
+    }
+  }
+
+  /* ۲) انتهای باز */
+  const hasPred = new Set<string>();
+  const hasSucc = new Set<string>();
+  for (const l of usable) {
+    hasSucc.add(actKey(resolve(logicRef(l.PredecessorCode))!));
+    hasPred.add(actKey(resolve(logicRef(l.SuccessorCode))!));
+  }
+  const openStarts = activities.filter((a) => !hasPred.has(actKey(a))).length;
+  const openFinishes = activities.filter((a) => !hasSucc.has(actKey(a))).length;
+  for (const a of activities) {
+    const k = actKey(a);
+    if (activities.length > 1 && !hasPred.has(k)) {
+      findings.push({ CheckKind: "open_end", Severity: "minor", ActivityCode: k, DetailFa: `فعالیت «${titleOf(a)}» پیش‌نیاز ندارد؛ اگر شروع شبکه نیست، انتهای باز است.` });
+    }
+    if (activities.length > 1 && !hasSucc.has(k)) {
+      findings.push({ CheckKind: "open_end", Severity: "minor", ActivityCode: k, DetailFa: `فعالیت «${titleOf(a)}» پس‌نیاز ندارد؛ اگر پایان شبکه نیست، انتهای باز است.` });
+    }
+  }
+
+  /* ۳) حلقه — DFS سه‌رنگ روی گراف جهت‌دار */
+  const adj = new Map<string, string[]>();
+  for (const l of usable) {
+    const p = actKey(resolve(logicRef(l.PredecessorCode))!);
+    const s = actKey(resolve(logicRef(l.SuccessorCode))!);
+    adj.set(p, [...(adj.get(p) ?? []), s]);
+  }
+  const color = new Map<string, 0 | 1 | 2>();
+  let loopMember: string | null = null;
+  const dfs = (u: string): boolean => {
+    color.set(u, 1);
+    for (const v of adj.get(u) ?? []) {
+      const c = color.get(v) ?? 0;
+      if (c === 1) { loopMember = v; return true; }
+      if (c === 0 && dfs(v)) return true;
+    }
+    color.set(u, 2);
+    return false;
+  };
+  let hasLoop = false;
+  for (const a of activities) {
+    const u = actKey(a);
+    if ((color.get(u) ?? 0) === 0 && dfs(u)) { hasLoop = true; break; }
+  }
+  if (hasLoop) {
+    findings.push({ CheckKind: "loop", Severity: "critical", ActivityCode: loopMember, DetailFa: `حلقهٔ منطقی در شبکه تشخیص داده شد (گذر از «${loopMember ?? "?"}»)؛ تا رفع حلقه، محاسبهٔ مسیر بحرانی ممکن نیست.` });
+  }
+
+  /* ۴) سوء‌استفادهٔ Lag — آستانهٔ قاعده‌محور اعلام‌شده در NETWORK_VALIDATION_THRESHOLDS */
+  for (const l of usable) {
+    const lag = Math.abs(Number(l.Lag ?? 0));
+    if (!Number.isFinite(lag) || lag === 0) continue;
+    const p = resolve(logicRef(l.PredecessorCode))!;
+    const limit = Math.max(durOf(p) * NETWORK_VALIDATION_THRESHOLDS.lagFractionOfPredDuration, NETWORK_VALIDATION_THRESHOLDS.lagAbsoluteLimitDays);
+    if (lag > limit) {
+      findings.push({ CheckKind: "lag_abuse", Severity: "major", LogicCode: l.Code, ActivityCode: actKey(p), DetailFa: `Lag رابطهٔ ${actKey(p)}→${actKey(resolve(logicRef(l.SuccessorCode))!)} برابر ${lag} از آستانهٔ ${limit.toFixed(1)} روز بزرگ‌تر است؛ باید با مدرک توجیه شود.` });
+    }
+  }
+
+  /* ۵) ترتیب اجرای نامتعارف: FS به‌همراه شروع پس‌نیاز قبل از پایان واقعی پیش‌نیاز */
+  for (const l of usable) {
+    if (l.RelType !== "FS") continue;
+    const p = resolve(logicRef(l.PredecessorCode))!;
+    const s = resolve(logicRef(l.SuccessorCode))!;
+    if (p.ActualFinish && s.ActualStart && String(s.ActualStart) < String(p.ActualFinish)) {
+      findings.push({ CheckKind: "out_of_sequence", Severity: "minor", ActivityCode: actKey(s), LogicCode: l.Code, DetailFa: `شروع واقعی «${titleOf(s)}» پیش از پایان واقعی پیش‌نیاز FS ثبت شده؛ پیشرفت نامتعارف باید مستند شود.` });
+    }
+  }
+
+  return {
+    findings: dedupeFindings(findings),
+    stats: { activityCount: activities.length, relationCount: logicRows.length, openStarts, openFinishes, broken },
+  };
+}
+
+/* ─────────────── CriticalPathReconstructionEngine ─────────────── */
+export type CpmActivityResult = { code: string; duration: number; es: number; ef: number; ls: number; lf: number; totalFloat: number; critical: boolean };
+export type CpmResult =
+  | { ok: true; projectDuration: number; results: CpmActivityResult[]; criticalPath: string[]; drivingOrder: string[] }
+  | { ok: false; reason: "loop" | "empty" | "broken_chain"; loopMember?: string };
+
+/**
+ * محاسبهٔ CPM روی شبکهٔ بازسازی‌شده با چهار نوع رابطهٔ FS/SS/FF/SF و Lag.
+ * پیاده‌سازی روی گراف دو گره‌ای (شروع/پایان هر فعالیت) با پاس رو به‌جلو/عقب.
+ * تقویم‌ها در این فاز واحد «روز کاری ناپویا»‌اند؛ دقت تقویمی با تأیید کارشناس است.
+ */
+export function computeCriticalPath(activities: ReconActivityLite[], logicRows: ReconLogicLite[]): CpmResult {
+  const acts = activities.filter((a) => actKey(a));
+  if (acts.length === 0) return { ok: false, reason: "empty" };
+  const byCode = new Map<string, ReconActivityLite>();
+  const aliases = new Map<string, ReconActivityLite>();
+  for (const a of acts) { byCode.set(actKey(a), a); if (a.ActivityId) aliases.set(String(a.ActivityId).trim(), a); }
+  const resolve = (ref: string): ReconActivityLite | undefined => byCode.get(ref) ?? aliases.get(ref);
+
+  /* گره‌ها: برای هر فعالیت دو گره s:/e: — یال شروع→پایان با وزن مدت. */
+  type Edge = { to: string; w: number };
+  const edges = new Map<string, Edge[]>();
+  const addEdge = (from: string, to: string, w: number) => edges.set(from, [...(edges.get(from) ?? []), { to, w }]);
+  for (const a of acts) {
+    const k = actKey(a);
+    addEdge(`s:${k}`, `e:${k}`, durOf(a));
+    if (!edges.has(`e:${k}`)) edges.set(`e:${k}`, []);
+    if (!edges.has(`s:${k}`) && !edges.get(`s:${k}`)) edges.set(`s:${k}`, []);
+  }
+  let relationEdges = 0;
+  for (const l of logicRows) {
+    const p = resolve(logicRef(l.PredecessorCode));
+    const s = resolve(logicRef(l.SuccessorCode));
+    if (!p || !s) continue;
+    const pk = actKey(p), sk = actKey(s);
+    if (pk === sk) continue;
+    const lag = Number(l.Lag ?? 0) || 0;
+    const rt = l.RelType;
+    if (rt === "FS") addEdge(`e:${pk}`, `s:${sk}`, lag);
+    else if (rt === "SS") addEdge(`s:${pk}`, `s:${sk}`, lag);
+    else if (rt === "FF") addEdge(`e:${pk}`, `e:${sk}`, lag);
+    else if (rt === "SF") addEdge(`s:${pk}`, `e:${sk}`, lag);
+    else continue;
+    relationEdges += 1;
+  }
+  if (relationEdges === 0 && acts.length > 1) return { ok: false, reason: "broken_chain" };
+
+  /* مرتب‌سازی توپولوژیک (Kahn)؛ چرخه → گزارش loop */
+  const nodes = [...edges.keys()];
+  const indeg = new Map<string, number>(nodes.map((n) => [n, 0]));
+  for (const [, es] of edges) for (const e of es) indeg.set(e.to, (indeg.get(e.to) ?? 0) + 1);
+  const queue = nodes.filter((n) => (indeg.get(n) ?? 0) === 0);
+  const topo: string[] = [];
+  const inQ = new Map(indeg);
+  while (queue.length) {
+    const u = queue.shift()!;
+    topo.push(u);
+    for (const e of edges.get(u) ?? []) {
+      const d = (inQ.get(e.to) ?? 0) - 1;
+      inQ.set(e.to, d);
+      if (d === 0) queue.push(e.to);
+    }
+  }
+  if (topo.length !== nodes.length) {
+    const loopMember = nodes.find((n) => (inQ.get(n) ?? 0) > 0)?.slice(2);
+    return { ok: false, reason: "loop", loopMember };
+  }
+
+  /* پاس رو به‌جلو: طولانی‌ترین مسیر (Longest Path / CPM) */
+  const es = new Map<string, number>(nodes.map((n) => [n, 0]));
+  for (const u of topo) for (const e of edges.get(u) ?? []) {
+    const cand = (es.get(u) ?? 0) + e.w;
+    if (cand > (es.get(e.to) ?? 0)) es.set(e.to, cand);
+  }
+  const projectDuration = Math.max(...[...es.values()], 0);
+
+  /* پاس رو به‌عقب */
+  const rev = new Map<string, Edge[]>();
+  for (const [u, es_] of edges) for (const e of es_) rev.set(e.to, [...(rev.get(e.to) ?? []), { to: u, w: e.w }]);
+  const ls = new Map<string, number>(nodes.map((n) => [n, projectDuration]));
+  for (const u of [...topo].reverse()) for (const e of rev.get(u) ?? []) {
+    const cand = (ls.get(u) ?? projectDuration) - e.w;
+    if (cand < (ls.get(e.to) ?? projectDuration)) ls.set(e.to, cand);
+  }
+
+  const EPS = 1e-6;
+  const results: CpmActivityResult[] = acts.map((a) => {
+    const k = actKey(a);
+    const d = durOf(a);
+    const s0 = es.get(`s:${k}`) ?? 0, e0 = es.get(`e:${k}`) ?? d;
+    const l1 = ls.get(`s:${k}`) ?? projectDuration - d, l2 = ls.get(`e:${k}`) ?? projectDuration;
+    const tf = Math.min(l1 - s0, l2 - e0);
+    return { code: k, duration: d, es: s0, ef: e0, ls: l1, lf: l2, totalFloat: Math.abs(tf) < EPS ? 0 : Number(tf.toFixed(4)), critical: Math.abs(tf) < EPS };
+  });
+  const critical = results.filter((r) => r.critical).sort((a, b) => a.es - b.es || a.ef - b.ef).map((r) => r.code);
+  const drivingOrder = [...results].sort((a, b) => a.es - b.es || a.ef - b.ef).map((r) => r.code);
+  return { ok: true, projectDuration: Number(projectDuration.toFixed(4)), results, criticalPath: critical, drivingOrder };
+}
+
+/* ─────────────── AACE29R03ProtocolMapper — امکان‌سنجی قاعده‌محور ─────────────── */
+export type MipDataInventory = {
+  activities: number;
+  activitiesWithActualDates: number;
+  logicRows: number;
+  snapshots: number;
+  extractions: number;
+  durations: number;
+  calendars: number;
+  evaluationsConfirmed: number;
+  decisionRepair: boolean;
+  decisionReconstruction: boolean;
+};
+export type MipAssessment = {
+  code: MipCode;
+  family: MipProtocol["family"];
+  feasibility: (typeof MIP_FEASIBILITIES)[number];
+  reasonFa: string;
+  required: string[];
+  provided: string[];
+};
+
+const NEEDS = {
+  baseline: "برنامهٔ مبنا (فعالیت‌های برنامه‌ای)",
+  actuals: "تاریخ‌های واقعی اجرا (As-Built)",
+  logic: "منطق شبکهٔ بازسازی‌شده",
+  snapshots2: "حداقل دو مقطع زمانی (Cut-Off) دوره‌ای",
+  events: "رویدادهای مستند تأخیر/استخراج واقعیت",
+  durationEvidence: "مدت‌های مستند (سوابق کارگاهی)",
+  calendars: "تقویم‌های کاری بازسازی‌شده",
+} as const;
+
+/**
+ * برای هر پروتکل MIP بر اساس موجودیت واقعی دادهٔ مأموریت امکان‌سنجی می‌کند.
+ * انتخاب نهایی روش (SelectedFlag) فقط با کارشناس است؛ موتور فقط امکان را گزارش می‌دهد.
+ */
+export function assessMipFeasibility(inv: MipDataInventory): MipAssessment[] {
+  const has = {
+    baseline: inv.activities > 0,
+    actuals: inv.activitiesWithActualDates > 0,
+    fullActuals: inv.activities > 0 && inv.activitiesWithActualDates >= inv.activities,
+    logic: inv.logicRows > 0,
+    snapshots2: inv.snapshots >= 2,
+    events: inv.extractions > 0,
+    durationEvidence: inv.durations > 0,
+    calendars: inv.calendars > 0,
+  };
+  const grade = (missing: string[]): { feasibility: MipAssessment["feasibility"]; reasonFa: string } => {
+    if (missing.length === 0) return { feasibility: "feasible", reasonFa: "پیش‌نیازهای داده‌ای این روش در پرونده موجود است؛ اجرا با تأیید کارشناس." };
+    if (missing.length === 1) return { feasibility: "partial", reasonFa: `یک پیش‌نیاز کم است (${missing[0]})؛ با تأمین آن روش کامل می‌شود.` };
+    return { feasibility: "not_feasible", reasonFa: `${missing.length} پیش‌نیاز داده‌ای موجود نیست: ${missing.join("، ")}.` };
+  };
+  const mk = (code: MipCode, required: (keyof typeof NEEDS)[]): MipAssessment => {
+    const requiredFa = required.map((k) => NEEDS[k]);
+    const missing = required.filter((k) => !has[k as keyof typeof has]);
+    const missingFa = missing.map((k) => NEEDS[k]);
+    const g = grade(missingFa);
+    return { code, family: MIP_PROTOCOLS.find((m) => m.code === code)!.family, ...g, required: requiredFa, provided: requiredFa.filter((_, i) => !missing.includes(required[i])) };
+  };
+  return [
+    mk("3.1", ["baseline", "actuals"]),
+    mk("3.2", ["baseline", "actuals", "snapshots2"]),
+    mk("3.3", ["baseline", "actuals", "logic"]),
+    mk("3.4", ["baseline", "actuals", "logic", "snapshots2"]),
+    mk("3.5", ["baseline", "actuals", "logic", "snapshots2", "events"]),
+    mk("3.6", ["baseline", "logic", "events"]),
+    mk("3.7", ["baseline", "logic", "events", "snapshots2", "durationEvidence"]),
+    mk("3.8", ["actuals", "logic"]),
+    mk("3.9", ["actuals", "logic", "snapshots2", "calendars"]),
+  ];
+}
+
+export function mipProtocolByCode(code: MipCode): MipProtocol | undefined {
+  return MIP_PROTOCOLS.find((m) => m.code === code);
+}
