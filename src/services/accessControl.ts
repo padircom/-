@@ -111,6 +111,14 @@ export const PERMISSION_CATALOG: PermissionDef[] = [
   P("rcc.claim.view", "d4", "مشاهده ادعا", "View claims", "confidential"),
   P("rcc.claim.edit", "d4", "تنظیم ادعا", "Draft claim", "restricted", true),
   P("rcc.claim.submit", "d4", "ارسال رسمی ادعا", "Submit claim", "restricted", true),
+  P("rcc.claim.decide", "d4", "بررسی و تعیین تکلیف ادعا", "Review and determine claims", "restricted", true),
+  P("rcc.issue.view", "d4", "مشاهده مسئله و هشدار زود", "View issues and early warnings", "internal"),
+  P("rcc.issue.edit", "d4", "ثبت و پیگیری مسئله", "Record and progress issues", "confidential"),
+  P("rcc.issue.escalate", "d4", "تشدید و بستن مسئله", "Escalate and close issues", "restricted", true),
+  P("rcc.delay.view", "d4", "مشاهده رویدادهای تأخیر و تمدید مدت", "View delay events and EOT", "confidential"),
+  P("rcc.delay.edit", "d4", "ثبت و ویرایش رویداد تأخیر", "Record and edit delay events", "restricted", true),
+  P("rcc.delay.calculate", "d4", "محاسبه تأخیر و بخشنامه‌های ۱۳۰۰ و ۵۰۹۰", "Calculate delay, Circular 1300 and 5090", "restricted", true),
+  P("rcc.delay.approve", "d4", "تأیید محاسبه و تمدید مدت", "Approve delay calculation and EOT", "restricted", true),
 
   /* ── d12 مهندسی و طراحی ──
    * تفکیک بر پایهٔ اقتدار واقعی: ثبت مدرک، صدور ریویژن، پاسخ به نظر و
@@ -874,7 +882,7 @@ export const ROLE_CATALOG: RoleDef[] = [
     inherits: ["viewer"],
     clearance: "confidential",
     party: "contractor",
-    grants: ["plan.schedule.edit", "plan.progress.report", "pex.evm.view", "pex.forecast.edit", "rcc.risk.view", "core.ai.run",
+    grants: ["plan.schedule.edit", "plan.progress.report", "pex.evm.view", "pex.forecast.edit", "rcc.risk.view", "rcc.issue.view", "core.ai.run",
       /* بهره‌وری کار روزمرهٔ برنامه‌ریز است: او بودجهٔ نفر-ساعت را
        * بسته و باید بداند مصرف واقعی کجا از آن جدا شد. محاسبه با
        * اوست، ولی نهایی‌سازی نه — SOD-19. */
@@ -1027,7 +1035,7 @@ export const ROLE_CATALOG: RoleDef[] = [
     clearance: "restricted",
     party: "contractor",
     grants: [
-      "rcc.claim.view", "rcc.claim.edit", "rcc.change.raise",
+      "rcc.claim.view", "rcc.claim.edit", "rcc.change.raise", "rcc.issue.view", "rcc.issue.edit", "rcc.delay.view", "rcc.delay.edit", "rcc.delay.calculate",
       "fin.cost.view", "fin.rate.view", "ckm.letter.view", "ckm.letter.draft",
       "cnt.contract.view", "cnt.contract.edit", "cnt.boq.edit", "cnt.ipc.prepare",
       "cnt.retainage.manage", "com.certificate.view",
@@ -1075,7 +1083,7 @@ export const ROLE_CATALOG: RoleDef[] = [
       "core.project.edit", "core.ai.run",
       "plan.baseline.set", "plan.progress.approve",
       "pex.evm.view", "pex.kpi.edit", "pex.forecast.edit",
-      "rcc.risk.view", "rcc.risk.edit", "rcc.change.raise", "rcc.claim.view", "rcc.claim.submit",
+      "rcc.risk.view", "rcc.risk.edit", "rcc.change.raise", "rcc.claim.view", "rcc.claim.submit", "rcc.claim.decide", "rcc.issue.view", "rcc.issue.edit", "rcc.issue.escalate", "rcc.delay.view", "rcc.delay.edit", "rcc.delay.calculate", "rcc.delay.approve",
       "fin.cost.view", "fin.rate.view", "fin.ipc.approve", "fin.procure.approve", "fin.reserve.draw",
       "qms.itp.view", "qms.ncr.close",
       "hrm.roster.view", "hrm.timesheet.approve", "hrm.productivity.view",
@@ -1234,7 +1242,7 @@ export const ROLE_CATALOG: RoleDef[] = [
     inherits: ["planner"],
     clearance: "restricted",
     party: "contractor",
-    grants: ["spm.plan.view", "spm.plan.edit", "oex.assessment.view", "oex.assessment.edit", "eqm.workspace.view", "eqm.workspace.manage", "gov.process.view", "gov.gate.review", "gov.owner.assign", "pex.kpi.edit", "rcc.risk.edit", "fin.cost.view", "report.official.publish", "report.export.bulk", "sys.audit.view",
+    grants: ["spm.plan.view", "spm.plan.edit", "oex.assessment.view", "oex.assessment.edit", "eqm.workspace.view", "eqm.workspace.manage", "gov.process.view", "gov.gate.review", "gov.owner.assign", "pex.kpi.edit", "rcc.risk.edit", "rcc.issue.view", "rcc.issue.edit", "rcc.issue.escalate", "fin.cost.view", "report.official.publish", "report.export.bulk", "sys.audit.view",
       /* ارسال هزینهٔ نیرو به دفتر مالی.
        *
        * نه مدیر منابع انسانی (نرخ را او تعریف می‌کند — SOD-28) و نه
@@ -1273,7 +1281,7 @@ export const ROLE_CATALOG: RoleDef[] = [
     inherits: ["viewer"],
     clearance: "restricted",
     party: "contractor",
-    grants: ["spm.plan.view", "spm.plan.edit", "oex.assessment.view", "oex.assessment.edit", "eqm.workspace.view", "eqm.dispatch.approve", "fin.cost.view", "fin.budget.edit", "fin.reserve.draw", "pex.evm.view", "rcc.change.approve", "gov.gate.approve", "rcc.claim.view", "core.ai.run",
+    grants: ["spm.plan.view", "spm.plan.edit", "oex.assessment.view", "oex.assessment.edit", "eqm.workspace.view", "eqm.dispatch.approve", "fin.cost.view", "fin.budget.edit", "fin.reserve.draw", "pex.evm.view", "rcc.change.approve", "gov.gate.approve", "rcc.claim.view", "rcc.claim.decide", "rcc.issue.view", "rcc.issue.escalate", "core.ai.run",
       "pmo.charter.view",
       "pmo.charter.approve",
       "pmo.health.view",
@@ -1305,7 +1313,7 @@ export const ROLE_CATALOG: RoleDef[] = [
        * برگشتنش هم به تشخیص او. */
       "cnt.guarantee.view", "cnt.guarantee.release", "cnt.progress.view", "cnt.kpi.view",
       "cnt.report.view",
-      "com.certificate.view", "com.certificate.issue", "pex.evm.view", "rcc.change.approve", "gov.gate.approve", "ckm.letter.view", "ckm.letter.sign", "doc.document.approve", "eng.review.code", "eng.crs.resolve", "eng.tq.answer",
+      "com.certificate.view", "com.certificate.issue", "pex.evm.view", "rcc.change.approve", "rcc.claim.view", "rcc.claim.decide", "rcc.delay.view", "rcc.delay.approve", "gov.gate.approve", "ckm.letter.view", "ckm.letter.sign", "doc.document.approve", "eng.review.code", "eng.crs.resolve", "eng.tq.answer",
       "pmo.charter.view",
       "pmo.charter.approve",
       "pmo.health.view",
@@ -1334,7 +1342,7 @@ export const ROLE_CATALOG: RoleDef[] = [
     inherits: ["viewer"],
     clearance: "restricted",
     party: "any",
-    grants: ["sys.audit.view", "qms.audit.conduct", "fin.cost.view", "fin.rate.view", "rcc.claim.view", "ckm.letter.view", "hrm.productivity.view", "itg.connector.view",
+    grants: ["sys.audit.view", "qms.audit.conduct", "fin.cost.view", "fin.rate.view", "rcc.claim.view", "rcc.issue.view", "ckm.letter.view", "hrm.productivity.view", "itg.connector.view",
       /* P10: ممیز باید ببیند چه پرسشی از داده پرسیده شده و کدام منبع
        * خوانده شده؛ ولی خودش خروجی سند نمی‌گیرد. */
       "ai.history.view"

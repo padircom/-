@@ -109,7 +109,7 @@ function wbsInstructions(templateId) {
     "1. Every node must trace to a clause. Put the clause number in sourceRef.",
     "2. Never invent a quantity, rate or amount. If the contract does not state it, use null.",
     "3. Suggest a weight only when the contract or the scope implies relative effort; otherwise null.",
-    "4. Do not exceed four levels.",
+    "4. Use up to eight levels where the contract scope supports deeper nesting; do not pad levels artificially.",
     "5. Output strict JSON: an array of objects with keys code, parentCode, titleFa, titleEn, weightPct, sourceRef."
   ].join("\n");
 }

@@ -218,11 +218,31 @@ type RunFn = (fn: () => Promise<{ ok: boolean; message?: string; code?: string }
 function AreasTab({ lang, data, can, busy, run }: { lang: Lang; data: CpmWorkspacePayload; can: CpmCan; busy: boolean; run: RunFn }) {
   const rtl = lang === "fa";
   const client = useMemo(() => new CpmClient(data.projectId, null), [data.projectId]);
+  const [guideOpen, setGuideOpen] = useState(false);
   const [form, setForm] = useState({ Code: "", WbsCode: "", ContractorCode: "", Discipline: "piping", ScopeFa: "", WeightPct: "", StartDate: "", EndDate: "" });
   const set = (k: keyof typeof form, v: string) => setForm((f) => ({ ...f, [k]: v }));
 
   return (
     <div className="space-y-2.5">
+      <div className="glass-dark rounded-2xl px-3 py-2">
+        <button onClick={() => setGuideOpen((o) => !o)} className="flex w-full items-center gap-2 text-start text-[11px] tx1">
+          <span className="grid h-5 w-5 place-items-center rounded-full border border-sky-400/50 text-[10px] text-sky-300">؟</span>
+          {rtl ? "راهنمای حوزهٔ کاری پیمانکاران" : "Work-area guide"}
+          <span className="ms-auto tx3">{guideOpen ? "▴" : "▾"}</span>
+        </button>
+        {guideOpen && (
+          <div className="mt-2 space-y-1.5 border-t b-line-soft pt-2 text-[10.5px] leading-5 tx2">
+            <p>{rtl ? "این ماژول مشخص می‌کند هر پیمانکار مسئول کدام بخش از WBS است؛ گزارش روزانه (DPR) و سنجش عملکرد پیمانکار روی همین تخصیص سوار می‌شود." : "This module assigns each WBS branch to a contractor; daily reporting (DPR) and contractor performance build on it."}</p>
+            <ol className="list-decimal space-y-1 ps-5">
+              <li>{rtl ? "پیش‌نیاز ۱: گره WBS باید قبلاً در ساختار شکست پروژه تعریف شده باشد." : "Prerequisite 1: the WBS node must already exist in the project breakdown."}</li>
+              <li>{rtl ? "پیش‌نیاز ۲: شمارهٔ قرارداد فرعی باید در «منابع انسانی ← قرارداد نیروی پیمانکاری» ثبت شده باشد." : "Prerequisite 2: the subcontract number must be registered under HR → Labour subcontracts."}</li>
+              <li>{rtl ? "با فرم «تخصیص WBS به پیمانکار» حوزه را ثبت کنید: کد حوزه، WBS، پیمانکار، دیسیپلین، دامنه، وزن و بازهٔ زمانی." : "Register the area with the assign form: code, WBS, contractor, discipline, scope, weight and dates."}</li>
+              <li>{rtl ? "قاعده: جمع وزن حوزه‌های یک WBS حداکثر ۱۰۰٪ است؛ کد ناموجود خطا می‌گیرد." : "Rule: weights per WBS total at most 100%; unknown codes are rejected."}</li>
+              <li>{rtl ? "بعد از ثبت، وضعیت حوزه (فعال/پایان‌یافته) از جدول پایین مدیریت و در گزارش روزانه انتخاب می‌شود." : "After creation, manage status in the table below; areas are then selectable in DPR."}</li>
+            </ol>
+          </div>
+        )}
+      </div>
       {can.workAreaEdit && (
         <Section title={rtl ? "تخصیص WBS به پیمانکار" : "Assign WBS to contractor"} note={rtl ? "کد WBS و کد پیمانکار باید در همین پروژه موجود باشند؛ جمع وزن هر WBS حداکثر ۱۰۰٪." : "WBS and contractor must exist in this project; weight per WBS ≤ 100%."}>
           <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
@@ -310,16 +330,41 @@ function AreasTab({ lang, data, can, busy, run }: { lang: Lang; data: CpmWorkspa
 
 function DprTab({ lang, data, can, busy, run, client, userId }: { lang: Lang; data: CpmWorkspacePayload; can: CpmCan; busy: boolean; run: RunFn; client: CpmClient; userId: string | null }) {
   const rtl = lang === "fa";
+  const [guideOpen, setGuideOpen] = useState(false);
   const [form, setForm] = useState({ ReportNo: "", ReportDate: todayIso(), Shift: "day", ContractorCode: "", Discipline: "piping", WorkAreaCode: "", LocationFa: "", ManpowerCount: "", WorkDoneFa: "" });
   const [openRow, setOpenRow] = useState<string | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [kind, setKind] = useState("photo");
   const [note, setNote] = useState("");
   const set = (k: keyof typeof form, v: string) => setForm((f) => ({ ...f, [k]: v }));
+  const areas = (data.workAreas as CpmWorkAreaRow[]) ?? [];
+  const contractors = [...new Set(areas.map((w) => w.ContractorCode).filter(Boolean))];
+  const pickArea = (code: string) => {
+    const area = areas.find((w) => w.Code === code);
+    setForm((f) => ({ ...f, WorkAreaCode: code, ContractorCode: area?.ContractorCode ?? f.ContractorCode, Discipline: area?.Discipline ?? f.Discipline }));
+  };
   const attachmentsOf = (no: string) => (data.attachments as any[]).filter((a) => a.ReportNo === no);
 
   return (
     <div className="space-y-2.5">
+      <div className="glass-dark rounded-2xl px-3 py-2">
+        <button onClick={() => setGuideOpen((o) => !o)} className="flex w-full items-center gap-2 text-start text-[11px] tx1">
+          <span className="grid h-5 w-5 place-items-center rounded-full border border-sky-400/50 text-[10px] text-sky-300">؟</span>
+          {rtl ? "راهنمای ثبت DPR (گزارش روزانهٔ پیمانکار)" : "DPR registration guide"}
+          <span className="ms-auto tx3">{guideOpen ? "▴" : "▾"}</span>
+        </button>
+        {guideOpen && (
+          <div className="mt-2 space-y-1.5 border-t b-line-soft pt-2 text-[10.5px] leading-5 tx2">
+            <p>{rtl ? "DPR گزارش روزانهٔ هر پیمانکار است: چه روزی، کدام حوزه، چند نفر و چه کاری انجام شد. فقط گزارش تأییدشده مبنای سنجش عملکرد و پیشرفت است." : "DPR is each contractor's daily report: date, work area, manpower and work done. Only approved reports count toward performance and progress."}</p>
+            <ol className="list-decimal space-y-1 ps-5">
+              <li>{rtl ? "پیش‌نیاز: حوزهٔ کاری پیمانکار باید قبلاً در «حوزهٔ کاری پیمانکاران» ثبت شده باشد؛ انتخاب حوزه، پیمانکار و دیسیپلین را خودکار پر می‌کند (تایپ دستی هم ممکن است)." : "Prerequisite: the work area must exist under Contractor Work Areas; picking it auto-fills contractor and discipline (manual typing also works)."}</li>
+              <li>{rtl ? "گزارش را با «ثبت پیش‌نویس» بسازید؛ پیوست (عکس/فایل) را از ستون پیوست همان ردیف اضافه کنید." : "Create the report as draft; add attachments from the row's attachment cell."}</li>
+              <li>{rtl ? "گردش تأیید: پیش‌نویس ← ارسال ← تأیید یا برگشت. تأیید/برگشت فقط توسط شخصی غیر از ثبت‌کننده و برگشت فقط با ذکر دلیل است." : "Workflow: draft → submit → approve or return. Approval/return only by someone other than the recorder; return requires a reason."}</li>
+              <li>{rtl ? "گزارش برگشت‌خورده را اصلاح و دوباره ارسال کنید؛ گزارش تأییدشده قفل است." : "Fix and resubmit returned reports; approved reports are locked."}</li>
+            </ol>
+          </div>
+        )}
+      </div>
       {can.dprRecord && (
         <Section title={rtl ? "ثبت گزارش روزانهٔ پیمانکار" : "New contractor daily report"} note={rtl ? "گزارش همیشه پیش‌نویس ساخته می‌شود؛ سپس ارسال و تأیید توسط غیرثبت‌کننده." : "Always created as draft; submit then approve by someone else."}>
           <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
@@ -328,15 +373,24 @@ function DprTab({ lang, data, can, busy, run, client, userId }: { lang: Lang; da
             <select className={inputCls} value={form.Shift} onChange={(e) => set("Shift", e.target.value)}>
               {SHIFT_CODES.map((s) => <option key={s} value={s}>{rtl ? STATUS_LABEL[s]?.fa : STATUS_LABEL[s]?.en}</option>)}
             </select>
-            <input className={inputCls} placeholder={rtl ? "کد پیمانکار" : "Contractor code"} dir="ltr" value={form.ContractorCode} onChange={(e) => set("ContractorCode", e.target.value)} />
+            <input className={inputCls} placeholder={rtl ? "پیمانکار" : "Contractor"} dir="ltr" list="dpr-contractors" value={form.ContractorCode} onChange={(e) => set("ContractorCode", e.target.value)} />
+            <datalist id="dpr-contractors">
+              {contractors.map((c) => <option key={c} value={c} />)}
+            </datalist>
             <select className={inputCls} value={form.Discipline} onChange={(e) => set("Discipline", e.target.value)}>
               {DISCIPLINES.map((dd) => <option key={dd} value={dd}>{rtl ? DISCIPLINE_LABEL[dd].fa : DISCIPLINE_LABEL[dd].en}</option>)}
             </select>
-            <input className={inputCls} placeholder={rtl ? "کد حوزهٔ کاری (اختیاری)" : "Work area (optional)"} dir="ltr" value={form.WorkAreaCode} onChange={(e) => set("WorkAreaCode", e.target.value)} />
+            <input className={inputCls} placeholder={rtl ? "حوزهٔ کاری (اختیاری)" : "Work area (optional)"} dir="ltr" list="dpr-areas" value={form.WorkAreaCode} onChange={(e) => pickArea(e.target.value)} />
+            <datalist id="dpr-areas">
+              {areas.map((w) => <option key={w.Code} value={w.Code} label={`${w.Code} · ${w.WbsCode} · ${w.ContractorCode}`} />)}
+            </datalist>
             <input className={inputCls} placeholder={rtl ? "موقعیت" : "Location"} value={form.LocationFa} onChange={(e) => set("LocationFa", e.target.value)} />
             <input className={inputCls} placeholder={rtl ? "نفرات" : "Manpower"} dir="ltr" value={form.ManpowerCount} onChange={(e) => set("ManpowerCount", e.target.value)} />
             <input className={`${inputCls} md:col-span-3`} placeholder={rtl ? "کار انجام‌شده" : "Work done"} value={form.WorkDoneFa} onChange={(e) => set("WorkDoneFa", e.target.value)} />
           </div>
+          {areas.length === 0 && (
+            <p className="text-[10px] text-amber-300">{rtl ? "هنوز حوزهٔ کاری ثبت نشده است؛ اول از «حوزهٔ کاری پیمانکاران» حوزه تعریف کنید تا انتخاب پیمانکار فعال شود." : "No work area registered yet; define one under Contractor Work Areas first."}</p>
+          )}
           <button className={btnPrimary} disabled={busy || !form.ReportNo || !form.ContractorCode || !form.LocationFa || !form.WorkDoneFa}
             onClick={() => void run(
               () => client.createDpr({ ...form, ManpowerCount: Number(form.ManpowerCount || 0), WorkAreaCode: form.WorkAreaCode || null }),
@@ -449,10 +503,17 @@ type LineDraft = { ItemRef: string; ItemType: string; SizeInch: string; Quantity
 
 function DisciplineTab({ lang, data, can, busy, run }: { lang: Lang; data: CpmWorkspacePayload; can: CpmCan; busy: boolean; run: RunFn }) {
   const rtl = lang === "fa";
+  const [guideOpen, setGuideOpen] = useState(false);
   const client = useMemo(() => new CpmClient(data.projectId, null), [data.projectId]);
   const [form, setForm] = useState({ ReportNo: "", ReportDate: todayIso(), Discipline: "piping", ContractorCode: "", WorkAreaCode: "" });
   const [lines, setLines] = useState<LineDraft[]>([{ ItemRef: "", ItemType: "weld", SizeInch: "", Quantity: "", ResultCode: "pending", NdtMethod: "RT", NoteFa: "" }]);
   const items = DISCIPLINE_ITEMS[form.Discipline as never] as readonly string[];
+  const areas = (data.workAreas as CpmWorkAreaRow[]) ?? [];
+  const contractors = [...new Set(areas.map((w) => w.ContractorCode).filter(Boolean))];
+  const pickArea = (code: string) => {
+    const area = areas.find((w) => w.Code === code);
+    setForm((f) => ({ ...f, WorkAreaCode: code, ContractorCode: area?.ContractorCode ?? f.ContractorCode }));
+  };
   const set = (k: keyof typeof form, v: string) => setForm((f) => ({ ...f, [k]: v }));
   const setLine = (i: number, k: keyof LineDraft, v: string) => setLines((ls) => ls.map((l, j) => (j === i ? { ...l, [k]: v } : l)));
   const linePayload = (l: LineDraft) => {
@@ -472,6 +533,24 @@ function DisciplineTab({ lang, data, can, busy, run }: { lang: Lang; data: CpmWo
 
   return (
     <div className="space-y-2.5">
+      <div className="glass-dark rounded-2xl px-3 py-2">
+        <button onClick={() => setGuideOpen((o) => !o)} className="flex w-full items-center gap-2 text-start text-[11px] tx1">
+          <span className="grid h-5 w-5 place-items-center rounded-full border border-sky-400/50 text-[10px] text-sky-300">؟</span>
+          {rtl ? "راهنمای گزارش دیسیپلینی" : "Discipline report guide"}
+          <span className="ms-auto tx3">{guideOpen ? "▴" : "▾"}</span>
+        </button>
+        {guideOpen && (
+          <div className="mt-2 space-y-1.5 border-t b-line-soft pt-2 text-[10.5px] leading-5 tx2">
+            <p>{rtl ? "گزارش دیسیپلینی، گزارش فنیِ روزانهٔ هر رشته است (مثل پایپینگ: فیت‌آپ/جوش/NDT). نرخ قبولی و ردی‌ها از همین خطوط حساب می‌شود." : "A discipline report is the daily technical report per trade (e.g. piping: fit-up/weld/NDT). Pass rates and rejects come from its lines."}</p>
+            <ol className="list-decimal space-y-1 ps-5">
+              <li>{rtl ? "پیش‌نیاز: حوزهٔ کاری از «حوزهٔ کاری پیمانکاران»؛ انتخاب حوزه، پیمانکار را خودکار پر می‌کند (تایپ دستی هم ممکن است)." : "Prerequisite: work area from Contractor Work Areas; picking it auto-fills the contractor (manual typing works too)."}</li>
+              <li>{rtl ? "دیسیپلین را انتخاب کنید؛ فقط آیتم‌های مجاز همان رشته در خطوط می‌آید. برای هر خط: شناسهٔ آیتم، مقدار و در صورت نیاز قطر و نتیجه." : "Choose the discipline; only its allowed items appear. Per line: item ref, quantity, size/result where needed."}</li>
+              <li>{rtl ? "قاعده: نتیجهٔ «رد» بدون دلیل و اقدام اصلاحی ثبت نمی‌شود؛ شناسهٔ آیتم در یک گزارش نباید تکراری باشد (حداکثر ۳۰۰ خط)." : "Rule: a rejected result needs a reason; item refs must be unique per report (max 300 lines)."}</li>
+              <li>{rtl ? "گردش تأیید مثل DPR: پیش‌نویس ← ارسال ← تأیید/برگشت توسط غیرثبت‌کننده." : "Workflow like DPR: draft → submit → approve/return by a non-recorder."}</li>
+            </ol>
+          </div>
+        )}
+      </div>
       {can.disciplineRecord && (
         <Section title={rtl ? "ثبت گزارش دیسیپلینی" : "New discipline report"} note={rtl ? "آیتم‌های مجاز هر دیسیپلین محدود است؛ نتیجهٔ «رد» بدون دلیل ثبت نمی‌شود." : "Allowed items are per discipline; a rejected result needs a reason."}>
           <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
@@ -480,8 +559,14 @@ function DisciplineTab({ lang, data, can, busy, run }: { lang: Lang; data: CpmWo
             <select className={inputCls} value={form.Discipline} onChange={(e) => { set("Discipline", e.target.value); setLines((ls) => ls.map((l) => ({ ...l, ItemType: DISCIPLINE_ITEMS[e.target.value as never][0] }))); }}>
               {DISCIPLINES.map((d) => <option key={d} value={d}>{rtl ? DISCIPLINE_LABEL[d].fa : DISCIPLINE_LABEL[d].en}</option>)}
             </select>
-            <input className={inputCls} placeholder={rtl ? "کد پیمانکار" : "Contractor code"} dir="ltr" value={form.ContractorCode} onChange={(e) => set("ContractorCode", e.target.value)} />
-            <input className={inputCls} placeholder={rtl ? "کد حوزهٔ کاری (اختیاری)" : "Work area (optional)"} dir="ltr" value={form.WorkAreaCode} onChange={(e) => set("WorkAreaCode", e.target.value)} />
+            <input className={inputCls} placeholder={rtl ? "پیمانکار" : "Contractor"} dir="ltr" list="disc-contractors" value={form.ContractorCode} onChange={(e) => set("ContractorCode", e.target.value)} />
+            <datalist id="disc-contractors">
+              {contractors.map((c) => <option key={c} value={c} />)}
+            </datalist>
+            <input className={inputCls} placeholder={rtl ? "حوزهٔ کاری (اختیاری)" : "Work area (optional)"} dir="ltr" list="disc-areas" value={form.WorkAreaCode} onChange={(e) => pickArea(e.target.value)} />
+            <datalist id="disc-areas">
+              {areas.map((w) => <option key={w.Code} value={w.Code} label={`${w.Code} · ${w.WbsCode} · ${w.ContractorCode}`} />)}
+            </datalist>
           </div>
           <div className="space-y-1.5">
             {lines.map((l, i) => (

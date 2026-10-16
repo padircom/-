@@ -41,9 +41,7 @@ export type PexTab =
   | "discipline"
   | "weekly"
   | "mpr"
-  | "reports"
   | "alerts"
-  | "template"
   | "roc";
 
 const TABS: { id: PexTab; fa: string; en: string }[] = [
@@ -55,9 +53,7 @@ const TABS: { id: PexTab; fa: string; en: string }[] = [
   { id: "dpr", fa: "گزارش روزانه", en: "DPR" },
   { id: "weekly", fa: "گزارش هفتگی", en: "Weekly Report" },
   { id: "mpr", fa: "ماهانه", en: "MPR" },
-  { id: "reports", fa: "گزارش‌ساز", en: "Reports" },
   { id: "alerts", fa: "هشدار", en: "Alerts" },
-  { id: "template", fa: "قالب AI", en: "Templates" },
 ];
 
 /** برچسب فارسی وضعیت؛ پیش از این کلید انگلیسی خام نشان داده می‌شد. */
@@ -110,8 +106,8 @@ export default function PlanningWorkspace({
   const [weightMode, setWeightMode] = useState<WeightMode>("Cost");
   const [alpha, setAlpha] = useState(0.6);
   const [ack, setAck] = useState<Record<string, boolean>>({});
-  const [fmt, setFmt] = useState("PDF");
-  const [kind, setKind] = useState("External");
+  const [ackAt, setAckAt] = useState<Record<string, string>>({});
+  const [alertFilter, setAlertFilter] = useState<string>("all");
 
   useEffect(() => {
     setTab(initialTab);
@@ -1458,80 +1454,97 @@ export default function PlanningWorkspace({
           </div>
         )}
 
-        {tab === "reports" && (
-          <div className="fade-rise space-y-2">
-            <div className="glass-dark flex flex-wrap gap-2 rounded-2xl p-3 text-[11px]">
-              <select value={kind} onChange={(e) => setKind(e.target.value)} className="rounded-lg border b-line-soft bg-black/20 px-2 py-1 tx1" style={{ colorScheme: "dark" }}>
-                <option>Internal</option>
-                <option>External</option>
-              </select>
-              <select value={fmt} onChange={(e) => setFmt(e.target.value)} className="rounded-lg border b-line-soft bg-black/20 px-2 py-1 tx1" style={{ colorScheme: "dark" }}>
-                <option>PDF</option>
-                <option>XLSX</option>
-                <option>DOCX</option>
-              </select>
-              <button className="rounded-lg border border-sky-400/40 bg-sky-400/15 px-3 py-1 text-sky-200">{rtl ? "تولید (نمونه)" : "Generate (demo)"}</button>
-              <span className="ms-auto text-[10px] tx4">{kind} · {fmt} · {rtl ? "سربرگ A4 با سه لوگو" : "A4 header, three logos"}</span>
-            </div>
-            <div className="glass-dark rounded-2xl p-3">
-              <div className="mb-2 text-[11.5px] tx1">{rtl ? "گزارش‌های استاندارد ماژول" : "Standard module reports"}</div>
-              <div className="grid gap-1 sm:grid-cols-2">
-                {[
-                  ["MS-01", rtl ? "وضعیت مایلستون‌ها" : "Milestone status", `${m.milestones.length}`],
-                  ["MS-02", rtl ? "جریمه و پاداش" : "LD & bonus", fmtNum(m.totalPenalty)],
-                  ["MS-03", rtl ? "تشدید مایلستون" : "Escalation", String(m.milestones.filter((x) => x.escalation >= 2).length)],
-                  ["CP-01", rtl ? "مسیر بحرانی" : "Critical path", String(m.cpm.criticalPath.length)],
-                  ["CP-02", rtl ? "نزدیک‌بحرانی" : "Near-critical", String(m.nearCritical.length)],
-                  ["CP-03", rtl ? "رانش مسیر بحرانی" : "CP drift", `${m.snapshot.drift}d`],
-                  ["CP-04", rtl ? "سلامت DCMA" : "DCMA health", String(m.dcma.healthScore)],
-                  ["PMS-01", rtl ? "پیشرفت وزنی WBS" : "WBS weighted progress", `${m.overallPct}%`],
-                  ["PMS-02", rtl ? "انحراف برنامه‌ای" : "Progress variance", `${m.variance.deltaPct}`],
-                  ["PMS-03", rtl ? "PPC هفتگی" : "Weekly PPC", `${m.ppcPct}%`],
-                ].map(([code, name, val]) => (
-                  <div key={code} className="flex items-center gap-2 rounded-lg border b-line-soft px-2 py-1.5 text-[10.5px]">
-                    <span className="font-mono text-emerald-300" dir="ltr">{code}</span>
-                    <span className="tx2">{name}</span>
-                    <span className="ms-auto tabular-nums tx1" dir="ltr">{val}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-
         {tab === "alerts" && (
           <div className="fade-rise space-y-2">
-            {m.alerts.length === 0 && <div className="glass-dark rounded-2xl p-3 text-[11px] tx3">{rtl ? "هشدار فعالی نیست." : "No active alerts."}</div>}
-            {m.alerts.map((a, i) => {
-              const key = `${a.code}-${a.refId ?? i}`;
-              return (
-                <div key={key} className="glass-dark flex flex-wrap items-center gap-3 rounded-xl p-3 text-[11px]">
-                  <span className="rounded px-2 py-0.5" style={{ background: `${SEV_COLOR[a.severity]}22`, color: SEV_COLOR[a.severity] }}>{a.severity}</span>
-                  <span className="font-mono tx3" dir="ltr">{a.code}</span>
-                  <span className="tx3">{a.type}</span>
-                  <span className="tx1">{a.message}</span>
-                  {a.refId && <span className="font-mono text-sky-300" dir="ltr">{a.refId}</span>}
-                  <button
-                    onClick={() => setAck((s) => ({ ...s, [key]: true }))}
-                    className="ms-auto rounded-lg border b-line-soft px-2 py-1 text-[10px] tx2"
-                  >
-                    {ack[key] ? "ACK" : rtl ? "تأیید وصول" : "Ack"}
-                  </button>
-                </div>
-              );
-            })}
+            {m.alerts.length === 0 ? (
+              <div className="glass-dark rounded-2xl p-5 text-center text-[12px] text-emerald-300">
+                ✓ {rtl ? "هشدار فعالی نیست — همه‌چیز تحت کنترل است." : "No active alerts — all under control."}
+              </div>
+            ) : (
+              <>
+                {(() => {
+                  const rank: Record<string, number> = { emergency: 0, critical: 1, warning: 2 };
+                  const keyOf = (a: (typeof m.alerts)[number], i: number) => `${a.code}-${a.refId ?? i}`;
+                  const counts = {
+                    total: m.alerts.length,
+                    emergency: m.alerts.filter((a) => a.severity === "emergency").length,
+                    critical: m.alerts.filter((a) => a.severity === "critical").length,
+                    warning: m.alerts.filter((a) => a.severity === "warning").length,
+                    unacked: m.alerts.filter((a, i) => !ack[keyOf(a, i)]).length,
+                  };
+                  const chips: { id: string; fa: string; en: string; color?: string; value: number }[] = [
+                    { id: "all", fa: "همه", en: "All", value: counts.total },
+                    { id: "emergency", fa: "اضطراری", en: "Emergency", color: SEV_COLOR.emergency, value: counts.emergency },
+                    { id: "critical", fa: "بحرانی", en: "Critical", color: SEV_COLOR.critical, value: counts.critical },
+                    { id: "warning", fa: "هشدار", en: "Warning", color: SEV_COLOR.warning, value: counts.warning },
+                  ];
+                  const visible = m.alerts
+                    .map((a, i) => ({ a, i }))
+                    .filter(({ a }) => alertFilter === "all" || a.severity === alertFilter)
+                    .sort((x, y) => (rank[x.a.severity] ?? 3) - (rank[y.a.severity] ?? 3));
+                  return (
+                    <>
+                      <div className="glass-dark flex flex-wrap items-center gap-1.5 rounded-2xl p-2">
+                        {chips.map((c) => (
+                          <button
+                            key={c.id}
+                            onClick={() => setAlertFilter(c.id)}
+                            className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[10px] transition ${alertFilter === c.id ? "toggle-on tx1" : "b-line-soft tx3 hover:tx1"}`}
+                          >
+                            {c.color && <i className="h-2 w-2 rounded-full" style={{ background: c.color }} />}
+                            {rtl ? c.fa : c.en}
+                            <b className="tabular-nums">{c.value}</b>
+                          </button>
+                        ))}
+                        <span className="ms-auto px-2 text-[10px] tx3">
+                          {rtl ? "تأییدنشده:" : "Unacknowledged:"} <b className="tabular-nums tx1">{counts.unacked}</b>
+                        </span>
+                      </div>
+                      {visible.map(({ a, i }) => {
+                        const key = keyOf(a, i);
+                        const color = SEV_COLOR[a.severity] ?? "#9fb3c8";
+                        const done = !!ack[key];
+                        return (
+                          <div
+                            key={key}
+                            className="glass-dark flex flex-wrap items-center gap-3 rounded-xl p-3 text-[11px] transition"
+                            style={{ borderInlineStart: `3px solid ${color}`, opacity: done ? 0.55 : 1 }}
+                          >
+                            <span className="flex items-center gap-1.5 rounded px-2 py-0.5 text-[9.5px] font-semibold" style={{ background: `${color}26`, color }}>
+                              <i className="h-1.5 w-1.5 rounded-full" style={{ background: color }} />
+                              {a.severity}
+                            </span>
+                            <span className="font-mono tx3" dir="ltr">{a.code}</span>
+                            <span className="tx3">{a.type}</span>
+                            <span className="tx1">{a.message}</span>
+                            {a.refId && (
+                              <button onClick={() => setTab("baseline")} title={rtl ? "مشاهده در برنامه پایه" : "View in baseline"} className="rounded border border-sky-400/40 bg-sky-400/10 px-1.5 py-0.5 font-mono text-[9.5px] text-sky-300 transition hover:bg-sky-400/20" dir="ltr">
+                                {a.refId} ↗
+                              </button>
+                            )}
+                            <span className="ms-auto flex items-center gap-2">
+                              {done && ackAt[key] && <span className="text-[9px] tx4" dir="ltr">✓ {ackAt[key]}</span>}
+                              <button
+                                onClick={() => { setAck((s) => ({ ...s, [key]: true })); setAckAt((s) => ({ ...s, [key]: new Date().toLocaleTimeString() })); }}
+                                disabled={done}
+                                className="rounded-lg border b-line-soft px-2 py-1 text-[10px] tx2 transition enabled:hover:border-emerald-400/50 disabled:opacity-60"
+                              >
+                                {done ? "ACK ✓" : rtl ? "تأیید وصول" : "Ack"}
+                              </button>
+                            </span>
+                          </div>
+                        );
+                      })}
+                      {visible.length === 0 && <div className="glass-dark rounded-2xl p-4 text-center text-[11px] tx3">{rtl ? "در این سطح هشداری نیست." : "No alerts at this level."}</div>}
+                    </>
+                  );
+                })()}
+              </>
+            )}
           </div>
         )}
 
         {tab === "insight" && <MspAnalysisPanel lang={lang} />}
-
-        {tab === "template" && (
-          <div className="fade-rise grid gap-2 md:grid-cols-3">
-            <div className="glass-dark rounded-2xl p-3 text-[11px] tx2">{rtl ? "بلوک: هدر · جدول · نمودار" : "Blocks: header · table · chart"}</div>
-            <div className="glass-dark rounded-2xl p-3 text-[11px] tx1">{rtl ? "بوم WYSIWYG (نمونه)" : "WYSIWYG canvas (demo)"}</div>
-            <div className="glass-dark rounded-2xl p-3 text-[11px] tx2">{rtl ? "AI پیشنهاد می‌دهد؛ اعمال فقط پس از Approve" : "AI suggests; apply only after Approve"}</div>
-          </div>
-        )}
 
         {tab === "workshop" && shopView === "roc" && (
           <div className="fade-rise space-y-2">

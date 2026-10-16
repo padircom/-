@@ -163,7 +163,7 @@ function summarizeLossPortfolio(claims, items, runs, versions = []) {
     cases,
     activeCases: claims.filter((c) => !["closed", "withdrawn", "settled"].includes(String(c.Status ?? ""))).length,
     incompleteDocs: cases.reduce((s, c) => s + c.itemsWithoutDocs, 0),
-    needsReview: runs.filter((r) => r.Status === "needs_review").length + cases.reduce((s, c) => s + 0, 0),
+    needsReview: runs.filter((r) => r.Status === "needs_review").length,
     readyForDocument: cases.filter((c) => c.readyForDocument).length,
     pendingApproval: items.filter((i) => i.Status === "submitted").length,
     documentVersions: versions.length

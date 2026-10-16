@@ -59,6 +59,8 @@ server/storage/dpr/
 
 # Generated LIVE-3 shared logic
 server/rccWsLogic.js
+server/delayLogic.js
+server/claimDocLogic.js
 
 # Generated LIVE-5 monitoring projections
 server/monitoringWsLogic.js

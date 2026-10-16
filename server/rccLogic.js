@@ -39,18 +39,6 @@ function guardianTick(notices, now = /* @__PURE__ */ new Date()) {
   }
   return out;
 }
-function seedNotices() {
-  const t = Date.now();
-  const iso = (offset) => {
-    const d = new Date(t + offset * 864e5);
-    return d.toISOString().slice(0, 10);
-  };
-  return [
-    { id: "n1", claimId: "CLM-01", title: "EOT Long Lead", clause: "FIDIC 20.1 / Art.29", dueAt: iso(12), bodyFa: "\u067E\u06CC\u0634\u200C\u0646\u0648\u06CC\u0633 \u0627\u0648\u0644\u06CC\u0647" },
-    { id: "n2", claimId: "CLM-02", title: "Access delay", clause: "Art.30", dueAt: iso(2) },
-    { id: "n3", claimId: "CLM-03", title: "Weather window", clause: "Particular", dueAt: iso(-1) }
-  ];
-}
 function depletionAlert(progressPct, opening, balance) {
   if (opening <= 0) return false;
   const usedPct = (1 - balance / opening) * 100;
@@ -141,6 +129,5 @@ export {
   parseRiskCsv,
   quantumDays,
   scoreColor,
-  scoreLevel,
-  seedNotices
+  scoreLevel
 };
