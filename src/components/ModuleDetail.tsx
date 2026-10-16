@@ -13,6 +13,7 @@ import GovernanceWorkspace, { type GovTab } from "./GovernanceWorkspace";
 import PmoWorkspace from "./PmoWorkspace";
 import HseWorkspace, { type HseTab as HseFieldTab } from "./HseFieldWorkspace";
 import ContractsPanel from "./ContractsPanel";
+import ContractRiskWorkspace from "./ContractRiskWorkspace";
 import CostSupplyWorkspace, { type FinTab } from "./CostSupplyWorkspace";
 import QualityWorkspace, { type QmsTab } from "./QualityWorkspace";
 import WorkforceWorkspace, { type HrmTab } from "./WorkforceWorkspace";
@@ -880,8 +881,8 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
      حوزه‌های اصلی دست‌نخورده می‌مانند و فقط نمای درون d6 عوض می‌شود. */
   const [d6View, setD6View] = useState<"gov" | "pmo">("gov");
 
-  const [d14View, setD14View] = useState<"contract" | "ipc" | "rating">(
-    target.processId === "d14-p8" ? "rating" : "contract",
+  const [d14View, setD14View] = useState<"contract" | "ipc" | "rating" | "risk">(
+    target.subId === "d14-p1-risk" ? "risk" : target.processId === "d14-p8" ? "rating" : "contract",
   );
 
   /* MFG/MES: دسترسی به فضای کاری سامانهٔ مستقل تولید کارگاهی (Standalone MES)
@@ -1071,6 +1072,7 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
             ["contract", rtl ? "پیمان و صورت‌وضعیت" : "Contract & IPC"],
             ["ipc", rtl ? "قالب‌پذیری صورت‌وضعیت" : "Configurable IPC"],
             ["rating", rtl ? "ارزیابی پیمانکاران و تأمین‌کنندگان" : "Contractor & Supplier Rating"],
+            ["risk", rtl ? "مدیریت ریسک قراردادها و بهبود قرارداد" : "Contract Risk & Improvement"],
           ] as const).map(([k, label]) => (
             <button
               key={k}
@@ -1086,7 +1088,9 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
         </div>
         <div className="glass flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl p-3">
           <div className="thin-scroll min-h-0 flex-1 overflow-y-auto">
-            {d14View === "rating" ? (
+            {d14View === "risk" ? (
+              <ContractRiskWorkspace lang={lang} projectId={target.projectId} />
+            ) : d14View === "rating" ? (
               <VendorRatingPanel lang={lang} />
             ) : d14View === "ipc" ? (
               <CntIpcPanel lang={lang} />
