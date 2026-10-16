@@ -145,6 +145,9 @@ export const PERMISSION_CATALOG: PermissionDef[] = [
    * جداگانه است تا در ممیزی مشخص باشد چه کسی آن را باز کرده. */
   P("cnt.contract.view", "d14", "مشاهده شناسنامه پیمان", "View contract master", "confidential"),
   P("cnt.contract.edit", "d14", "ثبت و ویرایش پیمان و الحاقیه", "Edit contract and amendments", "restricted", true),
+  P("cnt.risk.view", "d14", "مشاهدهٔ ریسک‌های قراردادی و بهبود قرارداد", "View contract risks & improvement", "confidential"),
+  P("cnt.risk.edit", "d14", "ثبت و ویرایش ریسک، تعهد، اقدام و پیشنهاد اصلاح قرارداد", "Edit contract risks, obligations, actions & improvements", "restricted", true),
+  P("cnt.risk.approve", "d14", "تأیید قاعدهٔ امتیازدهی و پیشنهاد اصلاح قرارداد", "Approve scoring rules & clause improvements", "restricted", true),
   P("cnt.boq.edit", "d14", "ویرایش فهرست بها و نرخ ردیف", "Edit BOQ and unit rates", "restricted", true),
   /* ریزمتره فقط مقدار فیزیکی است و هیچ نرخی نشان نمی‌دهد، پس طبقه‌بندی
    * «داخلی» کافی است — وگرنه سرپرست کارگاه که کار را متره می‌کند نمی‌توانست
@@ -1038,6 +1041,9 @@ export const ROLE_CATALOG: RoleDef[] = [
       "rcc.claim.view", "rcc.claim.edit", "rcc.change.raise", "rcc.issue.view", "rcc.issue.edit", "rcc.delay.view", "rcc.delay.edit", "rcc.delay.calculate",
       "fin.cost.view", "fin.rate.view", "ckm.letter.view", "ckm.letter.draft",
       "cnt.contract.view", "cnt.contract.edit", "cnt.boq.edit", "cnt.ipc.prepare",
+      /* PMO-CONTRACT-RISK-ENGINE-V1.0: ریسک قراردادی را مدیر پیمان ثبت و
+       * پایش می‌کند؛ تأیید قاعدهٔ امتیازدهی و پیشنهاد اصلاح با او نیست. */
+      "cnt.risk.view", "cnt.risk.edit",
       "cnt.retainage.manage", "com.certificate.view",
       /* ثبت و تمدید ضمانت‌نامه کار روزمرهٔ مدیر پیمان است، ولی
        * آزادسازی و ضبط عمداً به او داده نشده: کسی که سند را ثبت
@@ -1084,6 +1090,8 @@ export const ROLE_CATALOG: RoleDef[] = [
       "plan.baseline.set", "plan.progress.approve",
       "pex.evm.view", "pex.kpi.edit", "pex.forecast.edit",
       "rcc.risk.view", "rcc.risk.edit", "rcc.change.raise", "rcc.claim.view", "rcc.claim.submit", "rcc.claim.decide", "rcc.issue.view", "rcc.issue.edit", "rcc.issue.escalate", "rcc.delay.view", "rcc.delay.edit", "rcc.delay.calculate", "rcc.delay.approve",
+      /* تصویب پیشنهاد اصلاح بند و قاعدهٔ امتیازدهی ریسک قراردادی با مدیر پروژه است، نه تهیه‌کننده. */
+      "cnt.risk.view", "cnt.risk.approve",
       "fin.cost.view", "fin.rate.view", "fin.ipc.approve", "fin.procure.approve", "fin.reserve.draw",
       "qms.itp.view", "qms.ncr.close",
       "hrm.roster.view", "hrm.timesheet.approve", "hrm.productivity.view",
@@ -1297,7 +1305,7 @@ export const ROLE_CATALOG: RoleDef[] = [
     inherits: ["viewer"],
     clearance: "confidential",
     party: "consultant",
-    grants: ["doc.document.approve", "plan.progress.approve", "qms.itp.view", "qms.inspection.record", "qms.ncr.raise", "fin.ipc.prepare", "cnt.contract.view", "cnt.ipc.review", "cnt.guarantee.view", "cnt.progress.view", "cnt.kpi.view", "cnt.report.view",
+    grants: ["doc.document.approve", "plan.progress.approve", "qms.itp.view", "qms.inspection.record", "qms.ncr.raise", "fin.ipc.prepare", "cnt.contract.view", "cnt.ipc.review", "cnt.guarantee.view", "cnt.progress.view", "cnt.kpi.view", "cnt.report.view", "cnt.risk.view",
       "com.punch.record", "com.certificate.view", "ckm.letter.view", "ckm.letter.draft", "gov.gate.review", "eng.mdr.view", "eng.review.code", "eng.crs.resolve", "eng.vpr.review"],
   },
   {
@@ -1313,6 +1321,8 @@ export const ROLE_CATALOG: RoleDef[] = [
        * برگشتنش هم به تشخیص او. */
       "cnt.guarantee.view", "cnt.guarantee.release", "cnt.progress.view", "cnt.kpi.view",
       "cnt.report.view",
+      /* تصمیم نهایی اصلاح بند قرارداد با کارفرماست؛ پیشنهاد به‌تنهایی متن پیمان را عوض نمی‌کند. */
+      "cnt.risk.view", "cnt.risk.approve",
       "com.certificate.view", "com.certificate.issue", "pex.evm.view", "rcc.change.approve", "rcc.claim.view", "rcc.claim.decide", "rcc.delay.view", "rcc.delay.approve", "gov.gate.approve", "ckm.letter.view", "ckm.letter.sign", "doc.document.approve", "eng.review.code", "eng.crs.resolve", "eng.tq.answer",
       "pmo.charter.view",
       "pmo.charter.approve",

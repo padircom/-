@@ -595,6 +595,68 @@ export const SCHEMA: TableDef[] = [
     indexes: [{ name: "IX_ClaimDocumentVersion_Claim", columns: ["ProjectId", "ClaimId", "Version"] }],
   },
 
+  /* ── d14 ریسک قراردادی (PMO-CONTRACT-RISK-ENGINE-V1.0) ──
+   * جداول این ماژول فقط با کلیدهای نرم (ProjectId/ContractCode/ClauseRef/
+   * DelayEventCode/ClaimCode/DocumentId) به سایر ماژول‌ها وصل می‌شوند؛
+   * هیچ Foreign Key فیزیکی به جداول قرارداد/EDMS/RCC ساخته نمی‌شود تا
+   * Zero-Regression سایر ماژول‌ها حفظ شود. */
+  {
+    name: "ContractRiskRegister",
+    module: "d14",
+    title: { fa: "دفتر ثبت ریسک قراردادی", en: "Contract risk register" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("Code", "text", { len: 40 }), req("TitleFa", "text", { len: 400 }), c("DescriptionFa", "text", { len: 2000 }), c("ContractCode", "text", { len: 60 }), c("ClauseRef", "text", { len: 200 }), c("DocumentId", "text", { len: 60 }), req("Category", "text", { len: 40 }), c("CauseFa", "text", { len: 1000 }), c("EventFa", "text", { len: 1000 }), c("ConsequenceFa", "text", { len: 1000 }), c("Owner", "text", { len: 60 }), c("IdentifiedAt", "date"), c("Probability", "int"), c("ImpactTime", "int"), c("ImpactFinancial", "int"), c("ImpactLegal", "int"), c("ImpactOperational", "int"), c("ImpactQuality", "int"), c("ExistingControlsFa", "text", { len: 2000 }), c("ControlEffectiveness", "text", { len: 20, comment: "none|weak|partial|strong" }), c("ControlEvidenceRefs", "json"), c("InherentScore", "decimal", { precision: 7, scale: 2 }), c("InherentBand", "text", { len: 20 }), c("ResidualScore", "decimal", { precision: 7, scale: 2 }), c("ResidualBand", "text", { len: 20 }), c("ScoringVersion", "text", { len: 40 }), req("Status", "text", { len: 20, default: "'identified'", comment: "identified|assessed|responding|monitoring|closed" }), c("NextReviewDate", "date"), c("DelayEventCode", "text", { len: 40 }), c("ClaimCode", "text", { len: 40 })],
+    indexes: [{ name: "UX_ContractRiskRegister_Code", columns: ["ProjectId", "Code"], unique: true }, { name: "IX_ContractRiskRegister_Contract", columns: ["ProjectId", "ContractCode"] }],
+  },
+  {
+    name: "ContractRiskAssessment",
+    module: "d14",
+    title: { fa: "سابقهٔ ارزیابی ریسک قراردادی (append-only)", en: "Contract risk assessment snapshot" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("RiskCode", "text", { len: 40 }), req("Inputs", "json"), c("InherentScore", "decimal", { precision: 7, scale: 2 }), c("InherentBand", "text", { len: 20 }), c("ResidualScore", "decimal", { precision: 7, scale: 2 }), c("ResidualBand", "text", { len: 20 }), c("ScoringVersion", "text", { len: 40 }), c("AssessedBy", "text", { len: 60 }), c("AssessedAt", "datetime")],
+    indexes: [{ name: "IX_ContractRiskAssessment_Risk", columns: ["ProjectId", "RiskCode", "AssessedAt"] }],
+  },
+  {
+    name: "ContractRiskScoringRule",
+    module: "d14",
+    title: { fa: "قاعده و نسخهٔ امتیازدهی ریسک قراردادی", en: "Contract risk scoring rule" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("Code", "text", { len: 60 }), req("NameFa", "text", { len: 300 }), c("Version", "text", { len: 20, default: "'1.0'" }), req("Config", "json"), req("Status", "text", { len: 20, comment: "draft|needs_review|approved|obsolete|inactive" }), c("ApprovedBy", "text", { len: 60 }), c("ApprovedAt", "datetime")],
+    indexes: [{ name: "UX_ContractRiskScoringRule_Code", columns: ["ProjectId", "Code", "Version"], unique: true }],
+  },
+  {
+    name: "ContractClauseFinding",
+    module: "d14",
+    title: { fa: "یافتهٔ تحلیل بند قرارداد", en: "Contract clause analysis finding" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), c("DocumentId", "text", { len: 60 }), c("ContractCode", "text", { len: 60 }), c("ClauseNo", "text", { len: 60 }), c("ClauseText", "text", { len: 4000 }), req("Kind", "text", { len: 40, comment: "payment|deadline|extension|suspension|termination|guarantee|insurance|liability|variation|obligation_employer|obligation_contractor|ambiguity|missing_criteria" }), c("FindingFa", "text", { len: 1000 }), c("ReasonFa", "text", { len: 1000 }), c("Confidence", "decimal", { precision: 5, scale: 2 }), c("SourceRef", "text", { len: 300 }), c("SuggestedCategory", "text", { len: 40 }), req("ReviewStatus", "text", { len: 20, default: "'pending'", comment: "pending|accepted|rejected" }), c("ReviewedBy", "text", { len: 60 }), c("ReviewedAt", "datetime")],
+    indexes: [{ name: "IX_ContractClauseFinding_Doc", columns: ["ProjectId", "DocumentId"] }],
+  },
+  {
+    name: "ContractObligation",
+    module: "d14",
+    title: { fa: "تعهد و مهلت قراردادی", en: "Contract obligation & deadline" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("Code", "text", { len: 40 }), c("ContractCode", "text", { len: 60 }), c("ClauseRef", "text", { len: 200 }), req("TitleFa", "text", { len: 400 }), c("ResponsibleParty", "text", { len: 30, comment: "employer|contractor|consultant|third_party" }), c("BeneficiaryParty", "text", { len: 30 }), c("StartDate", "date"), c("DueDate", "date"), c("PreconditionFa", "text", { len: 1000 }), c("EvidenceDocumentId", "text", { len: 60 }), req("Status", "text", { len: 20, default: "'pending'", comment: "pending|done|waived|cancelled" }), c("NoteFa", "text", { len: 1000 }), c("RiskCode", "text", { len: 40 })],
+    indexes: [{ name: "UX_ContractObligation_Code", columns: ["ProjectId", "Code"], unique: true }, { name: "IX_ContractObligation_Due", columns: ["ProjectId", "DueDate"] }],
+  },
+  {
+    name: "ContractImprovement",
+    module: "d14",
+    title: { fa: "پیشنهاد اصلاح و بهبود بند قرارداد", en: "Contract clause improvement proposal" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("Code", "text", { len: 40 }), c("ContractCode", "text", { len: 60 }), c("ClauseRef", "text", { len: 200 }), c("CurrentText", "text", { len: 4000 }), c("ProblemFa", "text", { len: 2000 }), c("RiskFa", "text", { len: 2000 }), c("ConsequenceFa", "text", { len: 2000 }), c("ProposedText", "text", { len: 4000 }), c("ReasonFa", "text", { len: 2000 }), c("EffectEmployerFa", "text", { len: 1000 }), c("EffectContractorFa", "text", { len: 1000 }), c("EffectCostTimeFa", "text", { len: 1000 }), c("BasisFa", "text", { len: 2000 }), c("Confidence", "decimal", { precision: 5, scale: 2 }), req("Status", "text", { len: 20, default: "'draft'", comment: "draft|needs_review|pending_approval|approved|rejected|superseded|obsolete" }), c("ReviewerBy", "text", { len: 60 }), c("ReviewedAt", "datetime"), c("RiskCode", "text", { len: 40 })],
+    indexes: [{ name: "UX_ContractImprovement_Code", columns: ["ProjectId", "Code"], unique: true }],
+  },
+  {
+    name: "ContractRiskAction",
+    module: "d14",
+    title: { fa: "اقدام پاسخ به ریسک قراردادی", en: "Contract risk response action" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("Code", "text", { len: 40 }), req("RiskCode", "text", { len: 40 }), req("Strategy", "text", { len: 20, comment: "avoid|mitigate|transfer|accept|exploit" }), req("TitleFa", "text", { len: 400 }), c("Owner", "text", { len: 60 }), c("StartDate", "date"), c("DueDate", "date"), c("Cost", "decimal", { precision: 18, scale: 2 }), c("ProgressPct", "decimal", { precision: 5, scale: 2, default: "0" }), req("Status", "text", { len: 20, default: "'defined'", comment: "defined|in_progress|done|ineffective|cancelled" }), c("EffectivenessMetricFa", "text", { len: 1000 }), c("EvidenceDocumentId", "text", { len: 60 }), c("EffectivenessNoteFa", "text", { len: 1000 })],
+    indexes: [{ name: "UX_ContractRiskAction_Code", columns: ["ProjectId", "Code"], unique: true }, { name: "IX_ContractRiskAction_Risk", columns: ["ProjectId", "RiskCode"] }],
+  },
+
   /* ── d5 مالی ── */
   {
     name: "CostAccount",
@@ -6520,6 +6582,10 @@ export const MIGRATIONS: Migration[] = [
   {
     version: "0069", name: "claim_loss_item_fields",
     statements: [...["LossCategory", "CostNature", "Quantity", "Rate", "UnitFa", "DocumentedAmount", "ApprovedAmount", "RuleCode", "ResourceKind", "ResourceNameFa", "WorkedUnits", "IdleUnits"].map((col) => addColumnDdl("ClaimCostItem", col, "mssql")), addColumnDdl("Claim", "ProposedAmount", "mssql")],
+  },
+  {
+    version: "0070", name: "contract_risk_engine_tables",
+    statements: ["ContractRiskRegister", "ContractRiskAssessment", "ContractRiskScoringRule", "ContractClauseFinding", "ContractObligation", "ContractImprovement", "ContractRiskAction"].flatMap((name) => { const table = tableDef(name); if (!table) throw new Error(`Missing table definition: ${name}`); return [tableDdl(table, "mssql"), ...(table.indexes ?? []).map((index) => indexDdl(table, index, "mssql"))]; }),
   },
 ];
 
