@@ -6515,7 +6515,7 @@ export const MIGRATIONS: Migration[] = [
   },
   {
     version: "0068", name: "claim_loss_engine_tables",
-    statements: ["ClaimCalculationRule", "ClaimCalculationRun", "ClaimCostAllocation", "ClaimDocumentVersion"].flatMap((name) => { const table = tableDef(name); return [tableDdl(table, "mssql"), ...(table.indexes ?? []).map((index) => indexDdl(table, index, "mssql"))]; }),
+    statements: ["ClaimCalculationRule", "ClaimCalculationRun", "ClaimCostAllocation", "ClaimDocumentVersion"].flatMap((name) => { const table = tableDef(name); if (!table) throw new Error(`Missing table definition: ${name}`); return [tableDdl(table, "mssql"), ...(table.indexes ?? []).map((index) => indexDdl(table, index, "mssql"))]; }),
   },
   {
     version: "0069", name: "claim_loss_item_fields",
