@@ -523,7 +523,7 @@ export function registerRccWorkspaceRoutes(app, { repo, subjects, evaluate }) {
       const documentById = new Map(documentRows.map(d => [d.Id, d]));
       const summary = summarizeLossPortfolio([claim], costItems, runs, versions);
       const caseAmounts = summary.cases.find(c => c.claimCode === claim.Code);
-      const doc = buildClaimLossDocument({ projectId: req.params.projectId, claim, delayEvents, costItems, runs, rules, allocations, overlapWarnings: detectCostOverlaps(costItems, allocations), lossSummary: summary, documentById, version: versions.length + 1, format, generatedAt: new Date().toISOString(), generatedBy: req.rccSubject.id });
+      const doc = buildClaimLossDocument({ projectId: req.params.projectId, claim, delayEvents, costItems, runs, rules, allocations, overlapWarnings: detectCostOverlaps(costItems, allocations), lossSummary: summary, documentById, version: versions.length + 1, format, generatedAt: new Date().toISOString(), generatedBy: req.rccSubject.id, documentVersions: versions });
       if (doc.issues.length) return res.status(422).json({ ok: false, error: { code: 'RCC_LOSS_DOCUMENT_GATE', message: doc.issues.join('؛ '), traceId: req.requestId } });
       const versionRow = await r.create('ClaimDocumentVersion', { ClaimId: claim.Id, ClaimCode: claim.Code, Version: versions.length + 1, Format: format, Status: 'draft', Totals: caseAmounts ?? {}, GeneratedBy: req.rccSubject.id, GeneratedAt: new Date().toISOString(), ProjectId: req.params.projectId }, req.rccSubject.id, 'lossDocument');
       await audit(r, req, 'ClaimDocumentVersion', versionRow, 'LOSS_DOCUMENT');
