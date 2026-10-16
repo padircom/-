@@ -657,6 +657,109 @@ export const SCHEMA: TableDef[] = [
     indexes: [{ name: "UX_ContractRiskAction_Code", columns: ["ProjectId", "Code"], unique: true }, { name: "IX_ContractRiskAction_Risk", columns: ["ProjectId", "RiskCode"] }],
   },
 
+  /* ── d4 بازسازی کارشناسی زمان‌بندی ادعا (PMO-FORENSIC-SCHEDULE-ENGINE-V1.0) ──
+   * جدول‌های PmisSchedRecon* فقط با کلیدهای نرم (ProjectId/MissionCode/
+   * ActivityCode/ClaimCode/DelayEventCode/DocumentId) به ماژول‌های دیگر وصل
+   * می‌شوند؛ هیچ Foreign Key فیزیکی ساخته نمی‌شود تا Zero-Regression حفظ شود.
+   * خروجی موتور «زمان‌بندی بازسازی‌شده و آنومالی» است و هرگز مبلغ خسارت یا
+   * مدت تمدید تولید نمی‌کند؛ بدون تأیید کارشناس هیچ رکوردی قطعی نیست. */
+  {
+    name: "PmisSchedReconMissions",
+    module: "d4",
+    title: { fa: "مأموریت کارشناسی بازسازی زمان‌بندی ادعا", en: "Forensic schedule reconstruction mission" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("Code", "text", { len: 40 }), req("TitleFa", "text", { len: 400 }), c("PurposeFa", "text", { len: 2000 }), req("PeriodFrom", "date"), req("PeriodTo", "date"), c("AnalysisStandard", "text", { len: 20, default: "'BOTH'", comment: "AACE_29R03|SCL_V2|BOTH" }), c("ClaimCode", "text", { len: 40 }), c("DelayEventCode", "text", { len: 40 }), c("ContractCode", "text", { len: 60 }), c("ScheduleFileRefs", "json"), c("CurrentStep", "int", { default: "1", comment: "۱..۸ دستورالعمل کارشناسی" }), req("Status", "text", { len: 20, default: "'draft'", comment: "draft|in_progress|on_hold|completed|cancelled" }), c("CreatedBy", "text", { len: 60 }), c("StartedAt", "datetime"), c("CompletedAt", "datetime"), c("ExpertNoteFa", "text", { len: 2000 }), c("ApprovedBy", "text", { len: 60 }), c("ApprovedAt", "datetime")],
+    indexes: [{ name: "UX_PmisSchedReconMissions_Code", columns: ["ProjectId", "Code"], unique: true }],
+  },
+  {
+    name: "PmisSchedReconExtractions",
+    module: "d4",
+    title: { fa: "مستندات استخراج‌شده از واقعیت میدانی", en: "Extracted field evidence documents" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("MissionCode", "text", { len: 40 }), req("Code", "text", { len: 40 }), req("DocType", "text", { len: 30, comment: "daily_report|meeting_minute|transmittal|letter|weather_report|progress_photo|ipc|other" }), c("DocumentId", "text", { len: 60, comment: "پیوند نرم به EDMS" }), c("SourceRef", "text", { len: 300 }), req("EventDate", "date"), c("PeriodFrom", "date"), c("PeriodTo", "date"), c("SummaryFa", "text", { len: 2000 }), c("FactsJson", "json"), req("Status", "text", { len: 20, default: "'collected'", comment: "collected|verified|rejected" }), c("VerifiedBy", "text", { len: 60 }), c("VerifiedAt", "datetime"), c("NoteFa", "text", { len: 1000 })],
+    indexes: [{ name: "UX_PmisSchedReconExtractions_Code", columns: ["ProjectId", "Code"], unique: true }, { name: "IX_PmisSchedReconExtractions_Mission", columns: ["ProjectId", "MissionCode"] }],
+  },
+  {
+    name: "PmisSchedReconEvaluations",
+    module: "d4",
+    title: { fa: "ارزیابی آسیب‌دیدگی فایل زمان‌بندی و تصمیم Repair/Reconstruction", en: "Schedule file health evaluation" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("MissionCode", "text", { len: 40 }), req("Code", "text", { len: 40 }), req("FileKind", "text", { len: 10, comment: "xer|xml|mpp|pdf|other" }), c("DocumentId", "text", { len: 60 }), c("BaselineDate", "date"), c("DataDate", "date"), c("ActivityCount", "int"), c("RelationshipCount", "int"), c("OpenEndsCount", "int"), c("NegativeFloatCount", "int"), c("LoopCount", "int"), c("OutOfSequenceCount", "int"), c("MissingCalendarCount", "int"), c("DamageClass", "text", { len: 30, comment: "intact|repairable|reconstruction_required" }), c("Decision", "text", { len: 20, default: "'pending'", comment: "pending|repair|reconstruction" }), c("DecisionReasonFa", "text", { len: 2000 }), req("Status", "text", { len: 20, default: "'pending_review'", comment: "pending_review|confirmed|superseded" }), c("EvaluatedBy", "text", { len: 60 }), c("EvaluatedAt", "datetime")],
+    indexes: [{ name: "UX_PmisSchedReconEvaluations_Code", columns: ["ProjectId", "Code"], unique: true }, { name: "IX_PmisSchedReconEvaluations_Mission", columns: ["ProjectId", "MissionCode"] }],
+  },
+  {
+    name: "PmisSchedReconWbsMaps",
+    module: "d4",
+    title: { fa: "نقشه تطبیق و همسان‌سازی WBS مصوب با واقعیت", en: "WBS alignment map" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("MissionCode", "text", { len: 40 }), req("Code", "text", { len: 40 }), req("BaselineWbsCode", "text", { len: 80 }), c("BaselineWbsTitleFa", "text", { len: 300 }), c("ActualWbsCode", "text", { len: 80 }), c("ActualWbsTitleFa", "text", { len: 300 }), req("MapKind", "text", { len: 20, comment: "one_to_one|merged|split|renumbered|new|dropped" }), c("Confidence", "decimal", { precision: 5, scale: 2 }), c("NoteFa", "text", { len: 1000 }), req("Status", "text", { len: 20, default: "'draft'", comment: "draft|confirmed" })],
+    indexes: [{ name: "UX_PmisSchedReconWbsMaps_Code", columns: ["ProjectId", "MissionCode", "Code"], unique: true }],
+  },
+  {
+    name: "PmisSchedReconActivities",
+    module: "d4",
+    title: { fa: "دیکشنری فعالیت‌های بازسازی‌شده", en: "Reconstructed activity dictionary" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("MissionCode", "text", { len: 40 }), req("Code", "text", { len: 40 }), req("ActivityId", "text", { len: 80, comment: "شناسهٔ فعالیت در فایل مبدأ XER/XML" }), c("WbsMapCode", "text", { len: 40 }), req("TitleFa", "text", { len: 400 }), c("ActivityType", "text", { len: 20, default: "'task'", comment: "task|milestone|hammock|loe" }), c("PlannedStart", "date"), c("PlannedFinish", "date"), c("ActualStart", "date"), c("ActualFinish", "date"), c("OriginalDuration", "decimal", { precision: 10, scale: 2 }), c("ActualDuration", "decimal", { precision: 10, scale: 2 }), c("PctComplete", "decimal", { precision: 5, scale: 2 }), req("StatusFlag", "text", { len: 20, default: "'not_started'", comment: "not_started|in_progress|completed|suspended" }), c("SourceRef", "text", { len: 300 }), c("NoteFa", "text", { len: 1000 })],
+    indexes: [{ name: "UX_PmisSchedReconActivities_Code", columns: ["ProjectId", "MissionCode", "Code"], unique: true }, { name: "IX_PmisSchedReconActivities_Activity", columns: ["ProjectId", "MissionCode", "ActivityId"] }],
+  },
+  {
+    name: "PmisSchedReconCalendars",
+    module: "d4",
+    title: { fa: "تقویم‌های کاری بازسازی‌شده، شیفت‌ها و تعلیق‌های جوی", en: "Reconstructed work calendars" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("MissionCode", "text", { len: 40 }), req("Code", "text", { len: 40 }), req("NameFa", "text", { len: 300 }), req("BaseKind", "text", { len: 30, comment: "standard|modified|weather_suspension" }), c("DaysPerWeek", "int"), c("HoursPerDay", "decimal", { precision: 5, scale: 2 }), c("ShiftDefJson", "json"), c("ExceptionsJson", "json", ), c("ValidFrom", "date"), c("ValidTo", "date"), c("SourceRef", "text", { len: 300 }), req("Status", "text", { len: 20, default: "'draft'", comment: "draft|confirmed" })],
+    indexes: [{ name: "UX_PmisSchedReconCalendars_Code", columns: ["ProjectId", "MissionCode", "Code"], unique: true }],
+  },
+  {
+    name: "PmisSchedReconDurations",
+    module: "d4",
+    title: { fa: "مدت‌های واقعی بازسازی‌شده در برابر برنامه‌ای", en: "Reconstructed actual vs planned durations" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("MissionCode", "text", { len: 40 }), req("ActivityCode", "text", { len: 40 }), c("PlannedDuration", "decimal", { precision: 10, scale: 2 }), c("ObservedDuration", "decimal", { precision: 10, scale: 2 }), c("Deviation", "decimal", { precision: 10, scale: 2 }), req("Method", "text", { len: 20, comment: "records|interview|interpolation" }), c("EvidenceRefs", "json"), req("Status", "text", { len: 20, default: "'estimated'", comment: "estimated|evidenced|confirmed" }), c("NoteFa", "text", { len: 1000 })],
+    indexes: [{ name: "UX_PmisSchedReconDurations_Activity", columns: ["ProjectId", "MissionCode", "ActivityCode"], unique: true }],
+  },
+  {
+    name: "PmisSchedReconLogic",
+    module: "d4",
+    title: { fa: "منطق شبکهٔ بازسازی‌شده؛ روابط FS/SS/FF/SF و Lag/Lead", en: "Reconstructed network logic" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("MissionCode", "text", { len: 40 }), req("Code", "text", { len: 40 }), req("PredecessorCode", "text", { len: 40 }), req("SuccessorCode", "text", { len: 40 }), req("RelType", "text", { len: 4, comment: "FS|SS|FF|SF" }), c("Lag", "decimal", { precision: 10, scale: 2, default: "0" }), c("LagUnit", "text", { len: 5, default: "'d'", comment: "d|h|pct" }), req("ReconstructionBasis", "text", { len: 30, comment: "file_record|inferred_physical|inferred_documented|assumed" }), c("EvidenceRef", "text", { len: 300 }), c("Confidence", "decimal", { precision: 5, scale: 2 }), req("Flag", "text", { len: 10, default: "'normal'", comment: "normal|suspect|broken" }), c("NoteFa", "text", { len: 1000 })],
+    indexes: [{ name: "UX_PmisSchedReconLogic_Code", columns: ["ProjectId", "MissionCode", "Code"], unique: true }, { name: "IX_PmisSchedReconLogic_Pred", columns: ["ProjectId", "MissionCode", "PredecessorCode"] }],
+  },
+  {
+    name: "PmisSchedReconCriticalPaths",
+    module: "d4",
+    title: { fa: "ردیابی تغییرات مسیر بحرانی در مقاطع زمانی", en: "Critical path tracking over cut-off dates" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("MissionCode", "text", { len: 40 }), req("Code", "text", { len: 40 }), req("SnapshotCode", "text", { len: 40 }), c("PathRank", "int", { default: "1" }), c("ActivityCodes", "json"), c("TotalDuration", "decimal", { precision: 10, scale: 2 }), c("DrivingLogic", "json"), c("ChangeKind", "text", { len: 20, comment: "new|extended|shortened|shifted|unchanged" }), c("NoteFa", "text", { len: 1000 })],
+    indexes: [{ name: "UX_PmisSchedReconCriticalPaths_Code", columns: ["ProjectId", "MissionCode", "Code"], unique: true }, { name: "IX_PmisSchedReconCriticalPaths_Snapshot", columns: ["ProjectId", "MissionCode", "SnapshotCode"] }],
+  },
+  {
+    name: "PmisSchedReconSnapshots",
+    module: "d4",
+    title: { fa: "مقاطع زمانی و قطع‌های دوره‌ای (Cut-Off Dates)", en: "Time slice snapshots / cut-off dates" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("MissionCode", "text", { len: 40 }), req("Code", "text", { len: 40 }), req("LabelFa", "text", { len: 300 }), req("CutoffDate", "date"), c("DataKind", "text", { len: 20, comment: "periodic_update|claim_event|milestone|other" }), c("SourceRefs", "json"), c("MetricsJson", "json"), req("Status", "text", { len: 10, default: "'open'", comment: "open|frozen" }), c("CreatedBy", "text", { len: 60 }), c("CreatedAt", "datetime"), c("NoteFa", "text", { len: 1000 })],
+    indexes: [{ name: "UX_PmisSchedReconSnapshots_Code", columns: ["ProjectId", "MissionCode", "Code"], unique: true }],
+  },
+  {
+    name: "PmisSchedReconValidations",
+    module: "d4",
+    title: { fa: "یافته‌های اعتبارسنجی مدل زمان‌بندی", en: "Schedule model validation findings" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("MissionCode", "text", { len: 40 }), req("Code", "text", { len: 40 }), c("SnapshotCode", "text", { len: 40 }), req("CheckKind", "text", { len: 30, comment: "negative_float|open_end|loop|lag_abuse|out_of_sequence|dangling_logic|constraint_abuse|missing_calendar" }), req("Severity", "text", { len: 10, comment: "info|minor|major|critical" }), c("ActivityCode", "text", { len: 40 }), c("DetailFa", "text", { len: 2000 }), c("AutoDetected", "bool"), req("Resolution", "text", { len: 20, default: "'open'", comment: "open|accepted_risk|fixed|not_applicable" }), c("ResolvedBy", "text", { len: 60 }), c("ResolvedAt", "datetime"), c("NoteFa", "text", { len: 1000 })],
+    indexes: [{ name: "UX_PmisSchedReconValidations_Code", columns: ["ProjectId", "MissionCode", "Code"], unique: true }, { name: "IX_PmisSchedReconValidations_Kind", columns: ["ProjectId", "MissionCode", "CheckKind"] }],
+  },
+  {
+    name: "PmisSchedReconMipMappings",
+    module: "d4",
+    title: { fa: "تطبیق دادهٔ بازسازی با پروتکل‌های AACE 29R-03 (MIP 3.1..3.9)", en: "AACE 29R-03 MIP mapping" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("MissionCode", "text", { len: 40 }), req("Code", "text", { len: 40 }), req("MipCode", "text", { len: 5, comment: "3.1..3.9" }), c("Family", "text", { len: 20, comment: "observational|modeled" }), c("Feasibility", "text", { len: 20, comment: "feasible|partial|not_feasible" }), c("FeasibilityReasonFa", "text", { len: 2000 }), c("RequiredDataJson", "json"), c("ProvidedDataJson", "json"), c("SelectedFlag", "bool"), c("SelectedBy", "text", { len: 60 }), c("SelectedAt", "datetime"), c("OutputTableRefs", "json", ), c("NoteFa", "text", { len: 1000 })],
+    indexes: [{ name: "UX_PmisSchedReconMipMappings_Mip", columns: ["ProjectId", "MissionCode", "MipCode"], unique: true }],
+  },
+
   /* ── d5 مالی ── */
   {
     name: "CostAccount",
@@ -6586,6 +6689,12 @@ export const MIGRATIONS: Migration[] = [
   {
     version: "0070", name: "contract_risk_engine_tables",
     statements: ["ContractRiskRegister", "ContractRiskAssessment", "ContractRiskScoringRule", "ContractClauseFinding", "ContractObligation", "ContractImprovement", "ContractRiskAction"].flatMap((name) => { const table = tableDef(name); if (!table) throw new Error(`Missing table definition: ${name}`); return [tableDdl(table, "mssql"), ...(table.indexes ?? []).map((index) => indexDdl(table, index, "mssql"))]; }),
+  },
+  {
+    /* PMO-FORENSIC-SCHEDULE-ENGINE-V1.0: دوازده جدول اختصاصی PmisSchedRecon —
+     * بدون FK فیزیکی (Zero-Regression) و با گارد tableDef. */
+    version: "0071", name: "pmis_sched_recon_engine_tables",
+    statements: ["PmisSchedReconMissions", "PmisSchedReconExtractions", "PmisSchedReconEvaluations", "PmisSchedReconWbsMaps", "PmisSchedReconActivities", "PmisSchedReconCalendars", "PmisSchedReconDurations", "PmisSchedReconLogic", "PmisSchedReconCriticalPaths", "PmisSchedReconSnapshots", "PmisSchedReconValidations", "PmisSchedReconMipMappings"].flatMap((name) => { const table = tableDef(name); if (!table) throw new Error(`Missing table definition: ${name}`); return [tableDdl(table, "mssql"), ...(table.indexes ?? []).map((index) => indexDdl(table, index, "mssql"))]; }),
   },
 ];
 

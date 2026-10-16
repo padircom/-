@@ -37,6 +37,7 @@ import nodemailer from "nodemailer";
 import { createWorker } from "tesseract.js";
 import { registerRccWorkspaceRoutes } from "./rccWorkspaceApi.js";
 import { registerContractRiskRoutes } from "./contractRiskApi.js";
+import { registerSchedReconRoutes } from "./schedReconApi.js";
 import { registerDprDocRoutes } from "./dprDocApi.js";
 import { registerDprTablesRoutes } from "./dprTablesApi.js";
 import { registerFinWorkspaceRoutes } from "./finWorkspaceApi.js";
@@ -628,6 +629,20 @@ const DEDICATED_TABLE_ROUTES = {
   ContractObligation: "/api/cnt-risk/:projectId/obligations",
   ContractImprovement: "/api/cnt-risk/:projectId/improvements",
   ContractRiskAction: "/api/cnt-risk/:projectId/actions",
+  /* PMO-FORENSIC-SCHEDULE-ENGINE-V1.0: جدول‌های PmisSchedRecon* فقط از مسیر
+   * اختصاصی خودشان؛ پیوند با RCC/ادعا/EDMS نرم است. */
+  PmisSchedReconMissions: "/api/sched-recon/:projectId/missions",
+  PmisSchedReconExtractions: "/api/sched-recon/:projectId/missions",
+  PmisSchedReconEvaluations: "/api/sched-recon/:projectId/missions",
+  PmisSchedReconWbsMaps: "/api/sched-recon/:projectId/missions",
+  PmisSchedReconActivities: "/api/sched-recon/:projectId/missions",
+  PmisSchedReconCalendars: "/api/sched-recon/:projectId/missions",
+  PmisSchedReconDurations: "/api/sched-recon/:projectId/missions",
+  PmisSchedReconLogic: "/api/sched-recon/:projectId/missions",
+  PmisSchedReconCriticalPaths: "/api/sched-recon/:projectId/missions",
+  PmisSchedReconSnapshots: "/api/sched-recon/:projectId/missions",
+  PmisSchedReconValidations: "/api/sched-recon/:projectId/missions",
+  PmisSchedReconMipMappings: "/api/sched-recon/:projectId/missions",
   Correspondence: "/api/ckm/:projectId/letters",
   MeetingMinute: "/api/ckm/:projectId/meetings",
   MeetingAction: "/api/ckm/:projectId/meetings/:code/actions",
@@ -978,6 +993,9 @@ registerHrmWorkspaceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: r
 registerEdmsWorkspaceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
 registerRccWorkspaceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
 registerContractRiskRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
+/* PMO-FORENSIC-SCHEDULE-ENGINE-V1.0: بازسازی کارشناسی زمان‌بندی ادعا —
+ * پروژه‌ای، مجوز مستقل (sched.recon.*)، تکمیل مأموریت با SoD. */
+registerSchedReconRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
 registerEqmWorkspaceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
 registerMonitoringWorkspaceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
 registerStrategyExcellenceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
