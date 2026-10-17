@@ -760,6 +760,117 @@ export const SCHEMA: TableDef[] = [
     indexes: [{ name: "UX_PmisSchedReconMipMappings_Mip", columns: ["ProjectId", "MissionCode", "MipCode"], unique: true }],
   },
 
+  /* ── d4 کارشناسی، داوری و تحلیل دعاوی ساخت (PMO-CONSTRUCTION-DISPUTE-EXPERT-ENGINE-V1.0) ──
+   * ۱۳ جدول PmisDispute* فقط با کلیدهای نرم (ProjectId/CaseCode/ClaimCode/
+   * ContractCode/DocumentId/PartyCode/ReferenceCode) وصل‌اند؛ هیچ FK فیزیکی
+   * بین ‌ماژولی ساخته نمی‌شود (Zero-Regression). مبالغ مطالبه/بررسی/تأیید
+   * جدا نگه داشته می‌شوند و منبع/روش هر مبلغ الزامی است (مبلغ بدون
+   * مبنا نمایش داده نمی‌شود). رأی داوری/قضایی هرگز تولید نمی‌شود. */
+  {
+    name: "PmisDisputeCases",
+    module: "d4",
+    title: { fa: "پرونده اختلاف", en: "Dispute case" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("Code", "text", { len: 40 }), req("TitleFa", "text", { len: 400 }), req("SubjectCode", "text", { len: 30, comment: "DISPUTE_SUBJECTS.code" }), c("DescriptionFa", "text", { len: 2000 }), c("EmployerFa", "text", { len: 300 }), c("ContractorFa", "text", { len: 300 }), c("ConsultantFa", "text", { len: 300 }), c("CourtRefFa", "text", { len: 300, comment: "مرجع ارجاع/رسیدگی" }), c("ExpertScopeFa", "text", { len: 2000, comment: "حدود مأموریت کارشناسی" }), c("ClaimDescriptionFa", "text", { len: 2000, comment: "شرح خواسته‌ها" }), c("ClaimedAmount", "decimal", { precision: 20, scale: 2 }), c("Currency", "text", { len: 10, default: "'IRR'" }), c("ClaimedDelayDays", "int"), c("ContractCode", "text", { len: 60 }), c("ClaimCode", "text", { len: 40 }), c("DelayEventCode", "text", { len: 40 }), c("DelayCaseId", "text", { len: 60 }), c("LossCaseId", "text", { len: 60 }), c("ContractRiskId", "text", { len: 60 }), c("IncidentDate", "date"), c("RegistrationDate", "date"), c("ResponseDeadline", "date"), c("DeliveryDeadline", "date"), c("Priority", "text", { len: 10, default: "'normal'", comment: "low|normal|high|urgent" }), c("InternalOwnerFa", "text", { len: 200 }), req("Status", "text", { len: 25, default: "'draft'", comment: "draft|registered|awaiting_documents|under_review|awaiting_party_response|report_drafting|pending_review|ready_for_delivery|delivered|closed|archived" }), c("CreatedBy", "text", { len: 60 }), c("StatusChangedBy", "text", { len: 60 }), c("StatusChangedAt", "datetime"), c("StatusNoteFa", "text", { len: 1000 }), c("ExpertNoteFa", "text", { len: 2000 })],
+    indexes: [{ name: "UX_PmisDisputeCases_Code", columns: ["ProjectId", "Code"], unique: true }, { name: "IX_PmisDisputeCases_Status", columns: ["ProjectId", "Status"] }, { name: "IX_PmisDisputeCases_Contract", columns: ["ProjectId", "ContractCode"] }],
+  },
+  {
+    name: "PmisDisputeParties",
+    module: "d4",
+    title: { fa: "طرفین و نمایندگان پرونده", en: "Dispute parties & representatives" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("CaseCode", "text", { len: 40 }), req("Code", "text", { len: 40 }), req("Role", "text", { len: 20, comment: "employer|contractor|consultant|arbitrator|insurer|subcontractor|other" }), req("NameFa", "text", { len: 300 }), c("OrgInfoFa", "text", { len: 1000 }), c("RepresentativeFa", "text", { len: 300 }), c("ContactInfo", "text", { len: 500 }), c("ClaimLinkNoteFa", "text", { len: 500, comment: "ارتباط او با ادعاها" }), c("Status", "text", { len: 20, default: "'active'", comment: "active|inactive" })],
+    indexes: [{ name: "UX_PmisDisputeParties_Code", columns: ["ProjectId", "CaseCode", "Code"], unique: true }, { name: "IX_PmisDisputeParties_Case", columns: ["ProjectId", "CaseCode"] }],
+  },
+  {
+    name: "PmisDisputeClaims",
+    module: "d4",
+    title: { fa: "ادعای پرونده", en: "Dispute claim" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("CaseCode", "text", { len: 40 }), req("Code", "text", { len: 40 }), req("TitleFa", "text", { len: 400 }), c("DemandFa", "text", { len: 1000, comment: "خواسته و مبنا" }), req("ClaimantPartyCode", "text", { len: 40 }), req("BasisKind", "text", { len: 15, comment: "time|money|both|declaratory" }), c("ClaimedAmount", "decimal", { precision: 20, scale: 2 }), c("Currency", "text", { len: 10, default: "'IRR'" }), c("ClaimedDelayDays", "int"), c("ContractClauseRef", "text", { len: 200 }), c("EventRefs", "json"), c("EvidenceRefs", "json"), c("ResponseFa", "text", { len: 2000, comment: "پاسخ/دفاع طرف مقابل" }), c("AgreementsFa", "text", { len: 1000 }), c("DisagreementsFa", "text", { len: 1000 }), c("EvidenceSufficiency", "text", { len: 15, default: "'unchecked'", comment: "unchecked|sufficient|insufficient|contested" }), c("ContradictionsFa", "text", { len: 1000 }), c("QuestionsJson", "json"), c("ReviewedAmount", "decimal", { precision: 20, scale: 2 }), c("ReviewBasisFa", "text", { len: 1000 }), c("ReviewedBy", "text", { len: 60 }), c("ReviewedAt", "datetime"), c("ApprovedAmount", "decimal", { precision: 20, scale: 2 }), c("ApprovedBasisFa", "text", { len: 1000 }), c("ApprovedBy", "text", { len: 60 }), c("ApprovedAt", "datetime"), c("ReviewResultFa", "text", { len: 1000 }), c("ReviewStatus", "text", { len: 20, default: "'open'", comment: "open|under_analysis|question_sent|reviewed|superseded" }), c("ExpertNoteFa", "text", { len: 1000 })],
+    indexes: [{ name: "UX_PmisDisputeClaims_Code", columns: ["ProjectId", "CaseCode", "Code"], unique: true }, { name: "IX_PmisDisputeClaims_Case", columns: ["ProjectId", "CaseCode"] }],
+  },
+  {
+    name: "PmisDisputeResponses",
+    module: "d4",
+    title: { fa: "پاسخ و دفاعیه طرف مقابل", en: "Response / defense" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("CaseCode", "text", { len: 40 }), req("ClaimCode", "text", { len: 40 }), req("Code", "text", { len: 40 }), req("ResponderPartyCode", "text", { len: 40 }), req("BodyFa", "text", { len: 2000 }), c("EvidenceRefs", "json"), c("ReceivedAt", "date"), c("DocumentId", "text", { len: 60, comment: "پیوند نرم EDMS" }), c("AssessmentFa", "text", { len: 1000, comment: "ارزیابی کارشناسی پاسخ" }), c("Status", "text", { len: 20, default: "'received'", comment: "received|reviewed|contested" })],
+    indexes: [{ name: "UX_PmisDisputeResponses_Code", columns: ["ProjectId", "CaseCode", "Code"], unique: true }, { name: "IX_PmisDisputeResponses_Claim", columns: ["ProjectId", "CaseCode", "ClaimCode"] }],
+  },
+  {
+    name: "PmisDisputeEvidence",
+    module: "d4",
+    title: { fa: "مدرک/سند پرونده", en: "Dispute evidence" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("CaseCode", "text", { len: 40 }), req("Code", "text", { len: 40 }), req("DocType", "text", { len: 20 }), req("TitleFa", "text", { len: 400 }), c("DocumentId", "text", { len: 60, comment: "پیوند نرم EDMS - انتخاب از مخزن مرکزی" }), c("DocNo", "text", { len: 100 }), c("Revision", "text", { len: 20 }), c("IssuedAt", "date"), c("ReceivedAt", "date"), c("SenderFa", "text", { len: 200 }), c("ReceiverFa", "text", { len: 200 }), c("ContractClauseRef", "text", { len: 200 }), c("ClaimRefs", "json"), c("EventRefs", "json"), c("CalculationRefs", "json"), c("ExpertNoteFa", "text", { len: 1000 }), c("ReviewStatus", "text", { len: 20, default: "'pending'", comment: "pending|reviewed|flagged" }), c("AuthenticityStatus", "text", { len: 15, default: "'pending'", comment: "pending|verified|rejected|contested - استقلال از وجود فایل" }), c("SufficiencyStatus", "text", { len: 15, default: "'unchecked'", comment: "unchecked|sufficient|insufficient|contested" }), c("DeficiencyNoteFa", "text", { len: 1000 })],
+    indexes: [{ name: "UX_PmisDisputeEvidence_Code", columns: ["ProjectId", "CaseCode", "Code"], unique: true }, { name: "IX_PmisDisputeEvidence_Case", columns: ["ProjectId", "CaseCode"] }],
+  },
+  {
+    name: "PmisDisputeAnalyses",
+    module: "d4",
+    title: { fa: "تحلیل کارشناسی", en: "Expert analysis" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("CaseCode", "text", { len: 40 }), req("Code", "text", { len: 40 }), req("TopicFa", "text", { len: 400 }), req("QuestionFa", "text", { len: 1000, comment: "سؤال کارشناسی" }), c("InputDataJson", "json", ), c("EvidenceRefs", "json"), req("MethodFa", "text", { len: 1000, comment: "روش تحلیل" }), c("AssumptionsFa", "text", { len: 1000 }), c("CalculationsFa", "text", { len: 2000 }), c("ResultsFa", "text", { len: 2000 }), c("UncertaintiesFa", "text", { len: 1000 }), c("InfoGapsFa", "text", { len: 1000 }), c("MethodLimitsFa", "text", { len: 1000 }), c("SuggestedConclusionFa", "text", { len: 2000, comment: "پیشنهاد کارشناسی — بدون تأیید قطعی نیست" }), c("AnalyzedBy", "text", { len: 60 }), c("AnalyzedAt", "datetime"), c("ApprovedBy", "text", { len: 60 }), c("ApprovedAt", "datetime"), c("ApprovalStatus", "text", { len: 20, default: "'draft'", comment: "draft|under_review|approved|rejected" })],
+    indexes: [{ name: "UX_PmisDisputeAnalyses_Code", columns: ["ProjectId", "CaseCode", "Code"], unique: true }, { name: "IX_PmisDisputeAnalyses_Case", columns: ["ProjectId", "CaseCode"] }],
+  },
+  {
+    name: "PmisDisputeCalculations",
+    module: "d4",
+    title: { fa: "محاسبه مستقل کارشناسی برای مقایسه", en: "Independent expert calculation" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("CaseCode", "text", { len: 40 }), req("Code", "text", { len: 40 }), req("TitleFa", "text", { len: 400 }), c("PurposeFa", "text", { len: 1000, comment: "هدف مقایسه با محاسبه اصلی — نه جایگزینی" }), req("MethodFa", "text", { len: 1000 }), c("InputsJson", "json"), c("ResultAmount", "decimal", { precision: 20, scale: 2 }), c("Currency", "text", { len: 10 }), c("ResultBaseDate", "date"), c("DataSourceFa", "text", { len: 1000 }), c("ComparedWithClaimCode", "text", { len: 40 }), c("VarianceNoteFa", "text", { len: 1000 }), c("CalculatedBy", "text", { len: 60 }), c("CalculatedAt", "datetime"), c("ReviewedBy", "text", { len: 60 }), c("Status", "text", { len: 20, default: "'draft'" })],
+    indexes: [{ name: "UX_PmisDisputeCalculations_Code", columns: ["ProjectId", "CaseCode", "Code"], unique: true }, { name: "IX_PmisDisputeCalculations_Case", columns: ["ProjectId", "CaseCode"] }],
+  },
+  {
+    name: "PmisDisputeHearings",
+    module: "d4",
+    title: { fa: "جلسه و صورت‌جلسه", en: "Hearing / meeting" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("CaseCode", "text", { len: 40 }), req("Code", "text", { len: 40 }), req("TitleFa", "text", { len: 400 }), req("MeetingDate", "date"), c("LocationFa", "text", { len: 200 }), c("AttendeesJson", "json"), c("TopicsJson", "json"), c("QuestionsJson", "json"), c("ResponsesJson", "json"), c("DocsShownJson", "json"), c("QuestionDeadline", "date"), c("MinutesBodyFa", "text", { len: 4000 }), c("MinutesDocumentId", "text", { len: 60 }), c("MinutesStatus", "text", { len: 20, default: "'draft'", comment: "draft|awaiting_sign|signed" }), c("SignedAt", "date"), c("NoteFa", "text", { len: 1000 })],
+    indexes: [{ name: "UX_PmisDisputeHearings_Code", columns: ["ProjectId", "CaseCode", "Code"], unique: true }, { name: "IX_PmisDisputeHearings_Case", columns: ["ProjectId", "CaseCode"] }],
+  },
+  {
+    name: "PmisDisputeOpinions",
+    module: "d4",
+    title: { fa: "نظریه کارشناسی", en: "Expert opinion" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("CaseCode", "text", { len: 40 }), req("Code", "text", { len: 40 }), req("TitleFa", "text", { len: 400 }), req("BodyFa", "text", { len: 4000 }), c("SourcesJson", "json", ), req("Version", "int", { default: "1" }), c("PreviousVersionCode", "text", { len: 40 }), c("SupplementaryNoteFa", "text", { len: 2000 }), c("AuthoredBy", "text", { len: 60 }), c("AuthoredAt", "datetime"), c("ReviewedBy", "text", { len: 60 }), c("ReviewStatus", "text", { len: 20, default: "'draft'", comment: "draft|in_review|approved|final" })],
+    indexes: [{ name: "UX_PmisDisputeOpinions_Code", columns: ["ProjectId", "CaseCode", "Code"], unique: true }, { name: "IX_PmisDisputeOpinions_Case", columns: ["ProjectId", "CaseCode"] }],
+  },
+  {
+    name: "PmisDisputeReports",
+    module: "d4",
+    title: { fa: "نسخهٔ گزارش کارشناسی", en: "Expert report version" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("CaseCode", "text", { len: 40 }), req("Code", "text", { len: 40 }), req("TitleFa", "text", { len: 400 }), req("Version", "int", { default: "1" }), c("PreviousVersionCode", "text", { len: 40 }), c("EnabledSectionsJson", "json", { comment: "ترتیب/انتخاب ۲۰ بخش — قابل تنظیم" }), c("GeneratedAt", "datetime"), c("GeneratedBy", "text", { len: 60 }), req("Status", "text", { len: 15, default: "'draft'", comment: "draft|in_review|approved|issued|superseded" }), c("IssuedAt", "datetime"), c("IssuedBy", "text", { len: 60 }), c("DataVersionNoteFa", "text", { len: 500, comment: "نسخهٔ داده‌هایی که گزارش از آن‌ها ساخته شد" }), c("WordFileRef", "text", { len: 300 }), c("PdfFileRef", "text", { len: 300 })],
+    indexes: [{ name: "UX_PmisDisputeReports_Code", columns: ["ProjectId", "CaseCode", "Code"], unique: true }, { name: "IX_PmisDisputeReports_Case", columns: ["ProjectId", "CaseCode", "Status"] }],
+  },
+  {
+    name: "PmisDisputeDeadlines",
+    module: "d4",
+    title: { fa: "ارجاع و مهلت", en: "Referral / deadline" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("CaseCode", "text", { len: 40 }), req("Code", "text", { len: 40 }), req("TitleFa", "text", { len: 400 }), req("Kind", "text", { len: 25, comment: "question|document|response|report_delivery|other" }), req("DueDate", "date"), c("OwnerPartyCode", "text", { len: 40 }), c("RelatedCode", "text", { len: 40, comment: "کد مرتبط: سؤال/ادعا/سند" }), c("Status", "text", { len: 15, default: "'open'", comment: "open|met|missed|cancelled" }), c("MetAt", "date"), c("NoteFa", "text", { len: 1000 })],
+    indexes: [{ name: "UX_PmisDisputeDeadlines_Code", columns: ["ProjectId", "CaseCode", "Code"], unique: true }, { name: "IX_PmisDisputeDeadlines_Due", columns: ["ProjectId", "Status", "DueDate"] }],
+  },
+  {
+    name: "PmisDisputeModuleLinks",
+    module: "d4",
+    title: { fa: "پیوند نرم به ماژول/پرونده بیرونی", en: "Soft link to other module cases" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("CaseCode", "text", { len: 40 }), req("Code", "text", { len: 40 }), req("LinkKind", "text", { len: 25, comment: "delay_case|loss_case|contract_risk|claim|contract|edms_document" }), req("TargetCode", "text", { len: 80 }), req("TargetTitleFa", "text", { len: 400 }), c("TargetId", "text", { len: 60 }), c("ConsistencyCheckFa", "text", { len: 1000 }), c("QuestionSentFa", "text", { len: 1000 }), c("CorrectionRequestFa", "text", { len: 1000 }), c("EstablishedBy", "text", { len: 60 }), c("EstablishedAt", "datetime"), c("Status", "text", { len: 20, default: "'active'" })],
+    indexes: [{ name: "UX_PmisDisputeModuleLinks_Code", columns: ["ProjectId", "CaseCode", "Code"], unique: true }, { name: "IX_PmisDisputeModuleLinks_Case", columns: ["ProjectId", "CaseCode"] }],
+  },
+  {
+    name: "PmisDisputeAuditTrail",
+    module: "d4",
+    title: { fa: "رویداد تاریخچهٔ پرونده", en: "Case audit trail event" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("CaseCode", "text", { len: 40 }), req("Code", "text", { len: 40 }), req("Action", "text", { len: 40, comment: "case_created|status_changed|claim_added|evidence_added|report_issued|..." }), req("Actor", "text", { len: 60 }), c("DetailFa", "text", { len: 1000 }), c("FromValue", "text", { len: 200 }), c("ToValue", "text", { len: 200 }), req("OccurredAt", "datetime")],
+    indexes: [{ name: "IX_PmisDisputeAuditTrail_Case", columns: ["ProjectId", "CaseCode", "OccurredAt"] }],
+  },
+
   /* ── d5 مالی ── */
   {
     name: "CostAccount",
@@ -6695,6 +6806,10 @@ export const MIGRATIONS: Migration[] = [
      * بدون FK فیزیکی (Zero-Regression) و با گارد tableDef. */
     version: "0071", name: "pmis_sched_recon_engine_tables",
     statements: ["PmisSchedReconMissions", "PmisSchedReconExtractions", "PmisSchedReconEvaluations", "PmisSchedReconWbsMaps", "PmisSchedReconActivities", "PmisSchedReconCalendars", "PmisSchedReconDurations", "PmisSchedReconLogic", "PmisSchedReconCriticalPaths", "PmisSchedReconSnapshots", "PmisSchedReconValidations", "PmisSchedReconMipMappings"].flatMap((name) => { const table = tableDef(name); if (!table) throw new Error(`Missing table definition: ${name}`); return [tableDdl(table, "mssql"), ...(table.indexes ?? []).map((index) => indexDdl(table, index, "mssql"))]; }),
+  },
+  {
+    version: "0072", name: "pmis_dispute_expert_engine_tables",
+    statements: ["PmisDisputeCases", "PmisDisputeParties", "PmisDisputeClaims", "PmisDisputeResponses", "PmisDisputeEvidence", "PmisDisputeAnalyses", "PmisDisputeCalculations", "PmisDisputeHearings", "PmisDisputeOpinions", "PmisDisputeReports", "PmisDisputeDeadlines", "PmisDisputeModuleLinks", "PmisDisputeAuditTrail"].flatMap((name) => { const table = tableDef(name); if (!table) throw new Error(`Missing table definition: ${name}`); return [tableDdl(table, "mssql"), ...(table.indexes ?? []).map((index) => indexDdl(table, index, "mssql"))]; }),
   },
 ];
 

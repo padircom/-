@@ -38,6 +38,7 @@ import { createWorker } from "tesseract.js";
 import { registerRccWorkspaceRoutes } from "./rccWorkspaceApi.js";
 import { registerContractRiskRoutes } from "./contractRiskApi.js";
 import { registerSchedReconRoutes } from "./schedReconApi.js";
+import { registerDisputeExpertRoutes } from "./disputeExpertApi.js";
 import { registerDprDocRoutes } from "./dprDocApi.js";
 import { registerDprTablesRoutes } from "./dprTablesApi.js";
 import { registerFinWorkspaceRoutes } from "./finWorkspaceApi.js";
@@ -643,6 +644,21 @@ const DEDICATED_TABLE_ROUTES = {
   PmisSchedReconSnapshots: "/api/sched-recon/:projectId/missions",
   PmisSchedReconValidations: "/api/sched-recon/:projectId/missions",
   PmisSchedReconMipMappings: "/api/sched-recon/:projectId/missions",
+  /* PMO-CONSTRUCTION-DISPUTE-EXPERT-ENGINE-V1.0: جدول‌های PmisDispute* فقط
+   * از مسیر اختصاصی خودشان؛ پیوند باخارج از پرونده نرم است. */
+  PmisDisputeCases: "/api/dispute-expert/:projectId/cases",
+  PmisDisputeParties: "/api/dispute-expert/:projectId/cases",
+  PmisDisputeClaims: "/api/dispute-expert/:projectId/cases",
+  PmisDisputeResponses: "/api/dispute-expert/:projectId/cases",
+  PmisDisputeEvidence: "/api/dispute-expert/:projectId/cases",
+  PmisDisputeAnalyses: "/api/dispute-expert/:projectId/cases",
+  PmisDisputeCalculations: "/api/dispute-expert/:projectId/cases",
+  PmisDisputeHearings: "/api/dispute-expert/:projectId/cases",
+  PmisDisputeOpinions: "/api/dispute-expert/:projectId/cases",
+  PmisDisputeReports: "/api/dispute-expert/:projectId/cases",
+  PmisDisputeDeadlines: "/api/dispute-expert/:projectId/cases",
+  PmisDisputeModuleLinks: "/api/dispute-expert/:projectId/cases",
+  PmisDisputeAuditTrail: "/api/dispute-expert/:projectId/cases",
   Correspondence: "/api/ckm/:projectId/letters",
   MeetingMinute: "/api/ckm/:projectId/meetings",
   MeetingAction: "/api/ckm/:projectId/meetings/:code/actions",
@@ -996,7 +1012,7 @@ registerContractRiskRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: r
 /* PMO-FORENSIC-SCHEDULE-ENGINE-V1.0: بازسازی کارشناسی زمان‌بندی ادعا —
  * پروژه‌ای، مجوز مستقل (sched.recon.*)، تکمیل مأموریت با SoD. */
 registerSchedReconRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
-registerEqmWorkspaceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
+registerDisputeExpertRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });registerEqmWorkspaceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
 registerMonitoringWorkspaceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
 registerStrategyExcellenceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
 /* Core/P0: دادهٔ پایهٔ خوشه‌ها و پروژه‌ها روی لایهٔ ماندگاری مشترک — با درایور

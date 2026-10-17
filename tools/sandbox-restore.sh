@@ -5,15 +5,22 @@
 set -e
 cd "$(dirname "$0")/.."
 echo "── git sync"
+# نکتهٔ حیاتی: reset --hard ویرایش‌های uncommitted را نابود می‌کند.
+# فقط وقتی hard لازم است که working tree نسبت به origin پشت باشد؛ در غیراین صورت mixed.
 git fetch origin arena/a94888dd-repo --quiet
-git reset --hard origin/arena/a94888dd-repo --quiet 2>/dev/null || git reset origin/arena/a94888dd-repo --quiet
+if git diff --quiet HEAD origin/arena/a94888dd-repo -- 2>/dev/null && [ -z "$(git status --porcelain | grep -v '^??')" ]; then
+  git reset --hard origin/arena/a94888dd-repo --quiet
+else
+  git reset origin/arena/a94888dd-repo --quiet 2>/dev/null || true
+  echo "  !! working tree دارای تغییرات uncommitted است — hard reset انجام نشد"
+fi
 git log --oneline -1
 if [ ! -x node_modules/.bin/esbuild ]; then
   echo "── npm ci"
   npm ci --silent
 fi
 echo "── rebuild logic bundles"
-for s in sql rbac schedrecon schedrecondoc aiassist ckm ckmws cmms cmmsai cntipc cpmws dprt fin finws hrm itg itgout mcsdrill mfgplan pex pexdata pmows qms rpt rptbuilder monitoring rccws delay claimdoc sxws cntrisk cntclause cntriskdoc claimloss lossdoc lossassist; do
+for s in sql rbac schedrecon schedrecondoc dispute aiassist ckm ckmws cmms cmmsai cntipc cpmws dprt fin finws hrm itg itgout mcsdrill mfgplan pex pexdata pmows qms rpt rptbuilder monitoring rccws delay claimdoc sxws cntrisk cntclause cntriskdoc claimloss lossdoc lossassist; do
   npm run build:$s --silent >/dev/null 2>&1 || echo "  !! build:$s failed (احتمالاً اسکریپت وجود ندارد یا وابستگی — بررسی)"
 done
 node -e '

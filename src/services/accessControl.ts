@@ -127,6 +127,16 @@ export const PERMISSION_CATALOG: PermissionDef[] = [
   P("sched.recon.edit", "d4", "ثبت و ویرایش مأموریت و سوابق بازسازی زمان‌بندی", "Edit forensic schedule reconstruction records", "restricted", true),
   P("sched.recon.approve", "d4", "تأیید تکمیل مأموریت بازسازی و بستن پرونده", "Approve forensic reconstruction mission completion", "restricted", true),
 
+  /* PMO-CONSTRUCTION-DISPUTE-EXPERT-ENGINE-V1.0: پروندهٔ دعوا را کارشناس/مدیر
+   * ادعا می‌سازد و روایت می‌کند؛ گذرهای آماده تحویل/تحویل/مختومه/بایگانی
+   * دروازهٔ تأیید و SoD دارند (تأییدکننده ≠ ثبت‌کنندهٔ اقدام قبلی).
+   * خروجی این ماژول صدور رأی داوری نیست — گزارش کارشناسی پیش‌نویس است و
+   * تا تأیید ارسال نمی‌شود. */
+  P("dispute.view", "d4", "مشاهدهٔ پروندهٔ اختلاف و سوابق دعاوی", "View dispute case records", "confidential"),
+  P("dispute.edit", "d4", "تشکیل و ویرایش پرونده/ادعا/مدرک/تحلیل/جلسه", "Edit dispute case records", "restricted", true),
+  P("dispute.review", "d4", "ثبت بازبینی گزارش/نظریه/تحلیل و تخصیص مبالغ لایه‌های بررسی/تأیید", "Review dispute analyses and set reviewed/approved amounts", "restricted", true),
+  P("dispute.approve", "d4", "گذر به آماده تحویل/تحویل/مختومه/بایگانی و صدور گزارش نهایی", "Approve dispute finalization transitions and report issue", "restricted", true),
+
   /* ── d12 مهندسی و طراحی ──
    * تفکیک بر پایهٔ اقتدار واقعی: ثبت مدرک، صدور ریویژن، پاسخ به نظر و
    * تأیید کارفرما چهار اقتدار جدا هستند. کد بررسی ۱ تا ۴ را فقط کارفرما و
@@ -913,6 +923,9 @@ export const ROLE_CATALOG: RoleDef[] = [
       /* بازسازی کارشناسی زمان‌بندی (FSR) کار خودِ برنامه‌ریز است: ثبت
        * سوابق و دیکشنری با اوست؛ بستن مأموریت با تأییدکنندهٔ مستقل. */
       "sched.recon.view", "sched.recon.edit",
+      /* پروندهٔ دعوا از نظر برنامه‌ریز فقط‌خواندنی است: دست‌کاری پرونده
+       * کار مدیر پیمان و تحلیل‌گر کارشناسی است. */
+      "dispute.view",
       "pmo.charter.view",
       "pmo.form.view",
       "pmo.health.view",
@@ -1057,6 +1070,10 @@ export const ROLE_CATALOG: RoleDef[] = [
       /* PMO-FORENSIC-SCHEDULE-ENGINE-V1.0: پروندهٔ ادعا را مدیر پیمان می‌سازد؛
        * بستن مأموریت بازسازی با تأییدکنندهٔ مستقل است. */
       "sched.recon.view", "sched.recon.edit",
+      /* PMO-CONSTRUCTION-DISPUTE-EXPERT-ENGINE-V1.0: تشکیل پروندهٔ دعوا، ثبت
+       * ادعا/مدرک/تحلیل/جلسه و بازبینی گزارش‌ها کار مدیر ادعا/پیمان است؛
+       * گذر نهایی (تحویل/مختومه/بایگانی) عمداً از او گرفته شده — SoD با PM. */
+      "dispute.view", "dispute.edit", "dispute.review",
       "cnt.retainage.manage", "com.certificate.view",
       /* ثبت و تمدید ضمانت‌نامه کار روزمرهٔ مدیر پیمان است، ولی
        * آزادسازی و ضبط عمداً به او داده نشده: کسی که سند را ثبت
@@ -1108,6 +1125,10 @@ export const ROLE_CATALOG: RoleDef[] = [
       /* تکمیل مأموریت بازسازی زمان‌بندی را مدیر پروژه تأیید می‌کند؛
        * ثبت سوابق کارشناسی با تهیه‌کنندهٔ پرونده است (SoD زمان اجرا). */
       "sched.recon.view", "sched.recon.approve",
+      /* گذرهای نهایی پروندهٔ دعوا (آماده تحویل/تحویل/مختومه/بایگانی) با
+       * تأیید PM و SoD (≠ تأییدکنندهٔ مرحلهٔ قبل) قفل است؛ محتوا را
+       * تهیه‌کنندهٔ پرونده می‌نویسد. */
+      "dispute.view", "dispute.approve",
       "fin.cost.view", "fin.rate.view", "fin.ipc.approve", "fin.procure.approve", "fin.reserve.draw",
       "qms.itp.view", "qms.ncr.close",
       "hrm.roster.view", "hrm.timesheet.approve", "hrm.productivity.view",
