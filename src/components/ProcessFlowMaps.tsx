@@ -226,24 +226,33 @@ const MAP_DISPUTE: MapDef = {
 export const PROCESS_MAP_IDS = ['delay', 'loss', 'risk', 'dispute'] as const;
 const MAPS: MapDef[] = [MAP_DELAY, MAP_LOSS, MAP_RISK, MAP_DISPUTE];
 
-/* ————— سبک‌ها ————— */
-const stepBox = 'w-full rounded-xl border border-[#b8c0ea] bg-[#edeff8] px-4 py-3 text-center text-[12.5px] font-bold leading-6 text-[#3d4270] shadow-sm cursor-pointer transition hover:bg-[#e2e6f6] hover:border-[#8f99d8] focus:outline-none focus:ring-2 focus:ring-[#8f99d8]/40';
-const sideBox = 'rounded-xl border border-[#9ecfbe] bg-[#e3f3ec] px-4 py-3 text-[11px] text-[205f4a]';
-const finalBoxOut = 'rounded-xl border border-[#e6c98f] bg-[#fdf3de] px-4 py-3 text-center font-bold text-[#8a5a10] shadow-sm';
-const finalBoxSec = 'rounded-xl border border-[#9ecfbe] bg-[#e3f3ec] px-4 py-3 text-[12px] text-[#205f4a]';
-const itemLi = 'leading-6';
+/* ————— سبک‌ها — هم‌سان با PlanningWorkflowMap (پالت نعنایی/کرم/خط‌چین طلایی) ————— */
+const boxCls = {
+  io: 'border-[#c9cfc9] bg-[#efeee9] text-[#26332e]',
+  proc: 'border-[#57a773] bg-[#e2f2e7] text-[#17563a]',
+  cross: 'border-dashed border-[#b9a86a] bg-[#f7f4ec] text-[#6b5d24]',
+  fin: 'border-[#b9a86a] bg-[#f7f4ec] text-[#6b5d24]',
+} as const;
+const sectionCls = 'rounded-2xl border border-[#d8ded8] bg-[#f6f8f6] p-4 text-[#21322c] shadow-sm';
+const titleCls = 'text-center text-[16px] font-extrabold text-[#1c2b26]';
+const subCls = 'mt-0.5 text-center text-[11px] text-[#6b7a74]';
+const colHead = 'text-center text-[11px] font-normal text-[#6b7a74]';
+const arrowCls = 'flex items-center justify-center text-[13px] text-[#5c6f68]';
+const vArrowCls = 'mx-auto py-0.5 text-[13px] leading-4 text-[#5c6f68]';
+const stepCls = `flex w-full flex-col items-center justify-center rounded-[10px] border-[1.5px] px-3 py-2.5 text-center cursor-pointer transition hover:shadow-md hover:brightness-[1.03] focus:outline-none focus:ring-2 focus:ring-[#57a773] ${boxCls.proc}`;
+const itemLi = 'leading-5 text-[10px] opacity-80';
 
 function SideCard({ s, fa, dir }: { s: SideBlock; fa: boolean; dir: 'rtl' | 'ltr' }) {
   const cols = s.itemsFa.length > 8;
   return (
-    <div className={sideBox} dir={dir}>
-      <div className="mb-1.5 text-center text-[12px] font-bold">{fa ? s.titleFa : s.titleEn}</div>
-      <ul dir={dir} className={cols ? 'grid grid-cols-2 gap-x-3' : ''}>
+    <div className={`rounded-[10px] border-[1.5px] px-3 py-2.5 ${boxCls.io}`}>
+      <div className="text-center text-[12px] font-bold leading-5" dir={dir}>{fa ? s.titleFa : s.titleEn}</div>
+      <ul dir={dir} className={`mt-1 ${cols ? 'grid grid-cols-2 gap-x-3' : ''}`}>
         {(fa ? s.itemsFa : s.itemsEn).map((it, i) => (
           <li key={i} className={itemLi}>· {it}</li>
         ))}
       </ul>
-      {s.noteFa && <div className="mt-1.5 text-center text-[10px] text-[#467a63]" dir={s.noteFa.includes('MSP') ? 'ltr' : dir}>{fa ? s.noteFa : s.noteEn}</div>}
+      {s.noteFa && <div className="mt-1 text-center text-[9px] opacity-70" dir={s.noteFa.includes('MSP') ? 'ltr' : dir}>{fa ? s.noteFa : s.noteEn}</div>}
     </div>
   );
 }
@@ -251,87 +260,93 @@ function SideCard({ s, fa, dir }: { s: SideBlock; fa: boolean; dir: 'rtl' | 'ltr
 function FlowChart({ map, fa, onNavigate }: { map: MapDef; fa: boolean; onNavigate: (tab: string) => void }) {
   const L = (a: string, b: string) => (fa ? a : b);
   return (
-    <section className="rounded-2xl border border-[#e4ddd0] bg-[#fffdf8] p-4 shadow-sm" dir="rtl">
-      <h3 className="text-center text-[17px] font-extrabold text-[#3d4270]">{L(map.titleFa, map.titleEn)}</h3>
-      <p className="mt-1 text-center text-[11px] text-[#7d8098]">{L(map.subtitleFa, map.subtitleEn)}</p>
-      <div className="mt-4 flex flex-col items-stretch gap-0">
+    <section dir="ltr" className={sectionCls} aria-label={L(map.titleFa, map.titleEn)}>
+      <h3 className={titleCls} dir="rtl">{L(map.titleFa, map.titleEn)}</h3>
+      <p className={subCls} dir="rtl">{L(map.subtitleFa, map.subtitleEn)}</p>
+
+      {/* سرستون‌ها — عین نقشهٔ برنامه‌ریزی */}
+      <div className="mt-3 grid grid-cols-[1.15fr_22px_1fr]">
+        <div className={colHead} dir="rtl">{fa ? 'ورودی‌ها و خروجی‌های هر مرحله' : 'Step inputs / outputs'}</div>
+        <div />
+        <div className={colHead} dir="rtl">{fa ? 'مراحل فرایند' : 'Process steps'}</div>
+      </div>
+
+      <div className="mt-1.5 flex flex-col">
         {map.steps.map((st, i) => (
           <div key={i} className="flex flex-col">
-            {/* ردیف مرحله: کارت کناری (سمت راست در RTL) | فلش | باکس مرحله */}
-            <div className="grid items-center gap-2" dir="ltr" style={{ gridTemplateColumns: st.side ? '1fr 30px 1.05fr' : '1fr' }}>
-              {st.side ? (
-                <>
-                  <SideCard s={st.side} fa={fa} dir="rtl" />
-                  <div className="text-center text-[16px] text-[#8b93c0]" dir="ltr">→</div>
-                </>
-              ) : null}
-              <button
-                className={stepBox + (st.side ? '' : ' mx-auto max-w-[46%]')}
+            <div className="grid grid-cols-[1.15fr_22px_1fr] items-stretch">
+              {st.side ? <SideCard s={st.side} fa={fa} dir="rtl" /> : <div />}
+              <div className={arrowCls}>{st.side ? '→' : ''}</div>
+              <button type="button" className={stepCls} dir="rtl"
                 onClick={() => onNavigate(st.tab)}
-                title={fa ? 'رفتن به تب عملیاتی' : 'Open operational tab'}
-                type="button"
-              >
-                {st.n != null && <div className="text-[10px] font-normal text-[#8b93c0]">{fa ? `مرحله ${faNum(st.n)}` : `Step ${st.n}`}</div>}
-                {L(st.fa, st.en)}
+                title={fa ? 'رفتن به تب عملیاتی' : 'Open operational tab'}>
+                <span className="block text-[13px] font-bold leading-5">{L(st.fa, st.en)}</span>
+                {st.n != null && (
+                  <span className="mt-0.5 mx-auto w-fit rounded-full bg-[#cde8d7] px-2 py-px text-[8.5px] font-bold text-[#17563a]">
+                    {fa ? `مرحله ${faNum(st.n)}` : `Step ${st.n}`}
+                  </span>
+                )}
               </button>
             </div>
             {st.noteFa && (
-              <div className="mt-1 mr-auto ml-auto w-[46%] text-left text-[10px] text-[#8b93c0]">{L(st.noteFa, st.noteEn ?? '')}</div>
+              <div className="grid grid-cols-[1.15fr_22px_1fr]">
+                <div /><div />
+                <div className="text-left text-[9.5px] leading-5 text-[#6b7a74]" dir="rtl">{L(st.noteFa, st.noteEn ?? '')}</div>
+              </div>
             )}
             {st.dashedBackFa && (
-              <div className="my-1 mr-auto ml-auto w-[46%] rounded-lg border border-dashed border-[#a9b0d0] px-3 py-1.5 text-center text-[10px] text-[#6d759c]">
-                ↩ {L(st.dashedBackFa, st.dashedBackEn ?? '')}
+              <div className="grid grid-cols-[1.15fr_22px_1fr] items-center">
+                <div />
+                <div />
+                <div className={`my-1 mx-auto w-fit rounded-[10px] border-[1.5px] px-3 py-1 text-center text-[9.5px] ${boxCls.cross}`} dir="rtl">
+                  ↩ {L(st.dashedBackFa, st.dashedBackEn ?? '')}
+                </div>
               </div>
             )}
-            {i < map.steps.length - 1 && <div className="mx-auto py-0.5 text-[17px] leading-5 text-[#8b93c0]">↓</div>}
+            {i < map.steps.length - 1 && (
+              <div className="grid grid-cols-[1.15fr_22px_1fr]"><div /><div /><div className={vArrowCls}>↓</div></div>
+            )}
           </div>
         ))}
-        <div className="mx-auto py-0.5 text-[17px] leading-5 text-[#c9a25e]">↓</div>
-        {map.finalItemsFa ? (
-          map.finalKind === 'section' ? (
-            <div className={`${finalBoxSec} mx-auto w-[46%]`} dir="rtl">
-              <div className="mb-1 text-center font-bold text-[#1c6b4b]">{L(map.finalFa, map.finalEn)}</div>
-              <ul>{(fa ? map.finalItemsFa! : map.finalItemsEn!).map((it, i) => <li key={i} className={itemLi}>· {it}</li>)}</ul>
-            </div>
-          ) : (
-            <div className="mx-auto w-[46%]">
-              <div className={finalBoxOut}>
-                <div>{L(map.finalFa, map.finalEn)}</div>
-                <div className="mt-0.5 text-[10px] font-normal text-[#b48a35]">{fa ? 'خروجی نهایی' : 'Final output'}</div>
-              </div>
-              <ul className="mt-1 rounded-xl border border-[#e6c98f] bg-[#fdf8ec] px-4 py-2 text-[11px] text-[#7a5f27]" dir="rtl">
-                {(fa ? map.finalItemsFa! : map.finalItemsEn!).map((it, i) => <li key={i} className={itemLi}>· {it}</li>)}
+        {/* خروجی نهایی */}
+        <div className="grid grid-cols-[1.15fr_22px_1fr]"><div /><div /><div className={vArrowCls}>↓</div></div>
+        <div className="grid grid-cols-[1.15fr_22px_1fr] items-stretch">
+          <div />
+          <div />
+          <div className={`rounded-[10px] border-[1.5px] px-3 py-2.5 text-center ${map.finalKind === 'output' ? boxCls.fin : boxCls.io}`} dir="rtl">
+            <span className="block text-[13px] font-bold leading-5">{L(map.finalFa, map.finalEn)}</span>
+            <span className="mt-0.5 block text-[10px] font-normal leading-4 opacity-70">
+              {map.finalKind === 'output' ? (fa ? 'خروجی نهایی' : 'Final output') : (fa ? 'خروجی‌های این بخش' : 'This section’s outputs')}
+            </span>
+            {map.finalItemsFa && (
+              <ul className="mt-1 text-right">
+                {(fa ? map.finalItemsFa : map.finalItemsEn!).map((it, i) => <li key={i} className={itemLi}>· {it}</li>)}
               </ul>
-            </div>
-          )
-        ) : (
-          <div className="mx-auto w-[46%]">
-            <div className={finalBoxOut}>
-              <div>{L(map.finalFa, map.finalEn)}</div>
-              <div className="mt-0.5 text-[10px] font-normal text-[#b48a35]">{fa ? 'خروجی نهایی' : 'Final output'}</div>
-            </div>
+            )}
           </div>
-        )}
+        </div>
       </div>
+
       {map.footerFa && (
-        <div className="mt-4 rounded-xl border border-[#e4ddd0] bg-[#f8f6f0] px-4 py-2.5 text-center text-[10.5px] leading-5 text-[#77705f]">
+        <div className="mt-3 rounded-[10px] border-[1.5px] border-[#e0e4e0] bg-[#fbfbfa] px-3 py-2 text-center text-[10px] leading-5 text-[#55665f]" dir="rtl">
           {L(map.footerFa, map.footerEn ?? '')}
         </div>
       )}
       <Legend fa={fa} dashed={map.dashedLegendFa ? L(map.dashedLegendFa, map.dashedLegendEn ?? '') : undefined}
-        greenLabel={fa ? 'ورودی‌ها و نتایج هر مرحله' : 'Step inputs / outputs'} />
+        finLabel={fa ? 'خروجی نهایی' : 'Final output'} />
     </section>
   );
 }
 
-function Legend({ fa, dashed, greenLabel }: { fa: boolean; dashed?: string; greenLabel: string }) {
-  const chip = 'inline-flex items-center gap-1.5 text-[10px] text-[#6d759c]';
+function Legend({ fa, dashed, finLabel }: { fa: boolean; dashed?: string; finLabel: string }) {
+  const sw = 'ml-1 inline-block h-3 w-3 rounded-[4px] border-[1.5px] align-[-2px]';
   return (
-    <div className="mt-4 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 border-t border-[#eee7d8] pt-3" dir="rtl">
-      <span className={chip}><i className="inline-block h-3.5 w-3.5 rounded-md border border-[#b8c0ea] bg-[#edeff8]" />{fa ? 'مراحل فرایند' : 'Process steps'}</span>
-      <span className={chip}><i className="inline-block h-3.5 w-3.5 rounded-md border border-[#9ecfbe] bg-[#e3f3ec]" />{greenLabel}</span>
-      <span className={chip}><i className="inline-block h-3.5 w-3.5 rounded-md border border-[#e6c98f] bg-[#fdf3de]" />{fa ? 'خروجی نهایی' : 'Final output'}</span>
-      {dashed && <span className={chip}><i className="inline-block h-1 w-5 border-t-2 border-dashed border-[#a9b0d0]" />{dashed}</span>}
+    <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-[10px] text-[#55665f]" dir="rtl">
+      <span><i className={`${sw} ${boxCls.proc}`} />{fa ? 'مراحل فرایند / پردازش' : 'Process / processing'}</span>
+      <span><i className={`${sw} ${boxCls.io}`} />{fa ? 'ورودی‌ها و خروجی‌های هر مرحله' : 'Step inputs & outputs'}</span>
+      <span><i className={`${sw} ${boxCls.fin}`} />{finLabel}</span>
+      {dashed && <span><i className={`${sw} ${boxCls.cross}`} />{dashed}</span>}
+      <span className="opacity-70">{fa ? 'با کلیک روی هر مرحله به بخش عملیاتی آن می‌روید.' : 'Click a step to open its section.'}</span>
     </div>
   );
 }
@@ -341,17 +356,18 @@ function faNum(n: number) { return '۰۱۲۳۴۵۶۷۸۹'[n] ?? String(n); }
 /* ————— نقشهٔ یکپارچهٔ فرایند ادعا در چرخهٔ قرارداد ————— */
 function IntegratedMap({ fa, onSelect, allowed }: { fa: boolean; onSelect: (id: MapDef['id']) => void; allowed?: (MapDef['id'] | 'integrated')[] }) {
   const L = (a: string, b: string) => (fa ? a : b);
-  const phaseHead = 'text-center text-[13px] font-extrabold text-[#3d4270]';
-  const secBox = 'w-full rounded-xl border border-[#b8c0ea] bg-[#edeff8] px-3 py-3 text-center text-[12px] font-bold leading-6 text-[#3d4270] shadow-sm transition hover:bg-[#e2e6f6] hover:border-[#8f99d8] cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#8f99d8]/40';
-  const outCard = 'rounded-xl border border-[#9ecfbe] bg-[#e3f3ec] px-3 py-2.5 text-[10.5px] text-[#205f4a]';
-  const finCard = 'rounded-xl border border-[#e6c98f] bg-[#fdf3de] px-3 py-2.5 text-[10.5px] text-[#7a5f27]';
-  const outHead = 'mb-1 text-center text-[11px] font-bold text-[#1c6b4b]';
-  const finHead = 'mb-1 text-center text-[11px] font-bold text-[#8a5a10]';
+  const phaseHead = 'text-center text-[13px] font-extrabold text-[#1c2b26]';
+  const phaseBox = 'rounded-[14px] border-[1.5px] border-[#a9b6b0] bg-[#f8faF8] px-3 pb-3 pt-3';
+  const secBox = `w-full flex flex-col items-center justify-center rounded-[10px] border-[1.5px] px-3 py-2.5 text-center cursor-pointer transition hover:shadow-md hover:brightness-[1.03] focus:outline-none focus:ring-2 focus:ring-[#57a773] ${boxCls.proc}`;
+  const outCard = `rounded-[10px] border-[1.5px] px-3 py-2.5 ${boxCls.io}`;
+  const finCard = `rounded-[10px] border-[1.5px] px-3 py-2.5 ${boxCls.fin}`;
+  const outHead = 'mb-1 text-center text-[11px] font-bold text-[#26332e]';
+  const finHead = 'mb-1 text-center text-[11px] font-bold text-[#6b5d24]';
 
   const Row = ({ box, card, cardNode }: { box: React.ReactNode; card?: 'out' | 'fin'; cardNode: React.ReactNode }) => (
     <div className="grid items-stretch gap-2" style={{ gridTemplateColumns: '1fr 22px 1.05fr' }} dir="ltr">
       {card ? <div className={card === 'out' ? outCard : finCard} dir="rtl">{cardNode}</div> : <div />}
-      <div className="flex items-center justify-center text-[15px] text-[#8b93c0]">←</div>
+      <div className={arrowCls}>←</div>
       <div>{box}</div>
     </div>
   );
@@ -363,20 +379,20 @@ function IntegratedMap({ fa, onSelect, allowed }: { fa: boolean; onSelect: (id: 
         onClick={() => onSelect(id)}
         title={enabled ? (fa ? 'باز کردن فلوچارت این بخش' : 'Open this section’s flowchart') : (fa ? 'این بخش در ماژول دیگر است' : 'This section lives in another module')}>
         {faT}
-        <div className="text-[10px] font-normal text-[#8b93c0]">{fa ? `بخش ${num}` : enT}</div>
+        <span className="mt-0.5 mx-auto w-fit rounded-full bg-[#cde8d7] px-2 py-px text-[8.5px] font-bold text-[#17563a]">{fa ? `بخش ${num}` : enT}</span>
       </button>
     );
   };
   const li = 'leading-5';
 
   return (
-    <section className="rounded-2xl border border-[#e4ddd0] bg-[#fffdf8] p-4 shadow-sm" dir="rtl">
-      <h3 className="text-center text-[17px] font-extrabold text-[#3d4270]">{L('نقشهٔ یکپارچهٔ فرایند ادعا در چرخهٔ قرارداد', 'Integrated claims map across the contract lifecycle')}</h3>
-      <p className="mt-1 text-center text-[11px] text-[#7d8098]">{L('بخش ۳ در ابتدای قرارداد · بخش‌های ۱ و ۲ هنگام ادعا · بخش ۴ در مرحله داوری', 'Section 3 at contract start · sections 1–2 at claim time · section 4 at arbitration')}</p>
+    <section className={sectionCls} dir="rtl">
+      <h3 className={titleCls}>{L('نقشهٔ یکپارچهٔ فرایند ادعا در چرخهٔ قرارداد', 'Integrated claims map across the contract lifecycle')}</h3>
+      <p className={subCls}>{L('بخش ۳ در ابتدای قرارداد · بخش‌های ۱ و ۲ هنگام ادعا · بخش ۴ در مرحله داوری', 'Section 3 at contract start · sections 1–2 at claim time · section 4 at arbitration')}</p>
 
       <div className="relative mt-4 flex flex-col gap-2">
         {/* فاز ۱ */}
-        <div className="rounded-2xl border border-[#ece5d6] bg-[#faf8f2] p-3">
+        <div className={phaseBox}>
           <div className={phaseHead}>{fa ? 'فاز ۱ · ابتدای قرارداد' : 'Phase 1 · Contract start'}</div>
           <div className="mt-2">
             <Row
@@ -388,7 +404,7 @@ function IntegratedMap({ fa, onSelect, allowed }: { fa: boolean; onSelect: (id: 
         </div>
         <ConnectorEdge left={fa ? 'بندها و مبنای قراردادی' : 'Clauses & contractual basis'} right={fa ? 'اجرای قرارداد' : 'Contract execution'} />
         {/* فاز ۲ */}
-        <div className="rounded-2xl border border-[#ece5d6] bg-[#faf8f2] p-3">
+        <div className={phaseBox}>
           <div className={phaseHead}>{fa ? 'فاز ۲ · هنگام ادعا' : 'Phase 2 · At claim time'}</div>
           <div className="mt-2 flex flex-col gap-3">
             <Row
@@ -406,7 +422,7 @@ function IntegratedMap({ fa, onSelect, allowed }: { fa: boolean; onSelect: (id: 
         </div>
         <ConnectorEdge left={fa ? 'لوایح و مستندات' : 'Dossiers & records'} right={fa ? 'ارجاع اختلاف' : 'Dispute referral'} />
         {/* فاز ۳ */}
-        <div className="rounded-2xl border border-[#ece5d6] bg-[#faf8f2] p-3">
+        <div className={phaseBox}>
           <div className={phaseHead}>{fa ? 'فاز ۳ · مرحله داوری' : 'Phase 3 · Arbitration'}</div>
           <div className="mt-2">
             <Row
@@ -418,16 +434,17 @@ function IntegratedMap({ fa, onSelect, allowed }: { fa: boolean; onSelect: (id: 
         </div>
       </div>
 
-      <div className="mt-4 rounded-xl border border-[#e4ddd0] bg-[#f8f6f0] px-4 py-2.5 text-center text-[10.5px] leading-6 text-[#77705f]" dir="rtl">
+      <div className="mt-4 rounded-[10px] border-[1.5px] border-[#e0e4e0] bg-[#fbfbfa] px-4 py-2.5 text-center text-[10px] leading-5 text-[#55665f]" dir="rtl">
         {fa ? 'ورودی مشترک: قرارداد، الحاقیه، صورت‌جلسات، مکاتبات، برنامه‌های زمان‌بندی، گزارش‌های دوره‌ای و اسناد مالی' : 'Shared inputs: contract, annexes, minutes, correspondence, schedules, period reports & financial records'}
         <br />{fa ? 'فرمت‌های پشتیبانی: MSP ,Primavera P6, Word, PDF' : 'Supported: MSP, Primavera P6, Word, PDF'}
       </div>
-      <div className="mt-3 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 border-t border-[#eee7d8] pt-3" dir="rtl">
-        <span className="inline-flex items-center gap-1.5 text-[10px] text-[#6d759c]"><i className="inline-block h-3.5 w-3.5 rounded-md border border-[#b8c0ea] bg-[#edeff8]" />{fa ? 'بخش‌های نرم‌افزار' : 'Software sections'}</span>
-        <span className="inline-flex items-center gap-1.5 text-[10px] text-[#6d759c]"><i className="inline-block h-3.5 w-3.5 rounded-md border border-[#9ecfbe] bg-[#e3f3ec]" />{fa ? 'خروجی هر بخش' : 'Section outputs'}</span>
-        <span className="inline-flex items-center gap-1.5 text-[10px] text-[#6d759c]"><i className="inline-block h-3.5 w-3.5 rounded-md border border-[#e6c98f] bg-[#fdf3de]" />{fa ? 'خروجی نهایی' : 'Final output'}</span>
-        <span className="inline-flex items-center gap-1.5 text-[10px] text-[#6d759c]"><i className="inline-block h-1 w-5 border-t-2 border-[#8b93c0]" />{fa ? 'ترتیب فازها' : 'Phase order'}</span>
-        <span className="inline-flex items-center gap-1.5 text-[10px] text-[#6d759c]"><i className="inline-block h-1 w-5 border-t-2 border-dashed border-[#a9b0d0]" />{fa ? 'جریان دادهٔ پیشنهادی' : 'Suggested data flow'}</span>
+      <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-[10px] text-[#55665f]" dir="rtl">
+        <span><i className="ml-1 inline-block h-3 w-3 rounded-[4px] border-[1.5px] border-[#57a773] bg-[#e2f2e7] align-[-2px]" />{fa ? 'بخش‌های نرم‌افزار' : 'Software sections'}</span>
+        <span><i className="ml-1 inline-block h-3 w-3 rounded-[4px] border-[1.5px] border-[#c9cfc9] bg-[#efeee9] align-[-2px]" />{fa ? 'خروجی هر بخش' : 'Section outputs'}</span>
+        <span><i className="ml-1 inline-block h-3 w-3 rounded-[4px] border-[1.5px] border-[#b9a86a] bg-[#f7f4ec] align-[-2px]" />{fa ? 'خروجی نهایی' : 'Final output'}</span>
+        <span className="inline-flex items-center gap-1.5"><i className="inline-block h-1 w-5 border-t-2 border-[#57a773]" />{fa ? 'ترتیب فازها' : 'Phase order'}</span>
+        <span className="inline-flex items-center gap-1.5"><i className="inline-block h-1 w-5 border-t-2 border-dashed border-[#b9a86a]" />{fa ? 'جریان دادهٔ پیشنهادی' : 'Suggested data flow'}</span>
+        <span className="opacity-70">{fa ? 'با کلیک روی هر بخش، فلوچارت داخلی آن باز می‌شود.' : 'Click a section to open its internal flowchart.'}</span>
       </div>
     </section>
   );
@@ -436,17 +453,17 @@ function IntegratedMap({ fa, onSelect, allowed }: { fa: boolean; onSelect: (id: 
 function ConnectorEdge({ left, right, short }: { left: string; right?: string; short?: boolean }) {
   /* لبهٔ اتصال میان فازها: خط ممتد (ترتیب) یا خط‌چین (جریان داده) با برچسب لبه */
   return (
-    <div className={`relative flex items-center justify-between px-6 ${short ? 'h-8' : 'h-12'}`} dir="rtl">
-      <div className="flex h-full flex-col items-center">
-        <span className="w-px flex-1 border-r-2 border-dashed border-[#b3b9d6]" />
-        <span className="text-[10px] text-[#8b93c0]">▼</span>
-        <span className="text-[10px] text-[#6d759c]">{left}</span>
+    <div className={`relative flex items-center justify-between px-6 ${short ? 'py-0.5' : 'py-1'}`} dir="rtl">
+      <div className="flex flex-col items-center">
+        <span className="h-4 w-px border-r-[1.5px] border-dashed border-[#b9a86a]" />
+        <span className="text-[11px] leading-3 text-[#b9a86a]">▼</span>
+        <span className="text-[9.5px] text-[#6b5d24]">{left}</span>
       </div>
       {right && (
-        <div className="flex h-full flex-col items-center">
-          <span className="w-px flex-1 border-r-2 border-[#8b93c0]" />
-          <span className="text-[10px] text-[#8b93c0]">▼</span>
-          <span className="text-[10px] font-semibold text-[#5a6288]">{right}</span>
+        <div className="flex flex-col items-center">
+          <span className="h-4 w-px border-r-[1.5px] border-[#57a773]" />
+          <span className="text-[11px] leading-3 text-[#57a773]">▼</span>
+          <span className="text-[9.5px] font-semibold text-[#17563a]">{right}</span>
         </div>
       )}
     </div>
@@ -473,11 +490,11 @@ export default function ProcessFlowMaps({ lang, onNavigate, only, defaultMap }: 
   const first = defaultMap && allowed.includes(defaultMap) ? defaultMap : allowed[0];
   const [sel, setSel] = useState<ProcessMapId>(first);
   const active = allowed.includes(sel) ? sel : allowed[0];
-  const pill = (on: boolean) => `rounded-full border px-3.5 py-1.5 text-[11px] font-semibold transition ${on ? 'border-[#8f99d8] bg-[#edeff8] text-[#3d4270] shadow-sm' : 'border-[#d8dce8] bg-[#f6f7fb] text-[#7d8098] hover:border-[#b8c0ea] hover:text-[#575f86]'}`;
+  const pill = (on: boolean) => `rounded-full border-[1.5px] px-3.5 py-1.5 text-[11px] font-semibold transition ${on ? 'border-[#57a773] bg-[#e2f2e7] text-[#17563a] shadow-sm' : 'border-[#d8ded8] bg-[#f8faF8] text-[#6b7a74] hover:border-[#a9b6b0] hover:text-[#37473f]'}`;
   const NAME_FA: Record<ProcessMapId, string> = { integrated: 'نقشهٔ یکپارچه', delay: 'تهیه لایحه تأخیرات', loss: 'تهیه لایحه ضرر و زیان', risk: 'مدیریت ریسک و بهبود قرارداد', dispute: 'کارشناسی و داوری دعوا' };
   const NAME_EN: Record<ProcessMapId, string> = { integrated: 'Integrated map', delay: 'Delay dossier', loss: 'Loss dossier', risk: 'Contract risk', dispute: 'Dispute expert' };
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto rounded-2xl border border-[#e4ddd0] bg-[#fffaf1]/40 p-3" dir={fa ? 'rtl' : 'ltr'}>
+    <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto rounded-2xl border border-[#d8ded8] bg-[#f2f4f2]/60 p-3" dir={fa ? 'rtl' : 'ltr'}>
       {allowed.length > 1 && (
         <div className="flex flex-wrap items-center justify-center gap-2">
           {allowed.map((id) => (
