@@ -853,7 +853,7 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
                     {[
                       ...p.subs.map((s) => ({ id: s.id, title: s.title, sql: s.sql })),
                       ...(D4_PAGE_SUBS[p.id] ?? []),
-                    ].map((s) => (
+                    ].filter((s, i, arr) => arr.findIndex((x) => x.id === s.id) === i).map((s) => (
                       <button
                         key={s.id}
                         onClick={() => {
