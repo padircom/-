@@ -472,3 +472,160 @@ export const CLAIM_ANALYSIS_METHOD_FA =
   "تحلیل قاعده‌محور خودکار سامانهٔ کارشناسی دعاوی نسخهٔ ۱٫۰: کنترل لایه‌بندی مبالغ (مطالبه/بررسی/تأیید)، وجود استناد قراردادی، انطباق مبنای ادعا با داده، وضعیت اصالت و کفایت مدارک، پاسخ‌های طرف مقابل و پیوندهای ماژولی مرتبط. هیچ داده‌ای استنباط/جعل نمی‌شود؛ موارد احرازنشده صریحاً «تأییدنشده» اعلام می‌شوند.";
 export const CALC_TOTALS_METHOD_FA =
   "محاسبهٔ جمع سادهٔ روی ردیف‌های ثبت‌شدهٔ ادعای همین پرونده (sum). منبع داده: ستون‌های ClaimedAmount/ReviewedAmount/ApprovedAmount/ClaimedDelayDays. مقادیر ماژول‌های دیگر فقط نمایشی خوانده می‌شوند و در این ماژول بازمحاسبه نمی‌گردند. این محاسبهٔ مستقل کارشناسی «برای مقایسه» است و جای محاسبهٔ اصلی مدعی/پاسخگو را نمی‌گیرد.";
+
+/* ═══════════════ فاز ۴ — جلسات/نظریات/گزارش کارشناسی ═══════════════
+ * هیچ نتیجه‌ای بدون تأیید کارشناس انسانی نهایی نمی‌شود؛ ماشین‌حالت گزارش این
+ * الزام را در کد پیاده می‌کند. منابع نظریه فقط اشاره به رکوردهای واقعی‌اند.
+ */
+
+export const HEARING_MINUTES_STATUSES = ["draft", "awaiting_sign", "signed"] as const;
+export const HEARING_MINUTES_FA: Record<string, string> = {
+  draft: "پیش‌نویس", awaiting_sign: "در انتظار امضا", signed: "امضاشده",
+};
+
+export const OPINION_REVIEW_STATUSES = ["draft", "in_review", "approved", "final"] as const;
+export const OPINION_REVIEW_FA: Record<string, string> = {
+  draft: "پیش‌نویس", in_review: "در حال بازبینی", approved: "تأییدشده", final: "نهایی",
+};
+
+export const REPORT_STATUS_FA: Record<string, string> = {
+  draft: "پیش‌نویس", in_review: "در حال بازبینی", approved: "تأییدشده",
+  issued: "صادرشده", superseded: "جایگزین‌شده",
+};
+export const REPORT_TRANSITIONS: Record<string, string[]> = {
+  draft: ["in_review"],
+  in_review: ["draft", "approved"],
+  approved: ["draft", "issued"],
+  issued: [],
+  superseded: [],
+};
+export function canTransitionReport(from: string, to: string): boolean {
+  return (REPORT_TRANSITIONS[from] ?? []).includes(to);
+}
+export function reportTransitionNeedsReview(to: string): boolean { return to === "approved"; }
+export function reportTransitionNeedsApproval(to: string): boolean { return to === "issued"; }
+
+/** منابع مجاز نظریه: فقط اشاره به رکوردهای واقعی پرونده — جعل منبع ممنوع. */
+export const OPINION_SOURCE_KINDS = ["evidence", "analysis", "claim", "module_link", "hearing", "deadline"] as const;
+export const OPINION_SOURCE_KIND_FA: Record<string, string> = {
+  evidence: "مدرک", analysis: "تحلیل", claim: "ادعا", module_link: "پیوند ماژولی", hearing: "جلسه", deadline: "مهلت",
+};
+export interface OpinionSourceRef { kind: string; code: string }
+
+/**
+ * کنترل صداقت منابع نظریه: هر منبع باید در رکوردهای پرونده موجود باشد. هر
+ * منبع ناموجود «تأییدنشده» اعلام می‌شود، نه این‌که پذیرفته شود.
+ */
+export function validateOpinionSources(sources: unknown, codesOf: Record<string, Set<string>>): ValidationResult {
+  const errors: string[] = [];
+  if (sources === undefined || sources === null || sources === "") return { ok: true, errors: [] };
+  if (!Array.isArray(sources)) return { ok: false, errors: ["SourcesJson باید آرایه‌ای از {kind, code} باشد"] };
+  for (const raw of sources) {
+    if (!raw || typeof raw !== "object") { errors.push("قالب هر منبع باید {kind, code} باشد"); continue; }
+    const r = raw as Record<string, unknown>;
+    const kind = String(r.kind ?? "");
+    const code = String(r.code ?? "").trim();
+    if (!(OPINION_SOURCE_KINDS as readonly string[]).includes(kind)) { errors.push(`نوع منبع «${kind}» نامعتبر است`); continue; }
+    if (!code) { errors.push("کد منبع خالی است"); continue; }
+    if (!codesOf[kind]?.has(code)) errors.push(`منبع «${OPINION_SOURCE_KIND_FA[kind]}» با کد «${code}» در پرونده موجود نیست (تأییدنشده)`);
+  }
+  return { ok: errors.length === 0, errors };
+}
+
+/* ── ۱۴ گزارش مدیریتی — همه از دادهٔ واقعی جدول‌ها؛ هیچ خط/عدد نمایشی فاقد منبع نیست ── */
+export const MANAGEMENT_REPORTS = [
+  { code: "cases_status", fa: "وضعیت پرونده‌ها و جریان کاری" },
+  { code: "cases_by_subject", fa: "پرونده‌ها به تفکیک موضوع" },
+  { code: "claims_layers", fa: "ادعاها و لایه‌های سه‌گانهٔ مبلغ" },
+  { code: "evidence_register", fa: "دفتر مدارک و وضعیت اصالت" },
+  { code: "evidence_gaps", fa: "شکاف‌های مستنداتی/اصالت در انتظار" },
+  { code: "deadlines", fa: "مهلت‌ها و هشدارهای عقب‌مانده" },
+  { code: "parties", fa: "طرفین، نقش‌ها و پیوند ادعا" },
+  { code: "analyses", fa: "تحلیل‌ها و وضعیت تأیید کارشناسی" },
+  { code: "hearings", fa: "جلسات و وضعیت صورت‌جلسه" },
+  { code: "opinions", fa: "نظریات کارشناسی و زنجیرهٔ نسخه‌ها" },
+  { code: "module_links", fa: "پیوندهای ماژولی و سازگاری" },
+  { code: "reports_register", fa: "دفتر نسخه‌های گزارش" },
+  { code: "trend_cases", fa: "روند ثبت پرونده‌ها (ماهانه)" },
+  { code: "dashboard_detail", fa: "جزئیات داشبورد مبالغ و وضعیت‌ها" },
+] as const;
+export const MANAGEMENT_REPORT_FA: Record<string, string> = Object.fromEntries(MANAGEMENT_REPORTS.map((m) => [m.code, m.fa]));
+
+export type MgmtRows = Record<string, unknown>;
+export interface ManagementData {
+  cases: MgmtRows[]; claims: MgmtRows[]; parties: MgmtRows[]; evidence: MgmtRows[];
+  analyses: MgmtRows[]; calculations: MgmtRows[]; hearings: MgmtRows[]; opinions: MgmtRows[];
+  links: MgmtRows[]; deadlines: MgmtRows[]; reports: MgmtRows[]; today: string;
+}
+export interface ManagementReportOut { title: string; heads: string[]; rows: string[][]; noteFa?: string }
+
+export function buildManagementReport(kind: string, d: ManagementData): ManagementReportOut {
+  const dash = "—";
+  const s = (v: unknown) => (v === undefined || v === null || v === "" ? dash : String(v));
+  const m = (v: unknown) => { const n = Number(v); return v === undefined || v === null || v === "" || !Number.isFinite(n) ? dash : n.toLocaleString("en-US"); };
+  const statusFa = (v: unknown) => CASE_STATUS_FA[String(v) as CaseStatus] ?? s(v);
+  const subj = (v: unknown) => disputeSubjectFa(String(v ?? "other"));
+  const days = (r: MgmtRows) => deadlineDaysLeft({ DueDate: String(r.DueDate ?? ""), Status: String(r.Status ?? "") }, d.today);
+  switch (kind) {
+    case "cases_status": {
+      return { title: MANAGEMENT_REPORT_FA[kind], heads: ["کد", "عنوان", "موضوع", "وضعیت", "اولویت", "ثبت", "مهلت تحویل", "مالک داخلی"], rows: d.cases.map((c) => [s(c.Code), s(c.TitleFa), subj(c.SubjectCode), statusFa(c.Status), s(c.Priority), s(c.RegistrationDate), s(c.DeliveryDeadline), s(c.InternalOwnerFa)]) };
+    }
+    case "cases_by_subject": {
+      const by = new Map<string, number>();
+      for (const c of d.cases) by.set(String(c.SubjectCode ?? "other"), (by.get(String(c.SubjectCode ?? "other")) ?? 0) + 1);
+      return { title: MANAGEMENT_REPORT_FA[kind], heads: ["موضوع", "تعداد پرونده"], rows: [...by.entries()].map(([k, n]) => [subj(k), String(n)]), noteFa: d.cases.length ? undefined : "پرونده‌ای ثبت نشده است" };
+    }
+    case "claims_layers": {
+      return { title: MANAGEMENT_REPORT_FA[kind], heads: ["پرونده", "کد ادعا", "عنوان", "مبنا", "مطالبه‌شده", "بررسی‌شده", "تأییدشده", "مبنای بررسی", "وضعیت ارزیابی"], rows: d.claims.map((c) => [s(c.CaseCode), s(c.Code), s(c.TitleFa), claimBasisFa(String(c.BasisKind ?? "")), m(c.ClaimedAmount), m(c.ReviewedAmount), m(c.ApprovedAmount), s(c.ReviewBasisFa), s(c.ReviewStatus)]), noteFa: "لایهٔ «تأییدشدهٔ خالی/صفر» به معنای عدم انجام تأیید است — نه رد." };
+    }
+    case "evidence_register": {
+      return { title: MANAGEMENT_REPORT_FA[kind], heads: ["پرونده", "کد", "نوع", "عنوان", "شماره/نسخه", "اصالت", "کفایت", "تاریخ دریافت"], rows: d.evidence.map((e) => [s(e.CaseCode), s(e.Code), s(e.DocType), s(e.TitleFa), s(e.DocNo) + (e.Revision ? `/${s(e.Revision)}` : ""), s(e.AuthenticityStatus), s(e.SufficiencyStatus), s(e.ReceivedAt)]) };
+    }
+    case "evidence_gaps": {
+      const gaps = d.evidence.filter((e) => String(e.AuthenticityStatus ?? "pending") !== "verified" || ["insufficient", "unchecked"].includes(String(e.SufficiencyStatus ?? "unchecked")));
+      return { title: MANAGEMENT_REPORT_FA[kind], heads: ["پرونده", "کد", "عنوان", "اصالت", "کفایت", "یادداشت نقص"], rows: gaps.map((e) => [s(e.CaseCode), s(e.Code), s(e.TitleFa), s(e.AuthenticityStatus), s(e.SufficiencyStatus), s(e.DeficiencyNoteFa)]), noteFa: `اصالت «در انتظار» به معنای نامعلوم است؛ اتکای گزارش‌دهی بدون احراز اصالت مسئولیت‌آفرین است.` };
+    }
+    case "deadlines": {
+      return { title: MANAGEMENT_REPORT_FA[kind], heads: ["پرونده", "کد", "عنوان", "نوع", "سررسید", "وضعیت", "روز مانده", "مالک طرف"], rows: d.deadlines.map((x) => [s(x.CaseCode), s(x.Code), s(x.TitleFa), s(x.Kind), s(x.DueDate), s(x.Status), days(x) === null ? dash : String(days(x)), s(x.OwnerPartyCode)]) };
+    }
+    case "parties": {
+      return { title: MANAGEMENT_REPORT_FA[kind], heads: ["پرونده", "کد", "نقش", "نام", "نماینده", "یادداشت پیوند"], rows: d.parties.map((p) => [s(p.CaseCode), s(p.Code), partyRoleFa(String(p.Role ?? "")), s(p.NameFa), s(p.RepresentativeFa), s(p.ClaimLinkNoteFa)]) };
+    }
+    case "analyses": {
+      return { title: MANAGEMENT_REPORT_FA[kind], heads: ["پرونده", "کد", "موضوع", "تحلیل‌گر", "وضعیت تأیید", "تأییدکننده", "تاریخ تحلیل"], rows: d.analyses.map((a) => [s(a.CaseCode), s(a.Code), s(a.TopicFa), s(a.AnalyzedBy), ANALYSIS_APPROVAL_FA[String(a.ApprovalStatus ?? "draft")] ?? s(a.ApprovalStatus), s(a.ApprovedBy), s(a.AnalyzedAt)]) };
+    }
+    case "hearings": {
+      return { title: MANAGEMENT_REPORT_FA[kind], heads: ["پرونده", "کد", "عنوان", "تاریخ", "محل", "وضعیت صورت‌جلسه", "مهلت پاسخ پرسش", "امضا"], rows: d.hearings.map((h) => [s(h.CaseCode), s(h.Code), s(h.TitleFa), s(h.MeetingDate), s(h.LocationFa), HEARING_MINUTES_FA[String(h.MinutesStatus ?? "draft")] ?? s(h.MinutesStatus), s(h.QuestionDeadline), s(h.SignedAt)]) };
+    }
+    case "opinions": {
+      return { title: MANAGEMENT_REPORT_FA[kind], heads: ["پرونده", "کد", "عنوان", "نسخه", "مؤلف", "وضعیت", "بازبین", "نسخهٔ پیشین"], rows: d.opinions.map((o) => [s(o.CaseCode), s(o.Code), s(o.TitleFa), s(o.Version), s(o.AuthoredBy), OPINION_REVIEW_FA[String(o.ReviewStatus ?? "draft")] ?? s(o.ReviewStatus), s(o.ReviewedBy), s(o.PreviousVersionCode)]) };
+    }
+    case "module_links": {
+      return { title: MANAGEMENT_REPORT_FA[kind], heads: ["پرونده", "کد", "نوع", "هدف", "عنوان هدف", "ایجادکننده", "وضعیت"], rows: d.links.map((l) => [s(l.CaseCode), s(l.Code), LINK_KIND_FA[String(l.LinkKind) as never] ?? s(l.LinkKind), s(l.TargetCode), s(l.TargetTitleFa), s(l.EstablishedBy), s(l.Status)]), noteFa: "پیوندها مرجع‌اند؛ تغییری در ماژول مقصد ایجاد نمی‌کنند." };
+    }
+    case "reports_register": {
+      return { title: MANAGEMENT_REPORT_FA[kind], heads: ["پرونده", "کد", "عنوان", "نسخه", "وضعیت", "تولیدکننده", "تأییدکننده", "صادرکننده", "تاریخ صدور"], rows: d.reports.map((r) => [s(r.CaseCode), s(r.Code), s(r.TitleFa), s(r.Version), REPORT_STATUS_FA[String(r.Status)] ?? s(r.Status), s(r.GeneratedBy), s(r.ApprovedBy), s(r.IssuedBy), s(r.IssuedAt)]) };
+    }
+    case "trend_cases": {
+      const by = new Map<string, number>();
+      for (const c of d.cases) { const k = String(c.RegistrationDate ?? c.IncidentDate ?? "").slice(0, 7) || "نامشخص"; by.set(k, (by.get(k) ?? 0) + 1); }
+      return { title: MANAGEMENT_REPORT_FA[kind], heads: ["ماه (YYYY-MM)", "پرونده‌های ثبت‌شده"], rows: [...by.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([k, n]) => [k, String(n)]) };
+    }
+    case "dashboard_detail": {
+      const dash2 = computeDisputeDashboard(d.cases as CaseLite[], d.claims as ClaimLite[], d.reports.map((x) => ({ Status: String(x.Status) })), d.deadlines.map((x) => ({ DueDate: String(x.DueDate ?? ""), Status: String(x.Status ?? "") })), d.today);
+      const rows: string[][] = [
+        ["کل پرونده‌ها", String(dash2.totalCases)], ["پرونده‌های باز", String(dash2.openCases)],
+        ["مختومه", String(dash2.closedCases)], ["در انتظار تکمیل مدارک", String(dash2.awaitingDocuments)],
+        ["مهلت‌های نزدیک/بحرانی", String(dash2.nearDeadlines)], ["کل ادعاها", String(dash2.totalClaims)],
+        ["ادعای فاقد کفایت مدارک", String(dash2.claimsInsufficientEvidence)],
+        ["مجموع مبلغ مطالبه‌شده", String(dash2.totalClaimedAmount)], ["مجموع مبلغ بررسی‌شده", String(dash2.totalReviewedAmount)],
+        ["مجموع مبلغ تأییدشده", String(dash2.totalApprovedAmount)],
+        ["گزارش‌های در حال تهیه", String(dash2.reportsDrafting)], ["گزارش‌های در بازبینی", String(dash2.reportsInReview)],
+      ];
+      return { title: MANAGEMENT_REPORT_FA[kind], heads: ["شاخص", "مقدار"], rows, noteFa: "هر سه لایهٔ مبلغ از رکوردهای واقعی و مستقل محاسبه شده‌اند." };
+    }
+    default:
+      return { title: "گزارش نامعتبر", heads: ["خطا"], rows: [["گزارش مدیریتی با این کد تعریف نشده است"]] };
+  }
+}
+export const MANAGEABLE_KINDS = MANAGEMENT_REPORTS.map((m) => m.code);

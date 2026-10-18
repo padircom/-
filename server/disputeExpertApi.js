@@ -54,7 +54,13 @@ import {
   renderFindingsLines,
   CLAIM_ANALYSIS_METHOD_FA,
   CALC_TOTALS_METHOD_FA,
+  REPORT_STATUS_FA,
+  canTransitionReport,
+  validateOpinionSources,
+  MANAGEABLE_KINDS,
+  buildManagementReport,
 } from "./disputeExpertLogic.js";
+import { buildExpertReport } from "./disputeExpertDocLogic.js";
 
 const locks = new Map();
 async function serial(key, work) {
@@ -252,13 +258,33 @@ export function registerDisputeExpertRoutes(app, { repo, subjects, evaluate }) {
       const rv = validateLegalReference({ SourceKind: "contract_clause", TitleFa: req.body?.TargetTitleFa, Verification: "unverified" });
       if (!rv.ok) throw error(400, "DSP_LINK", rv.errors.join("؛ "));
     }
+    /* صداقت منابع نظریه: هر منبع باید رکوردی واقعی در همین پرونده باشد */
+    if (table === "PmisDisputeOpinions" && req.body?.SourcesJson !== undefined) {
+      const sv = validateOpinionSources(req.body.SourcesJson, await sourceCodeSets(r, req.params.projectId, row.Code));
+      if (!sv.ok) throw error(400, "DSP_SOURCES", sv.errors.join("؛ "));
+    }
     const code = String(req.body?.Code ?? "").trim() || newRecordCode(table.replace("PmisDispute", ""));
     const dup = await r.findOne(table, [...where(req.params.projectId), { column: "CaseCode", op: "eq", value: row.Code }, { column: "Code", op: "eq", value: code }]);
     if (dup) throw error(409, "DSP_DUP", "کد رکورد در این پرونده تکراری است");
     const body = { ...(req.body ?? {}) };
     delete body.Id; delete body.ProjectId; delete body.CaseCode;
+    /* اعتبار نویسندگی سمت سرور: نظریهٔ دستی به نام نویسندهٔ فعلی ثبت شود تا SoD بگیرد */
+    if (table === "PmisDisputeOpinions") { body.AuthoredBy = req.disputeSubject.id; body.AuthoredAt = new Date().toISOString(); }
+    if (table === "PmisDisputeAnalyses" && !String(body.AnalyzedBy ?? "").trim()) { body.AnalyzedBy = req.disputeSubject.id; body.AnalyzedAt = new Date().toISOString(); }
     const created = await r.create(table, { Code: code, CaseCode: row.Code, ProjectId: req.params.projectId, ...body }, req.disputeSubject.id, "dispute");
     await audit(r, req.params.projectId, row.Code, `${table.replace("PmisDispute", "").toLowerCase()}_added`, req.disputeSubject.id, `ثبت ${code}`, null, code);
+    /* جلسه با مهلت پاسخ پرسش → مهلت خودکار (قاعده‌محور، شفاف در حسابرسی) */
+    if (table === "PmisDisputeHearings" && req.body?.QuestionDeadline) {
+      const dlCode = newRecordCode("Deadlines");
+      try {
+        await r.create("PmisDisputeDeadlines", {
+          Code: dlCode, CaseCode: row.Code, ProjectId: req.params.projectId,
+          TitleFa: `مهلت پاسخ به پرسش‌های جلسهٔ ${code}`, Kind: "question",
+          DueDate: String(req.body.QuestionDeadline), RelatedCode: code, Status: "open",
+        }, req.disputeSubject.id, "dispute");
+        await audit(r, req.params.projectId, row.Code, "deadline_auto_created", req.disputeSubject.id, `مهلت خودکار ${dlCode} بر پایهٔ QuestionDeadline جلسهٔ ${code}`, null, dlCode);
+      } catch { /* ایجاد مهلت فرعی شکستش جریان جلسه را متوقف نمی‌کند */ }
+    }
     return { row: created };
   }));
 
@@ -279,6 +305,11 @@ export function registerDisputeExpertRoutes(app, { repo, subjects, evaluate }) {
     }
     const patch = { ...(req.body ?? {}) };
     delete patch.Id; delete patch.ProjectId; delete patch.CaseCode; delete patch.Code;
+    /* صداقت منابع نظریه در ویرایش */
+    if (table === "PmisDisputeOpinions" && patch.SourcesJson !== undefined) {
+      const sv = validateOpinionSources(patch.SourcesJson, await sourceCodeSets(r, req.params.projectId, row.Code));
+      if (!sv.ok) throw error(400, "DSP_SOURCES", sv.errors.join("؛ "));
+    }
     /* تحلیل: هر تغییر ApprovalStatus فقط با dispute.review؛ تأیید با SoD (تأییدکننده ≠ تحلیل‌گر) */
     if (table === "PmisDisputeAnalyses" && patch.ApprovalStatus !== undefined) {
       if (!can(req, "dispute.review")) throw error(403, "DSP_FORBIDDEN", "تغییر وضعیت تأیید تحلیل نیازمند مجوز بازبینی است");
@@ -334,6 +365,15 @@ export function registerDisputeExpertRoutes(app, { repo, subjects, evaluate }) {
 
   const childWhere = (projectId, caseCode) => [...where(projectId), { column: "CaseCode", op: "eq", value: caseCode }];
   const listChild = (r, table, projectId, caseCode) => r.list(table, { where: childWhere(projectId, caseCode), limit: 5000 }).catch(() => []);
+  /** مجموعهٔ کدهای موجود هر نوع منبع در پرونده — برای کنترل صداقت منابع نظریه */
+  const sourceCodeSets = async (r, projectId, caseCode) => ({
+    evidence: new Set((await listChild(r, "PmisDisputeEvidence", projectId, caseCode)).map((x) => String(x.Code))),
+    analysis: new Set((await listChild(r, "PmisDisputeAnalyses", projectId, caseCode)).map((x) => String(x.Code))),
+    claim: new Set((await listChild(r, "PmisDisputeClaims", projectId, caseCode)).map((x) => String(x.Code))),
+    module_link: new Set((await listChild(r, "PmisDisputeModuleLinks", projectId, caseCode)).map((x) => String(x.Code))),
+    hearing: new Set((await listChild(r, "PmisDisputeHearings", projectId, caseCode)).map((x) => String(x.Code))),
+    deadline: new Set((await listChild(r, "PmisDisputeDeadlines", projectId, caseCode)).map((x) => String(x.Code))),
+  });
   /** upsert در ستون ثابت Code داخل پرونده؛ بازتولیدِ تحلیل، تأیید انسانی قبلی را باطل می‌کند. */
   const upsertChild = async (r, table, projectId, caseCode, code, payload, actor) => {
     const existing = await r.findOne(table, [...childWhere(projectId, caseCode), { column: "Code", op: "eq", value: code }]);
@@ -524,5 +564,130 @@ export function registerDisputeExpertRoutes(app, { repo, subjects, evaluate }) {
       res.resolvable = false; res.noteFa = `نوع پیوند «${LINK_KIND_FA[kind] ?? kind}» در این نسخه قابل بازیابی زنده نیست.`;
     }
     return res;
+  }));
+
+  /* ═══════════ فاز ۴ — نسخه‌های گزارش کارشناسی، تولید Word/PDF و گردش تأیید ═══════════ */
+
+  const loadCaseBundle = async (r, projectId, caseCode) => {
+    const [parties, claims, responses, evidence, analyses, calculations, hearings, opinions, links, deadlines, reports] = await Promise.all([
+      listChild(r, "PmisDisputeParties", projectId, caseCode), listChild(r, "PmisDisputeClaims", projectId, caseCode),
+      listChild(r, "PmisDisputeResponses", projectId, caseCode), listChild(r, "PmisDisputeEvidence", projectId, caseCode),
+      listChild(r, "PmisDisputeAnalyses", projectId, caseCode), listChild(r, "PmisDisputeCalculations", projectId, caseCode),
+      listChild(r, "PmisDisputeHearings", projectId, caseCode), listChild(r, "PmisDisputeOpinions", projectId, caseCode),
+      listChild(r, "PmisDisputeModuleLinks", projectId, caseCode), listChild(r, "PmisDisputeDeadlines", projectId, caseCode),
+      listChild(r, "PmisDisputeReports", projectId, caseCode),
+    ]);
+    return { parties, claims, responses, evidence, analyses, calculations, hearings, opinions, links, deadlines, reports };
+  };
+
+  /* ── ثبت نسخهٔ گزارش (draft — تا تأیید/صدور انسانی نهایی نیست) ── */
+  app.post(base + "/cases/:id/reports", need("dispute.edit"), run(async (r, req) => {
+    const row = await findCase(r, req);
+    if (["closed", "archived"].includes(row.Status)) throw error(409, "DSP_STATUS", "پروندهٔ مختومه/بایگانی تغییر نمی‌پذیرد");
+    const pid = req.params.projectId, cc = row.Code, actor = req.disputeSubject.id;
+    const titleFa = String(req.body?.TitleFa ?? "").trim();
+    if (!titleFa) throw error(400, "DSP_VALIDATION", "فیلد «TitleFa» الزامی است");
+    const existing = await listChild(r, "PmisDisputeReports", pid, cc);
+    const version = existing.reduce((mx, v) => Math.max(mx, Number(v.Version) || 0), 0) + 1;
+    let enabled = req.body?.EnabledSectionsJson;
+    if (enabled !== undefined && (!Array.isArray(enabled) || enabled.some((x) => !REPORT_SECTIONS.includes(x)))) throw error(400, "DSP_VALIDATION", "EnabledSectionsJson نامعتبر است");
+    if (!Array.isArray(enabled) || enabled.length === 0) enabled = [...REPORT_SECTIONS];
+    const code = newRecordCode("Reports");
+    const created = await r.create("PmisDisputeReports", {
+      Code: code, CaseCode: cc, ProjectId: pid, TitleFa: titleFa,
+      Version: version, PreviousVersionCode: req.body?.PreviousVersionCode ?? null,
+      EnabledSectionsJson: enabled, Status: "draft",
+    }, actor, "dispute");
+    await audit(r, pid, cc, "report_created", actor, `نسخهٔ گزارش ${code} (v${version}) ثبت شد — پیش‌نویس`, null, code);
+    return { row: created };
+  }));
+
+  /* ── گردش وضعیت نسخهٔ گزارش: draft→in_review→approved→issued (SoD) ── */
+  app.post(base + "/cases/:id/reports/:rowId/status", need(["dispute.edit", "dispute.review", "dispute.approve"]), run(async (r, req) => {
+    const row = await findCase(r, req);
+    if (["closed", "archived"].includes(row.Status)) throw error(409, "DSP_STATUS", "پروندهٔ مختومه/بایگانی تغییر نمی‌پذیرد");
+    const pid = req.params.projectId, cc = row.Code, actor = req.disputeSubject.id;
+    const rep = await r.findOne("PmisDisputeReports", [...childWhere(pid, cc), { column: "Id", op: "eq", value: req.params.rowId }]);
+    if (!rep) throw error(404, "DSP_NOT_FOUND", "نسخهٔ گزارش یافت نشد");
+    const from = String(rep.Status ?? "draft");
+    const to = String(req.body?.to ?? "");
+    if (!canTransitionReport(from, to)) throw error(409, "DSP_STATUS", `گذر «${REPORT_STATUS_FA[from] ?? from} → ${REPORT_STATUS_FA[to] ?? to}» مجاز نیست`);
+    const now = new Date().toISOString();
+    const patch = { Status: to };
+    if (to === "approved") {
+      if (!can(req, "dispute.review")) throw error(403, "DSP_FORBIDDEN", "تأیید محتوای گزارش نیازمند مجوز بازبینی است");
+      if (!String(rep.GeneratedBy ?? "").trim() || !rep.GeneratedAt) throw error(409, "DSP_NOT_GENERATED", "پیش از تأیید محتوا، حداقل یک خروجی (Word/PDF) از نسخه تولید کنید تا قابل‌بازبینی باشد");
+      if (String(rep.GeneratedBy ?? "") === actor) throw error(403, "DSP_SOD", "تولیدکنندهٔ نسخه نمی‌تواند همان را تأیید کند (جدایی وظایف)");
+      patch.ApprovedBy = actor; patch.ApprovedAt = now;
+    }
+    if (to === "issued") {
+      if (!can(req, "dispute.approve")) throw error(403, "DSP_FORBIDDEN", "صدور نسخه نیازمند مجوز تأیید نهایی است");
+      if (!String(rep.GeneratedBy ?? "").trim() || !rep.GeneratedAt) throw error(409, "DSP_NOT_GENERATED", "نسخهٔ فاقد خروجی قابل‌بازبینی صادر نمی‌شود");
+      if (String(rep.GeneratedBy ?? "") === actor) throw error(403, "DSP_SOD", "تولیدکنندهٔ نسخه نمی‌تواند همان را صادر کند (جدایی وظایف)");
+      patch.IssuedBy = actor; patch.IssuedAt = now;
+    }
+    if (to === "draft") { patch.ApprovedBy = null; patch.ApprovedAt = null; }
+    const updated = await r.patch("PmisDisputeReports", rep.Id, patch, actor, rep.RowVersion);
+    /* صدور نسخهٔ جدید ← نسخه‌های صادرشدهٔ قبلی به «جایگزین‌شده» (superseded) می‌روند */
+    if (to === "issued") {
+      const others = await listChild(r, "PmisDisputeReports", pid, cc);
+      for (const o of others) {
+        if (o.Id !== rep.Id && String(o.Status) === "issued") {
+          await r.patch("PmisDisputeReports", o.Id, { Status: "superseded" }, actor, o.RowVersion).catch(() => {});
+          await audit(r, pid, cc, "report_superseded", actor, `نسخهٔ ${o.Code} به سبب صدور ${rep.Code} جایگزین شد`, o.Code, rep.Code);
+        }
+      }
+    }
+    await audit(r, pid, cc, "report_status_changed", actor, `گذر وضعیت نسخهٔ ${rep.Code}`, from, to);
+    return { row: updated };
+  }));
+
+  /* ── تولید Word/PDF از دادهٔ واقعی پرونده (۲۰ فصل/۳۴ جدول + Auto-Cleanup) ── */
+  app.get(base + "/cases/:id/reports/:rowId/document", need("dispute.view"), async (req, res, next) => {
+    try {
+      const r = await repo();
+      const row = await findCase(r, req);
+      const rep = await r.findOne("PmisDisputeReports", [...childWhere(req.params.projectId, row.Code), { column: "Id", op: "eq", value: req.params.rowId }]);
+      if (!rep) return res.status(404).json({ ok: false, error: { code: "DSP_NOT_FOUND", message: "نسخهٔ گزارش یافت نشد", traceId: req.requestId } });
+      const format = req.query.format === "pdf" ? "pdf" : "word";
+      const bundle = await loadCaseBundle(r, req.params.projectId, row.Code);
+      const now = new Date().toISOString();
+      const dataNote = `اسنپ‌شات دادهٔ ${now} — وضعیت پرونده ${String(row.Status)} · ${bundle.claims.length} ادعا · ${bundle.evidence.length} سند · ${bundle.analyses.length} تحلیل`;
+      const doc = buildExpertReport({
+        projectId: req.params.projectId, caseRow: row, ...bundle, reportVersions: bundle.reports.filter((v) => v.Id !== rep.Id),
+        reportRow: { ...rep, DataVersionNoteFa: dataNote },
+        generatedAt: now, generatedBy: req.disputeSubject.id, format,
+      });
+      if (doc.issues.length) return res.status(422).json({ ok: false, error: { code: "DSP_REPORT_GATE", message: doc.issues.join("؛ "), traceId: req.requestId } });
+      /* ثبت مرجع خروجی روی ردیف نسخه (حافظهٔ نسخه‌دار فایل‌ها) */
+      const refPatch = format === "pdf" ? { PdfFileRef: doc.filename.replace(/\.html$/, ".pdf") } : { WordFileRef: doc.filename };
+      await r.patch("PmisDisputeReports", rep.Id, { ...refPatch, GeneratedAt: now, GeneratedBy: req.disputeSubject.id, DataVersionNoteFa: dataNote }, req.disputeSubject.id, rep.RowVersion).catch(() => {});
+      await audit(r, req.params.projectId, row.Code, format === "pdf" ? "report_pdf_generated" : "report_word_generated", req.disputeSubject.id, `تولید ${doc.filename} برای نسخهٔ ${rep.Code}`, null, rep.Code);
+      if (format === "pdf") {
+        let pdf;
+        try { const { htmlToPdf } = await import("./pdfRenderer.js"); pdf = await htmlToPdf(doc.body); }
+        catch { return res.status(501).json({ ok: false, error: { code: "DSP_PDF_UNAVAILABLE", message: "موتور تولید PDF واقعی روی این سرور در دسترس نیست؛ خروجی Word در دسترس است", traceId: req.requestId } }); }
+        res.setHeader("content-type", "application/pdf");
+        res.setHeader("content-disposition", `attachment; filename="${doc.filename.replace(/\.html$/, ".pdf")}"`);
+        return res.send(pdf);
+      }
+      res.setHeader("content-type", doc.contentType);
+      res.setHeader("content-disposition", `attachment; filename="${doc.filename}"`);
+      return res.send(doc.body);
+    } catch (e) { next(e); }
+  });
+
+  /* ═══════════ فاز ۴ — ۱۴ گزارش مدیریتی پروژه (فقط‌خواندنی از دادهٔ واقعی) ═══════════ */
+  app.get(base + "/management-reports", need("dispute.view"), run(async (r, req) => {
+    const kind = String(req.query.kind ?? "");
+    if (!MANAGEABLE_KINDS.includes(kind)) throw error(400, "DSP_MGMT_KIND", `گزارش مدیریتی نامعتبر است — مقادیر مجاز: ${MANAGEABLE_KINDS.join(", ")}`);
+    const pid = req.params.projectId;
+    const full = async (table) => r.list(table, { where: where(pid), limit: 10000 }).catch(() => []);
+    const [cases, claims, parties, evidence, analyses, calculations, hearings, opinions, links, deadlines, reports] = await Promise.all([
+      full("PmisDisputeCases"), full("PmisDisputeClaims"), full("PmisDisputeParties"), full("PmisDisputeEvidence"),
+      full("PmisDisputeAnalyses"), full("PmisDisputeCalculations"), full("PmisDisputeHearings"), full("PmisDisputeOpinions"),
+      full("PmisDisputeModuleLinks"), full("PmisDisputeDeadlines"), full("PmisDisputeReports"),
+    ]);
+    return buildManagementReport(kind, { cases, claims, parties, evidence, analyses, calculations, hearings, opinions, links, deadlines, reports, today: new Date().toISOString().slice(0, 10) });
   }));
 }

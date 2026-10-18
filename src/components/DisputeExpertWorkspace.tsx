@@ -9,7 +9,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { type Lang } from '../data/framework';
 import { useAuth } from '../context/AuthContext';
-import { disputeApi, type DisputeCase, type DisputeCatalog, type DisputeDashboard, type DisputeRow, type LinkSuggestions, type LinkResolution, CASE_STATUS_FA, PRIORITY_FA, CLAIM_BASIS_FA, REVIEW_STATUS_FA, EVIDENCE_STATUS_FA, LINK_KIND_CLIENT_FA, ANALYSIS_APPROVAL_CLIENT_FA, EMPTY } from '../services/disputeExpertClient';
+import { disputeApi, type DisputeCase, type DisputeCatalog, type DisputeDashboard, type DisputeRow, type LinkSuggestions, type LinkResolution, type ManagementReportOut, CASE_STATUS_FA, PRIORITY_FA, CLAIM_BASIS_FA, REVIEW_STATUS_FA, EVIDENCE_STATUS_FA, LINK_KIND_CLIENT_FA, ANALYSIS_APPROVAL_CLIENT_FA, REPORT_STATUS_CLIENT_FA, HEARING_MINUTES_CLIENT_FA, OPINION_REVIEW_CLIENT_FA, OPINION_SOURCE_KIND_CLIENT_FA, MANAGEMENT_REPORTS_CLIENT, EMPTY } from '../services/disputeExpertClient';
 import JalaliDateInput from './JalaliDateInput';
 
 const btn = 'rounded-lg border b-line-soft px-2.5 py-1 text-[11px] transition hover:opacity-80 disabled:opacity-40';
@@ -18,7 +18,7 @@ const card = 'rounded-xl border b-line-soft bg-white/60 p-3';
 const kpi = 'rounded-xl border b-line-soft bg-white/70 p-3 text-center';
 const inputClass = 'w-full rounded-lg border b-line-soft bg-transparent px-2 py-1 text-xs tx1';
 
-type Tab = 'dashboard' | 'cases' | 'parties' | 'evidence' | 'claims' | 'analyses' | 'calculations' | 'links';
+type Tab = 'dashboard' | 'cases' | 'parties' | 'evidence' | 'claims' | 'analyses' | 'calculations' | 'links' | 'hearings' | 'opinions' | 'reports';
 
 export default function DisputeExpertWorkspace(props: { lang: Lang; projectId: string }) {
   const { user } = useAuth();
@@ -52,6 +52,15 @@ function Live({ lang, projectId, userId }: { lang: Lang; projectId: string; user
   const [linkPick, setLinkPick] = useState<{ kind: string; target: string }>({ kind: 'delay_case', target: '' });
   const [resolutions, setResolutions] = useState<Record<string, LinkResolution>>({});
   const [resolvingId, setResolvingId] = useState('');
+  /* فاز ۴ */
+  const [heaForm, setHeaForm] = useState<Record<string, string>>({ TitleFa: '', MeetingDate: '', LocationFa: '', QuestionsFa: '', QuestionDeadline: '', MinutesBodyFa: '' });
+  const [opiForm, setOpiForm] = useState<Record<string, string>>({ TitleFa: '', BodyFa: '', PreviousVersionCode: '', Version: '' });
+  const [opiSources, setOpiSources] = useState<Record<string, boolean>>({});
+  const [repTitle, setRepTitle] = useState('');
+  const [docBusy, setDocBusy] = useState('');
+  const [mgmtKind, setMgmtKind] = useState('cases_status');
+  const [mgmt, setMgmt] = useState<ManagementReportOut | null>(null);
+  const [mgmtBusy, setMgmtBusy] = useState(false);
   const generation = useRef(0);
   const mounted = useRef(true);
 
@@ -64,6 +73,10 @@ function Live({ lang, projectId, userId }: { lang: Lang; projectId: string; user
   const analyses = children.PmisDisputeAnalyses ?? [];
   const calculations = children.PmisDisputeCalculations ?? [];
   const links = children.PmisDisputeModuleLinks ?? [];
+  const hearings = children.PmisDisputeHearings ?? [];
+  const opinions = children.PmisDisputeOpinions ?? [];
+  const reportRows = children.PmisDisputeReports ?? [];
+  const deadlines = children.PmisDisputeDeadlines ?? [];
   const caseLocked = current ? ['closed', 'archived'].includes(current.Status) : false;
   const fmtAmount = (v: unknown): string => { const n = Number(v); return Number.isFinite(n) && v !== null && v !== undefined && v !== '' ? n.toLocaleString('fa-IR') : EMPTY; };
   const subjectFa = (code: string | null | undefined): string => catalog?.subjects.find((s) => s.code === code)?.fa ?? (code || EMPTY);
@@ -197,6 +210,88 @@ function Live({ lang, projectId, userId }: { lang: Lang; projectId: string; user
     return keys.filter((k) => t[k] !== null && t[k] !== undefined && t[k] !== '').map((k) => [k, t[k]]);
   }
 
+  /* ── فاز ۴: جلسات / نظریات / گزارش‌ها ── */
+  const addHearing = () => current && mutate(async () => {
+    if (!heaForm.TitleFa.trim() || !heaForm.MeetingDate.trim()) return { ok: false, message: label('عنوان و تاریخ جلسه الزامی است', 'Title and date are required') };
+    const questions = heaForm.QuestionsFa.split('\n').map((x) => x.trim()).filter(Boolean);
+    const body: Record<string, unknown> = {
+      TitleFa: heaForm.TitleFa.trim(), MeetingDate: heaForm.MeetingDate.trim(),
+      LocationFa: heaForm.LocationFa || null, QuestionsJson: questions,
+      QuestionDeadline: heaForm.QuestionDeadline || null, MinutesBodyFa: heaForm.MinutesBodyFa || null,
+    };
+    if (body.QuestionDeadline) body.QuestionDeadlineNoteFa = 'سررسید پاسخ → مهلت خودکار در تب ارجاعات ثبت می‌شود';
+    const r = await disputeApi.addRow(projectId, userId, current.Id, 'PmisDisputeHearings', body);
+    if (r.ok) setHeaForm({ TitleFa: '', MeetingDate: '', LocationFa: '', QuestionsFa: '', QuestionDeadline: '', MinutesBodyFa: '' });
+    return r;
+  }, () => setNotice(label(heaForm.QuestionDeadline ? 'جلسه ثبت شد؛ مهلت پاسخ پرسش‌ها به‌صورت خودکار در ارجاعات ایجاد شد.' : 'جلسه ثبت شد.', 'Hearing registered.')));
+  const setMinutesStatus = (rowId: string, status: string) => current && mutate(async () => {
+    const body: Record<string, unknown> = { MinutesStatus: status };
+    if (status === 'signed') body.SignedAt = new Date().toISOString().slice(0, 10);
+    return disputeApi.patchRow(projectId, userId, current.Id, 'PmisDisputeHearings', rowId, body);
+  }, () => setNotice(label('وضعیت صورت‌جلسه به‌روزرسانی شد.', 'Minutes status updated.')));
+  const addOpinion = () => current && mutate(async () => {
+    if (!opiForm.TitleFa.trim() || !opiForm.BodyFa.trim()) return { ok: false, message: label('عنوان و متن نظریه الزامی است', 'Title and body are required') };
+    const sources = Object.entries(opiSources).filter(([, on]) => on).map(([k]) => { const [kind, ...rest] = k.split('|'); return { kind, code: rest.join('|') }; });
+    const body: Record<string, unknown> = {
+      TitleFa: opiForm.TitleFa.trim(), BodyFa: opiForm.BodyFa.trim(),
+      SourcesJson: sources, AuthoredBy: userId, AuthoredAt: new Date().toISOString(),
+    };
+    if (opiForm.PreviousVersionCode && opiForm.Version) { body.PreviousVersionCode = opiForm.PreviousVersionCode; body.Version = Number(opiForm.Version); }
+    const r = await disputeApi.addRow(projectId, userId, current.Id, 'PmisDisputeOpinions', body);
+    if (r.ok) { setOpiForm({ TitleFa: '', BodyFa: '', PreviousVersionCode: '', Version: '' }); setOpiSources({}); }
+    return r;
+  }, () => setNotice(label('نظریهٔ کارشناسی ثبت شد (پیش‌نویس — تا تأیید/نهایی انسانی مؤثر نیست).', 'Opinion saved (draft).')));
+  const cloneOpinionVersion = (o: DisputeRow) => {
+    setOpiForm({ TitleFa: String(o.TitleFa ?? ''), BodyFa: '', PreviousVersionCode: String(o.Code ?? ''), Version: String((Number(o.Version) || 1) + 1) });
+    setNotice(label(`فرم «نسخهٔ ${String((Number(o.Version) || 1) + 1)}» نظریه آماده شد — متن جدید را بنویسید و ثبت کنید.`, 'New version form ready.'));
+    setTab('opinions');
+  };
+  const setOpinionStatus = (rowId: string, status: string) => current && mutate(
+    () => disputeApi.patchRow(projectId, userId, current.Id, 'PmisDisputeOpinions', rowId, { ReviewStatus: status }),
+    () => setNotice(label(`وضعیت نظریه → ${OPINION_REVIEW_CLIENT_FA[status] ?? status}`, `Opinion → ${status}`)));
+  const createReport = () => current && mutate(async () => {
+    if (!repTitle.trim()) return { ok: false, message: label('عنوان نسخهٔ گزارش الزامی است', 'Report title required') };
+    const r = await disputeApi.createReport(projectId, userId, current.Id, { TitleFa: repTitle.trim() });
+    if (r.ok) setRepTitle('');
+    return r;
+  }, () => setNotice(label('نسخهٔ گزارش (پیش‌نویس) ثبت شد — تا تأیید و صدور نهایی نیست.', 'Report version registered (draft).')));
+  const setReportStatus = (rowId: string, to: string) => current && mutate(
+    () => disputeApi.setReportStatus(projectId, userId, current.Id, rowId, to),
+    () => setNotice(label(`گذر وضعیت نسخهٔ گزارش → ${REPORT_STATUS_CLIENT_FA[to] ?? to}`, `Report → ${to}`)));
+  async function downloadDoc(rowId: string, format: 'word' | 'pdf') {
+    if (!current || docBusy) return;
+    setDocBusy(rowId + ':' + format);
+    try {
+      const res = await fetch(disputeApi.reportDocumentUrl(projectId, current.Id, rowId, format), { headers: { ...(userId ? { 'x-user-id': userId } : {}) } });
+      if (!res.ok) {
+        const payload = await res.json().catch(() => null) as { error?: { message?: string } } | null;
+        throw new Error(payload?.error?.message || label('تولید سند انجام نشد', 'Document generation failed'));
+      }
+      const blob = await res.blob();
+      if (!blob.size) throw new Error(label('فایل خروجی خالی است', 'Empty file'));
+      const filename = res.headers.get('content-disposition')?.match(/filename="([^"]+)"/)?.[1] ?? `ExpertReport.${format === 'pdf' ? 'pdf' : 'doc'}`;
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url; anchor.download = filename; anchor.style.display = 'none';
+      document.body.appendChild(anchor); anchor.click();
+      window.setTimeout(() => anchor.remove(), 1000);
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      setNotice(label(`دانلود آغاز شد: ${filename} (از دادهٔ واقعی پرونده — ۲۰ فصل)`, `Download started: ${filename}`));
+      await loadCase(current.Id);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : label('تولید سند انجام نشد', 'Generation failed');
+      if (mounted.current) setError(msg);
+    } finally {
+      if (mounted.current) setDocBusy('');
+    }
+  }
+  async function loadMgmt() {
+    if (mgmtBusy) return;
+    setMgmtBusy(true);
+    const r = await disputeApi.managementReport(projectId, userId, mgmtKind);
+    if (mounted.current) { if (r.ok) setMgmt(r.data); else setError(r.message); setMgmtBusy(false); }
+  }
+
   if (loading && !catalog) return <p className="tx3 p-4">{label('در حال بارگذاری…', 'Loading…')}</p>;
   if (!catalog) return <p className="tx3 p-4">{label('دسترسی انجام نشد — مجوز dispute.view لازم است.', 'No access — dispute.view required.')}</p>;
 
@@ -209,6 +304,9 @@ function Live({ lang, projectId, userId }: { lang: Lang; projectId: string; user
     { id: 'analyses', fa: 'تحلیل‌های کارشناسی', en: 'Analyses' },
     { id: 'calculations', fa: 'محاسبات مستقل (مقایسه)', en: 'Comparison calcs' },
     { id: 'links', fa: 'پیوندهای ماژولی', en: 'Module links' },
+    { id: 'hearings', fa: 'جلسات و صورت‌جلسات', en: 'Hearings' },
+    { id: 'opinions', fa: 'نظریات کارشناسی', en: 'Opinions' },
+    { id: 'reports', fa: 'گزارش‌ها', en: 'Reports' },
   ];
 
   return (
@@ -720,6 +818,189 @@ function Live({ lang, projectId, userId }: { lang: Lang; projectId: string; user
           })}
         </div>
       ) : (tab === 'links' && <p className="tx3 py-8 text-center text-[11px]">{label('ابتدا از تب «مدیریت پرونده‌ها» پرونده‌ای انتخاب کنید', 'Select a case first')}</p>)}
+
+      {/* فاز ۴ — جلسات و صورت‌جلسات */}
+      {tab === 'hearings' && current ? (
+        <div className="space-y-3">
+          <div className={card}>
+            <h3 className="tx1 mb-1 text-xs font-bold">{label('جلسات و صورت‌جلسات', 'Hearings & minutes')}</h3>
+            <p className="tx3 text-[10px]">{label('ثبت «مهلت پاسخ به پرسش‌ها» به‌طور خودکار یک رکورد در ارجاعات/مهلت‌ها می‌سازد.', 'Question deadline auto-creates a deadline record.')}( {String(deadlines.length)} {label('مهلت', 'deadlines')})</p>
+          </div>
+          {can('dispute.edit') && !caseLocked && (
+            <div className={`${card} space-y-2`}>
+              <h4 className="tx1 text-[11px] font-bold">{label('جلسهٔ جدید', 'New hearing')}</h4>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                <input className={inputClass} placeholder={label('عنوان جلسه *', 'Title *')} value={heaForm.TitleFa} onChange={(e) => setHeaForm({ ...heaForm, TitleFa: e.target.value })} />
+                <div className="flex items-center gap-1"><span className="tx3 text-[9px]">{label('تاریخ جلسه *', 'Date *')}</span><JalaliDateInput value={heaForm.MeetingDate} onChange={(v) => setHeaForm({ ...heaForm, MeetingDate: v })} ariaLabel={label('تاریخ جلسه', 'Hearing date')} /></div>
+                <input className={inputClass} placeholder={label('محل تشکیل', 'Location')} value={heaForm.LocationFa} onChange={(e) => setHeaForm({ ...heaForm, LocationFa: e.target.value })} />
+              </div>
+              <textarea className={`${inputClass} min-h-[60px]`} placeholder={label('پرسش‌های مطرح‌شده (هر خط یک پرسش)', 'Questions (one per line)')} value={heaForm.QuestionsFa} onChange={(e) => setHeaForm({ ...heaForm, QuestionsFa: e.target.value })} />
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <div className="flex items-center gap-1"><span className="tx3 text-[9px]">{label('مهلت پاسخ به پرسش‌ها (اختیاری → مهلت خودکار)', 'Question deadline (optional → auto)')}</span><JalaliDateInput value={heaForm.QuestionDeadline} onChange={(v) => setHeaForm({ ...heaForm, QuestionDeadline: v })} ariaLabel={label('مهلت پاسخ به پرسش‌ها', 'Question deadline')} /></div>
+                <input className={inputClass} placeholder={label('نکتهٔ متن صورت‌جلسه (کوتاه)', 'Minutes note')} value={heaForm.MinutesBodyFa} onChange={(e) => setHeaForm({ ...heaForm, MinutesBodyFa: e.target.value })} />
+              </div>
+              <button className={btnP} disabled={busy || !heaForm.TitleFa.trim() || !heaForm.MeetingDate.trim()} onClick={addHearing}>{label('ثبت جلسه', 'Register')}</button>
+            </div>
+          )}
+          {hearings.length === 0 && <p className="tx3 py-6 text-center text-[11px]">{label('جلسه‌ای ثبت نشده است — «—»', 'No hearings — "—"')}</p>}
+          {hearings.map((h) => {
+            const ms = String(h.MinutesStatus ?? 'draft');
+            return (
+              <div key={h.Id} className={card}>
+                <div className="flex flex-wrap items-start gap-2">
+                  <div className="min-w-[220px] flex-1">
+                    <h4 className="tx1 text-xs font-bold">{String(h.TitleFa ?? EMPTY)}</h4>
+                    <p className="tx3 text-[10px]">{String(h.Code)} · {label('تاریخ:', 'Date:')} {h.MeetingDate ? String(h.MeetingDate).slice(0, 10) : EMPTY} {Boolean(h.LocationFa) && `· ${label('محل:', 'Loc:')} ${String(h.LocationFa)}`} {Boolean(h.QuestionDeadline) && `· ${label('مهلت پاسخ:', 'Answer due:')} ${String(h.QuestionDeadline).slice(0, 10)}`}</p>
+                  </div>
+                  <span className={`rounded-full px-2 py-0.5 text-[10px] ${ms === 'signed' ? 'bg-emerald-100 text-emerald-800' : ms === 'awaiting_sign' ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-700'}`}>{label('صورت‌جلسه:', 'Minutes:')} {HEARING_MINUTES_CLIENT_FA[ms] ?? ms}</span>
+                  {ms === 'signed' && Boolean(h.SignedAt) && <span className="tx3 text-[9px]">{label('امضا:', 'Signed:')} {String(h.SignedAt).slice(0, 10)}</span>}
+                </div>
+                {Boolean(h.MinutesBodyFa) && <p className="tx2 mt-1 whitespace-pre-wrap rounded-lg bg-slate-50 p-2 text-[10px]">{String(h.MinutesBodyFa)}</p>}
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {can('dispute.edit') && !caseLocked && ms === 'draft' && <button className={btn} disabled={busy} onClick={() => setMinutesStatus(h.Id, 'awaiting_sign')}>{label('ارسال برای امضا', 'Send for signature')}</button>}
+                  {can('dispute.review') && !caseLocked && ms === 'awaiting_sign' && <button className={btn} disabled={busy} onClick={() => setMinutesStatus(h.Id, 'signed')}>{label('ثبت امضا', 'Mark signed')}</button>}
+                  {can('dispute.edit') && !caseLocked && <button className={btn} disabled={busy} onClick={() => removeRow('PmisDisputeHearings', h.Id)}>{label('حذف', 'Delete')}</button>}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (tab === 'hearings' && <p className="tx3 py-8 text-center text-[11px]">{label('ابتدا از تب «مدیریت پرونده‌ها» پرونده‌ای انتخاب کنید', 'Select a case first')}</p>)}
+
+      {/* فاز ۴ — نظریات کارشناسی */}
+      {tab === 'opinions' && current ? (
+        <div className="space-y-3">
+          <div className={card}>
+            <h3 className="tx1 mb-1 text-xs font-bold">{label('نظریات کارشناسی', 'Expert opinions')}</h3>
+            <p className="tx3 text-[10px]">{label('منابع فقط می‌توانند اشاره به رکوردهای واقعی پرونده باشند؛ منبع ناموجود با برچسب «تأییدنشده» رد می‌شود. نهایی‌سازی نیازمند مجوز بازبینی و تأییدکننده‌ای متفاوت از مؤلف است.', 'Sources must reference real case records; finalization needs review permission and a different approver.')}</p>
+          </div>
+          {can('dispute.edit') && !caseLocked && (
+            <div className={`${card} space-y-2`}>
+              <div className="flex flex-wrap items-center gap-2">
+                <h4 className="tx1 text-[11px] font-bold">{opiForm.PreviousVersionCode ? label(`نسخهٔ جدید نظریه (v${opiForm.Version} ← ${opiForm.PreviousVersionCode})`, `New version (v${opiForm.Version})`) : label('نظریهٔ جدید', 'New opinion')}</h4>
+                {Boolean(opiForm.PreviousVersionCode) && <button className={btn} onClick={() => setOpiForm({ TitleFa: '', BodyFa: '', PreviousVersionCode: '', Version: '' })}>{label('انصراف نسخه‌سازی', 'Cancel versioning')}</button>}
+              </div>
+              <input className={inputClass} placeholder={label('عنوان نظریه *', 'Title *')} value={opiForm.TitleFa} onChange={(e) => setOpiForm({ ...opiForm, TitleFa: e.target.value })} />
+              <textarea className={`${inputClass} min-h-[70px]`} placeholder={label('متن نظریهٔ کارشناسی *', 'Opinion body *')} value={opiForm.BodyFa} onChange={(e) => setOpiForm({ ...opiForm, BodyFa: e.target.value })} />
+              {/* منابع قابل اتکا — فقط از دادهٔ واقعی پرونده */}
+              <div className="space-y-1">
+                <p className="tx3 text-[9px]">{label('منابع نظریه (فقط رکوردهای واقعی پرونده):', 'Opinion sources (real records only):')}</p>
+                {([
+                  ['hearing', hearings.map((x) => String(x.Code))],
+                  ['analysis', analyses.map((x) => String(x.Code))],
+                  ['evidence', evidence.map((x) => String(x.Code))],
+                  ['claim', claims.map((x) => String(x.Code))],
+                  ['module_link', links.map((x) => String(x.Code))],
+                  ['deadline', deadlines.map((x) => String(x.Code))],
+                ] as [string, string[]][]).map(([kind, codes]) => codes.length > 0 && (
+                  <div key={kind} className="flex flex-wrap items-center gap-1">
+                    <span className="tx3 w-20 text-[9px]">{OPINION_SOURCE_KIND_CLIENT_FA[kind]}:</span>
+                    {codes.map((code) => {
+                      const key = `${kind}|${code}`;
+                      return <label key={key} className={`${btn} cursor-pointer text-[9px] ${opiSources[key] ? 'bg-[#1f4e79] text-white' : ''}`}><input type="checkbox" className="me-1 hidden" checked={!!opiSources[key]} onChange={(e) => setOpiSources((m) => ({ ...m, [key]: e.target.checked }))} />{code}</label>;
+                    })}
+                  </div>
+                ))}
+                {hearings.length + analyses.length + evidence.length + claims.length + links.length + deadlines.length === 0 && <p className="tx3 text-[9px]">{label('رکوردی برای استناد در پرونده نیست — «—»', 'No source records yet — "—"')}</p>}
+              </div>
+              <button className={btnP} disabled={busy || !opiForm.TitleFa.trim() || !opiForm.BodyFa.trim()} onClick={addOpinion}>{label('ثبت نظریه', 'Register opinion')}</button>
+            </div>
+          )}
+          {opinions.length === 0 && <p className="tx3 py-6 text-center text-[11px]">{label('نظریه‌ای ثبت نشده است — «—»', 'No opinions — "—"')}</p>}
+          {opinions.map((o) => {
+            const st = String(o.ReviewStatus ?? 'draft');
+            const mine = String(o.AuthoredBy ?? '') === String(userId ?? '');
+            return (
+              <div key={o.Id} className={card}>
+                <div className="flex flex-wrap items-start gap-2">
+                  <div className="min-w-[220px] flex-1">
+                    <h4 className="tx1 text-xs font-bold">{String(o.TitleFa ?? EMPTY)} <span className="tx3 text-[9px]">v{String(o.Version ?? 1)}</span></h4>
+                    <p className="tx3 text-[10px]">{String(o.Code)} · {label('مؤلف:', 'Author:')} {String(o.AuthoredBy ?? EMPTY)} {Boolean(o.PreviousVersionCode) && `· ${label('نسخهٔ پیشین:', 'Prev:')} ${String(o.PreviousVersionCode)}`}</p>
+                  </div>
+                  <span className={`rounded-full px-2 py-0.5 text-[10px] ${st === 'final' ? 'bg-[#1f4e79] text-white' : st === 'approved' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-700'}`}>{OPINION_REVIEW_CLIENT_FA[st] ?? st}</span>
+                </div>
+                <p className="tx2 mt-1 whitespace-pre-wrap rounded-lg bg-slate-50 p-2 text-[10px]">{String(o.BodyFa ?? EMPTY)}</p>
+                {Array.isArray(o.SourcesJson) && (o.SourcesJson as { kind: string; code: string }[]).length > 0 && (
+                  <p className="tx3 mt-1 text-[9px]">{label('منابع:', 'Sources:')} {(o.SourcesJson as { kind: string; code: string }[]).map((s2) => `${OPINION_SOURCE_KIND_CLIENT_FA[s2.kind] ?? s2.kind}:${s2.code}`).join('، ')}</p>
+                )}
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {can('dispute.review') && !caseLocked && st === 'draft' && <button className={btn} disabled={busy} onClick={() => setOpinionStatus(o.Id, 'in_review')}>{label('ارسال به بازبینی', 'Send to review')}</button>}
+                  {can('dispute.review') && !caseLocked && !mine && st === 'in_review' && <button className={btn} disabled={busy} onClick={() => setOpinionStatus(o.Id, 'approved')}>{label('تأیید', 'Approve')}</button>}
+                  {can('dispute.review') && !caseLocked && !mine && (st === 'approved' || st === 'in_review') && <button className={btn} disabled={busy} onClick={() => setOpinionStatus(o.Id, 'final')}>{label('نهایی‌سازی', 'Finalize')}</button>}
+                  {mine && st === 'in_review' && <span className="tx3 text-[9px]">{label('SoD: بازبینی/نهایی‌سازی نظریهٔ خودتان مجاز نیست', 'SoD: cannot finalize your own')}</span>}
+                  {can('dispute.edit') && !caseLocked && <button className={btn} disabled={busy} onClick={() => cloneOpinionVersion(o)}>{label('نسخهٔ اصلاح‌شده', 'New revision')}</button>}
+                  {can('dispute.edit') && !caseLocked && ['draft'].includes(st) && <button className={btn} disabled={busy} onClick={() => removeRow('PmisDisputeOpinions', o.Id)}>{label('حذف', 'Delete')}</button>}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (tab === 'opinions' && <p className="tx3 py-8 text-center text-[11px]">{label('ابتدا از تب «مدیریت پرونده‌ها» پرونده‌ای انتخاب کنید', 'Select a case first')}</p>)}
+
+      {/* فاز ۴ — گزارش‌ها (نسخه‌های ۲۰-فصل کارشناسی + ۱۴ گزارش مدیریتی) */}
+      {tab === 'reports' && current ? (
+        <div className="space-y-3">
+          <div className={card}>
+            <h3 className="tx1 mb-1 text-xs font-bold">{label('نسخه‌های گزارش کارشناسی', 'Expert report versions')}</h3>
+            <p className="tx3 text-[10px]">{label('هر خروجی از دادهٔ زندهٔ پرونده و با ساختار ۲۰ فصل/۳۴ جدول ساخته می‌شود (Auto-Cleanup + B Nazanin). گردش: پیش‌نویس → بازبینی → تأیید → صدور؛ صدور نسخهٔ جدید، نسخهٔ صادرشدهٔ قبلی را «جایگزین‌شده» می‌کند.', 'Each output is built live from real case data — 20 chapters/34 tables. Lifecycle draft→review→approved→issued; newer issuance supersedes the older issued version.')}</p>
+          </div>
+          {can('dispute.edit') && !caseLocked && (
+            <div className={`${card} flex flex-wrap items-center gap-2`}>
+              <input className={`${inputClass} min-w-[240px] flex-1`} placeholder={label('عنوان نسخهٔ گزارش *', 'Report version title *')} value={repTitle} onChange={(e) => setRepTitle(e.target.value)} />
+              <button className={btnP} disabled={busy || !repTitle.trim()} onClick={createReport}>{label('ثبت نسخهٔ جدید', 'Register version')}</button>
+            </div>
+          )}
+          {reportRows.length === 0 && <p className="tx3 py-6 text-center text-[11px]">{label('نسخه‌ای ثبت نشده است — «—»', 'No report versions — "—"')}</p>}
+          {[...reportRows].sort((a, b) => (Number(b.Version) || 0) - (Number(a.Version) || 0)).map((r) => {
+            const st = String(r.Status ?? 'draft');
+            return (
+              <div key={r.Id} className={card}>
+                <div className="flex flex-wrap items-start gap-2">
+                  <div className="min-w-[240px] flex-1">
+                    <h4 className="tx1 text-xs font-bold">{String(r.TitleFa ?? EMPTY)} <span className="tx3 text-[9px]">v{String(r.Version ?? 1)}</span></h4>
+                    <p className="tx3 text-[10px]">{String(r.Code)}{Boolean(r.GeneratedAt) && ` · ${label('تولید:', 'Gen:')} ${String(r.GeneratedBy ?? EMPTY)} ${String(r.GeneratedAt).slice(0, 16).replace('T', ' ')}`}{Boolean(r.ApprovedBy) && ` · ${label('تأیید:', 'Appr:')} ${String(r.ApprovedBy)}`}{Boolean(r.IssuedBy) && ` · ${label('صدور:', 'Issued:')} ${String(r.IssuedBy)} ${String(r.IssuedAt ?? '').slice(0, 10)}`}</p>
+                    {Boolean(r.DataVersionNoteFa) && <p className="tx3 text-[9px]">{String(r.DataVersionNoteFa)}</p>}
+                    {Boolean(r.WordFileRef) && <p className="tx3 text-[9px]">Word: {String(r.WordFileRef)}{Boolean(r.PdfFileRef) && ` · PDF: ${String(r.PdfFileRef)}`}</p>}
+                  </div>
+                  <span className={`rounded-full px-2 py-0.5 text-[10px] ${st === 'issued' ? 'bg-[#1f4e79] text-white' : st === 'superseded' ? 'bg-slate-200 text-slate-500 line-through' : st === 'approved' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>{REPORT_STATUS_CLIENT_FA[st] ?? st}</span>
+                </div>
+                <div className="mt-2 flex flex-wrap gap-1">
+                  <button className={btn} disabled={!!docBusy} onClick={() => void downloadDoc(r.Id, 'word')}>{docBusy === r.Id + ':word' ? label('…', '…') : label('دانلود Word', 'Word')}</button>
+                  <button className={btn} disabled={!!docBusy} onClick={() => void downloadDoc(r.Id, 'pdf')}>{docBusy === r.Id + ':pdf' ? label('…', '…') : label('دانلود PDF', 'PDF')}</button>
+                  {can('dispute.edit') && !caseLocked && st === 'draft' && <button className={btn} disabled={busy} onClick={() => setReportStatus(r.Id, 'in_review')}>{label('ارسال به بازبینی', 'Send to review')}</button>}
+                  {can('dispute.review') && !caseLocked && st === 'in_review' && <button className={btn} disabled={busy} onClick={() => setReportStatus(r.Id, 'approved')}>{label('تأیید محتوا', 'Approve content')}</button>}
+                  {can('dispute.edit') && !caseLocked && st === 'in_review' && <button className={btn} disabled={busy} onClick={() => setReportStatus(r.Id, 'draft')}>{label('بازگشت به پیش‌نویس', 'Back to draft')}</button>}
+                  {can('dispute.approve') && !caseLocked && st === 'approved' && <button className={`${btnP}`} disabled={busy} onClick={() => setReportStatus(r.Id, 'issued')}>{label('صدور نسخه', 'Issue')}</button>}
+                </div>
+              </div>
+            );
+          })}
+
+          {/* ۱۴ گزارش مدیریتی */}
+          <div className={card}>
+            <h3 className="tx1 mb-1 text-xs font-bold">{label('گزارش‌های مدیریتی پروژه (۱۴)', 'Management reports (14)')}</h3>
+            <div className="flex flex-wrap items-center gap-2">
+              <select className={`${inputClass} max-w-xs`} value={mgmtKind} onChange={(e) => setMgmtKind(e.target.value)}>
+                {MANAGEMENT_REPORTS_CLIENT.map((m2) => <option key={m2.code} value={m2.code}>{m2.fa}</option>)}
+              </select>
+              <button className={btnP} disabled={mgmtBusy} onClick={() => void loadMgmt()}>{mgmtBusy ? label('در حال بارگذاری…', 'Loading…') : label('نمایش گزارش', 'Show report')}</button>
+            </div>
+            {mgmt && (
+              <div className="mt-2 overflow-x-auto">
+                <h4 className="tx1 text-[11px] font-bold">{mgmt.title}</h4>
+                <table className="mt-1 w-full border-collapse text-[10px]">
+                  <thead><tr>{mgmt.heads.map((h3) => <th key={h3} className="border b-line-soft bg-slate-100 px-2 py-1 text-start font-bold">{h3}</th>)}</tr></thead>
+                  <tbody>
+                    {mgmt.rows.length === 0 && <tr><td colSpan={mgmt.heads.length} className="border b-line-soft px-2 py-3 text-center tx3">{EMPTY}</td></tr>}
+                    {mgmt.rows.map((row, ri) => <tr key={ri} className={ri % 2 ? 'bg-slate-50' : ''}>{row.map((cell, ci) => <td key={ci} className="border b-line-soft px-2 py-1">{cell}</td>)}</tr>)}
+                  </tbody>
+                </table>
+                {Boolean(mgmt.noteFa) && <p className="tx3 mt-1 rounded-lg bg-blue-50 p-1.5 text-[9px] text-blue-900">{mgmt.noteFa}</p>}
+              </div>
+            )}
+          </div>
+        </div>
+      ) : (tab === 'reports' && <p className="tx3 py-8 text-center text-[11px]">{label('ابتدا از تب «مدیریت پرونده‌ها» پرونده‌ای انتخاب کنید', 'Select a case first')}</p>)}
 
       {/* تاریخچه (همیشه در پایین) */}
       {current && auditTrail.length > 0 && (

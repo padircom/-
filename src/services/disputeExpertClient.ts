@@ -77,7 +77,46 @@ export const disputeApi = {
     jsonRequest<LinkSuggestions>(`/api/dispute-expert/${enc(projectId)}/cases/${enc(id)}/link-suggestions`, userId, "GET"),
   resolveLink: (projectId: string, userId: string | null, id: string, rowId: string) =>
     jsonRequest<LinkResolution>(`/api/dispute-expert/${enc(projectId)}/cases/${enc(id)}/links/${enc(rowId)}/resolve`, userId, "GET"),
+  /* ── فاز ۴: نسخه‌های گزارش + گزارش‌های مدیریتی ── */
+  createReport: (projectId: string, userId: string | null, id: string, body: Record<string, unknown>) =>
+    jsonRequest<{ row: DisputeRow }>(`/api/dispute-expert/${enc(projectId)}/cases/${enc(id)}/reports`, userId, "POST", body),
+  setReportStatus: (projectId: string, userId: string | null, id: string, rowId: string, to: string) =>
+    jsonRequest<{ row: DisputeRow }>(`/api/dispute-expert/${enc(projectId)}/cases/${enc(id)}/reports/${enc(rowId)}/status`, userId, "POST", { to }),
+  reportDocumentUrl: (projectId: string, id: string, rowId: string, format: "word" | "pdf") =>
+    `/api/dispute-expert/${enc(projectId)}/cases/${enc(id)}/reports/${enc(rowId)}/document?format=${format}`,
+  managementReport: (projectId: string, userId: string | null, kind: string) =>
+    jsonRequest<ManagementReportOut>(`/api/dispute-expert/${enc(projectId)}/management-reports?kind=${enc(kind)}`, userId, "GET"),
 };
+
+export type ManagementReportOut = { title: string; heads: string[]; rows: string[][]; noteFa?: string };
+export const REPORT_STATUS_CLIENT_FA: Record<string, string> = { draft: "پیش‌نویس", in_review: "در حال بازبینی", approved: "تأییدشده", issued: "صادرشده", superseded: "جایگزین‌شده" };
+export const HEARING_MINUTES_CLIENT_FA: Record<string, string> = { draft: "پیش‌نویس", awaiting_sign: "در انتظار امضا", signed: "امضاشده" };
+export const OPINION_REVIEW_CLIENT_FA: Record<string, string> = { draft: "پیش‌نویس", in_review: "در حال بازبینی", approved: "تأییدشده", final: "نهایی" };
+export const OPINION_SOURCE_KIND_CLIENT_FA: Record<string, string> = { evidence: "مدرک", analysis: "تحلیل", claim: "ادعا", module_link: "پیوند ماژولی", hearing: "جلسه", deadline: "مهلت" };
+export const MANAGEMENT_REPORTS_CLIENT: { code: string; fa: string }[] = [
+  { code: "cases_status", fa: "وضعیت پرونده‌ها و جریان کاری" },
+  { code: "cases_by_subject", fa: "پرونده‌ها به تفکیک موضوع" },
+  { code: "claims_layers", fa: "ادعاها و لایه‌های سه‌گانهٔ مبلغ" },
+  { code: "evidence_register", fa: "دفتر مدارک و وضعیت اصالت" },
+  { code: "evidence_gaps", fa: "شکاف‌های مستنداتی" },
+  { code: "deadlines", fa: "مهلت‌ها و هشدارها" },
+  { code: "parties", fa: "طرفین و نقش‌ها" },
+  { code: "analyses", fa: "تحلیل‌ها و وضعیت تأیید کارشناسی" },
+  { code: "hearings", fa: "جلسات و وضعیت صورت‌جلسه" },
+  { code: "opinions", fa: "نظریات و زنجیرهٔ نسخه‌ها" },
+  { code: "module_links", fa: "پیوندهای ماژولی" },
+  { code: "reports_register", fa: "دفتر نسخه‌های گزارش" },
+  { code: "trend_cases", fa: "روند ثبت پرونده‌ها" },
+  { code: "dashboard_detail", fa: "جزئیات داشبورد" },
+];
+export const REPORT_SECTION_KEYS_CLIENT: string[] = [
+  "cover", "referral_scope", "parties", "subject", "expert_questions",
+  "documents_reviewed", "claims_and_defenses", "legal_contractual_basis",
+  "method_and_assumptions", "technical_analysis", "time_analysis",
+  "financial_analysis", "evidence_assessment", "computations",
+  "agreements_disagreements", "limitations_gaps", "reasoned_answers",
+  "expert_conclusion", "references_annexes", "preparer_reviewer",
+];
 
 export type LinkCandidate = { code: string; titleFa: string; alreadyLinked: boolean; status?: string | null; revision?: string | null; amount?: number | null };
 export type LinkSuggestions = {

@@ -843,7 +843,7 @@ export const SCHEMA: TableDef[] = [
     module: "d4",
     title: { fa: "نسخهٔ گزارش کارشناسی", en: "Expert report version" },
     pk: "Id",
-    columns: [id(), req("ProjectId", "text", { len: 60 }), req("CaseCode", "text", { len: 40 }), req("Code", "text", { len: 40 }), req("TitleFa", "text", { len: 400 }), req("Version", "int", { default: "1" }), c("PreviousVersionCode", "text", { len: 40 }), c("EnabledSectionsJson", "json", { comment: "ترتیب/انتخاب ۲۰ بخش — قابل تنظیم" }), c("GeneratedAt", "datetime"), c("GeneratedBy", "text", { len: 60 }), req("Status", "text", { len: 15, default: "'draft'", comment: "draft|in_review|approved|issued|superseded" }), c("IssuedAt", "datetime"), c("IssuedBy", "text", { len: 60 }), c("DataVersionNoteFa", "text", { len: 500, comment: "نسخهٔ داده‌هایی که گزارش از آن‌ها ساخته شد" }), c("WordFileRef", "text", { len: 300 }), c("PdfFileRef", "text", { len: 300 })],
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("CaseCode", "text", { len: 40 }), req("Code", "text", { len: 40 }), req("TitleFa", "text", { len: 400 }), req("Version", "int", { default: "1" }), c("PreviousVersionCode", "text", { len: 40 }), c("EnabledSectionsJson", "json", { comment: "ترتیب/انتخاب ۲۰ بخش — قابل تنظیم" }), c("GeneratedAt", "datetime"), c("GeneratedBy", "text", { len: 60 }), req("Status", "text", { len: 15, default: "'draft'", comment: "draft|in_review|approved|issued|superseded" }), c("ApprovedBy", "text", { len: 60, comment: "تأییدکنندهٔ نسخه — SoD ≠ تولیدکننده" }), c("ApprovedAt", "datetime"), c("IssuedAt", "datetime"), c("IssuedBy", "text", { len: 60 }), c("DataVersionNoteFa", "text", { len: 500, comment: "نسخهٔ داده‌هایی که گزارش از آن‌ها ساخته شد" }), c("WordFileRef", "text", { len: 300 }), c("PdfFileRef", "text", { len: 300 })],
     indexes: [{ name: "UX_PmisDisputeReports_Code", columns: ["ProjectId", "CaseCode", "Code"], unique: true }, { name: "IX_PmisDisputeReports_Case", columns: ["ProjectId", "CaseCode", "Status"] }],
   },
   {
@@ -6809,7 +6809,13 @@ export const MIGRATIONS: Migration[] = [
   },
   {
     version: "0072", name: "pmis_dispute_expert_engine_tables",
-    statements: ["PmisDisputeCases", "PmisDisputeParties", "PmisDisputeClaims", "PmisDisputeResponses", "PmisDisputeEvidence", "PmisDisputeAnalyses", "PmisDisputeCalculations", "PmisDisputeHearings", "PmisDisputeOpinions", "PmisDisputeReports", "PmisDisputeDeadlines", "PmisDisputeModuleLinks", "PmisDisputeAuditTrail"].flatMap((name) => { const table = tableDef(name); if (!table) throw new Error(`Missing table definition: ${name}`); return [tableDdl(table, "mssql"), ...(table.indexes ?? []).map((index) => indexDdl(table, index, "mssql"))]; }),
+    statements: ["PmisDisputeCases", "PmisDisputeParties", "PmisDisputeClaims", "PmisDisputeResponses", "PmisDisputeEvidence", "PmisDisputeAnalyses", "PmisDisputeCalculations", "PmisDisputeHearings", "PmisDisputeOpinions", "PmisDisputeReports", "PmisDisputeDeadlines", "PmisDisputeModuleLinks", "PmisDisputeAuditTrail"].flatMap((name) => { const table = tableDef(name); if (!table) throw new Error(`Missing table definition: ${name}`); return [tableDdl(table, "mssql"), ...(table.indexes ?? []).map(index => indexDdl(table, index, "mssql"))]; }),
+  },
+  {
+    /* PMO-CONSTRUCTION-DISPUTE-EXPERT-ENGINE-V1.0 فاز ۴ — ستون‌های SoD نسخهٔ گزارش.
+     * مهاجرت افزایشی؛ 0072 دست‌نخورده. */
+    version: "0073", name: "pmis_dispute_report_approval_fields",
+    statements: ["ApprovedBy", "ApprovedAt"].map((col) => addColumnDdl("PmisDisputeReports", col, "mssql")),
   },
 ];
 
