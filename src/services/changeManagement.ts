@@ -511,3 +511,137 @@ export function verifyModuleLinks(links: Record<string, unknown>[], sets: LinkVe
   });
 }
 export type { CostLayer as ChangeCostLayer };
+
+/* ═════════════════════════════ فاز ۲ — موتورهای تحلیل ═════════════════════════════ */
+
+/** پاسارگانهٔ «تاریخ مبنا → جمع لایه‌ها» برای نمای کاش‌فلو. */
+export interface ChangeCashflowPoint {
+  basisDate: string;
+  total: number;
+  byLayer: Record<string, number>;
+}
+
+/**
+ * لایه‌های مبلغ را از ردیف‌های خام CostEstimates تجمیع می‌کند؛ هیچ‌گاه مبالغ را برابر پیش‌فرض نمی‌گذارد.
+ * واریانس زنجیرهٔ لایه‌ها: برآورد→پیشنهاد→مذاکره→مصوب→پرداخت.
+ */
+export function computeCostLayers(rows: Record<string, unknown>[]): {
+  totals: Record<CostLayer, number>;
+  variance: { estToProp: number; propToNeg: number; negToApp: number; appToPaid: number };
+  cashflowByDate: ChangeCashflowPoint[];
+  warningsFa: string[];
+  duplicates: string[];
+} {
+  const totals = Object.fromEntries(COST_LAYERS.map((l) => [l, 0])) as Record<CostLayer, number>;
+  const seen = new Map<string, Map<CostLayer, number>>();
+  const cash = new Map<string, Record<string, number>>();
+  const warnings: string[] = [];
+  for (const r of rows) {
+    const layer = String(r.Layer ?? "") as CostLayer;
+    if (!COST_LAYERS.includes(layer)) continue;
+    const amount = Number(r.Amount) || 0;
+    totals[layer] = (totals[layer] ?? 0) + amount;
+    const code = String(r.Code ?? "");
+    if (code) {
+      const m = seen.get(code) ?? new Map<CostLayer, number>();
+      m.set(layer, (m.get(layer) ?? 0) + amount);
+      seen.set(code, m);
+    }
+    const bd = String(r.BasisDate ?? "").slice(0, 7);
+    if (bd && ISO_DATE.test(`${bd}-01`)) {
+      const bc = cash.get(bd) ?? {};
+      bc[layer] = (bc[layer] ?? 0) + amount;
+      cash.set(bd, bc);
+    }
+    const f = String(r.FormulaFa ?? "").trim(), s = String(r.SourceFa ?? "").trim();
+    if (layer === "estimated" && (!f || !s)) warnings.push(`ردیف «${code || "?"}»: لایهٔ برآورد بدون فرمول یا منبع`);
+    if ((layer === "approved" || layer === "paid") && !s) warnings.push(`ردیف «${code || "?"}»: لایهٔ ${COST_LAYER_FA[layer]} بدون سند معتبر`);
+  }
+  const layerNum = (l: CostLayer) => totals[l] ?? 0;
+  const px = [0, 0, 0, 0]; /* صفر قانون‌مدار نیست — فقط محور محاسبه */
+  const variance = {
+    estToProp: layerNum("proposed") - layerNum("estimated"),
+    propToNeg: layerNum("negotiated") - layerNum("proposed"),
+    negToApp: layerNum("approved") - layerNum("negotiated"),
+    appToPaid: layerNum("paid") - layerNum("approved"),
+  };
+  void px;
+  const cashflowByDate: ChangeCashflowPoint[] = [...cash.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([basisDate, byLayer]) => ({ basisDate, byLayer, total: Object.values(byLayer).reduce((s, v) => s + v, 0) }));
+  const duplicates: string[] = [];
+  for (const [code, m] of seen) {
+    const paid = m.get("paid") ?? 0, approved = m.get("approved") ?? 0;
+    if (paid > 0 && approved > 0 && paid > approved) warnings.push(`کد «${code}»: پرداخت از مصوب بیشتر است — بررسی کنید`);
+    if (paid > 0 && approved === 0) warnings.push(`کد «${code}»: پرداخت بدون لایهٔ مصوب ثبت شده است`);
+    const dups = [...m.keys()].filter((l) => m.get(l) !== 0).length > 1 && PAIRS.some(([a2, b2]) => (m.get(a2) ?? 0) === (m.get(b2) ?? 0) && (m.get(a2) ?? 0) > 0);
+    if (dups) duplicates.push(code);
+  }
+  if (duplicates.length) warnings.push(`کدهای «${duplicates.join(", ")}»: لایه‌های متمایز با مبلغ یکسان — برابر پیش‌فرض نیستند مگر با مبنا`);
+  return { totals, variance, cashflowByDate, warningsFa: warnings, duplicates };
+
+}
+
+const PAIRS: [CostLayer, CostLayer][] = [["estimated", "proposed"], ["proposed", "negotiated"], ["negotiated", "approved"], ["approved", "paid"]];
+
+/* parseCodeList اینجا تعریف شده بود و بالاتر (کنار موتورهای تحلیل) منتقل شد */
+
+/**
+ * ارزیابی پایدار اثر زمان‌بندی تغییر — فقط از فعالیت‌های متأثر واقعی (d2) + ردیف‌های ScheduleImpacts.
+ * تمدید قراردادی از «اثر زمانِ تغییر» جدا و فقط با ApprovedEotDays + EotEntitlementFa قابل ثبت است.
+ */
+export function assessTimeEffect(scheduleImpacts: Record<string, unknown>[], affectedActivities: Record<string, unknown>[]): {
+  affectedCount: number; criticalCount: number; milestoneCount: number; minFloat: number | null;
+  baselineMaxFinish: string | null; estDeltaDays: number; approvedEotDays: number; withoutEntitlement: number;
+  highFloatCount: number;
+} {
+  let criticalCount = 0, milestoneCount = 0, minFloat: number | null = null, highFloat = 0;
+  let baselineMaxFinish: string | null = null;
+  for (const a of affectedActivities) {
+    if (a.IsCritical === true || Number(a.IsCritical) === 1) criticalCount++;
+    const dur = Number(a.DurationDays) || 0;
+    if (dur === 0) milestoneCount++;
+    const tf = a.TotalFloatDays;
+    if (tf !== null && tf !== undefined && tf !== "") { const n = Number(tf); if (Number.isFinite(n)) { minFloat = minFloat === null ? n : Math.min(minFloat, n); if (n >= 21) highFloat++; } }
+    const pf = String(a.PlannedFinish ?? "").slice(0, 10);
+    if (pf && ISO_DATE.test(pf) && (baselineMaxFinish === null || pf > baselineMaxFinish)) baselineMaxFinish = pf;
+  }
+  let estDeltaDays = 0, approvedEotDays = 0, withoutEntitlement = 0;
+  for (const s of scheduleImpacts) {
+    estDeltaDays += Number(s.EstimatedDurationDeltaDays) || 0;
+    const eot = Number(s.ApprovedEotDays) || 0;
+    approvedEotDays += eot;
+    if (eot !== 0 && !String(s.EotEntitlementFa ?? "").trim()) withoutEntitlement++;
+  }
+  return { affectedCount: affectedActivities.length, criticalCount, milestoneCount, minFloat, baselineMaxFinish, estDeltaDays, approvedEotDays, withoutEntitlement, highFloatCount: highFloat };
+}
+
+/** فیلتر هابل-پذیر برای drill-down داشبورد. */
+export function filterChangeRequests(rows: Record<string, unknown>[], f: { status?: string; type?: string; fromDate?: string; toDate?: string }): Record<string, unknown>[] {
+  return rows.filter((r) => {
+    if (f.status && String(r.Status) !== f.status) return false;
+    if (f.type && String(r.ChangeType) !== f.type) return false;
+    const d = String(r.RequestDate ?? "");
+    if (f.fromDate && d < f.fromDate) return false;
+    if (f.toDate && d > f.toDate) return false;
+    return true;
+  });
+}
+
+/* ─── مراحل اجرای کنترل‌شده (PmisChangeImplementation.Step) ─── */
+export const IMPLEMENTATION_STEPS = ["instruction_issued", "started", "baselines_updated", "execution_control", "verified", "completed"] as const;
+export const IMPLEMENTATION_STEP_FA: Record<string, string> = {
+  instruction_issued: "ابلاغ/دستور اجرا صادر شده",
+  started: "اجرای مسیر تصویب آغاز شده",
+  baselines_updated: "مبناهای مجاز به‌روزرسانی شد",
+  execution_control: "کنترل اجرای واقع‌زیست",
+  verified: "تحقق نتایج راستی‌آزمایی شد",
+  completed: "تکمیل و آمادهٔ بستن",
+};
+
+/** میان‌بر وضعیت پس‌از‌تصویب: هر وضعیتی که مسیر تصویب/اجرا را در بر می‌گیرد. */
+export function isPostApproval(status: string): boolean {
+  return ["approved", "approved_conditional", "notified", "implementing", "baselines_updated", "execution_monitoring", "closed", "archived"].includes(status);
+}
+
+
