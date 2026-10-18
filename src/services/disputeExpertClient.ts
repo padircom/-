@@ -68,7 +68,33 @@ export const disputeApi = {
     jsonRequest<{ row: DisputeRow }>(`/api/dispute-expert/${enc(projectId)}/cases/${enc(id)}/rows/${enc(table)}/${enc(rowId)}`, userId, "PATCH", body),
   deleteRow: (projectId: string, userId: string | null, id: string, table: string, rowId: string) =>
     jsonRequest<{ deleted: boolean }>(`/api/dispute-expert/${enc(projectId)}/cases/${enc(id)}/rows/${enc(table)}/${enc(rowId)}`, userId, "DELETE"),
+  /* ── فاز ۳ ── */
+  runAnalysis: (projectId: string, userId: string | null, id: string) =>
+    jsonRequest<{ generated: number; summary: string; analyses: { code: string; claimCode: string; findings: number; critical: number }[]; invalidatedApprovalCount: number; llmConnected: boolean }>(`/api/dispute-expert/${enc(projectId)}/cases/${enc(id)}/analysis/run`, userId, "POST", {}),
+  recalcCalculations: (projectId: string, userId: string | null, id: string) =>
+    jsonRequest<{ recalculated: number; totals: { code: string; amount: number | null }[]; note: string }>(`/api/dispute-expert/${enc(projectId)}/cases/${enc(id)}/calculations/recalc`, userId, "POST", {}),
+  linkSuggestions: (projectId: string, userId: string | null, id: string) =>
+    jsonRequest<LinkSuggestions>(`/api/dispute-expert/${enc(projectId)}/cases/${enc(id)}/link-suggestions`, userId, "GET"),
+  resolveLink: (projectId: string, userId: string | null, id: string, rowId: string) =>
+    jsonRequest<LinkResolution>(`/api/dispute-expert/${enc(projectId)}/cases/${enc(id)}/links/${enc(rowId)}/resolve`, userId, "GET"),
 };
+
+export type LinkCandidate = { code: string; titleFa: string; alreadyLinked: boolean; status?: string | null; revision?: string | null; amount?: number | null };
+export type LinkSuggestions = {
+  delay_case: LinkCandidate[]; loss_case: LinkCandidate[]; contract_risk: LinkCandidate[];
+  claim: LinkCandidate[]; edms_document: LinkCandidate[]; noteFa: string;
+};
+export type LinkResolution = {
+  link: DisputeRow; resolvable: boolean; found: boolean;
+  target: Record<string, unknown> | null; related: Record<string, unknown>[];
+  noteFa: string | null; readOnly: boolean;
+};
+
+export const LINK_KIND_CLIENT_FA: Record<string, string> = {
+  delay_case: "رویداد تأخیر", loss_case: "آیتم خسارت/لایحه", contract_risk: "ریسک قراردادی",
+  claim: "ادعای مرجع", contract: "قرارداد", edms_document: "سند EDMS",
+};
+export const ANALYSIS_APPROVAL_CLIENT_FA: Record<string, string> = { draft: "پیش‌نویس", under_review: "در حال بازبینی", approved: "تأییدشده", rejected: "مرجوع" };
 
 export const CHILD_TABLE_FA: Record<string, string> = {
   PmisDisputeParties: "طرفین و نمایندگان",

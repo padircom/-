@@ -46,6 +46,14 @@ import {
   computeDisputeDashboard,
   newCaseCode,
   newRecordCode,
+  LINK_KINDS,
+  LINK_KIND_FA,
+  ANALYSIS_APPROVAL_FA,
+  analyzeClaim,
+  summarizeCaseFindings,
+  renderFindingsLines,
+  CLAIM_ANALYSIS_METHOD_FA,
+  CALC_TOTALS_METHOD_FA,
 } from "./disputeExpertLogic.js";
 
 const locks = new Map();
@@ -271,6 +279,22 @@ export function registerDisputeExpertRoutes(app, { repo, subjects, evaluate }) {
     }
     const patch = { ...(req.body ?? {}) };
     delete patch.Id; delete patch.ProjectId; delete patch.CaseCode; delete patch.Code;
+    /* تحلیل: هر تغییر ApprovalStatus فقط با dispute.review؛ تأیید با SoD (تأییدکننده ≠ تحلیل‌گر) */
+    if (table === "PmisDisputeAnalyses" && patch.ApprovalStatus !== undefined) {
+      if (!can(req, "dispute.review")) throw error(403, "DSP_FORBIDDEN", "تغییر وضعیت تأیید تحلیل نیازمند مجوز بازبینی است");
+      if (patch.ApprovalStatus === "approved") {
+        if (String(existing.AnalyzedBy ?? "") === req.disputeSubject.id) throw error(403, "DSP_SOD", "تحلیل‌گر نمی‌تواند تحلیل خود را تأیید کند");
+        patch.ApprovedBy = req.disputeSubject.id;
+        patch.ApprovedAt = new Date().toISOString();
+      } else { patch.ApprovedBy = null; patch.ApprovedAt = null; }
+    }
+    /* نظریه (گام بعدی): نهایی‌سازی فقط با dispute.review؛ مؤلف ≠ نهایی‌کننده */
+    if (table === "PmisDisputeOpinions" && patch.ReviewStatus !== undefined) {
+      if (!can(req, "dispute.review")) throw error(403, "DSP_FORBIDDEN", "تغییر وضعیت نظریه نیازمند مجوز بازبینی است");
+      if (["final", "approved"].includes(String(patch.ReviewStatus)) && String(existing.AuthoredBy ?? "") === req.disputeSubject.id)
+        throw error(403, "DSP_SOD", "مؤلف نظریه نمی‌تواند همان را نهایی کند");
+      if (["final", "approved"].includes(String(patch.ReviewStatus))) patch.ReviewedBy = req.disputeSubject.id;
+    }
     /* SoD ادعا: ثبت ApprovedAmount با dispute.review و تأییدکننده ≠ ReviewedBy */
     if (table === "PmisDisputeClaims" && patch.ApprovedAmount !== undefined && patch.ApprovedAmount !== null && patch.ApprovedAmount !== "") {
       if (!can(req, "dispute.review")) throw error(403, "DSP_FORBIDDEN", "تأیید مبلغ نیازمند مجوز بازبینی است");
@@ -304,5 +328,201 @@ export function registerDisputeExpertRoutes(app, { repo, subjects, evaluate }) {
     await r.remove(table, existing.Id);
     await audit(r, req.params.projectId, row.Code, `${table.replace("PmisDispute", "").toLowerCase()}_deleted`, req.disputeSubject.id, `حذف ${existing.Code}`, existing.Code, null);
     return { deleted: true, code: existing.Code };
+  }));
+
+  /* ═══════════ فاز ۳ — سرویس‌های قاعده‌محور (تحلیل/محاسبه/پیوند) ═══════════ */
+
+  const childWhere = (projectId, caseCode) => [...where(projectId), { column: "CaseCode", op: "eq", value: caseCode }];
+  const listChild = (r, table, projectId, caseCode) => r.list(table, { where: childWhere(projectId, caseCode), limit: 5000 }).catch(() => []);
+  /** upsert در ستون ثابت Code داخل پرونده؛ بازتولیدِ تحلیل، تأیید انسانی قبلی را باطل می‌کند. */
+  const upsertChild = async (r, table, projectId, caseCode, code, payload, actor) => {
+    const existing = await r.findOne(table, [...childWhere(projectId, caseCode), { column: "Code", op: "eq", value: code }]);
+    if (!existing) return { row: await r.create(table, { ...payload, Code: code, CaseCode: caseCode, ProjectId: projectId }, actor, "dispute"), created: true, invalidatedApproval: false };
+    const patch = { ...payload };
+    delete patch.Code; delete patch.CaseCode; delete patch.ProjectId;
+    const invalidated = existing.ApprovalStatus === "approved";
+    if (table === "PmisDisputeAnalyses" || table === "PmisDisputeOpinions") {
+      if (invalidated) { patch.ApprovedBy = null; patch.ApprovedAt = null; }
+    }
+    return { row: await r.patch(table, existing.Id, patch, actor, existing.RowVersion), created: false, invalidatedApproval: invalidated };
+  };
+
+  /* ── اجرای تحلیل قاعده‌محور: برای هر ادعا یک رکورد تحلیل + یک جمع‌بندی پرونده ── */
+  app.post(base + "/cases/:id/analysis/run", need("dispute.review"), run(async (r, req) => {
+    const row = await findCase(r, req);
+    if (["closed", "archived"].includes(row.Status)) throw error(409, "DSP_STATUS", "پرونده مختومه/بایگانی است");
+    const pid = req.params.projectId, cc = row.Code, actor = req.disputeSubject.id;
+    const [claims, evidence, responses, links, parties, deadlines] = await Promise.all([
+      listChild(r, "PmisDisputeClaims", pid, cc), listChild(r, "PmisDisputeEvidence", pid, cc),
+      listChild(r, "PmisDisputeResponses", pid, cc), listChild(r, "PmisDisputeModuleLinks", pid, cc),
+      listChild(r, "PmisDisputeParties", pid, cc), listChild(r, "PmisDisputeDeadlines", pid, cc),
+    ]);
+    const now = new Date().toISOString();
+    const today = now.slice(0, 10);
+    const results = [];
+    let invalidated = 0;
+    for (const c of claims) {
+      const findings = analyzeClaim(c, evidence, responses, links);
+      const crit = findings.filter((f) => f.severity === "critical").length;
+      const warn = findings.filter((f) => f.severity === "warning").length;
+      const suggestion = crit > 0
+        ? `${crit} یافتهٔ بحرانی شناسایی شد؛ پیش از اتکای این ادعا در گزارش کارشناسی، موارد بحرانی رفع یا در گزارش صریحاً محدودیت اعلام شود. (پیش‌نویس قاعده‌محور — صدور رأی در صلاحیت سامانه نیست)`
+        : warn > 0
+          ? `${warn} هشدار؛ تکمیل داده توصیه می‌شود. هیچ یافتهٔ بحرانی‌ای توسط کنترل‌های قاعده‌محور ثبت نشد. (پیش‌نویس قاعده‌محور — نیازمند بازبینی و تأیید کارشناس)`
+          : "کنترل‌های قاعده‌محور مورد بحرانی/هشداری ثبت نکردند. این نتیجه صرفاً بر داده‌های ثبت‌شده تکیه دارد و معادل نظر کارشناسی نهایی نیست.";
+      const up = await upsertChild(r, "PmisDisputeAnalyses", pid, cc, `ANA-${c.Code}`, {
+        TopicFa: `تحلیل خودکار ادعای «${c.TitleFa ?? c.Code}»`,
+        QuestionFa: "جایگاه این ادعا در داده‌های ثبت‌شدهٔ پرونده چیست؟ (مبالغ، استناد، مدارک، دفاع، پیوندها)",
+        MethodFa: CLAIM_ANALYSIS_METHOD_FA,
+        InputDataJson: { claimCode: c.Code, basisKind: c.BasisKind, findings, generatedAt: now },
+        EvidenceRefs: evidence.map((e) => e.Code).slice(0, 200),
+        AssumptionsFa: "فرض تحلیل: فقط داده‌های ثبت‌شده در پرونده معتبرند؛ هیچ سند/رسیدی خارج از پرونده فرض نشده است.",
+        ResultsFa: renderFindingsLines(findings),
+        UncertaintiesFa: "هر آیتم «اصالت در انتظار/احرازنشده» حکم قطعی ندارد؛ اعتبارسنجی اسناد مسئولیت کارشناس انسانی است.",
+        InfoGapsFa: renderFindingsLines(findings.filter((f) => f.severity !== "info")),
+        MethodLimitsFa: "تحلیل خودکار محتوای متن اسناد را نمی‌خواند و سوابق خارج از این پرونده را ندارد؛ چارچوب زمانی‌اش هنگام اجراست.",
+        SuggestedConclusionFa: suggestion,
+        AnalyzedBy: "DisputeClaimAnalysisService/v1.0",
+        AnalyzedAt: now,
+        ApprovalStatus: "draft",
+      }, actor);
+      if (up.invalidatedApproval) invalidated += 1;
+      results.push({ code: up.row.Code, claimCode: c.Code, findings: findings.length, critical: crit });
+    }
+    /* جمع‌بندی سطح پرونده */
+    const agg = summarizeCaseFindings(claims, links, deadlines, today);
+    const aggCrit = agg.findings.filter((f) => f.severity === "critical").length;
+    const up2 = await upsertChild(r, "PmisDisputeAnalyses", pid, cc, "ANA-SUMMARY", {
+      TopicFa: `جمع‌بندی خودکار پرونده ${cc}`,
+      QuestionFa: "وضعیت کلی داده‌های پرونده برای تهیهٔ گزارش کارشناسی چیست؟",
+      MethodFa: CLAIM_ANALYSIS_METHOD_FA,
+      InputDataJson: { totals: agg.totals, findings: agg.findings, generatedAt: now, partyCount: parties.length, linkCount: links.length },
+      EvidenceRefs: evidence.map((e) => e.Code).slice(0, 200),
+      ResultsFa: renderFindingsLines(agg.findings),
+      AssumptionsFa: "جمع‌بندی صرفاً بر رکوردهای این پرونده است؛ لایهٔ «تأییدشدهٔ صفر» یعنی تأییدی انجام نشده — نه رد.",
+      InfoGapsFa: renderFindingsLines(agg.findings.filter((f) => f.severity !== "info")),
+      MethodLimitsFa: "مقادیر ماژول‌های دیگر (تأخیر/خسارت/ریسک قراردادی) فقط‌خواندنی و نمایشی‌اند و در این سرویس بازمحاسبه نمی‌شوند.",
+      SuggestedConclusionFa: aggCrit > 0
+        ? `${aggCrit} موضوع بحرانی در سطح پرونده — پیش از تدوین گزارش کارشناسی رفع/ابلاغ شود. صدور نظر نهایی با کارشناس انسانی است.`
+        : "از منظر کنترل‌های قاعده‌محور، مانع داده‌ای بحرانی در سطح پرونده ثبت نشد؛ کارشناس همچنان باید محتوا را قضاوت کند.",
+      AnalyzedBy: "DisputeExpertAnalysisEngine/v1.0",
+      AnalyzedAt: now,
+      ApprovalStatus: "draft",
+    }, actor);
+    if (up2.invalidatedApproval) invalidated += 1;
+    await audit(r, pid, cc, "analysis_run", actor, `اجرای تحلیل قاعده‌محور: ${results.length} ادعا + جمع‌بندی${invalidated ? ` (ابطال ${invalidated} تأیید پیشین به سبب بازتولید)` : ""}`, null, null);
+    return { generated: results.length + 1, summary: up2.row.Code, analyses: results, invalidatedApprovalCount: invalidated, llmConnected: DISPUTE_LLM_CONNECTED };
+  }));
+
+  /* ── بازمحاسبهٔ شاخص‌های جمع (محاسبهٔ مستقل «برای مقایسه» — نه جایگزینی) ── */
+  app.post(base + "/cases/:id/calculations/recalc", need("dispute.review"), run(async (r, req) => {
+    const row = await findCase(r, req);
+    if (["closed", "archived"].includes(row.Status)) throw error(409, "DSP_STATUS", "پرونده مختومه/بایگانی است");
+    const pid = req.params.projectId, cc = row.Code, actor = req.disputeSubject.id;
+    const claims = await listChild(r, "PmisDisputeClaims", pid, cc);
+    const now = new Date().toISOString();
+    const n = (v) => { const x = Number(v); return Number.isFinite(x) ? x : 0; };
+    const sumOf = (f) => claims.reduce((a, c) => a + (c[f] === null || c[f] === undefined || c[f] === "" ? 0 : n(c[f])), 0);
+    const items = claims.map((c) => ({ code: c.Code, title: c.TitleFa ?? null, claimed: c.ClaimedAmount ?? null, reviewed: c.ReviewedAmount ?? null, approved: c.ApprovedAmount ?? null, days: c.ClaimedDelayDays ?? null }));
+    const defs = [
+      ["CALC-TOTAL-CLAIMED", "جمع مبالغ مورد مطالبهٔ ادعاهای پرونده", sumOf("ClaimedAmount")],
+      ["CALC-TOTAL-REVIEWED", "جمع مبالغ بررسی‌شدهٔ ادعاهای پرونده", sumOf("ReviewedAmount")],
+      ["CALC-TOTAL-APPROVED", "جمع مبالغ تأییدشدهٔ ادعاهای پرونده", sumOf("ApprovedAmount")],
+      ["CALC-TOTAL-DELAY-DAYS", "جمع مدت مطالبه‌شده (روز) ادعاهای پرونده", sumOf("ClaimedDelayDays")],
+    ];
+    const out = [];
+    for (const [code, titleFa, total] of defs) {
+      const up = await upsertChild(r, "PmisDisputeCalculations", pid, cc, code, {
+        TitleFa: titleFa,
+        PurposeFa: "محاسبهٔ مستقل کارشناسی برای مقایسه با اعداد مدعی/پاسخگو — جایگزین محاسبهٔ اصلی نیست و وارد گزارش فقط به‌عنوان مقایسه می‌شود.",
+        MethodFa: CALC_TOTALS_METHOD_FA,
+        InputsJson: { claims: items, computedAt: now },
+        ResultAmount: claims.length ? total : null,
+        Currency: null,
+        ResultBaseDate: today(),
+        DataSourceFa: "ردیف‌های ادعای همین پرونده (PmisDisputeClaims). مقادیر ماژول‌های دیگر بدون بازمحاسبه و فقط‌خواندنی‌اند.",
+        VarianceNoteFa: claims.length ? null : "ادعایی در پرونده ثبت نشده است — مجموع معنادار نیست.",
+        CalculatedBy: "DisputeCalculationsService/v1.0",
+        CalculatedAt: now,
+        ReviewedBy: null,
+        Status: "draft",
+      }, actor);
+      out.push({ code: up.row.Code, amount: claims.length ? total : null });
+    }
+    await audit(r, pid, cc, "calculations_recalc", actor, `بازمحاسبهٔ ${out.length} شاخص جمع ادعاها`, null, null);
+    return { recalculated: out.length, totals: out, note: "مقادیر ماژول‌های دیگر در این بازمحاسبه دخالت ندارند (فقط‌خواندنی)." };
+  }));
+
+  /* ── نامزدهای پیوند نرم از ماژول‌های دیگر (فقط‌خواندنی — حذف/تغییری ندارد) ── */
+  app.get(base + "/cases/:id/link-suggestions", need("dispute.view"), run(async (r, req) => {
+    const row = await findCase(r, req);
+    const existingLinks = new Set((await listChild(r, "PmisDisputeModuleLinks", req.params.projectId, row.Code)).map((l) => `${l.LinkKind}:${l.TargetCode}`));
+    const pick = async (table, kind, codeOf, titleOf, extraOf) => {
+      try {
+        const rows = await r.list(table, { where: where(req.params.projectId), limit: 200 });
+        return rows.map((x) => {
+          const code = String(codeOf(x) ?? "");
+          return code ? { code, titleFa: String(titleOf(x) ?? code), alreadyLinked: existingLinks.has(`${kind}:${code}`), ...((extraOf && extraOf(x)) ?? {}) } : null;
+        }).filter(Boolean);
+      } catch { return []; }
+    };
+    const [delay, loss, risk, claim, docs] = await Promise.all([
+      pick("DelayEvent", "delay_case", (x) => x.Code, (x) => x.TitleFa, (x) => ({ status: x.Status ?? null })),
+      pick("ClaimCostItem", "loss_case", (x) => x.Id, (x) => x.TitleFa, (x) => ({ status: x.Status ?? null, amount: x.Amount ?? null })),
+      pick("ContractRiskRegister", "contract_risk", (x) => x.Code, (x) => x.TitleFa, (x) => ({ status: x.Status ?? null })),
+      pick("Claim", "claim", (x) => x.Code, (x) => x.TitleFa, (x) => ({ status: x.Status ?? null })),
+      pick("Document", "edms_document", (x) => x.DocNo, (x) => x.TitleFa, (x) => ({ revision: x.Revision ?? null })),
+    ]);
+    return { delay_case: delay, loss_case: loss, contract_risk: risk, claim, edms_document: docs, noteFa: "هدف ماژول فقط‌خواندنی است؛ این فهرست فقط نامزد اتصال است." };
+  }));
+
+  /* ── بازیابی زندهٔ هدف پیوند (خواندنی — تغییری در ماژول مقصد نمی‌دهد) ── */
+  app.get(base + "/cases/:id/links/:rowId/resolve", need("dispute.view"), run(async (r, req) => {
+    const row = await findCase(r, req);
+    const pid = req.params.projectId;
+    const link = await r.findOne("PmisDisputeModuleLinks", [...childWhere(pid, row.Code), { column: "Id", op: "eq", value: req.params.rowId }]);
+    if (!link) throw error(404, "DSP_NOT_FOUND", "رکورد پیوند یافت نشد");
+    const kind = String(link.LinkKind ?? "");
+    const code = String(link.TargetCode ?? "");
+    const res = { link, resolvable: true, found: false, target: null, related: [], noteFa: null, readOnly: true };
+    const byCode = async (table) => {
+      try { return await r.findOne(table, [...where(pid), { column: "Code", op: "eq", value: code }]); } catch { return null; }
+    };
+    if (kind === "delay_case") {
+      const ev = await byCode("DelayEvent");
+      if (ev) {
+        res.found = true; res.target = ev;
+        try { res.related = (await r.list("DelayCalculation", { where: [...where(pid), { column: "DelayEventId", op: "eq", value: ev.Id }], limit: 50 })).map((x) => ({ Id: x.Id, Engine: x.Engine, RuleVersion: x.RuleVersion, FinalValueDays: x.FinalValueDays, Status: x.Status, CalculatedAt: x.CalculatedAt })); } catch { /* ignore */ }
+        res.noteFa = "مقادیر محاسبهٔ تأخیر فقط نمایشی‌اند و در ماژول اختلاف بازمحاسبه نمی‌شوند; بخشنامهٔ ۱۳۰۰ به‌خودی‌خود مبنای تمدید نیست.";
+      } else res.noteFa = "رویداد تأخیر با این کد یافت نشد — ممکن است حذف/تغییر یافته باشد؛ پیوند نیازمند اصلاح است.";
+    } else if (kind === "loss_case") {
+      let item = null;
+      try { item = await r.findOne("ClaimCostItem", [...where(pid), { column: "Id", op: "eq", value: code }]); } catch { item = null; }
+      if (!item) item = await byCode("ClaimCostItem");
+      if (item) {
+        res.found = true; res.target = item;
+        try { res.related = (await r.list("ClaimCalculationRun", { where: [...where(pid), { column: "ClaimCostItemId", op: "eq", value: item.Id }], limit: 50 })).map((x) => ({ Id: x.Id, Engine: x.Engine, RuleCode: x.RuleCode, FinalAmount: x.FinalAmount, Status: x.Status, CalculatedAt: x.CalculatedAt })); } catch { /* ignore */ }
+        res.noteFa = "مبالغ محاسبهٔ خسارت فقط‌خواندنی‌اند؛ این ماژول هیچ بازمحاسبه‌ای انجام نمی‌دهد.";
+      } else res.noteFa = "آیتم خسارت/لایحه با این کد یافت نشد؛ پیوند نیازمند اصلاح است.";
+    } else if (kind === "contract_risk") {
+      const rk = await byCode("ContractRiskRegister");
+      if (rk) { res.found = true; res.target = rk; res.noteFa = "امتیاز ریسک قراردادی تصویر وضعیت است؛ به‌خودی‌خود مبنای محاسبهٔ خسارت یا تمدید مدت نیست."; }
+      else res.noteFa = "ریسک قراردادی با این کد یافت نشد؛ پیوند نیازمند اصلاح است.";
+    } else if (kind === "claim") {
+      const cl = await byCode("Claim");
+      if (cl) { res.found = true; res.target = cl; res.noteFa = "وضعیت ادعای مرجع فقط‌خواندنی است."; }
+      else res.noteFa = "ادعای مرجع با این کد یافت نشد؛ پیوند نیازمند اصلاح است.";
+    } else if (kind === "edms_document") {
+      let doc = await byCode("Document");
+      if (!doc) { try { doc = await r.findOne("Document", [...where(pid), { column: "DocNo", op: "eq", value: code }]); } catch { doc = null; } }
+      if (!doc) { try { doc = await r.findOne("Document", [...where(pid), { column: "Id", op: "eq", value: code }]); } catch { doc = null; } }
+      if (doc) { res.found = true; res.target = doc; res.noteFa = "سند EDMS فقط به‌صورت پیوند مرجع استفاده می‌شود؛ محتوای فایل در این ماژول نگهداری نمی‌شود."; }
+      else res.noteFa = "سند با این کد/شماره یافت نشد؛ پیوند نیازمند اصلاح است.";
+    } else if (kind === "contract") {
+      res.resolvable = false; res.noteFa = "پیوند قرارداد از نوع مرجع‌نماست؛ اطلاعات قرارداد در ستون‌های پرونده/ادعا نگهداری می‌شود و دریافت زندهٔ آن در این نسخه پیش‌بینی نشده است.";
+    } else {
+      res.resolvable = false; res.noteFa = `نوع پیوند «${LINK_KIND_FA[kind] ?? kind}» در این نسخه قابل بازیابی زنده نیست.`;
+    }
+    return res;
   }));
 }

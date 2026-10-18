@@ -9,7 +9,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { type Lang } from '../data/framework';
 import { useAuth } from '../context/AuthContext';
-import { disputeApi, type DisputeCase, type DisputeCatalog, type DisputeDashboard, type DisputeRow, CASE_STATUS_FA, PRIORITY_FA, CLAIM_BASIS_FA, REVIEW_STATUS_FA, EVIDENCE_STATUS_FA, EMPTY } from '../services/disputeExpertClient';
+import { disputeApi, type DisputeCase, type DisputeCatalog, type DisputeDashboard, type DisputeRow, type LinkSuggestions, type LinkResolution, CASE_STATUS_FA, PRIORITY_FA, CLAIM_BASIS_FA, REVIEW_STATUS_FA, EVIDENCE_STATUS_FA, LINK_KIND_CLIENT_FA, ANALYSIS_APPROVAL_CLIENT_FA, EMPTY } from '../services/disputeExpertClient';
 import JalaliDateInput from './JalaliDateInput';
 
 const btn = 'rounded-lg border b-line-soft px-2.5 py-1 text-[11px] transition hover:opacity-80 disabled:opacity-40';
@@ -18,7 +18,7 @@ const card = 'rounded-xl border b-line-soft bg-white/60 p-3';
 const kpi = 'rounded-xl border b-line-soft bg-white/70 p-3 text-center';
 const inputClass = 'w-full rounded-lg border b-line-soft bg-transparent px-2 py-1 text-xs tx1';
 
-type Tab = 'dashboard' | 'cases' | 'parties' | 'evidence' | 'claims';
+type Tab = 'dashboard' | 'cases' | 'parties' | 'evidence' | 'claims' | 'analyses' | 'calculations' | 'links';
 
 export default function DisputeExpertWorkspace(props: { lang: Lang; projectId: string }) {
   const { user } = useAuth();
@@ -46,6 +46,12 @@ function Live({ lang, projectId, userId }: { lang: Lang; projectId: string; user
   const [amountForm, setAmountForm] = useState<Record<string, string>>({ claimId: '', ReviewedAmount: '', ReviewBasisFa: '', ApprovedAmount: '', ApprovedBasisFa: '' });
   const [respForm, setRespForm] = useState<Record<string, string>>({ claimCode: '', ResponderPartyCode: '', BodyFa: '' });
   const [q, setQ] = useState('');
+  /* فاز ۳ */
+  const [suggestions, setSuggestions] = useState<LinkSuggestions | null>(null);
+  const [suggestBusy, setSuggestBusy] = useState(false);
+  const [linkPick, setLinkPick] = useState<{ kind: string; target: string }>({ kind: 'delay_case', target: '' });
+  const [resolutions, setResolutions] = useState<Record<string, LinkResolution>>({});
+  const [resolvingId, setResolvingId] = useState('');
   const generation = useRef(0);
   const mounted = useRef(true);
 
@@ -55,6 +61,10 @@ function Live({ lang, projectId, userId }: { lang: Lang; projectId: string; user
   const evidence = children.PmisDisputeEvidence ?? [];
   const responses = children.PmisDisputeResponses ?? [];
   const auditTrail = children.PmisDisputeAuditTrail ?? [];
+  const analyses = children.PmisDisputeAnalyses ?? [];
+  const calculations = children.PmisDisputeCalculations ?? [];
+  const links = children.PmisDisputeModuleLinks ?? [];
+  const caseLocked = current ? ['closed', 'archived'].includes(current.Status) : false;
   const fmtAmount = (v: unknown): string => { const n = Number(v); return Number.isFinite(n) && v !== null && v !== undefined && v !== '' ? n.toLocaleString('fa-IR') : EMPTY; };
   const subjectFa = (code: string | null | undefined): string => catalog?.subjects.find((s) => s.code === code)?.fa ?? (code || EMPTY);
   const statusFa = (s: string | null | undefined) => (s ? CASE_STATUS_FA[s] ?? s : EMPTY);
@@ -146,6 +156,47 @@ function Live({ lang, projectId, userId }: { lang: Lang; projectId: string; user
     () => setNotice(label('وضعیت اصالت/کفایت ثبت شد.', 'Evidence check recorded.')));
   const removeRow = (table: string, rowId: string) => current && mutate(() => disputeApi.deleteRow(projectId, userId, current.Id, table, rowId));
 
+  /* ── فاز ۳: تحلیل/محاسبه/پیوند ── */
+  const runAnalysis = () => current && mutate(() => disputeApi.runAnalysis(projectId, userId, current.Id),
+    () => setNotice(label('تحلیل قاعده‌محور تولید/به‌روزرسانی شد؛ همهٔ خروجی‌ها پیش‌نویس‌اند و تا تأیید کارشناس انسانی مؤثر نیستند.', 'Rule-based analysis generated — drafts pending expert approval.')));
+  const recalcCalcs = () => current && mutate(() => disputeApi.recalcCalculations(projectId, userId, current.Id),
+    () => setNotice(label('شاخص‌های جمع بازمحاسبه شد (مقادیر ماژول‌های دیگر بازمحاسبه نمی‌شوند).', 'Totals recalculated (other modules never recomputed).')));
+  const setAnalysisStatus = (rowId: string, status: string) => current && mutate(
+    () => disputeApi.patchRow(projectId, userId, current.Id, 'PmisDisputeAnalyses', rowId, { ApprovalStatus: status }),
+    () => setNotice(label(`وضعیت تأیید تحلیل → ${ANALYSIS_APPROVAL_CLIENT_FA[status] ?? status}`, `Analysis status → ${status}`)));
+  async function loadSuggestions() {
+    if (!current || suggestBusy) return;
+    setSuggestBusy(true);
+    const r = await disputeApi.linkSuggestions(projectId, userId, current.Id);
+    if (mounted.current) { if (r.ok) setSuggestions(r.data); else setError(r.message); setSuggestBusy(false); }
+  }
+  const attachLink = () => {
+    if (!current || !linkPick.target) { setError(label('ابتدا نامزدها را بارگذاری و هدف پیوند را انتخاب کنید.', 'Load candidates and pick a target first.')); return; }
+    const kind = linkPick.kind;
+    const pool = (suggestions as unknown as Record<string, { code: string; titleFa: string }[] | undefined>)?.[kind] ?? [];
+    const cand = pool.find((c) => c.code === linkPick.target);
+    mutate(async () => {
+      const r = await disputeApi.addRow(projectId, userId, current.Id, 'PmisDisputeModuleLinks', {
+        LinkKind: kind, TargetCode: linkPick.target, TargetTitleFa: cand?.titleFa || linkPick.target,
+        TargetId: cand?.code || null, EstablishedBy: userId, EstablishedAt: new Date().toISOString(),
+      });
+      if (r.ok) { setLinkPick({ kind, target: '' }); void loadSuggestions(); }
+      return r;
+    }, () => setNotice(label('پیوند نرم برقرار شد (ماژول مقصد تغییری نمی‌کند).', 'Soft link attached (target module untouched).')));
+  };
+  async function toggleResolve(rowId: string) {
+    if (!current) return;
+    if (resolutions[rowId]) { setResolutions((m) => { const n = { ...m }; delete n[rowId]; return n; }); return; }
+    setResolvingId(rowId);
+    const r = await disputeApi.resolveLink(projectId, userId, current.Id, rowId);
+    if (mounted.current) { if (r.ok) setResolutions((m) => ({ ...m, [rowId]: r.data })); else setError(r.message); setResolvingId(''); }
+  }
+  /** خلاصهٔ خواندنی هدف پیوند — فقط کلیدهای معنادار و تصویرشده. */
+  function targetPairs(t: Record<string, unknown>): [string, unknown][] {
+    const keys = ['Code', 'DocNo', 'Revision', 'TitleFa', 'Status', 'Category', 'SourceParty', 'StartDate', 'FinishDate', 'CompletionImpactDays', 'EstimatedDelayDays', 'IsCritical', 'Amount', 'DocumentedAmount', 'ApprovedAmount', 'CostType', 'DeterminedAmount', 'SettlementAmount', 'ResidualScore', 'ResidualBand', 'InherentBand', 'ContractCode', 'ClauseRef', 'IssuedAt', 'CalculatedAt'];
+    return keys.filter((k) => t[k] !== null && t[k] !== undefined && t[k] !== '').map((k) => [k, t[k]]);
+  }
+
   if (loading && !catalog) return <p className="tx3 p-4">{label('در حال بارگذاری…', 'Loading…')}</p>;
   if (!catalog) return <p className="tx3 p-4">{label('دسترسی انجام نشد — مجوز dispute.view لازم است.', 'No access — dispute.view required.')}</p>;
 
@@ -155,6 +206,9 @@ function Live({ lang, projectId, userId }: { lang: Lang; projectId: string; user
     { id: 'parties', fa: 'طرفین و نمایندگان', en: 'Parties' },
     { id: 'evidence', fa: 'مستندات و ادله', en: 'Evidence' },
     { id: 'claims', fa: 'ادعاها و دفاعیات', en: 'Claims & defenses' },
+    { id: 'analyses', fa: 'تحلیل‌های کارشناسی', en: 'Analyses' },
+    { id: 'calculations', fa: 'محاسبات مستقل (مقایسه)', en: 'Comparison calcs' },
+    { id: 'links', fa: 'پیوندهای ماژولی', en: 'Module links' },
   ];
 
   return (
@@ -513,6 +567,159 @@ function Live({ lang, projectId, userId }: { lang: Lang; projectId: string; user
           {claims.length === 0 && <p className="tx3 py-6 text-center text-[11px]">{label('ادعایی ثبت نشده است', 'No claims yet')}</p>}
         </div>
       ) : (tab === 'claims' && <p className="tx3 py-8 text-center text-[11px]">{label('ابتدا از تب «مدیریت پرونده‌ها» پرونده‌ای انتخاب کنید', 'Select a case first')}</p>)}
+
+      {/* فاز ۳ — تحلیل‌های کارشناسی */}
+      {tab === 'analyses' && current ? (
+        <div className="space-y-3">
+          <div className={`${card} flex flex-wrap items-center gap-2`}>
+            <div className="min-w-[240px] flex-1">
+              <h3 className="tx1 text-xs font-bold">{label('تحلیل‌های کارشناسی', 'Expert analyses')}</h3>
+              <p className="tx3 text-[10px]">{label('خروجی قاعده‌محور و یادداشت‌های کارشناس؛ هیچ‌کدام بدون تأیید انسانی مؤثر نیستند و هیچ منبع حقوقی/رأیی جعل نمی‌شود.', 'Rule-based drafts; none effective without human approval; no fabricated sources.')}</p>
+            </div>
+            {can('dispute.review') && !caseLocked && <button className={btnP} disabled={busy} onClick={runAnalysis}>{label('اجرای تحلیل قاعده‌محور', 'Run rule-based analysis')}</button>}
+          </div>
+          {analyses.length === 0 && <p className="tx3 py-6 text-center text-[11px]">{label('تحلیلی ثبت نشده است — «—»', 'No analysis yet — "—"')}</p>}
+          {analyses.map((a) => {
+            const approval = String(a.ApprovalStatus ?? 'draft');
+            return (
+              <div key={a.Id} className={card}>
+                <div className="flex flex-wrap items-start gap-2">
+                  <div className="min-w-[220px] flex-1">
+                    <h4 className="tx1 text-xs font-bold">{String(a.TopicFa ?? EMPTY)}</h4>
+                    <p className="tx3 text-[10px]">{String(a.Code)} — {label('تحلیل‌گر:', 'By:')} {String(a.AnalyzedBy ?? EMPTY)} {a.AnalyzedAt ? `· ${String(a.AnalyzedAt).slice(0, 16).replace('T', ' ')}` : ''}</p>
+                  </div>
+                  <span className={`rounded-full px-2 py-0.5 text-[10px] ${approval === 'approved' ? 'bg-emerald-100 text-emerald-800' : approval === 'rejected' ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-700'}`}>{label('وضعیت تأیید:', 'Approval:')} {ANALYSIS_APPROVAL_CLIENT_FA[approval] ?? approval}</span>
+                  {approval === 'approved' && Boolean(a.ApprovedBy) && <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] text-emerald-700">{label('تأییدکننده:', 'Approver:')} {String(a.ApprovedBy)}</span>}
+                </div>
+                <p className="tx3 mt-1 text-[10px]"><b>{label('سؤال کارشناسی:', 'Question:')}</b> {String(a.QuestionFa ?? EMPTY)}</p>
+                <p className="tx3 mt-1 text-[10px]"><b>{label('روش:', 'Method:')}</b> {String(a.MethodFa ?? EMPTY)}</p>
+                {Boolean(a.ResultsFa) ? <pre className="tx2 mt-2 max-h-56 overflow-y-auto whitespace-pre-wrap rounded-lg bg-slate-50 p-2 text-[10px]">{String(a.ResultsFa)}</pre> : null}
+                {Boolean(a.InfoGapsFa) && String(a.InfoGapsFa).trim() !== '' && !String(a.InfoGapsFa).includes('— هیچ') ? <pre className="mt-1 max-h-40 overflow-y-auto whitespace-pre-wrap rounded-lg bg-amber-50 p-2 text-[10px] text-amber-900">{String(a.InfoGapsFa)}</pre> : null}
+                {Boolean(a.SuggestedConclusionFa) && <p className="mt-1 rounded-lg border border-amber-300 bg-amber-50 p-2 text-[10px] text-amber-900">{label('پیشنهاد تحلیل (پیش‌نویس — رأی نیست):', 'Suggested conclusion (draft — not a verdict):')} {String(a.SuggestedConclusionFa)}</p>}
+                {Boolean(a.UncertaintiesFa) && <p className="tx3 mt-1 text-[9px]">{label('عدم‌قطعیت‌ها:', 'Uncertainties:')} {String(a.UncertaintiesFa)}</p>}
+                {Boolean(a.MethodLimitsFa) && <p className="tx3 mt-0.5 text-[9px]">{label('محدودیت‌های روش:', 'Method limits:')} {String(a.MethodLimitsFa)}</p>}
+                {can('dispute.review') && !caseLocked && (
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {approval !== 'under_review' && <button className={btn} disabled={busy} onClick={() => setAnalysisStatus(a.Id, 'under_review')}>{label('ارسال به بازبینی', 'Send to review')}</button>}
+                    {approval !== 'approved' && <button className={btn} disabled={busy} onClick={() => setAnalysisStatus(a.Id, 'approved')}>{label('تأیید کارشناسی', 'Approve')}</button>}
+                    {approval !== 'rejected' && <button className={btn} disabled={busy} onClick={() => setAnalysisStatus(a.Id, 'rejected')}>{label('مرجوع', 'Reject')}</button>}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      ) : (tab === 'analyses' && <p className="tx3 py-8 text-center text-[11px]">{label('ابتدا از تب «مدیریت پرونده‌ها» پرونده‌ای انتخاب کنید', 'Select a case first')}</p>)}
+
+      {/* فاز ۳ — محاسبات مستقل (مقایسه) */}
+      {tab === 'calculations' && current ? (
+        <div className="space-y-3">
+          <div className={`${card} flex flex-wrap items-center gap-2`}>
+            <div className="min-w-[240px] flex-1">
+              <h3 className="tx1 text-xs font-bold">{label('محاسبات مستقل کارشناسی — فقط «برای مقایسه»', 'Independent expert calculations — comparison only')}</h3>
+              <p className="tx3 text-[10px]">{label('جایگزین محاسبهٔ مدعی/پاسخگو نیست؛ مقادیر ماژول‌های دیگر (تأخیر/خسارت/ریسک) فقط‌خواندنی‌اند و این‌جا بازمحاسبه نمی‌شوند.', 'Never a substitute; other modules’ values are read-only and never recomputed here.')}</p>
+            </div>
+            {can('dispute.review') && !caseLocked && <button className={btnP} disabled={busy} onClick={recalcCalcs}>{label('بازمحاسبهٔ شاخص‌های جمع', 'Recalculate totals')}</button>}
+          </div>
+          {calculations.length === 0 && <p className="tx3 py-6 text-center text-[11px]">{label('محاسبه‌ای ثبت نشده است — «—»', 'No calculations yet — "—"')}</p>}
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {calculations.map((c) => (
+              <div key={c.Id} className={card}>
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <h4 className="tx1 text-xs font-bold">{String(c.TitleFa ?? EMPTY)}</h4>
+                    <p className="tx3 text-[10px]">{String(c.Code)} · {label('وضعیت:', 'Status:')} {String(c.Status ?? EMPTY)}</p>
+                  </div>
+                  <span className="text-base font-bold text-[#1f4e79]">{fmtAmount(c.ResultAmount)}</span>
+                </div>
+                <p className="tx3 mt-1 text-[10px]">{String(c.MethodFa ?? EMPTY)}</p>
+                <p className="tx3 text-[10px]">{label('منبع داده:', 'Source:')} {String(c.DataSourceFa ?? EMPTY)} · {label('محاسبه‌گر:', 'By:')} {String(c.CalculatedBy ?? EMPTY)}</p>
+                {Boolean(c.VarianceNoteFa) && <p className="mt-1 rounded-lg bg-amber-50 p-1.5 text-[10px] text-amber-900">{String(c.VarianceNoteFa)}</p>}
+                <div className="mt-1 flex justify-end">{can('dispute.edit') && !caseLocked && <button className={btn} disabled={busy} onClick={() => removeRow('PmisDisputeCalculations', c.Id)}>{label('حذف', 'Delete')}</button>}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : (tab === 'calculations' && <p className="tx3 py-8 text-center text-[11px]">{label('ابتدا از تب «مدیریت پرونده‌ها» پرونده‌ای انتخاب کنید', 'Select a case first')}</p>)}
+
+      {/* فاز ۳ — پیوندهای ماژولی (نرم — فقط‌خواندنی) */}
+      {tab === 'links' && current ? (
+        <div className="space-y-3">
+          <div className={card}>
+            <h3 className="tx1 mb-1 text-xs font-bold">{label('پیوندهای نرم به ماژول‌های دیگر', 'Soft links to other modules')}</h3>
+            <p className="tx3 text-[10px]">{label('پیوند صرفاً مرجع است: هیچ رکوردی در ماژول مقصد ایجاد/تغییر/حذف نمی‌شود و بازیابی زنده فقط‌خواندنی است.', 'Links are references only — target modules are never written; live resolution is read-only.')}</p>
+          </div>
+          {can('dispute.edit') && !caseLocked && (
+            <div className={`${card} space-y-2`}>
+              <div className="flex flex-wrap items-center gap-2">
+                <h4 className="tx1 text-[11px] font-bold">{label('پیوند جدید', 'New link')}</h4>
+                <button className={btn} disabled={suggestBusy || busy} onClick={() => void loadSuggestions()}>{suggestBusy ? label('در حال بارگذاری…', 'Loading…') : label('بارگذاری نامزدها از ماژول‌ها', 'Load candidates')}</button>
+              </div>
+              {suggestions && (
+                <div className="flex flex-wrap items-end gap-2">
+                  <div className="w-40">
+                    <label className="tx3 text-[9px]">{label('نوع پیوند', 'Link kind')}</label>
+                    <select className={inputClass} value={linkPick.kind} onChange={(e) => setLinkPick({ kind: e.target.value, target: '' })}>
+                      {Object.entries(LINK_KIND_CLIENT_FA).map(([k, faTitle]) => <option key={k} value={k}>{faTitle}</option>)}
+                    </select>
+                  </div>
+                  <div className="min-w-[260px] flex-1">
+                    <label className="tx3 text-[9px]">{label('هدف (از دادهٔ واقعی ماژول مقصد)', 'Target (real data of target module)')}</label>
+                    <select className={inputClass} value={linkPick.target} onChange={(e) => setLinkPick({ ...linkPick, target: e.target.value })}>
+                      <option value="">{label('— انتخاب —', '— select —')}</option>
+                      {((suggestions as unknown as Record<string, { code: string; titleFa: string; alreadyLinked: boolean; status?: string | null }[] | undefined>)[linkPick.kind] ?? []).map((c) => (
+                        <option key={c.code} value={c.code} disabled={c.alreadyLinked}>{c.titleFa} — {c.code}{c.alreadyLinked ? label(' (پیوندشده)', ' (linked)') : ''}</option>
+                      ))}
+                    </select>
+                    {((suggestions as unknown as Record<string, unknown[] | undefined>)[linkPick.kind] ?? []).length === 0 && <p className="tx3 mt-0.5 text-[9px]">{label('رکوردی از این نوع در ماژول مقصد/این پروژه موجود نیست — «—»', 'No records of this kind in the target module — "—"')}</p>}
+                  </div>
+                  <button className={btnP} disabled={busy || !linkPick.target} onClick={attachLink}>{label('برقراری پیوند', 'Attach')}</button>
+                </div>
+              )}
+              {suggestions ? <p className="tx3 text-[9px]">{suggestions.noteFa}</p> : null}
+            </div>
+          )}
+          {links.length === 0 && <p className="tx3 py-6 text-center text-[11px]">{label('پیوندی ثبت نشده است — «—»', 'No links yet — "—"')}</p>}
+          {links.map((l) => {
+            const res = resolutions[l.Id];
+            return (
+              <div key={l.Id} className={card}>
+                <div className="flex flex-wrap items-start gap-2">
+                  <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] text-indigo-800">{LINK_KIND_CLIENT_FA[String(l.LinkKind)] ?? String(l.LinkKind)}</span>
+                  <div className="min-w-[200px] flex-1">
+                    <p className="tx1 text-xs font-bold">{String(l.TargetTitleFa ?? EMPTY)}</p>
+                    <p className="tx3 text-[10px]">{String(l.TargetCode)} · {label('ایجاد:', 'By:')} {String(l.EstablishedBy ?? EMPTY)} {l.EstablishedAt ? `· ${String(l.EstablishedAt).slice(0, 10)}` : ''} · {label('وضعیت:', 'Status:')} {String(l.Status ?? 'active')}</p>
+                  </div>
+                  <button className={btn} disabled={resolvingId === l.Id} onClick={() => void toggleResolve(l.Id)}>{resolutions[l.Id] ? label('بستن بازیابی', 'Hide') : resolvingId === l.Id ? label('…', '…') : label('بازیابی زندهٔ هدف (خواندنی)', 'Live resolve (read-only)')}</button>
+                  {can('dispute.edit') && !caseLocked && <button className={btn} disabled={busy} onClick={() => removeRow('PmisDisputeModuleLinks', l.Id)}>{label('حذف پیوند', 'Remove')}</button>}
+                </div>
+                {res && (
+                  <div className="mt-2 rounded-xl border b-line-soft bg-slate-50/70 p-2">
+                    <div className="flex items-center gap-2">
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] ${res.found ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-700'}`}>{res.resolvable ? (res.found ? label('هدف پیدا شد', 'Target found') : label('هدف یافت نشد', 'Target not found')) : label('غیرقابل بازیابی زنده', 'Not resolvable')}</span>
+                      <span className="tx3 text-[9px]">readOnly: true</span>
+                    </div>
+                    {Boolean(res.noteFa) && <p className="tx3 mt-1 text-[10px]">{res.noteFa}</p>}
+                    {res.target && (
+                      <div className="mt-1 grid grid-cols-2 gap-x-3 gap-y-1 md:grid-cols-3">
+                        {targetPairs(res.target).map(([k, v]) => (
+                          <p key={k} className="tx2 text-[10px]"><span className="tx3">{k}:</span> {typeof v === 'number' ? v.toLocaleString('fa-IR') : String(v)}</p>
+                        ))}
+                      </div>
+                    )}
+                    {res.related.length > 0 && (
+                      <div className="mt-1">
+                        <p className="tx3 text-[9px]">{label('رکوردهای مرتبط (فقط نمایشی — بازمحاسبه نمی‌شوند):', 'Related records (display-only — never recomputed):')}</p>
+                        {res.related.map((rel) => <p key={String(rel.Id)} className="tx2 text-[10px]">{Object.entries(rel).filter(([k]) => k !== 'Id').map(([k, v]) => `${k}: ${v}`).join(' · ')}</p>)}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      ) : (tab === 'links' && <p className="tx3 py-8 text-center text-[11px]">{label('ابتدا از تب «مدیریت پرونده‌ها» پرونده‌ای انتخاب کنید', 'Select a case first')}</p>)}
 
       {/* تاریخچه (همیشه در پایین) */}
       {current && auditTrail.length > 0 && (

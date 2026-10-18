@@ -231,6 +231,7 @@ export function validateChildRow(table: keyof typeof CHILD_TABLE_SPECS, body: Re
   if (table === "PmisDisputeParties" && body.Role && !PARTY_ROLES.some((r) => r.code === body.Role)) errors.push("نقش طرف باید از فهرست استاندارد باشد");
   if (table === "PmisDisputeClaims" && body.BasisKind && !(CLAIM_BASIS_KINDS as readonly string[]).includes(String(body.BasisKind))) errors.push("مبنای ادعا نامعتبر است");
   if (table === "PmisDisputeDeadlines" && body.DueDate && !ISO_DAY.test(String(body.DueDate))) errors.push("مهلت باید YYYY-MM-DD باشد");
+  if (table === "PmisDisputeModuleLinks" && body.LinkKind && !(LINK_KINDS as readonly string[]).includes(String(body.LinkKind))) errors.push("نوع پیوند باید از فهرست استاندارد باشد");
   return { ok: errors.length === 0, errors };
 }
 
@@ -327,3 +328,147 @@ export function partyRoleFa(code: string): string {
 export function claimBasisFa(code: string): string {
   return ({ time: "زمانی", money: "مالی", both: "زمانی و مالی", declaratory: "اعلامی" } as Record<string, string>)[code] ?? code;
 }
+
+/* ═══════════════════════ فاز ۳ — سرویس‌های تحلیل قاعده‌محور ═══════════════════════
+ * همهٔ خروجی‌ها پیش‌نویس‌اند و پیش از مؤثرشدن نیازمند تأیید کارشناس انسانی‌اند.
+ * هیچ مادهٔ قانونی/رأی/منبعی، بدون وجود رکورد واقعی در پایگاه‌داده، ذکر نمی‌شود؛
+ * هر مرجع احرازنشده صریحاً «تأییدنشده» برچسب می‌خورد. سامانه رأی صادر نمی‌کند.
+ */
+
+/** انواع مجاز پیوند نرم با ماژول‌های دیگر (مطابق کامنت ستون LinkKind). */
+export const LINK_KINDS = ["delay_case", "loss_case", "contract_risk", "claim", "contract", "edms_document"] as const;
+export const LINK_KIND_FA: Record<(typeof LINK_KINDS)[number], string> = {
+  delay_case: "رویداد تأخیر", loss_case: "آیتم خسارت/لایحه", contract_risk: "ریسک قراردادی",
+  claim: "ادعای ماژول ادعاها", contract: "قرارداد", edms_document: "سند EDMS",
+};
+
+export const ANALYSIS_APPROVAL_STATUSES = ["draft", "under_review", "approved", "rejected"] as const;
+export const ANALYSIS_APPROVAL_FA: Record<string, string> = {
+  draft: "پیش‌نویس", under_review: "در حال بازبینی", approved: "تأییدشده", rejected: "مرجوع",
+};
+
+export type ClaimLike = Record<string, unknown> & { Code?: string; BasisKind?: string; ReviewStatus?: string };
+export type PartyLike = Record<string, unknown> & { Code?: string; Role?: string };
+export type EvidenceLike = Record<string, unknown> & { Code?: string; DocType?: string; AuthenticityStatus?: string; SufficiencyStatus?: string };
+export type ResponseLike = Record<string, unknown> & { Code?: string; ClaimCode?: string; ResponderPartyCode?: string; Verdict?: string };
+export type LinkLike = Record<string, unknown> & { Code?: string; LinkKind?: string; TargetCode?: string };
+export type FindingSeverity = "critical" | "warning" | "info";
+export interface AnalysisFinding { code: string; severity: FindingSeverity; text: string }
+
+export const SEVERITY_FA: Record<FindingSeverity, string> = {
+  critical: "بحرانی", warning: "هشدار", info: "اطلاع",
+};
+
+const num = (v: unknown): number | null => {
+  if (v === undefined || v === null || v === "") return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+};
+
+/**
+ * DisputeClaimAnalysisService — تحلیل قاعده‌محور یک ادعا در قلمرو پرونده.
+ * فقط از داده‌های واقعی رکوردها استفاده می‌کند؛ هیچ استناد قراردادی خارج از
+ * آنچه کاربر ثبت کرده اضافه نمی‌شود.
+ */
+export function analyzeClaim(claim: ClaimLike, evidence: EvidenceLike[], responses: ResponseLike[], links: LinkLike[]): AnalysisFinding[] {
+  const out: AnalysisFinding[] = [];
+  const push = (code: string, severity: FindingSeverity, text: string) => out.push({ code, severity, text });
+  const claimed = num(claim.ClaimedAmount);
+  const reviewed = num(claim.ReviewedAmount);
+  const approved = num(claim.ApprovedAmount);
+  const claimedDays = num(claim.ClaimedDelayDays);
+
+  /* A-amt: لایه‌بندی مبالغ */
+  if (claimed === null) push("amt-missing", "warning", "مبلغ مورد مطالبه ثبت نشده است — ارزیابی مالی ادعا فعلاً ممکن نیست.");
+  else if (claimed === 0) push("amt-zero", "info", "مبلغ مورد مطالبه صفر ثبت شده است؛ اگر ادعا صرفاً زمانی/اعلامی است نادیده بگیرید.");
+  if (reviewed !== null && approved === null) push("amt-review-pending", "info", "لایهٔ بررسی ثبت شده ولی لایهٔ تأیید هنوز انجام نشده است.");
+  if (reviewed !== null && claimed !== null && reviewed > claimed) push("amt-review-gt-claim", "warning", "مبلغ بررسی‌شده بیش از مبلغ مورد مطالبه است — انطباق داده بررسی شود.");
+  if (approved !== null && reviewed !== null && approved > reviewed) push("amt-approved-gt-review", "critical", "مبلغ تأییدشده بیش از مبلغ بررسی‌شده است — مغایر قاعدهٔ لایه‌بندی مبالغ.");
+
+  /* A-clause: استناد قراردادی — بدون جعل بند */
+  const clause = String(claim.ContractClauseRef ?? "").trim();
+  if (!clause) push("clause-missing", "critical", "ارجاع به بند/شرط قرارداد ثبت نشده است؛ اقامهٔ ادعا بدون استناد قراردادی نظم‌بخشی ثبت‌شده ضعیف است.");
+  else push("clause-registered", "info", `ارجاع قراردادی «${clause}» ثبت شده است — احراز اعتبار متن بند بر عهدهٔ کارشناس است (تأیید خودکار نشده).`);
+
+  /* A-basis: انطباق مبنا با داده */
+  const basis = String(claim.BasisKind ?? "");
+  if ((basis === "time" || basis === "both") && claimedDays === null) push("basis-time-no-days", "warning", "مبنای ادعا زمانی است ولی مدت مطالبه‌شده (روز) ثبت نشده است.");
+  if ((basis === "money" || basis === "both") && claimed === null) push("basis-money-no-amount", "warning", "مبنای ادعا مالی است ولی مبلغ مطالبه‌شده ثبت نشده است.");
+  /* پیوندهای پیشنهادی: مبنای زمانی ← رویداد تأخیر | مبنای مالی ← آیتم خسارت */
+  const kindCodes = new Set(links.map((l) => String(l.LinkKind ?? "")));
+  if ((basis === "time" || basis === "both") && !kindCodes.has("delay_case")) push("link-delay-missing", "warning", "برای ادعای زمانی پیوندی به «رویداد تأخیر» برقرار نشده است.");
+  if ((basis === "money" || basis === "both") && !kindCodes.has("loss_case")) push("link-loss-missing", "info", "برای ادعای مالی پیوندی به «آیتم خسارت/لایحه» برقرار نشده است (اختیاری ولی توصیه‌شده).");
+
+  /* A-evidence: اصالت و کفایت */
+  const myEvidence = evidence.filter((e) => {
+    const refs = e.ClaimRefs;
+    if (Array.isArray(refs) && refs.length) return refs.some((x) => String(x) === String(claim.Code ?? ""));
+    return true; // مدارک بدون اتصال صریح در سطح پرونده تلقی می‌شوند
+  });
+  if (myEvidence.length === 0) push("ev-none", "critical", "هیچ مدرکی به این ادعا متصل نیست — ادعا فاقد سند است.");
+  else {
+    const verified = myEvidence.filter((e) => String(e.AuthenticityStatus ?? "pending") === "verified").length;
+    const rejected = myEvidence.filter((e) => String(e.AuthenticityStatus ?? "pending") === "rejected").length;
+    const pending = myEvidence.length - verified - rejected;
+    const insufficient = myEvidence.filter((e) => String(e.SufficiencyStatus ?? "unchecked") === "insufficient").length;
+    push("ev-count", "info", `تعداد مدارک متصل/سطح پرونده: ${myEvidence.length} (اصالت: تأییدشده ${verified}، نامعلوم/در انتظار ${pending}، ردشده ${rejected}).`);
+    if (rejected > 0) push("ev-rejected", "critical", `${rejected} مدرک دارای اصالت «ردشده» است — اتکای مستقیم به آن‌ها قابل دفاع نیست.`);
+    if (pending === myEvidence.length) push("ev-all-pending", "warning", "اصالت هیچ‌کدام از مدارک هنوز احراز/ثبت نشده است.");
+    if (insufficient > 0) push("ev-insufficient", "warning", `${insufficient} مدرک «ناکافی» ارزیابی شده است — شکاف مستنداتی وجود دارد.`);
+  }
+
+  /* A-responses: دفاع طرف */
+  const myResponses = responses.filter((x) => String(x.ClaimCode ?? "") === String(claim.Code ?? ""));
+  if (myResponses.length === 0) push("resp-none", "info", "پاسخی از طرف مقابل برای این ادعا ثبت نشده است.");
+  else {
+    const accepted = myResponses.filter((x) => ["accepted", "partial"].includes(String(x.Verdict ?? ""))).length;
+    const rejected = myResponses.filter((x) => String(x.Verdict ?? "") === "rejected").length;
+    if (rejected > 0) push("resp-rejected", "warning", `${rejected} پاسخ ردکننده ثبت شده است — مواضع دفاعی طرف مقابل مستند و در تحلیل لحاظ شود.`);
+    if (accepted > 0) push("resp-accepted", "info", `${accepted} پاسخ پذیرش‌گر/جزئی ثبت شده است — محل اتفاقات طرفین مشخص است.`);
+  }
+
+  /* A-status */
+  const rs = String(claim.ReviewStatus ?? "open");
+  if (["approved"].includes(rs)) push("st-approved", "info", "وضعیت ارزیابی ادعا «تأیید» است."); 
+  if (["rejected"].includes(rs)) push("st-rejected", "info", "وضعیت ارزیابی ادعا «رد» است.");
+  return out;
+}
+
+/**
+ * DisputeExpertAnalysisEngine — جمع‌بندی تحلیل در سطح پرونده.
+ * خروجی متنی برای فیلدهای متنی تحلیل‌ها + آرایهٔ یافته‌ها برای ذخیرهٔ ساختاری.
+ */
+export function summarizeCaseFindings(
+  claims: ClaimLike[], links: LinkLike[], deadlines: { DueDate: string; Status: string }[], today: string,
+): { findings: AnalysisFinding[]; totals: { claims: number; claimed: number; reviewed: number; approved: number; delayDaysClaimed: number }; overdueDeadlines: number } {
+  const findings: AnalysisFinding[] = [];
+  const push = (code: string, severity: FindingSeverity, text: string) => findings.push({ code, severity, text });
+  const sum = (f: string) => claims.reduce((a, c) => a + (num((c as Record<string, unknown>)[f]) ?? 0), 0);
+  const totals = {
+    claims: claims.length,
+    claimed: sum("ClaimedAmount"), reviewed: sum("ReviewedAmount"), approved: sum("ApprovedAmount"),
+    delayDaysClaimed: sum("ClaimedDelayDays"),
+  };
+  const overdue = deadlines.filter((d) => deadlineDaysLeft(d, today) !== null && (deadlineDaysLeft(d, today) as number) < 0).length;
+  if (claims.length === 0) push("cc-no-claims", "warning", "هیچ ادعایی در پرونده ثبت نشده است — خروجی تحلیل نمی‌تواند دربارهٔ موضوع اختلاف قضاوت مستند داشته باشد.");
+  if (totals.approved === 0 && claims.length > 0) push("cc-approve-empty", "info", "مجموع مبالغ تأییدشدهٔ پرونده صفر است؛ این یعنی «تأییدی هنوز انجام نشده» — نه «رد کامل». لایهٔ تأیید جدا نمایش داده می‌شود.");
+  if (totals.reviewed > 0 && totals.reviewed !== totals.claimed) push("cc-layers-differ", "info", "مجموع لایه‌های مبلغ متفاوت است (مطالبه/بررسی/تأیید) — طبیعی و نشانهٔ کاربرگ سه‌لایه است؛ مبناهای ثبت‌شده کنترل شوند.");
+  if (overdue > 0) push("cc-deadline-overdue", "critical", `${overdue} مهلت از موعد گذشته است — ریسک تعطیلی فرایند داوری/کارشناسی.`);
+  const acceptedRisks = links.filter((l) => String(l.LinkKind) === "contract_risk").length;
+  if (acceptedRisks === 0) push("cc-no-risk-links", "info", "هیچ پیوندی به ریسک قراردادی ثبت نشده است (اختیاری).");
+  const riskScoreNote = "یادآوری قاعده: هیچ امتیاز ریسکی به‌خودی‌خود مبلغ خسارت یا تمدید مدت تولید نمی‌کند و بخشنامهٔ ۱۳۰۰ تنها به‌تنهایی مبنای EOT نیست.";
+  push("cc-principles", "info", riskScoreNote);
+  return { findings, totals, overdueDeadlines: overdue };
+}
+
+/** قالب‌بندی یافته‌ها برای فیلد متنی نتایج تحلیل (قابل نمایش در گزارش). */
+export function renderFindingsLines(findings: AnalysisFinding[]): string {
+  if (findings.length === 0) return "— هیچ یافته‌ای تولید نشد —";
+  return findings.map((f) => `${f.severity === "critical" ? "✖" : f.severity === "warning" ? "⚠" : "ℹ"} [${SEVERITY_FA[f.severity]}] ${f.text}`).join("\n");
+}
+
+/** پرسش/روش استاندارد تحلیل خودکار ادعا — روی رکورد قابل بازتولید است. */
+export const CLAIM_ANALYSIS_METHOD_FA =
+  "تحلیل قاعده‌محور خودکار سامانهٔ کارشناسی دعاوی نسخهٔ ۱٫۰: کنترل لایه‌بندی مبالغ (مطالبه/بررسی/تأیید)، وجود استناد قراردادی، انطباق مبنای ادعا با داده، وضعیت اصالت و کفایت مدارک، پاسخ‌های طرف مقابل و پیوندهای ماژولی مرتبط. هیچ داده‌ای استنباط/جعل نمی‌شود؛ موارد احرازنشده صریحاً «تأییدنشده» اعلام می‌شوند.";
+export const CALC_TOTALS_METHOD_FA =
+  "محاسبهٔ جمع سادهٔ روی ردیف‌های ثبت‌شدهٔ ادعای همین پرونده (sum). منبع داده: ستون‌های ClaimedAmount/ReviewedAmount/ApprovedAmount/ClaimedDelayDays. مقادیر ماژول‌های دیگر فقط نمایشی خوانده می‌شوند و در این ماژول بازمحاسبه نمی‌گردند. این محاسبهٔ مستقل کارشناسی «برای مقایسه» است و جای محاسبهٔ اصلی مدعی/پاسخگو را نمی‌گیرد.";
