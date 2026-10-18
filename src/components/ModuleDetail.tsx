@@ -163,6 +163,9 @@ const D4_PAGE_SUBS: Record<string, { id: string; title: Bi; tab: D4Tab; sql: str
     { id: "d4-p5-exe", title: { fa: "گراف EXEC", en: "EXEC graph" }, tab: "exec", sql: ["Trace_Link"] },
     { id: "d4-p5-loss", title: { fa: "مدیریت خسارات و دعاوی مالی پیمان", en: "Contract losses & financial claims" }, tab: "loss", sql: ["ClaimCostItem", "ClaimCalculationRule", "ClaimCalculationRun"] },
   ],
+  "d4-p7": [
+    { id: "d4-p7-dxp", title: { fa: "کارشناسی، داوری و تحلیل دعاوی ساخت", en: "Dispute expert workspace" }, tab: "dexp", sql: ["PmisDisputeCases", "PmisDisputeParties", "PmisDisputeClaims", "PmisDisputeResponses", "PmisDisputeEvidence", "PmisDisputeExpertReports"] },
+  ],
 };
 
 const D4_TAB_BY_SUB: Record<string, D4Tab> = {
@@ -181,6 +184,7 @@ const D4_TAB_BY_SUB: Record<string, D4Tab> = {
   "d4-p5-dsp": "dispute",
   "d4-p5-exe": "exec",
   "d4-p5-loss": "loss",
+  "d4-p7-dxp": "dexp",
   "d4-p6-s1": "invest",
   "d4-p6-s2": "invest",
 };

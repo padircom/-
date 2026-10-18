@@ -1279,6 +1279,13 @@ export const domains: Domain[] = [
           { id: "d4-p6-s2", title: { fa: "سناریو، حساسیت و گیتِ تصمیم", en: "Scenarios, Sensitivity & Gate" }, activity: { fa: "تحلیلِ سه سناریو با احتمال، نمودارِ تورنادو روی محرک‌ها و صدورِ تصمیمِ گیت (تأیید/مشروط/عدم تأیید)", en: "Analyse three probability-weighted scenarios, tornado sensitivity on drivers and issue a gate decision" }, source: "Finance, PMO", sql: ["Scenario_Model", "Sensitivity_Run"], output: "Investment Gate Decision", connectsTo: "Governance, Portfolio", ai: "AI Decision Advisor" },
         ],
       },
+      {
+        id: "d4-p7",
+        title: { fa: "کارشناسی، داوری و تحلیل دعاوی ساخت", en: "Construction Dispute Expert Engine" },
+        subs: [
+          { id: "d4-p7-dxp", title: { fa: "کارشناسی، داوری و تحلیل دعاوی ساخت", en: "Dispute Expert Workspace" }, activity: { fa: "مدیریت پرونده‌های اختلاف، طرفین، مستندات و ادله، ادعاها و دفاعیات، تحلیل کارشناسی و گزارش کارشناسی", en: "Dispute case management, parties, evidence, claims/defenses, expert analysis and reporting" }, source: "Contract, Claims, Delay Analysis, Evidence", sql: ["PmisDisputeCases", "PmisDisputeParties", "PmisDisputeClaims", "PmisDisputeEvidence", "PmisDisputeExpertReports"], output: "Expert Report (Word/PDF)", connectsTo: "D1, D4, EDMS", ai: "Rule-based analysis assistant (LLM not connected)" },
+        ],
+      },
     ],
   },
   {

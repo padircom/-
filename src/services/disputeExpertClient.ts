@@ -1,0 +1,97 @@
+/**
+ * PMO-CONSTRUCTION-DISPUTE-EXPERT-ENGINE-V1.0 — کلاینت رابط کاربری
+ * «کارشناسی، داوری و تحلیل دعاوی ساخت». همهٔ مسیرها پروژه‌ای و با x-user-id
+ * امضا می‌شوند؛ سرور مجوز dispute.* را دوباره و مستقل بررسی می‌کند.
+ */
+import { jsonRequest } from "./apiClient";
+
+export type DisputeCase = {
+  Id: string; Code: string; TitleFa: string; SubjectCode: string;
+  DescriptionFa: string | null; EmployerFa: string | null; ContractorFa: string | null;
+  ConsultantFa: string | null; CourtRefFa: string | null; ExpertScopeFa: string | null;
+  ClaimDescriptionFa: string | null; ClaimedAmount: number | null; Currency: string | null;
+  ClaimedDelayDays: number | null; ContractCode: string | null; ClaimCode: string | null;
+  DelayEventCode: string | null; DelayCaseId: string | null; LossCaseId: string | null;
+  ContractRiskId: string | null; IncidentDate: string | null; RegistrationDate: string | null;
+  ResponseDeadline: string | null; DeliveryDeadline: string | null; Priority: string | null;
+  InternalOwnerFa: string | null; Status: string; CreatedBy: string | null;
+  StatusChangedBy: string | null; StatusChangedAt: string | null; StatusNoteFa: string | null;
+  ExpertNoteFa: string | null; RowVersion: number;
+};
+export type DisputeCatalog = {
+  module: string; version: string; llmConnected: boolean; ruleBasedAssistanceNoteFa: string;
+  permissions: string[]; tables: string[]; childTables: string[];
+  subjects: { code: string; fa: string }[];
+  caseStatuses: { code: string; fa: string; to: string[] }[];
+  approvalTransitions: string[];
+  partyRoles: { code: string; fa: string }[];
+  evidenceDocTypes: { code: string; fa: string }[];
+  evidenceRuleFa: string; evidenceAuthenticity: string[]; evidenceSufficiency: string[];
+  claimBasisKinds: string[]; claimReviewStatuses: string[];
+  referenceSourceKinds: { code: string; fa: string }[]; referenceVerification: string[];
+  referenceRuleFa: string; reportSections: { key: string; fa: string }[];
+  reportStatuses: string[]; amountsRuleFa: string;
+};
+export type DisputeDashboard = {
+  totalCases: number; openCases: number; closedCases: number;
+  byStatus: Record<string, number>;
+  awaitingExpertReview: number; awaitingDocuments: number; nearDeadlines: number;
+  totalClaims: number; claimsInsufficientEvidence: number;
+  totalClaimedAmount: number; totalReviewedAmount: number; totalApprovedAmount: number;
+  reportsDrafting: number; reportsInReview: number;
+  bySubject: Record<string, number>; byContract: Record<string, number>; trend: Record<string, number>;
+};
+export type DisputeRow = Record<string, unknown> & { Id: string; Code: string; RowVersion?: number };
+
+const enc = encodeURIComponent;
+
+export const disputeApi = {
+  catalog: (projectId: string, userId: string | null) =>
+    jsonRequest<DisputeCatalog>(`/api/dispute-expert/${enc(projectId)}/catalog`, userId, "GET"),
+  dashboard: (projectId: string, userId: string | null) =>
+    jsonRequest<DisputeDashboard>(`/api/dispute-expert/${enc(projectId)}/dashboard`, userId, "GET"),
+  listCases: (projectId: string, userId: string | null) =>
+    jsonRequest<{ cases: DisputeCase[] }>(`/api/dispute-expert/${enc(projectId)}/cases`, userId, "GET"),
+  case: (projectId: string, userId: string | null, id: string) =>
+    jsonRequest<{ case: DisputeCase; children: Record<string, DisputeRow[]> }>(`/api/dispute-expert/${enc(projectId)}/cases/${enc(id)}`, userId, "GET"),
+  createCase: (projectId: string, userId: string | null, body: Record<string, unknown>) =>
+    jsonRequest<{ case: DisputeCase }>(`/api/dispute-expert/${enc(projectId)}/cases`, userId, "POST", body),
+  patchCase: (projectId: string, userId: string | null, id: string, body: Record<string, unknown>) =>
+    jsonRequest<{ case: DisputeCase }>(`/api/dispute-expert/${enc(projectId)}/cases/${enc(id)}`, userId, "PATCH", body),
+  transition: (projectId: string, userId: string | null, id: string, to: string, noteFa?: string) =>
+    jsonRequest<{ case: DisputeCase }>(`/api/dispute-expert/${enc(projectId)}/cases/${enc(id)}/transition`, userId, "POST", { to, noteFa }),
+  deleteCase: (projectId: string, userId: string | null, id: string) =>
+    jsonRequest<{ deleted: boolean }>(`/api/dispute-expert/${enc(projectId)}/cases/${enc(id)}`, userId, "DELETE"),
+  addRow: (projectId: string, userId: string | null, id: string, table: string, body: Record<string, unknown>) =>
+    jsonRequest<{ row: DisputeRow }>(`/api/dispute-expert/${enc(projectId)}/cases/${enc(id)}/rows/${enc(table)}`, userId, "POST", body),
+  patchRow: (projectId: string, userId: string | null, id: string, table: string, rowId: string, body: Record<string, unknown>) =>
+    jsonRequest<{ row: DisputeRow }>(`/api/dispute-expert/${enc(projectId)}/cases/${enc(id)}/rows/${enc(table)}/${enc(rowId)}`, userId, "PATCH", body),
+  deleteRow: (projectId: string, userId: string | null, id: string, table: string, rowId: string) =>
+    jsonRequest<{ deleted: boolean }>(`/api/dispute-expert/${enc(projectId)}/cases/${enc(id)}/rows/${enc(table)}/${enc(rowId)}`, userId, "DELETE"),
+};
+
+export const CHILD_TABLE_FA: Record<string, string> = {
+  PmisDisputeParties: "طرفین و نمایندگان",
+  PmisDisputeClaims: "ادعاها و دفاعیات",
+  PmisDisputeResponses: "پاسخ‌های طرف مقابل",
+  PmisDisputeEvidence: "مستندات و ادله",
+  PmisDisputeAnalyses: "تحلیل‌های کارشناسی",
+  PmisDisputeCalculations: "محاسبات مستقل (مقایسه)"
+,  PmisDisputeHearings: "جلسات و صورت‌جلسات",
+  PmisDisputeOpinions: "نظریات کارشناسی",
+  PmisDisputeReports: "نسخه‌های گزارش",
+  PmisDisputeDeadlines: "ارجاعات و مهلت‌ها",
+  PmisDisputeModuleLinks: "پیوندهای نرم به ماژول‌ها",
+  PmisDisputeAuditTrail: "تاریخچهٔ پرونده",
+};
+export const CASE_STATUS_FA: Record<string, string> = {
+  draft: "پیش‌نویس", registered: "ثبت‌شده", awaiting_documents: "در انتظار تکمیل مدارک",
+  under_review: "در حال بررسی", awaiting_party_response: "در انتظار پاسخ طرفین",
+  report_drafting: "در حال تهیه گزارش", pending_review: "در انتظار بازبینی",
+  ready_for_delivery: "آماده تحویل", delivered: "تحویل‌شده", closed: "مختومه", archived: "بایگانی‌شده",
+};
+export const PRIORITY_FA: Record<string, string> = { low: "کم", normal: "عادی", high: "زیاد", urgent: "فوری" };
+export const CLAIM_BASIS_FA: Record<string, string> = { time: "زمانی", money: "مالی", both: "زمانی و مالی", declaratory: "اعلامی" };
+export const REVIEW_STATUS_FA: Record<string, string> = { open: "باز", under_analysis: "در حال تحلیل", question_sent: "پرسش ارسال‌شده", reviewed: "بررسی‌شده", superseded: "جایگزین‌شده" };
+export const EVIDENCE_STATUS_FA: Record<string, string> = { pending: "در انتظار", verified: "احرازشده", rejected: "ردشده", contested: "مورد مناقشه", unchecked: "بررسی‌نشده", sufficient: "کافی", insufficient: "ناکافی", reviewed: "بررسی‌شده", flagged: "پرچم‌دار" };
+export const EMPTY = "—";
