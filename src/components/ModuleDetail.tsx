@@ -783,7 +783,7 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
   const d4Tab = ((): D4Tab => {
     const sid = selected?.sId ?? target.subId;
     if (sid && D4_TAB_BY_SUB[sid]) return D4_TAB_BY_SUB[sid];
-    return "matrix";
+    return "process";
   })();
 
   if (dom.id === "d4") {
