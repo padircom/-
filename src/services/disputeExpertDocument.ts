@@ -89,6 +89,8 @@ export function buildExpertReport(input: ExpertReportInput) {
   const issues: string[] = [];
   const c = input.caseRow;
   if (!c?.Code) issues.push('پروندهٔ معتبری برای ساخت گزارش انتخاب نشده است');
+  if (c?.Code && !input.parties?.length) issues.push('هیچ طرفی در پرونده ثبت نشده است؛ گزارش کارشناسی بدون طرفین قابل تولید نیست — ابتدا طرفین را ثبت کنید');
+  if (c?.Code && !input.claims?.length) issues.push('هیچ ادعا/خواسته‌ای در پرونده ثبت نشده است؛ گزارش کارشناسی بدون دست‌کم یک ادعا موضوعیت ندارد');
   const cds = (field: string) => {
     const v = c[field];
     return v === null || v === undefined || v === '' ? '—' : esc(String(v));

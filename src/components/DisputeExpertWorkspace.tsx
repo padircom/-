@@ -17,8 +17,15 @@ const btnP = 'rounded-lg bg-[#1f4e79] px-3 py-1 text-[11px] text-white transitio
 const card = 'rounded-xl border b-line-soft bg-white/60 p-3';
 const kpi = 'rounded-xl border b-line-soft bg-white/70 p-3 text-center';
 const inputClass = 'w-full rounded-lg border b-line-soft bg-transparent px-2 py-1 text-xs tx1';
+function daysToDate(iso: string): number | null {
+  const t = Date.parse(`${iso}T00:00:00Z`);
+  if (!Number.isFinite(t)) return null;
+  const now = new Date();
+  const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  return Math.round((t - today) / 86400000);
+}
 
-type Tab = 'dashboard' | 'cases' | 'parties' | 'evidence' | 'claims' | 'analyses' | 'calculations' | 'links' | 'hearings' | 'opinions' | 'reports';
+type Tab = 'dashboard' | 'cases' | 'parties' | 'evidence' | 'claims' | 'analyses' | 'calculations' | 'links' | 'hearings' | 'opinions' | 'deadlines' | 'reports';
 
 export default function DisputeExpertWorkspace(props: { lang: Lang; projectId: string }) {
   const { user } = useAuth();
@@ -57,6 +64,7 @@ function Live({ lang, projectId, userId }: { lang: Lang; projectId: string; user
   const [opiForm, setOpiForm] = useState<Record<string, string>>({ TitleFa: '', BodyFa: '', PreviousVersionCode: '', Version: '' });
   const [opiSources, setOpiSources] = useState<Record<string, boolean>>({});
   const [repTitle, setRepTitle] = useState('');
+  const [dlForm, setDlForm] = useState({ TitleFa: '', Kind: 'other', DueDate: '', PartyCode: '', RelatedCode: '', NoteFa: '' });
   const [docBusy, setDocBusy] = useState('');
   const [mgmtKind, setMgmtKind] = useState('cases_status');
   const [mgmt, setMgmt] = useState<ManagementReportOut | null>(null);
@@ -224,6 +232,23 @@ function Live({ lang, projectId, userId }: { lang: Lang; projectId: string; user
     if (r.ok) setHeaForm({ TitleFa: '', MeetingDate: '', LocationFa: '', QuestionsFa: '', QuestionDeadline: '', MinutesBodyFa: '' });
     return r;
   }, () => setNotice(label(heaForm.QuestionDeadline ? 'جلسه ثبت شد؛ مهلت پاسخ پرسش‌ها به‌صورت خودکار در ارجاعات ایجاد شد.' : 'جلسه ثبت شد.', 'Hearing registered.')));
+  const addDeadline = () => current && mutate(async () => {
+    if (!dlForm.TitleFa.trim() || !dlForm.DueDate.trim()) return { ok: false, message: label('عنوان و سررسید الزامی است', 'Title and due date are required') };
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dlForm.DueDate.trim())) return { ok: false, message: label('قالب تاریخ باید YYYY-MM-DD باشد', 'Date must be YYYY-MM-DD') };
+    const body: Record<string, unknown> = {
+      TitleFa: dlForm.TitleFa.trim(), Kind: dlForm.Kind, DueDate: dlForm.DueDate.trim(), Status: 'open',
+      PartyCode: dlForm.PartyCode || null, RelatedCode: dlForm.RelatedCode || null, NoteFa: dlForm.NoteFa || null,
+    };
+    const r = await disputeApi.addRow(projectId, userId, current.Id, 'PmisDisputeDeadlines', body);
+    if (r.ok) setDlForm({ TitleFa: '', Kind: 'other', DueDate: '', PartyCode: '', RelatedCode: '', NoteFa: '' });
+    return r;
+  }, () => setNotice(label('ارجاع/مهلت ثبت شد.', 'Referral registered.')));
+  const setDeadlineStatus = (rowId: string, status: string) => current && mutate(async () => {
+    const body: Record<string, unknown> = { Status: status, NoteFa: label('تغییر وضعیت از تب ارجاعات', 'Status changed from referrals tab') };
+    if (status === 'met') body.MetAt = new Date().toISOString().slice(0, 10);
+    return disputeApi.patchRow(projectId, userId, current.Id, 'PmisDisputeDeadlines', rowId, body);
+  }, () => setNotice(label('وضعیت مهلت به‌روزرسانی شد.', 'Deadline status updated.')));
+
   const setMinutesStatus = (rowId: string, status: string) => current && mutate(async () => {
     const body: Record<string, unknown> = { MinutesStatus: status };
     if (status === 'signed') body.SignedAt = new Date().toISOString().slice(0, 10);
@@ -306,6 +331,7 @@ function Live({ lang, projectId, userId }: { lang: Lang; projectId: string; user
     { id: 'links', fa: 'پیوندهای ماژولی', en: 'Module links' },
     { id: 'hearings', fa: 'جلسات و صورت‌جلسات', en: 'Hearings' },
     { id: 'opinions', fa: 'نظریات کارشناسی', en: 'Opinions' },
+    { id: 'deadlines', fa: 'ارجاع‌ها و مهلت‌ها', en: 'Referrals & deadlines' },
     { id: 'reports', fa: 'گزارش‌ها', en: 'Reports' },
   ];
 
@@ -936,6 +962,58 @@ function Live({ lang, projectId, userId }: { lang: Lang; projectId: string; user
           })}
         </div>
       ) : (tab === 'opinions' && <p className="tx3 py-8 text-center text-[11px]">{label('ابتدا از تب «مدیریت پرونده‌ها» پرونده‌ای انتخاب کنید', 'Select a case first')}</p>)}
+
+      {/* فاز ۵ — ارجاع‌ها و مهلت‌ها (ثبت دستی + مهلت خودکار پرسش‌های جلسه) */}
+      {tab === 'deadlines' && current ? (
+        <div className="space-y-3">
+          <p className="tx3 mb-1 text-[10px]">{label('مهلت پاسخ به پرسش‌های جلسات به‌صورت خودکار اینجا ثبت می‌شود؛ ارجاع‌های دیگر را دستی اضافه کنید. هر رکورد مسئول، سررسید و وضعیت دارد.', 'Hearing question deadlines appear here automatically; add other referrals manually. Each record has owner, due date and status.')}</p>
+          {can('dispute.edit') && !caseLocked && (
+            <div className={card}>
+              <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
+                <input className={inputClass} placeholder={label('عنوان ارجاع/مهلت *', 'Referral title *')} value={dlForm.TitleFa} onChange={(e) => setDlForm((f) => ({ ...f, TitleFa: e.target.value }))} />
+                <select className={inputClass} value={dlForm.Kind} onChange={(e) => setDlForm((f) => ({ ...f, Kind: e.target.value }))}>
+                  {[['question', 'پاسخ به پرسش کارشناس', 'Question'], ['document', 'ارائهٔ سند', 'Document'], ['response', 'ارائهٔ پاسخ/دفاعیه', 'Response'], ['report_delivery', 'تحویل گزارش', 'Report delivery'], ['other', 'سایر', 'Other']].map(([v, f, en]) => <option key={v} value={v}>{label(f, en)}</option>)}
+                </select>
+                <JalaliDateInput value={dlForm.DueDate} onChange={(v) => setDlForm((f) => ({ ...f, DueDate: v }))} ariaLabel={label('سررسید *', 'Due date *')} />
+                <select className={inputClass} value={dlForm.PartyCode} onChange={(e) => setDlForm((f) => ({ ...f, PartyCode: e.target.value }))}>
+                  <option value="">{label('مسئول/طرف (اختیاری)', 'Owner party (optional)')}</option>
+                  {parties.map((p) => <option key={String(p.Code)} value={String(p.Code)}>{String(p.NameFa)}</option>)}
+                </select>
+                <input className={inputClass} placeholder={label('کد مرتبط (پرسش/ادعا/سند)', 'Related code')} value={dlForm.RelatedCode} onChange={(e) => setDlForm((f) => ({ ...f, RelatedCode: e.target.value }))} />
+                <input className={inputClass} placeholder={label('یادداشت', 'Note')} value={dlForm.NoteFa} onChange={(e) => setDlForm((f) => ({ ...f, NoteFa: e.target.value }))} />
+              </div>
+              <button className={`${btn} mt-2`} disabled={busy} onClick={addDeadline}>{label('ثبت ارجاع/مهلت', 'Add referral')}</button>
+            </div>
+          )}
+          <div className={card}>
+            {deadlines.length === 0 && <p className="tx3 py-4 text-center text-[10px]">{EMPTY}</p>}
+            {deadlines.map((d) => {
+              const st = String(d.Status ?? 'open');
+              const days = d.DueDate ? daysToDate(String(d.DueDate)) : null;
+              return (
+                <div key={String(d.Id)} className="mb-1.5 rounded-lg border b-line-soft p-2">
+                  <div className="flex flex-wrap items-center gap-2 text-[11px]">
+                    <span className="tx3" dir="ltr">{String(d.Code)}</span>
+                    <span className="tx1 font-medium">{String(d.TitleFa)}</span>
+                    <span className="tx3">{({ question: label('پاسخ به پرسش', 'Question'), document: label('ارائهٔ سند', 'Document'), response: label('دفاعیه', 'Response'), report_delivery: label('تحویل گزارش', 'Report'), other: label('سایر', 'Other') } as Record<string, string>)[String(d.Kind ?? 'other')] ?? EMPTY}</span>
+                    <span className="tx3">{label('سررسید:', 'Due:')} <bdi dir="ltr">{String(d.DueDate ?? EMPTY)}</bdi></span>
+                    {st === 'open' && days !== null && <span className={`rounded px-1.5 py-0.5 text-[10px] ${days < 0 ? 'bg-rose-100 text-rose-800' : days <= 7 ? 'bg-amber-100 text-amber-900' : 'bg-emerald-100 text-emerald-900'}`}>{days < 0 ? label(`${Math.abs(days)} روز گذشته`, `${Math.abs(days)}d overdue`) : label(`${days} روز مانده`, `${days}d left`)}</span>}
+                    {st !== 'open' && <span className="rounded bg-slate-200 px-1.5 py-0.5 text-[10px] text-slate-700">{String(({ met: label('انجام‌شده', 'Met'), missed: label('از دست رفته', 'Missed'), cancelled: label('لغوشده', 'Cancelled') } as Record<string, string>)[st] ?? st)}{d.MetAt ? ` · ${String(d.MetAt ?? '')}` : ''}</span>}
+                    {Boolean(d.PartyCode) ? <span className="tx3">{String(parties.find((p) => String(p.Code) === String(d.PartyCode))?.NameFa ?? String(d.PartyCode ?? '') ?? '')}</span> : null}
+                    {Boolean(d.RelatedCode) ? <span className="tx3" dir="ltr">{String(d.RelatedCode ?? '')}</span> : null}
+                  </div>
+                  {d.NoteFa ? <p className="tx3 mt-1 text-[10px]">{String(d.NoteFa)}</p> : null}
+                  {can('dispute.edit') && !caseLocked && st === 'open' && (
+                    <div className="mt-1.5 flex gap-1">
+                      {(['met', 'missed', 'cancelled'] as const).map((s) => <button key={s} className={btn} disabled={busy} onClick={() => setDeadlineStatus(String(d.Id), s)}>{({ met: label('انجام شد', 'Mark met'), missed: label('از دست رفت', 'Mark missed'), cancelled: label('لغو', 'Cancel') } as Record<string, string>)[s]}</button>)}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : (tab === 'deadlines' && <p className="tx3 py-8 text-center text-[11px]">{label('ابتدا از تب «مدیریت پرونده‌ها» پرونده‌ای انتخاب کنید', 'Select a case first')}</p>)}
 
       {/* فاز ۴ — گزارش‌ها (نسخه‌های ۲۰-فصل کارشناسی + ۱۴ گزارش مدیریتی) */}
       {tab === 'reports' && current ? (
