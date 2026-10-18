@@ -266,6 +266,7 @@ function LiveRcc({ lang, projectId, subId, initialTab, hideTabs, userId }: Props
       <h3 className="tx1 font-semibold">{label('ریسک، تغییر و ادعا — دادهٔ ماندگار', 'Risk, change & claims — persisted data')}</h3>
       <span className="tx3 text-xs" dir="ltr">{projectId}</span>
       <button className={btn} disabled={busy || loading} onClick={() => void load()}>{label('تازه‌سازی', 'Refresh')}</button>
+      {tab !== 'process' && <button className={btn} onClick={() => setTab('process')}>{label('↩ بازگشت به نقشهٔ فرایند', '↩ Back to process map')}</button>}
       <span className="tx3 text-xs">{label('این بخش برنامه و بودجهٔ مصوب را بازنویسی نمی‌کند.', 'Approved schedule and budget are not overwritten.')}</span>
     </header>
     {!hideTabs && <nav className="flex flex-wrap gap-2">{TABS.map(([id, a, b]) => <button key={id} className={`${btn} ${tab === id ? 'toggle-on' : ''}`} onClick={() => setTab(id)}>{label(a, b)}</button>)}</nav>}

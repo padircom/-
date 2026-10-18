@@ -158,6 +158,9 @@ function Live({ lang, projectId, userId }: { lang: Lang; projectId: string; user
         {SECTIONS.map(([k, label]) => (
           <button key={k} type="button" onClick={() => setSection(k)} className={`rounded-lg px-2.5 py-1 text-[10.5px] font-light transition ${section === k ? 'toggle-on tx1' : 'tx3 hover:tx2'}`}>{label}</button>
         ))}
+        {section !== 'map' && (
+          <button type="button" onClick={() => setSection('map')} className="rounded-lg border b-line-soft px-2.5 py-1 text-[10.5px] font-light tx2 transition hover:tx1">{fa ? '↩ بازگشت به نقشهٔ فرایند' : '↩ Back to process map'}</button>
+        )}
       </div>
 
       {error && <div className="glass rounded-xl px-3 py-2 text-[11px]" style={{ color: '#dc2626' }}>{error}</div>}
