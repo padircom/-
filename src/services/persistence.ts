@@ -871,6 +871,109 @@ export const SCHEMA: TableDef[] = [
     indexes: [{ name: "IX_PmisDisputeAuditTrail_Case", columns: ["ProjectId", "CaseCode", "OccurredAt"] }],
   },
 
+  /* ── PMO-INTEGRATED-CHANGE-MANAGEMENT-V1.0 ──
+   * ۱۲ جدول PmisChange* (چرخهٔ کامل تغییر: ثبت تا تصویب، اجرا و بستن). هیچ
+   * FK فیزیکی به ماژول‌های دیگر وجود ندارد (Zero-Regression)؛ پیوندها به
+   * تأخیر/ضرر/ریسک/کارشناسی دعاوی/EDMS نرم است (Code/ID). لایه‌های مبلغ
+   * (برآوردی/پیشنهادی/مذاکره/مصوب/پرداخت) جدا نگهداری می‌شوند و هیچ تغییر
+   * تأییدنشده‌ای خودکار در مبنا اعمال نمی‌شود. */
+  {
+    name: "PmisChangeRequests",
+    module: "d4",
+    title: { fa: "درخواست تغییر (چرخهٔ کامل)", en: "Change request (full lifecycle)" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("Code", "text", { len: 40 }), req("TitleFa", "text", { len: 400 }), c("ContractCode", "text", { len: 60 }), c("DescriptionFa", "text", { len: 4000 }), req("RequestedBy", "text", { len: 60 }), c("RequestedByRoleCode", "text", { len: 30, comment: "CHANGE_ROLES.code" }), c("RequestDate", "date"), c("ChangeType", "text", { len: 30, comment: "CHANGE_TYPES.code" }), c("ReasonFa", "text", { len: 2000 }), c("NecessityFa", "text", { len: 2000 }), c("AffectedScopeFa", "text", { len: 2000 }), c("WbsRefs", "json"), c("ActivityRefs", "json"), c("SupportDocRefs", "json"), c("ClauseRefs", "json"), c("OptionsJson", "json"), c("InitialCostEstimate", "decimal", { precision: 20, scale: 2 }), c("Currency", "text", { len: 10, default: "'IRR'" }), c("InitialTimeImpactDays", "int"), c("InitialRisksJson", "json"), c("Priority", "text", { len: 10, default: "'normal'" }), c("ReviewOwnerFa", "text", { len: 200 }), c("ReviewDueDate", "date"), req("Status", "text", { len: 30, default: "'draft'", comment: "CHANGE_STATUSES" }), c("CreatedBy", "text", { len: 60 }), c("StatusChangedBy", "text", { len: 60 }), c("StatusChangedAt", "datetime"), c("StatusNoteFa", "text", { len: 1000 }), c("DecisionFa", "text", { len: 2000, comment: "متن تصمیم مرجع مجاز" }), c("RejectionReasonFa", "text", { len: 2000 }), c("DecidedBy", "text", { len: 60 }), c("DecidedAt", "datetime"), c("ClosedAt", "datetime"), c("ClosedBy", "text", { len: 60 })],
+    indexes: [{ name: "UX_PmisChangeRequests_Code", columns: ["ProjectId", "Code"], unique: true }, { name: "IX_PmisChangeRequests_Status", columns: ["ProjectId", "Status"] }, { name: "IX_PmisChangeRequests_Contract", columns: ["ProjectId", "ContractCode"] }],
+  },
+  {
+    name: "PmisChangeImpacts",
+    module: "d4",
+    title: { fa: "بررسی فنی/مهندسی اثر تغییر", en: "Technical impact assessment" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("ChangeCode", "text", { len: 40 }), req("Code", "text", { len: 40 }), req("TopicFa", "text", { len: 400 }), c("Aspect", "text", { len: 20, comment: "technical|method|spec|resource" }), c("AffectedItemsJson", "json"), req("ConclusionFa", "text", { len: 2000 }), c("AssumptionsFa", "text", { len: 2000 }), c("LimitationsFa", "text", { len: 2000 }), c("AnalyzedBy", "text", { len: 60 }), c("AnalyzedAt", "datetime"), c("ReviewStatus", "text", { len: 15, default: "'draft'" }), c("ReviewedBy", "text", { len: 60 }), c("ReviewedAt", "datetime"), c("ReviewNoteFa", "text", { len: 1000 })],
+    indexes: [{ name: "UX_PmisChangeImpacts_Code", columns: ["ProjectId", "ChangeCode", "Code"], unique: true }],
+  },
+  {
+    name: "PmisChangeCostEstimates",
+    module: "d4",
+    title: { fa: "برآورد هزینهٔ لایه‌ای تغییر", en: "Layered cost estimate" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("ChangeCode", "text", { len: 40 }), req("Code", "text", { len: 40 }), req("Layer", "text", { len: 15, comment: "estimated|proposed|negotiated|approved|paid" }), req("Amount", "decimal", { precision: 20, scale: 2 }), c("Currency", "text", { len: 10, default: "'IRR'" }), req("FormulaFa", "text", { len: 1000 }), c("UnitFa", "text", { len: 60 }), c("InputDataJson", "json"), req("SourceFa", "text", { len: 400, comment: "منبع و مبنای مبلغ" }), req("BasisDate", "date"), c("DirectAmount", "decimal", { precision: 20, scale: 2 }), c("IndirectAmount", "decimal", { precision: 20, scale: 2 }), c("TimeRelatedAmount", "decimal", { precision: 20, scale: 2 }), c("ScopeNoteFa", "text", { len: 1000 }), c("PreparedBy", "text", { len: 60 }), c("PreparedAt", "datetime"), c("ReviewStatus", "text", { len: 15, default: "'draft'" }), c("ReviewedBy", "text", { len: 60 }), c("ReviewedAt", "datetime"), c("ReviewNoteFa", "text", { len: 1000 }), c("ApprovedBy", "text", { len: 60 }), c("ApprovedAt", "datetime")],
+    indexes: [{ name: "UX_PmisChangeCostEstimates_Code", columns: ["ProjectId", "ChangeCode", "Code"], unique: true }, { name: "IX_PmisChangeCostEstimates_Layer", columns: ["ProjectId", "Layer"] }],
+  },
+  {
+    name: "PmisChangeScheduleImpacts",
+    module: "d4",
+    title: { fa: "تحلیل اثر تغییر بر زمان‌بندی", en: "Schedule impact analysis" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("ChangeCode", "text", { len: 40 }), req("Code", "text", { len: 40 }), c("BaselineVersionRef", "text", { len: 80, comment: "پیوند نرم به نسخه/مبنا" }), req("MethodFa", "text", { len: 400 }), c("AffectedActivitiesJson", "json"), c("CriticalPathEffect", "text", { len: 20, comment: "none|partial|critical" }), c("FloatEffectDays", "int"), c("EstimatedDurationDeltaDays", "int", { comment: "اثر تخمینی بر مدت — با تمدید قراردادی یکی نیست" }), c("CompletionEffectDays", "int"), c("ApprovedEotDays", "int", { comment: "تمدید تأییدشده — فقط با مبنای استحقاق + تأیید" }), c("EotEntitlementFa", "text", { len: 2000 }), req("AssumptionsFa", "text", { len: 2000 }), c("LimitationsFa", "text", { len: 2000 }), c("DataVersionNoteFa", "text", { len: 400 }), c("PreparedBy", "text", { len: 60 }), c("PreparedAt", "datetime"), c("ReviewStatus", "text", { len: 15, default: "'draft'" }), c("ReviewedBy", "text", { len: 60 }), c("ReviewedAt", "datetime"), c("ReviewNoteFa", "text", { len: 1000 })],
+    indexes: [{ name: "UX_PmisChangeScheduleImpacts_Code", columns: ["ProjectId", "ChangeCode", "Code"], unique: true }],
+  },
+  {
+    name: "PmisChangeApprovals",
+    module: "d4",
+    title: { fa: "گام تصویب گردش‌کار", en: "Workflow approval step" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("ChangeCode", "text", { len: 40 }), req("Code", "text", { len: 40 }), req("StepCode", "text", { len: 40 }), c("Stage", "text", { len: 20, comment: "review|approval|final" }), c("Decision", "text", { len: 25, default: "'pending'", comment: "pending|approved|approved_conditionally|rejected" }), c("DecidedBy", "text", { len: 60 }), c("DecidedAt", "datetime"), c("NoteFa", "text", { len: 1000 }), c("ConditionsFa", "text", { len: 2000 }), c("Sequence", "int")],
+    indexes: [{ name: "UX_PmisChangeApprovals_Code", columns: ["ProjectId", "ChangeCode", "Code"], unique: true }],
+  },
+  {
+    name: "PmisChangeRiskLinks",
+    module: "d4",
+    title: { fa: "پیوند ریسکِ ناشی از تغییر", en: "Change risk link" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("ChangeCode", "text", { len: 40 }), req("Code", "text", { len: 40 }), req("LinkType", "text", { len: 15, comment: "new|escalated|reduced" }), req("DescriptionFa", "text", { len: 2000 }), c("RiskRegisterRef", "text", { len: 60, comment: "پیوند نرم به ثبت ریسک اصلی" }), c("Probability", "int"), c("Severity", "int"), c("Score", "int"), c("MethodFa", "text", { len: 400 }), c("OwnerFa", "text", { len: 200 }), c("ControlActionsJson", "json"), c("ActionDueDate", "date"), c("ResidualNoteFa", "text", { len: 1000 }), c("CreatedBy", "text", { len: 60 }), c("CreatedAt", "datetime")],
+    indexes: [{ name: "UX_PmisChangeRiskLinks_Code", columns: ["ProjectId", "ChangeCode", "Code"], unique: true }],
+  },
+  {
+    name: "PmisChangeClaimLinks",
+    module: "d4",
+    title: { fa: "ادعا/اختلاف مرتبط با تغییر", en: "Change claim/dispute link" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("ChangeCode", "text", { len: 40 }), req("Code", "text", { len: 40 }), req("LinkType", "text", { len: 30, comment: "objection|work_order_dispute|rate_quantity|delay_effect|cost_claim|time_effect|monitoring" }), req("DescriptionFa", "text", { len: 2000 }), c("ClaimRefCode", "text", { len: 40, comment: "پیوند نرم به ادعای RCC" }), c("ExpertCaseRef", "text", { len: 40, comment: "پیوند نرم به PmisDisputeCases.Code" }), c("CorrespondenceJson", "json"), c("SupportingDocRefsJson", "json"), c("Status", "text", { len: 20, default: "'open'", comment: "open|escalated|linked|resolved|closed" }), c("CreatedBy", "text", { len: 60 }), c("CreatedAt", "datetime")],
+    indexes: [{ name: "UX_PmisChangeClaimLinks_Code", columns: ["ProjectId", "ChangeCode", "Code"], unique: true }],
+  },
+  {
+    name: "PmisChangeDocuments",
+    module: "d4",
+    title: { fa: "سند پشتیبان تغییر", en: "Change supporting document" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("ChangeCode", "text", { len: 40 }), req("Code", "text", { len: 40 }), req("TitleFa", "text", { len: 400 }), req("Kind", "text", { len: 20, comment: "supporting|decision|instruction|evidence|correspondence" }), c("DocRef", "text", { len: 80, comment: "پیوند نرم به EDMS" }), c("VersionFa", "text", { len: 60 }), c("DocDate", "date"), c("FileRef", "text", { len: 200 }), c("UploadedBy", "text", { len: 60 }), c("UploadedAt", "datetime"), c("NoteFa", "text", { len: 1000 })],
+    indexes: [{ name: "UX_PmisChangeDocuments_Code", columns: ["ProjectId", "ChangeCode", "Code"], unique: true }],
+  },
+  {
+    name: "PmisChangeImplementation",
+    module: "d4",
+    title: { fa: "کنترل اجرای تغییر مصوب", en: "Approved change implementation" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("ChangeCode", "text", { len: 40 }), req("Code", "text", { len: 40 }), req("Step", "text", { len: 30, comment: "instruction_issued|started|baselines_updated|execution_control|verified|completed" }), req("Status", "text", { len: 20, comment: "planned|in_progress|done|blocked" }), c("BaselineUpdateRef", "text", { len: 80, comment: "پیوند نرم به نسخه مبنای به‌روزشده" }), c("ExecutionResultFa", "text", { len: 2000 }), c("VerifiedBy", "text", { len: 60 }), c("VerifiedAt", "datetime"), c("VerifiedNoteFa", "text", { len: 1000 }), c("UpdatedBy", "text", { len: 60 }), c("UpdatedAt", "datetime")],
+    indexes: [{ name: "UX_PmisChangeImplementation_Code", columns: ["ProjectId", "ChangeCode", "Code"], unique: true }],
+  },
+  {
+    name: "PmisChangeAuditTrail",
+    module: "d4",
+    title: { fa: "رویداد تاریخچهٔ تغییر", en: "Change audit trail event" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("ChangeCode", "text", { len: 40 }), req("Code", "text", { len: 40 }), req("Action", "text", { len: 40 }), req("Actor", "text", { len: 60 }), c("DetailFa", "text", { len: 1000 }), c("FromValue", "text", { len: 200 }), c("ToValue", "text", { len: 200 }), req("OccurredAt", "datetime")],
+    indexes: [{ name: "IX_PmisChangeAuditTrail_Change", columns: ["ProjectId", "ChangeCode", "OccurredAt"] }],
+  },
+  {
+    name: "PmisChangeModuleLinks",
+    module: "d4",
+    title: { fa: "پیوند نرم تغییر به ماژول‌ها", en: "Change soft link to modules" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("ChangeCode", "text", { len: 40 }), req("Code", "text", { len: 40 }), req("LinkKind", "text", { len: 30, comment: "LINK_KINDS.code" }), req("TargetCode", "text", { len: 80 }), req("TargetTitleFa", "text", { len: 400 }), c("TargetId", "text", { len: 60 }), c("NoteFa", "text", { len: 1000 }), c("EstablishedBy", "text", { len: 60 }), c("EstablishedAt", "datetime"), c("Status", "text", { len: 20, default: "'active'" })],
+    indexes: [{ name: "UX_PmisChangeModuleLinks_Code", columns: ["ProjectId", "ChangeCode", "Code"], unique: true }],
+  },
+  {
+    name: "PmisChangeSettings",
+    module: "d4",
+    title: { fa: "تنظیمات گردش‌کار تغییر", en: "Change workflow setting" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("SettingKey", "text", { len: 60 }), req("SettingValueJson", "json"), c("UpdatedBy", "text", { len: 60 }), c("UpdatedAt", "datetime")],
+    indexes: [{ name: "UX_PmisChangeSettings_Key", columns: ["ProjectId", "SettingKey"], unique: true }],
+  },
+
   /* ── d5 مالی ── */
   {
     name: "CostAccount",
@@ -6816,6 +6919,12 @@ export const MIGRATIONS: Migration[] = [
      * مهاجرت افزایشی؛ 0072 دست‌نخورده. */
     version: "0073", name: "pmis_dispute_report_approval_fields",
     statements: ["ApprovedBy", "ApprovedAt"].map((col) => addColumnDdl("PmisDisputeReports", col, "mssql")),
+  },
+  {
+    /* PMO-INTEGRATED-CHANGE-MANAGEMENT-V1.0 — ۱۲ جدول PmisChange*؛
+     * بدون FK فیزیکی (Zero-Regression) و با گارد tableDef. */
+    version: "0074", name: "pmis_change_management_tables",
+    statements: ["PmisChangeRequests", "PmisChangeImpacts", "PmisChangeCostEstimates", "PmisChangeScheduleImpacts", "PmisChangeApprovals", "PmisChangeRiskLinks", "PmisChangeClaimLinks", "PmisChangeDocuments", "PmisChangeImplementation", "PmisChangeAuditTrail", "PmisChangeModuleLinks", "PmisChangeSettings"].flatMap((name) => { const table = tableDef(name); if (!table) throw new Error(`Missing table definition: ${name}`); return [tableDdl(table, "mssql"), ...(table.indexes ?? []).map((index) => indexDdl(table, index, "mssql"))]; }),
   },
 ];
 

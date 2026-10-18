@@ -137,6 +137,17 @@ export const PERMISSION_CATALOG: PermissionDef[] = [
   P("dispute.review", "d4", "ثبت بازبینی گزارش/نظریه/تحلیل و تخصیص مبالغ لایه‌های بررسی/تأیید", "Review dispute analyses and set reviewed/approved amounts", "restricted", true),
   P("dispute.approve", "d4", "گذر به آماده تحویل/تحویل/مختومه/بایگانی و صدور گزارش نهایی", "Approve dispute finalization transitions and report issue", "restricted", true),
 
+  /* PMO-INTEGRATED-CHANGE-MANAGEMENT-V1.0: چرخهٔ تغییر — ثبت با مدیر ادعا،
+   * تحلیل‌ها با کارشناسها، بررسی قراردادی/غربال با بازرس، تصمیم با مرجع مجاز
+   * (SoD: تأییدکننده ≠ آماده‌کنندهٔ درخواست برای تصمیم)، اجرا با دستان اجرا.
+   * هیچ تغییر تأییدنشده‌ای خودکار در مبنا اعمال نمی‌شود. */
+  P("change.view", "d4", "مشاهدهٔ درخواست‌ها و سوابق تغییر", "View change requests", "confidential"),
+  P("change.edit", "d4", "ثبت و ویرایش درخواست تغییر و رکوردهای فرزند", "Edit change requests and child records", "restricted", true),
+  P("change.analyze", "d4", "ثبت بررسی فنی/تحلیل اثر زمانی/هزینه", "Record technical/time/cost impact analyses", "restricted", true),
+  P("change.review", "d4", "بررسی قراردادی، غربال اختلافات، تجمیع و بازبینی لایه‌های مبلغ", "Contract review, dispute screening, consolidation", "restricted", true),
+  P("change.approve", "d4", "تصمیم نهایی (تأیید/تأیید مشروط/رد) و بستن درخواست", "Approve or reject change (decision gate)", "restricted", true),
+  P("change.implement", "d4", "ابلاغ، اجرا، به‌روزرسانی مبنا و کنترل نتایج", "Notify, implement, update baselines, monitor", "restricted", true),
+
   /* ── d12 مهندسی و طراحی ──
    * تفکیک بر پایهٔ اقتدار واقعی: ثبت مدرک، صدور ریویژن، پاسخ به نظر و
    * تأیید کارفرما چهار اقتدار جدا هستند. کد بررسی ۱ تا ۴ را فقط کارفرما و
@@ -926,6 +937,8 @@ export const ROLE_CATALOG: RoleDef[] = [
       /* پروندهٔ دعوا از نظر برنامه‌ریز فقط‌خواندنی است: دست‌کاری پرونده
        * کار مدیر پیمان و تحلیل‌گر کارشناسی است. */
       "dispute.view",
+      /* تغییر: تحلیل اثر زمانی/فنی کار خودِ برنامه‌ریز است؛ تصمیم نهایی با مرجع مجاز. */
+      "change.view", "change.analyze",
       "pmo.charter.view",
       "pmo.form.view",
       "pmo.health.view",
@@ -1074,6 +1087,9 @@ export const ROLE_CATALOG: RoleDef[] = [
        * ادعا/مدرک/تحلیل/جلسه و بازبینی گزارش‌ها کار مدیر ادعا/پیمان است؛
        * گذر نهایی (تحویل/مختومه/بایگانی) عمداً از او گرفته شده — SoD با PM. */
       "dispute.view", "dispute.edit", "dispute.review",
+      /* تغییر: ثبت/ویرایش درخواست + تحلیل‌های کارشناسی + بررسی قراردادی و غربال
+       * با مدیر ادعا/پیمان است؛ تصمیم نهایی عمداً از او گرفته شده — SoD با مرجع تصویب. */
+      "change.view", "change.edit", "change.analyze", "change.review",
       "cnt.retainage.manage", "com.certificate.view",
       /* ثبت و تمدید ضمانت‌نامه کار روزمرهٔ مدیر پیمان است، ولی
        * آزادسازی و ضبط عمداً به او داده نشده: کسی که سند را ثبت
@@ -1129,6 +1145,9 @@ export const ROLE_CATALOG: RoleDef[] = [
        * تأیید PM و SoD (≠ تأییدکنندهٔ مرحلهٔ قبل) قفل است؛ محتوا را
        * تهیه‌کنندهٔ پرونده می‌نویسد. */
       "dispute.view", "dispute.approve",
+      /* تغییر: تصمیم نهایی (تأیید/رد) و بستن با PM مرجع مجاز و SoD
+       * (تأییدکننده ≠ آماده‌کنندهٔ درخواست برای تصمیم)؛ اجرا/ابلاغ هم با او. */
+      "change.view", "change.approve", "change.implement",
       "fin.cost.view", "fin.rate.view", "fin.ipc.approve", "fin.procure.approve", "fin.reserve.draw",
       "qms.itp.view", "qms.ncr.close",
       "hrm.roster.view", "hrm.timesheet.approve", "hrm.productivity.view",

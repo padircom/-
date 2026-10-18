@@ -39,6 +39,7 @@ import { registerRccWorkspaceRoutes } from "./rccWorkspaceApi.js";
 import { registerContractRiskRoutes } from "./contractRiskApi.js";
 import { registerSchedReconRoutes } from "./schedReconApi.js";
 import { registerDisputeExpertRoutes } from "./disputeExpertApi.js";
+import { registerChangeMgmtRoutes } from "./changeMgmtApi.js";
 import { registerDprDocRoutes } from "./dprDocApi.js";
 import { registerDprTablesRoutes } from "./dprTablesApi.js";
 import { registerFinWorkspaceRoutes } from "./finWorkspaceApi.js";
@@ -659,6 +660,20 @@ const DEDICATED_TABLE_ROUTES = {
   PmisDisputeDeadlines: "/api/dispute-expert/:projectId/cases",
   PmisDisputeModuleLinks: "/api/dispute-expert/:projectId/cases",
   PmisDisputeAuditTrail: "/api/dispute-expert/:projectId/cases",
+  /* PMO-INTEGRATED-CHANGE-MANAGEMENT-V1.0: جدول‌های PmisChange* فقط از مسیر
+   * اختصاصی؛ پیوند با تأخیر/ضرر/ریسک/کارشناسی دعاوی/EDMS نرم است. */
+  PmisChangeRequests: "/api/change-mgmt/:projectId/requests",
+  PmisChangeImpacts: "/api/change-mgmt/:projectId/requests",
+  PmisChangeCostEstimates: "/api/change-mgmt/:projectId/requests",
+  PmisChangeScheduleImpacts: "/api/change-mgmt/:projectId/requests",
+  PmisChangeApprovals: "/api/change-mgmt/:projectId/requests",
+  PmisChangeRiskLinks: "/api/change-mgmt/:projectId/requests",
+  PmisChangeClaimLinks: "/api/change-mgmt/:projectId/requests",
+  PmisChangeDocuments: "/api/change-mgmt/:projectId/requests",
+  PmisChangeImplementation: "/api/change-mgmt/:projectId/requests",
+  PmisChangeAuditTrail: "/api/change-mgmt/:projectId/requests",
+  PmisChangeModuleLinks: "/api/change-mgmt/:projectId/requests",
+  PmisChangeSettings: "/api/change-mgmt/:projectId/requests",
   Correspondence: "/api/ckm/:projectId/letters",
   MeetingMinute: "/api/ckm/:projectId/meetings",
   MeetingAction: "/api/ckm/:projectId/meetings/:code/actions",
@@ -1012,7 +1027,10 @@ registerContractRiskRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: r
 /* PMO-FORENSIC-SCHEDULE-ENGINE-V1.0: بازسازی کارشناسی زمان‌بندی ادعا —
  * پروژه‌ای، مجوز مستقل (sched.recon.*)، تکمیل مأموریت با SoD. */
 registerSchedReconRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
-registerDisputeExpertRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });registerEqmWorkspaceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
+registerDisputeExpertRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
+/* PMO-INTEGRATED-CHANGE-MANAGEMENT-V1.0: چرخهٔ تغییر — پیوندها نرم؛ تصمیم با SoD. */
+registerChangeMgmtRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
+registerEqmWorkspaceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
 registerMonitoringWorkspaceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
 registerStrategyExcellenceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
 /* Core/P0: دادهٔ پایهٔ خوشه‌ها و پروژه‌ها روی لایهٔ ماندگاری مشترک — با درایور
