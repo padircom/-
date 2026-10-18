@@ -16,6 +16,9 @@
  */
 import {
   CHANGE_MODULE_ID,
+  analyzeTimeImpact,
+  analyzeCostImpact,
+  verifyModuleLinks,
   CHANGE_MODULE_VERSION,
   CHANGE_LLM_CONNECTED,
   CHANGE_TABLES,
@@ -104,15 +107,44 @@ export function registerChangeMgmtRoutes(app, { repo, subjects, evaluate }) {
     } });
   });
 
-  /* ── داشبورد مدیریتی — فقط از ردیف‌های واقعی ── */
+  /* ── داشبورد مدیریتی — فقط از ردیف‌های واقعی + drill-down با فیلتر ── */
   app.get(base + "/dashboard", need("change.view"), run(async (r, req) => {
     const pid = req.params.projectId;
     const full = (t) => r.list(t, { where: where(pid), limit: 10000 }).catch(() => []);
-    const [requests, costs, schedLinks, riskLinks, claimLinks] = await Promise.all([
+    let [requests, costs, schedLinks, riskLinks, claimLinks] = await Promise.all([
       full("PmisChangeRequests"), full("PmisChangeCostEstimates"), full("PmisChangeScheduleImpacts"),
       full("PmisChangeRiskLinks"), full("PmisChangeClaimLinks"),
     ]);
-    return computeChangeDashboard(requests, costs, schedLinks, riskLinks, claimLinks, new Date().toISOString().slice(0, 10));
+    /* فیلترهای drill-down (اختیاری) — اعمال بر همهٔ جدول‌ها با ChangeCode است */
+    const fStatus = String(req.query.status ?? "").trim();
+    const fType = String(req.query.type ?? "").trim();
+    const fFrom = String(req.query.from ?? "").trim();
+    const fTo = String(req.query.to ?? "").trim();
+    const fContract = String(req.query.contract ?? "").trim();
+    const activeFilters = { status: fStatus || null, type: fType || null, from: fFrom || null, to: fTo || null, contract: fContract || null };
+    if (fStatus) requests = requests.filter((x) => String(x.Status) === fStatus);
+    if (fType) requests = requests.filter((x) => String(x.ChangeType) === fType);
+    if (fFrom) requests = requests.filter((x) => String(x.RequestDate ?? "") >= fFrom);
+    if (fTo) requests = requests.filter((x) => String(x.RequestDate ?? "") <= fTo);
+    if (fContract) requests = requests.filter((x) => String(x.ContractCode ?? "") === fContract);
+    if (fStatus || fType || fFrom || fTo || fContract) {
+      const codes = new Set(requests.map((x) => String(x.Code)));
+      const pick = (rows) => rows.filter((x) => codes.has(String(x.ChangeCode)));
+      costs = pick(costs); schedLinks = pick(schedLinks); riskLinks = pick(riskLinks); claimLinks = pick(claimLinks);
+    }
+    const summary = computeChangeDashboard(requests, costs, schedLinks, riskLinks, claimLinks, new Date().toISOString().slice(0, 10));
+    /* drill-down: همان فیلد کلیدی هر کادر، برای الفبیشی/کمتری در UI */
+    return {
+      ...summary,
+      filters: activeFilters,
+      drilldown: {
+        requests: requests
+          .slice()
+          .sort((a, b) => String(b.RequestDate ?? "").localeCompare(String(a.RequestDate ?? "")))
+          .slice(0, 200)
+          .map((x) => ({ Id: x.Id, Code: x.Code, TitleFa: x.TitleFa, Status: x.Status, ChangeType: x.ChangeType, Priority: x.Priority, RequestDate: x.RequestDate, ContractCode: x.ContractCode ?? null, InitialCostEstimate: x.InitialCostEstimate ?? null, InitialTimeImpactDays: x.InitialTimeImpactDays ?? null, ReviewDueDate: x.ReviewDueDate ?? null })),
+      },
+    };
   }));
 
   /* ── فهرست درخواست‌ها ── */
@@ -217,6 +249,117 @@ export function registerChangeMgmtRoutes(app, { repo, subjects, evaluate }) {
     }, actor, "change");
     await audit(r, req.params.projectId, row.Code, "status_changed", actor, noteFa || `گذر به ${CHANGE_STATUS_FA[to]}`, from, to);
     return { request: updated };
+  }));
+
+  /* ─────────── فاز ۲: موتور تحلیل اثر زمانی (فقط‌خواندنی از d2) ─────────── */
+  app.get(base + "/requests/:id/analysis/time", need("change.view"), run(async (r, req) => {
+    const row = await findRequest(r, req);
+    const pid = req.params.projectId;
+    const sched = await listChild(r, "PmisChangeScheduleImpacts", pid, row.Code);
+    let activities = [], relations = [];
+    let requestForAnalysis = row;
+    if (row.ActivityRefs || row.WbsRefs || sched.length) {
+      activities = await r.list("Activity", { where: where(pid), limit: 10000 }).catch(() => []);
+      const wbsNodes = await r.list("WbsNode", { where: where(pid), limit: 10000 }).catch(() => []);
+      /* نگاشت «کد WBS → Id» (برنامه‌ریزی با WbsId کار می‌کند) */
+      const wbsByCode = new Map(wbsNodes.map((w) => [String(w.Code), String(w.Id)]));
+      const wbsRefs = Array.isArray(row.WbsRefs) ? row.WbsRefs : (typeof row.WbsRefs === "string" ? (() => { try { return JSON.parse(row.WbsRefs); } catch { return []; } })() : []);
+      const resolvedWbs = wbsRefs.map((c) => wbsByCode.get(String(c))).filter(Boolean);
+      requestForAnalysis = { ...row, WbsRefs: resolvedWbs };
+      /* رابطه‌ها بدون ستون ProjectId — از Id فعالیت‌های همین پروژه صافی می‌شود */
+      const actIds = new Set(activities.map((a) => String(a.Id)));
+      relations = (await r.list("ActivityRelation", { limit: 20000 }).catch(() => []))
+        .filter((rel) => actIds.has(String(rel.SuccessorId)));
+    }
+    const analysis = analyzeTimeImpact(requestForAnalysis, sched, activities, relations);
+    return { analysis, llmConnected: CHANGE_LLM_CONNECTED };
+  }));
+
+  /* ─────────── فاز ۲: موتور تحلیل اثر هزینه (از ردیف‌های واقعی) ─────────── */
+  app.get(base + "/requests/:id/analysis/cost", need("change.view"), run(async (r, req) => {
+    const row = await findRequest(r, req);
+    const costs = await listChild(r, "PmisChangeCostEstimates", req.params.projectId, row.Code);
+    const analysis = analyzeCostImpact(costs, String(row.Currency ?? "IRR"));
+    return { analysis, llmConnected: CHANGE_LLM_CONNECTED };
+  }));
+
+  /* ─────────── فاز ۲: راستی‌آزمایی پیوندهای نرم در برابر ماژول‌های مبنأ ─────────── */
+  app.get(base + "/requests/:id/analysis/links-verify", need("change.view"), run(async (r, req) => {
+    const row = await findRequest(r, req);
+    const pid = req.params.projectId;
+    const links = await listChild(r, "PmisChangeModuleLinks", pid, row.Code);
+    const codes = (rows, c = "Code") => new Set(rows.map((x) => String(x[c] ?? "")));
+    const ids = (rows) => new Set(rows.map((x) => String(x.Id ?? "")));
+    const [delays, claims, risks, disputes, docs, legacy, baselines, losses] = await Promise.all([
+      r.list("DelayEvent", { where: where(pid), limit: 5000 }).catch(() => []),
+      r.list("Claim", { where: where(pid), limit: 5000 }).catch(() => []),
+      r.list("ContractRiskRegister", { where: where(pid), limit: 5000 }).catch(() => []),
+      r.list("PmisDisputeCases", { where: where(pid), limit: 5000 }).catch(() => []),
+      r.list("Document", { where: where(pid), limit: 10000 }).catch(() => []),
+      r.list("ChangeRequest", { where: where(pid), limit: 5000 }).catch(() => []),
+      r.list("Baseline", { where: where(pid), limit: 2000 }).catch(() => []),
+      r.list("DelayCostItem", { where: where(pid), limit: 5000 }).catch(() => []),
+    ]);
+    const sets = {
+      delayEventCodes: codes(delays), lossCaseCodes: ids(losses),
+      contractRiskCodes: codes(risks), claimCodes: codes(claims),
+      disputeCaseCodes: codes(disputes), documentIds: ids(docs),
+      legacyChangeCodes: codes(legacy), baselineIds: ids(baselines),
+    };
+    const verified = verifyModuleLinks(links, sets);
+    return { links: verified, totals: { verified: verified.filter((l) => l.verified === true).length, missing: verified.filter((l) => l.verified === false).length }, llmConnected: CHANGE_LLM_CONNECTED };
+  }));
+
+  /* ─────────── فاز ۲: پیشنهاد نسخهٔ مبنای نامستقر — اعتبارش دهندهٔ baselines_updated ─────────── */
+  app.post(base + "/requests/:id/baseline-proposal", need(["change.implement", "change.review"]), run(async (r, req) => {
+    const row = await findRequest(r, req);
+    if (!["implementing", "baselines_updated", "execution_monitoring", "approved", "approved_conditional", "notified"].includes(String(row.Status)))
+      throw error(409, "CHG_STATUS", "پیشنهاد نسخهٔ مبنا فقط پس از ورود به مسیر تصویب/اجرای تغییر ممکن است");
+    if (!can(req, "change.implement")) throw error(403, "CHG_FORBIDDEN", "ساخت نسخهٔ مبنای نامستقر نیازمند مجوز اجرای تغییر است");
+    const note = String(req.body?.noteFa ?? "").trim();
+    if (!note || note.length > 1000) throw error(400, "CHG_VALIDATION", "یادداشت پیشنهاد مبنا الزامی است (حداکثر ۱۰۰۰ حرف)");
+    const sourceBaselineId = String(req.body?.sourceBaselineId ?? "").trim();
+    const pid = req.params.projectId;
+    let source = null;
+    if (sourceBaselineId) {
+      source = await r.get("Baseline", sourceBaselineId);
+      if (!source || source.ProjectId !== pid || !source.IsCurrent) throw error(422, "CHG_BASELINE", "مبنای مبدأ باید برنامهٔ مبنای جاری همین پروژه باشد");
+    } else {
+      const all = await r.list("Baseline", { where: where(pid), limit: 1000 }).catch(() => []);
+      source = all.find((b) => b.IsCurrent === true || Number(b.IsCurrent) === 1) ?? null;
+      if (!source) throw error(422, "CHG_BASELINE", "هیچ مبنای جاری در ماژول برنامه‌ریزی برای این پروژه وجود ندارد");
+    }
+    /* تکراری: اگر نسخهٔ پیوندشدهٔ همین تغییر وجود دارد، دوباره نساز */
+    const existing = await listChild(r, "PmisChangeModuleLinks", pid, row.Code);
+    const dup = existing.find((l) => String(l.LinkKind) === "baseline_revision");
+    if (dup) throw error(409, "CHG_BASELINE", "برای این درخواست یک پیشنهاد نسخهٔ مبنا ثبت شده است (نسخهٔ جدید بدون ابطال قبلی نمی‌سازیم)");
+    const actor = req.chgSubject.id;
+    const now = new Date().toISOString();
+    let snapshot = source.Snapshot ?? {};
+    if (typeof snapshot === "string") { try { snapshot = JSON.parse(snapshot); } catch { snapshot = { raw: snapshot }; } }
+    if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot)) snapshot = { value: snapshot };
+    const candidateId = `chg-${String(row.Id).replace(/[^A-Za-z0-9_-]/g, "").slice(-32)}`;
+    let candidate = await r.get("Baseline", candidateId);
+    if (!candidate) {
+      candidate = await r.create("Baseline", {
+        Id: candidateId, ProjectId: pid,
+        Name: `${String(source.Name ?? source.Id).slice(0, 70)} + ${row.Code}`.slice(0, 120),
+        SetAt: now, SetBy: actor, IsCurrent: false,
+        Snapshot: { ...snapshot, sourceBaselineId: source.Id, appliedChange: { changeId: row.Id, changeCode: row.Code, costImpact: null, timeImpactDays: null, appliedBy: actor, appliedAt: now, note } },
+      }, actor, "baseline");
+    }
+    await r.create("PmisChangeModuleLinks", {
+      ChangeCode: row.Code, ProjectId: pid, Code: newRecordCode("link"),
+      LinkKind: "baseline_revision", TargetCode: candidate.Id, TargetTitleFa: String(candidate.Name ?? candidate.Id),
+      DescriptionFa: note, EstablishedBy: actor, EstablishedAt: now, CreatedBy: actor, CreatedAt: now,
+    }, actor, "change");
+    await r.create("PmisChangeImplementation", {
+      ChangeCode: row.Code, ProjectId: pid, Code: newRecordCode("impl"),
+      Step: "baselines_updated", Status: "planned",
+      BaselineUpdateRef: candidate.Id, ExecutionResultFa: note, UpdatedBy: actor, UpdatedAt: now,
+    }, actor, "change");
+    await audit(r, pid, row.Code, "baseline_proposal_created", actor, note, null, candidate.Id);
+    return { baseline: candidate, linkKind: "baseline_revision", sourceBaselineId: source.Id };
   }));
 
   /* ── حذف پیش‌نویس بدون فرزند ── */

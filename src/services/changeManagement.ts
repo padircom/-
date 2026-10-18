@@ -322,3 +322,192 @@ export function computeChangeDashboard(requests: Record<string, unknown>[], cost
 }
 
 export const CHANGE_EMPTY = "—";
+
+/* ═══════════════════ فاز ۲: موتورهای تحلیل + پیوند نرم زنده ═══════════════════
+   همهٔ توابع خالص‌اند و هیچ دادهٔ ماژول دیگری را بازنویسی/بازمحاسبه نمی‌کنند؛
+   ورودی‌ها فقط‌خواندنی از API خوانده می‌شوند. */
+
+/** پارس امن آرایهٔ رشته‌ای از فیلد json (همیشه آرایه برمی‌گرداند). */
+export function parseCodeList(v: unknown): string[] {
+  if (Array.isArray(v)) return v.map((x) => String(x).trim()).filter(Boolean);
+  if (typeof v === "string" && v.trim()) {
+    try {
+      const p = JSON.parse(v);
+      if (Array.isArray(p)) return p.map((x) => String(x).trim()).filter(Boolean);
+    } catch { /* رشتهٔ ساده */ }
+    return [v.trim()];
+  }
+  return [];
+}
+
+/* ─────────────── موتور اثر زمانی — تحلیل صادقانه، نه خودکار ─────────────── */
+export interface ChangeTimeActivity {
+  code: string; nameFa: string; plannedStart: string | null; plannedFinish: string | null;
+  durationDays: number | null; totalFloat: number | null; freeFloat: number | null;
+  isCritical: boolean; predecessorCodes: string[]; successorCodes: string[];
+}
+export interface ChangeTimeAnalysis {
+  requestedActivityCodes: string[];
+  affected: ChangeTimeActivity[];
+  unknownCodes: string[];
+  affectedCount: number;
+  criticalCount: number;
+  criticalPathEffect: "none" | "partial" | "critical";
+  milestoneCount: number;
+  baselineFinish: string | null;
+  /** Σ اثر تخمینی مدت از ردیف‌های ScheduleImpacts (با تمدید یکی نیست) */
+  estimatedDeltaDays: number;
+  approvedEotDays: number;
+  scheduleRowCount: number;
+  dataBasisNoteFa: string;
+}
+
+const ISO_DATE_MIN = /^(\d{4})-(\d{2})-(\d{2})/;
+export function analyzeTimeImpact(
+  request: Record<string, unknown>,
+  schedRows: Record<string, unknown>[],
+  activities: Record<string, unknown>[],
+  relations: Record<string, unknown>[] = [],
+): ChangeTimeAnalysis {
+  const byId = new Map(activities.map((a) => [String(a.Id), a]));
+  const byCode = new Map(activities.map((a) => [String(a.Code), a]));
+  const requestedCodes = [...new Set([
+    ...parseCodeList(request.ActivityRefs),
+    ...schedRows.flatMap((r) => parseCodeList(r.AffectedActivitiesJson)),
+  ])];
+  const wbsCodes = [...new Set(parseCodeList(request.WbsRefs))];
+  const wbsById = new Map(wbsCodes.map((c) => [c, c]));
+  /* انتخاب فعالیت‌های تحت اثر: مستقیم بر اساس کد + فعالیت‌های WBSهای منتخب (اگر رابط Wbs تعریف شده باشد) */
+  const affected: ChangeTimeActivity[] = [];
+  const unknownCodes: string[] = [];
+  const inSet = new Set<string>();
+  const push = (a: Record<string, unknown>) => {
+    const code = String(a.Code);
+    if (inSet.has(code)) return;
+    inSet.add(code);
+    const id = String(a.Id);
+    affected.push({
+      code, nameFa: String(a.NameFa ?? ""),
+      plannedStart: a.PlannedStart ? String(a.PlannedStart).slice(0, 10) : null,
+      plannedFinish: a.PlannedFinish ? String(a.PlannedFinish).slice(0, 10) : null,
+      durationDays: a.DurationDays == null ? null : Number(a.DurationDays),
+      totalFloat: a.TotalFloat == null ? null : Number(a.TotalFloat),
+      freeFloat: a.FreeFloat == null ? null : Number(a.FreeFloat),
+      isCritical: Boolean(a.IsCritical),
+      predecessorCodes: relations.filter((r) => String(r.SuccessorId) === id).map((r) => { const p = byId.get(String(r.PredecessorId)); return p ? String(p.Code) : ""; }).filter(Boolean),
+      successorCodes: relations.filter((r) => String(r.PredecessorId) === id).map((r) => { const p = byId.get(String(r.SuccessorId)); return p ? String(p.Code) : ""; }).filter(Boolean),
+    });
+  };
+  for (const c of requestedCodes) {
+    const a = byCode.get(c);
+    if (a) push(a); else unknownCodes.push(c);
+  }
+  if (wbsCodes.length) {
+    for (const a of activities) {
+      const wbsRef = String(a.WbsId ?? "");
+      if (wbsRef && wbsById.has(wbsRef)) push(a);
+    }
+  }
+  const criticalCount = affected.filter((a) => a.isCritical).length;
+  /* مسیر بحرانی: اگر هیچ فعالیت بحرانی متاثر نشد ولی برخی تخمین‌ها از تلورانس مَنافی‌شان فراتر روند «جزئی» — تلورانس توسط کاربر در EstimatedDurationDeltaDays ثبت می‌شود؛ اینجا فقط فلگ صریح شناور */
+  const totalDelta = schedRows.reduce((s, r) => s + (Number(r.EstimatedDurationDeltaDays) || 0), 0);
+  const floatBreach = affected.some((a) => a.totalFloat !== null && totalDelta > Math.max(0, a.totalFloat));
+  const criticalPathEffect: ChangeTimeAnalysis["criticalPathEffect"] = criticalCount > 0 ? "critical" : floatBreach ? "partial" : affected.length ? "none" : "none";
+  const finishes = affected.map((a) => a.plannedFinish).filter((x): x is string => !!x && ISO_DATE_MIN.test(x)).sort();
+  return {
+    requestedActivityCodes: requestedCodes,
+    affected, unknownCodes,
+    affectedCount: affected.length,
+    criticalCount,
+    criticalPathEffect,
+    milestoneCount: affected.filter((a) => (a.durationDays ?? 1) === 0).length,
+    baselineFinish: finishes.length ? finishes[finishes.length - 1] : null,
+    estimatedDeltaDays: totalDelta,
+    approvedEotDays: schedRows.reduce((s, r) => s + (Number(r.ApprovedEotDays) || 0), 0),
+    scheduleRowCount: schedRows.length,
+    dataBasisNoteFa: "فعالیت‌ها از ماژول برنامه‌ریزی (فقط‌خواندنی) خوانده می‌شوند؛ اثر تخمینی مدت با تمدید قراردادی یکسان نیست و تمدید فقط پس از بررسی استحقاق و تأیید جداگانه معتبر است.",
+  };
+}
+
+/* ─────────────── موتور اثر هزینه — تجمیع لایه‌ای صادقانه ─────────────── */
+export interface ChangeCostAnalysis {
+  currency: string;
+  layers: Record<string, number>;
+  layerDeltas: Record<string, number | null>;
+  directTotal: number;
+  indirectTotal: number;
+  timeRelatedTotal: number;
+  rowCount: number;
+  approvedLayerCount: number;
+  warningsFa: string[];
+}
+export function analyzeCostImpact(costRows: Record<string, unknown>[], currency = "IRR"): ChangeCostAnalysis {
+  const layers: Record<string, number> = Object.fromEntries(COST_LAYERS.map((l) => [l, 0]));
+  const layerApprovedBy = new Set<string>();
+  let direct = 0, indirect = 0, timeRel = 0;
+  const warnings: string[] = [];
+  let approvedCount = 0;
+  for (const r of costRows) {
+    const layer = String(r.Layer ?? "estimated");
+    const amt = Number(r.Amount) || 0;
+    if (layers[layer] === undefined) { layers[layer] = amt; } else layers[layer] += amt;
+    direct += Number(r.DirectAmount) || 0;
+    indirect += Number(r.IndirectAmount) || 0;
+    timeRel += Number(r.TimeRelatedAmount) || 0;
+    if (layer === "approved") { approvedCount++; if (r.ApprovedBy) layerApprovedBy.add(String(r.ApprovedBy)); }
+    if (["approved", "paid"].includes(layer) && !String(r.SourceFa ?? "").trim())
+      warnings.push(`ردیف ${String(r.Code ?? "")}: لایهٔ مصوب/پرداخت بدون منبع نامعتبر است`);
+  }
+  const paid = layers.paid ?? 0, approved = layers.approved ?? 0;
+  if (paid > 0 && approved <= 0) warnings.push("مبلغ «پرداخت‌شده» بدون لایهٔ «مصوب» ثبت شده است — ابتدا لایهٔ مصوب با مستند معتبر لازم است");
+  if (paid > approved) warnings.push("مجموع «پرداخت‌شده» از «مصوب» بیشتر است — بررسی کنید");
+  const delta = (a: string, b: string) => (layers[a] > 0 || layers[b] > 0 ? layers[a] - layers[b] : null);
+  return {
+    currency, layers,
+    layerDeltas: {
+      "proposed-estimated": delta("proposed", "estimated"),
+      "negotiated-proposed": delta("negotiated", "proposed"),
+      "approved-negotiated": delta("approved", "negotiated"),
+      "paid-approved": delta("paid", "approved"),
+    },
+    directTotal: direct, indirectTotal: indirect, timeRelatedTotal: timeRel,
+    rowCount: costRows.length,
+    approvedLayerCount: approvedCount,
+    warningsFa: [...new Set(warnings)],
+  };
+}
+
+/* ─────────────── راستی‌آزمایی پیوندهای نرم (فاز ۲) ─────────────── */
+export interface LinkVerifySets {
+  delayEventCodes: Set<string>;
+  lossCaseCodes: Set<string>;
+  contractRiskCodes: Set<string>;
+  claimCodes: Set<string>;
+  disputeCaseCodes: Set<string>;
+  documentIds: Set<string>;
+  legacyChangeCodes: Set<string>;
+  baselineIds: Set<string>;
+}
+export function verifyModuleLinks(links: Record<string, unknown>[], sets: LinkVerifySets) {
+  const map: Record<string, Set<string>> = {
+    delay_event: sets.delayEventCodes,
+    loss_case: sets.lossCaseCodes,
+    contract_risk: sets.contractRiskCodes,
+    claim: sets.claimCodes,
+    dispute_case: sets.disputeCaseCodes,
+    edms_document: sets.documentIds,
+    legacy_change_request: sets.legacyChangeCodes,
+    baseline_revision: sets.baselineIds,
+  };
+  return links.map((l) => {
+    const kind = String(l.LinkKind ?? "");
+    const set = map[kind];
+    const code = String(l.TargetCode ?? "");
+    return {
+      ...l,
+      verified: set ? set.has(code) : null,
+      verifiedNoteFa: set ? (set.has(code) ? null : "مقصد پیوند در ماژول مبدأ یافت نشد (نرم ارزیابی شد)") : "نوع پیوند ناشناخته",
+    };
+  });
+}
+export type { CostLayer as ChangeCostLayer };
