@@ -656,42 +656,24 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
               <div className="flex items-center gap-2">
                 <span className="grid h-6 w-6 place-items-center rounded-md text-[12px]"
                       style={{ background: `${dom.accent}1a`, border: `1px solid ${dom.accent}55`, color: dom.accent }}>
-                  {dom.icon}
+                  {domPerfIcon}
                 </span>
-                <div className="text-[10.5px] font-normal tx1">{t(dom.title, lang)}</div>
+                <div className="text-[10.5px] font-normal tx1">{domPerfTitle}</div>
               </div>
             </div>
-            <div className="thin-scroll flex-1 overflow-y-auto p-1.5 space-y-1">
-              {dom.processes.map((p, i) => (
-                <div key={p.id} className="rounded-xl border b-line-soft bg-black/10 p-1">
-                  <div className="flex items-center gap-1.5 px-1 py-0.5">
-                    <span className="text-[8px] font-light tabular-nums tx4">
-                      {(i + 1).toLocaleString(rtl ? "fa-IR" : "en-US")}
-                    </span>
-                    <span className="text-[10.5px] font-normal" style={{ color: dom.accent }}>{t(p.title, lang)}</span>
-                  </div>
-                  <div className="mt-0.5 space-y-0.5">
-                    {[
-                      ...p.subs.map((s) => ({ id: s.id, title: s.title, sql: s.sql })),
-                      ...(D2_PAGE_SUBS[p.id] ?? []),
-                    ].map((s) => (
-                      <button
-                        key={s.id}
-                        onClick={() => {
-                          audit("OPEN_SUBPROCESS", { projectId: target.projectId, entity: dom.id, entityId: s.id });
-                          setSelected({ pId: p.id, sId: s.id });
-                        }}
-                        className={`group flex w-full items-start gap-2 rounded-lg px-2 py-1 text-start transition hover:-translate-y-px glass-row ${selected?.sId === s.id ? "row-on" : ""}`}
-                      >
-                        <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: dom.accent }} />
-                        <div className="min-w-0 flex-1">
-                          <div className="truncate text-[10px] font-light tx1">{t(s.title, lang)}</div>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ))}
+            <div className="thin-scroll flex-1 overflow-y-auto p-2 space-y-1">
+              <DomainNavGroups
+                lang={lang}
+                dom={dom}
+                activeProcesses={activeProcesses}
+                selectedSubId={selected?.sId}
+                extraSubs={D2_PAGE_SUBS}
+                onSelectSub={(pId, sId) => {
+                  audit("OPEN_SUBPROCESS", { projectId: target.projectId, entity: dom.id, entityId: sId });
+                  setSelected({ pId, sId });
+                }}
+                onOpenModuleSub={(moduleId, pId, sId) => onNavigate?.({ ...target, moduleId, processId: pId, subId: sId })}
+              />
             </div>
           </aside>
         </div>
@@ -2166,6 +2148,7 @@ function DomainNavGroups({
   dom,
   activeProcesses,
   selectedSubId,
+  extraSubs,
   onSelectSub,
   onOpenModuleSub,
 }: {
@@ -2173,6 +2156,8 @@ function DomainNavGroups({
   dom: Domain;
   activeProcesses: Process[];
   selectedSubId?: string;
+  /** زیرفرآیندهای افزودهٔ همان ماژول (مثل d2). */
+  extraSubs?: Record<string, { id: string; title: Bi }[]>;
   onSelectSub: (processId: string, subId: string) => void;
   onOpenModuleSub: (moduleId: string, processId: string, subId: string) => void;
 }) {
@@ -2180,7 +2165,7 @@ function DomainNavGroups({
   const pd = performanceDomainOf(dom.id);
   if (!pd) return null;
   const mods = performanceDomainModules(pd.id);
-  if (mods.length < 2) return null;
+  if (!mods.length) return null;
   return (
     <>
       {/* عنوان حوزهٔ عملکردی در سربرگ سایدبار آمده است؛ اینجا سرِ دستهٔ هر ماژول می‌آید. */}
@@ -2216,7 +2201,7 @@ function DomainNavGroups({
                   <span className="min-w-0 flex-1 truncate text-[10px] font-light tx1">{t(p.title, lang)}</span>
                 </div>
                 {/* زیرفرآیندها — تودرتو، با حالت انتخاب‌شده */}
-                {p.subs.map((s) => (
+                {[...p.subs, ...(extraSubs?.[p.id] ?? [])].map((s) => (
                   <button
                     key={s.id}
                     type="button"

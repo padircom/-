@@ -150,11 +150,24 @@ export function performanceDomainModules(pdId: PerformanceDomainId): Domain[] {
   return domains.filter((d) => domainPerformance[d.id] === pdId);
 }
 
-/** حوزه‌های عملکردی موجود در یک گروه فرایندی، با ماژول‌های هر حوزه. */
+/** حوزه‌های عملکردی موجود در یک گروه فرایندی، با ماژول‌های هر حوزه.
+ *  ترتیب حوزه‌ها = ترتیب ظهور ماژول‌های آن گروه (همان نقشهٔ فرایندی). */
 export function performanceDomainsInGroup(groupId: string): Array<PerformanceDomain & { modules: Domain[] }> {
-  return performanceDomains
-    .map((p) => ({ ...p, modules: domains.filter((d) => d.group === groupId && domainPerformance[d.id] === p.id) }))
-    .filter((p) => p.modules.length > 0);
+  const members = domains.filter((d) => d.group === groupId);
+  const out: Array<PerformanceDomain & { modules: Domain[] }> = [];
+  for (const m of members) {
+    const pid = domainPerformance[m.id];
+    if (!pid) continue;
+    let bucket = out.find((x) => x.id === pid);
+    if (!bucket) {
+      const pd = performanceDomains.find((p) => p.id === pid);
+      if (!pd) continue;
+      bucket = { ...pd, modules: [] };
+      out.push(bucket);
+    }
+    bucket.modules.push(m);
+  }
+  return out;
 }
 
 export const domains: Domain[] = [

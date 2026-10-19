@@ -127,6 +127,10 @@ const quickActions: QuickAction[] = [
 const selectClass =
   "w-full rounded-lg border b-line-soft bg-[var(--row)] px-2 py-1.5 text-[10.5px] font-light tx1 outline-none transition focus:border-[var(--accent)]";
 
+/* گروه‌هایی که در فاز نمایشی، لایهٔ ۲ (حوزهٔ عملکردی) در سایدبار اصلی دارند:
+ * «آغازین» (حاکمیت) و «برنامه‌ریزی» (زمان‌بندی/محدوده). */
+const PERF_NAV_GROUPS = new Set(["pg1", "pg2"]);
+
 export default function RightSidebar({
   lang,
   quickAction,
@@ -585,8 +589,8 @@ export default function RightSidebar({
 
                         {isOpen && (
                           <div className="fade-rise mt-1 border-s-2 ps-2" style={{ borderColor: `${g.color}33` }}>
-                            {/* فاز نمایشی: لایهٔ ۲ (حوزهٔ عملکردی) فقط زیر «آغازین» */}
-                            {g.id === "pg1"
+                            {/* لایهٔ ۲ (حوزهٔ عملکردی) زیر گروه‌های فاز نمایشی */}
+                            {PERF_NAV_GROUPS.has(g.id)
                               ? performanceDomainsInGroup(g.id).map(renderPerfDomain)
                               : members.map(renderDomain)}
                           </div>
