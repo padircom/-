@@ -901,3 +901,15 @@ export function addDaysIso(iso: string, days: number): string | null {
   d.setUTCDate(d.getUTCDate() + days);
   return d.toISOString().slice(0, 10);
 }
+
+/* ═══════════════════ فاز ۹: خط زمانی تصمیم‌های گردش‌کار (فقط مرتب‌سازی روی دادهٔ واقعی PmisChangeApprovals) ═══════════════════ */
+
+/** مرتب‌سازی پایدار: قدیمی→جدید بر اساس DecidedAt؛ بدون تاریخ = آخر؛ تساوی زمان با Code (صعودی). */
+export function sortChangeApprovals<T extends Record<string, unknown>>(rows: T[]): T[] {
+  return [...rows].sort((a, b) => {
+    const ta = String(a.DecidedAt ?? ""), tb = String(b.DecidedAt ?? "");
+    if (ta && tb && ta !== tb) return ta.localeCompare(tb);
+    if (!!ta !== !!tb) return ta ? -1 : 1;
+    return String(a.Code ?? "").localeCompare(String(b.Code ?? ""));
+  });
+}

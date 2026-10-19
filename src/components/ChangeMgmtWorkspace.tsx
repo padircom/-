@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { jsonRequest } from '../services/apiClient';
 import { type Lang } from '../data/framework';
+import { sortChangeApprovals } from '../services/changeManagement';
 
 /**
  * PMO-INTEGRATED-CHANGE-MANAGEMENT-V1.0 — «مدیریت تغییر یکپارچه» (d4).
@@ -101,6 +102,8 @@ const IMPACT_ASPECT_FA: Record<string, string> = {
   technical: 'فنی/طراحی', method: 'روش اجرا', spec: 'مشخصات مصالح', resource: 'منابع/ماشین‌آلات', schedule: 'زمان‌بندی', contract: 'قراردادی/حقوقی', cost: 'هزینه‌ای', other: 'سایر',
 };
 const REVIEW_FA: Record<string, string> = { draft: 'پیش‌نویس', under_review: 'در حال بررسی', approved: 'تأییدشده', rejected: 'ردشده' };
+const APPROVAL_DECISION_FA: Record<string, string> = { pending: 'در انتظار', approved: 'تأیید', approved_conditionally: 'تأیید مشروط', rejected: 'رد' };
+const APPROVAL_STAGE_FA: Record<string, string> = { review: 'بررسی میان‌مرحله', approval: 'تصویب نهایی', final: 'نهایی' };
 const LINK_FA: Record<string, string> = {
   delay_event: 'رویداد تأخیر (ماژول تأخیر)', loss_case: 'پروندهٔ ضرر و زیان', contract_risk: 'ریسک قرارداد d14',
   claim: 'ادعا', dispute_case: 'پروندهٔ کارشناسی دعاوی', edms_document: 'سند EDMS',
@@ -687,6 +690,37 @@ function Live({ lang, projectId, userId }: { lang: Lang; projectId: string; user
                     })}
                   </div>
                 </div>
+
+                {/* ── فاز ۹: جدول واقعی تصمیم‌های گردش‌کار (PmisChangeApprovals) ── */}
+                {(children.PmisChangeApprovals ?? []).length > 0 && (
+                  <div className="glass-dark rounded-xl p-3">
+                    <div className="mb-2 text-[11px] font-semibold tx1">{fa ? 'خط زمانی تصمیم‌ها (واقعی)' : 'Decision timeline (real)'}</div>
+                    <div className="thin-scroll overflow-x-auto">
+                      <table className="w-full text-[10px] tx2">
+                        <thead><tr className="text-[9px] tx4">
+                          {[fa ? 'گام' : 'Step', fa ? 'بازی' : 'Stage', fa ? 'تصمیم' : 'Decision', fa ? 'تصمیم‌گیرنده' : 'By', fa ? 'زمان' : 'At', fa ? 'یادداشت' : 'Note'].map((h) => <th key={h} className="px-2 py-1.5 text-start">{h}</th>)}
+                        </tr></thead>
+                        <tbody>
+                          {sortChangeApprovals(children.PmisChangeApprovals ?? []).map((a) => {
+                            const dec = String(a.Decision ?? 'pending');
+                            const col = dec === 'approved' ? '#16a34a' : dec === 'rejected' ? '#dc2626' : dec === 'approved_conditionally' ? '#2563eb' : '#f59e0b';
+                            return (
+                              <tr key={a.Id ?? a.Code} className="border-t b-line-soft">
+                                <td className="px-2 py-1.5">{statusFa(String(a.StepCode ?? ''))}</td>
+                                <td className="px-2 py-1.5">{APPROVAL_STAGE_FA[String(a.Stage)] ?? String(a.Stage ?? '—')}</td>
+                                <td className="px-2 py-1.5"><span className={chipClsBase} style={{ background: `${col}20`, color: col }}>{APPROVAL_DECISION_FA[dec] ?? dec}</span></td>
+                                <td className="px-2 py-1.5">{a.DecidedBy ?? '—'}</td>
+                                <td className="px-2 py-1.5 tabular-nums">{a.DecidedAt ? String(a.DecidedAt).slice(0, 16).replace('T', ' ') : '—'}</td>
+                                <td className="px-2 py-1.5 max-w-[220px] truncate" title={String(a.NoteFa ?? '')}>{a.NoteFa ?? '—'}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                    <div className="mt-1 text-[9px] tx4">{fa ? 'هر گذر وضعیت پایدار سند یک ردیف تصمیم می‌سازد (سرور مثلثه: صرفاً مثل اسل) — مشاهده‌گر فقط خوانده شود نه ثبات.' : ''}</div>
+                  </div>
+                )}
 
                   {transitionOptions.length > 0 && !['closed', 'rejected', 'archived'].includes(String(r.Status)) && (
                     <div className="glass-dark rounded-xl p-3">
