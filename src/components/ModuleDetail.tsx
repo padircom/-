@@ -5,6 +5,7 @@ import {
   domains,
   t,
   type Bi,
+  type Domain,
   type Lang,
   type Process,
 } from "../data/framework";
@@ -1694,41 +1695,18 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
               </div>
             </div>
             <div className="thin-scroll flex-1 overflow-y-auto p-2 space-y-1">
-              <PerfDomainBlock lang={lang} domainId={dom.id} onNavigate={(tg) => onNavigate?.({ ...target, ...tg })} />
-              {/* سرِ دستهٔ فرآیندها — همان ریتم سایدبار فرعی «برنامه‌ریزی و تولید» */}
-              <div className="flex items-center gap-1.5 px-2 pb-0.5 pt-3 text-[9px] font-semibold tracking-wide tx3" role="presentation">
-                <span className="h-px flex-1" style={{ background: "var(--line-soft)" }} aria-hidden="true" />
-                <span>{rtl ? "فرآیندها و زیرفرایندها" : "Processes & sub-processes"}</span>
-                <span className="h-px flex-1" style={{ background: "var(--line-soft)" }} aria-hidden="true" />
-              </div>
-              {activeProcesses.map((p, i) => (
-                <div key={p.id} className="rounded-xl border b-line-soft bg-black/10 p-1">
-                  <div className="flex items-center gap-1.5 px-1 py-0.5">
-                    <span className="text-[8px] font-light tabular-nums tx4">
-                      {(i + 1).toLocaleString(rtl ? "fa-IR" : "en-US")}
-                    </span>
-                    <span className="text-[10.5px] font-normal" style={{ color: dom.accent }}>{t(p.title, lang)}</span>
-                  </div>
-                  <div className="mt-0.5 space-y-0.5">
-                    {p.subs.map((s) => (
-                      <button
-                        key={s.id}
-                        onClick={() => {
-                          audit("OPEN_SUBPROCESS", { projectId: target.projectId, entity: dom.id, entityId: s.id });
-                          setSelected({ pId: p.id, sId: s.id });
-                          setD6Guide(false);
-                        }}
-                        className={`group flex w-full items-start gap-2 rounded-lg px-2 py-1.5 text-start transition hover:-translate-y-px glass-row ${selected?.sId === s.id ? "row-on" : ""}`}
-                      >
-                        <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: dom.accent }} />
-                        <div className="min-w-0 flex-1">
-                          <div className="truncate text-[10px] font-light tx1">{t(s.title, lang)}</div>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ))}
+              <DomainNavGroups
+                lang={lang}
+                dom={dom}
+                activeProcesses={activeProcesses}
+                selectedSubId={selected?.sId}
+                onSelectSub={(pId, sId) => {
+                  audit("OPEN_SUBPROCESS", { projectId: target.projectId, entity: dom.id, entityId: sId });
+                  setSelected({ pId, sId });
+                  setD6Guide(false);
+                }}
+                onOpenModuleSub={(moduleId, pId, sId) => onNavigate?.({ ...target, moduleId, processId: pId, subId: sId })}
+              />
             </div>
           </aside>
         </div>
@@ -1819,37 +1797,17 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
               </div>
             </div>
             <div className="thin-scroll flex-1 overflow-y-auto p-2 space-y-1">
-              <PerfDomainBlock lang={lang} domainId={dom.id} onNavigate={(tg) => onNavigate?.({ ...target, ...tg })} />
-              {/* سرِ دستهٔ فرآیندها — همان ریتم سایدبار فرعی «برنامه‌ریزی و تولید» */}
-              <div className="flex items-center gap-1.5 px-2 pb-0.5 pt-3 text-[9px] font-semibold tracking-wide tx3" role="presentation">
-                <span className="h-px flex-1" style={{ background: "var(--line-soft)" }} aria-hidden="true" />
-                <span>{rtl ? "فرآیندها و زیرفرایندها" : "Processes & sub-processes"}</span>
-                <span className="h-px flex-1" style={{ background: "var(--line-soft)" }} aria-hidden="true" />
-              </div>
-              {activeProcesses.map((p, i) => (
-                <div key={p.id} className="rounded-xl border b-line-soft bg-black/10 p-1.5">
-                  <div className="flex items-center gap-1.5 px-1 py-1">
-                    <span className="text-[8px] font-light tabular-nums tx4">{(i + 1).toLocaleString(rtl ? "fa-IR" : "en-US")}</span>
-                    <span className="text-[10.5px] font-normal" style={{ color: dom.accent }}>{t(p.title, lang)}</span>
-                  </div>
-                  <div className="mt-1 space-y-1">
-                    {p.subs.map((s) => (
-                      <button
-                        key={s.id}
-                        type="button"
-                        onClick={() => {
-                          audit("OPEN_SUBPROCESS", { projectId: target.projectId, entity: dom.id, entityId: s.id });
-                          setSelected({ pId: p.id, sId: s.id });
-                        }}
-                        className={`group flex w-full items-start gap-2 rounded-lg px-2 py-2 text-start transition hover:-translate-y-px glass-row ${selected?.sId === s.id ? "row-on" : ""}`}
-                      >
-                        <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: dom.accent }} />
-                        <span className="min-w-0 flex-1 truncate text-[10px] font-light tx1">{t(s.title, lang)}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ))}
+              <DomainNavGroups
+                lang={lang}
+                dom={dom}
+                activeProcesses={activeProcesses}
+                selectedSubId={selected?.sId}
+                onSelectSub={(pId, sId) => {
+                  audit("OPEN_SUBPROCESS", { projectId: target.projectId, entity: dom.id, entityId: sId });
+                  setSelected({ pId, sId });
+                }}
+                onOpenModuleSub={(moduleId, pId, sId) => onNavigate?.({ ...target, moduleId, processId: pId, subId: sId })}
+              />
             </div>
           </aside>
         </div>
@@ -2197,43 +2155,84 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
 /* ── لایهٔ ۳ — ماژول‌های هم‌حوزه در سایدبار فرعی ──
  * ساختار سه‌لایه: گروه فرایندی (لایهٔ ۱) ← حوزهٔ عملکردی (لایهٔ ۲،
  * سایدبار اصلی) ← ماژول (لایهٔ ۳، همین‌جا در سایدبار فرعی صفحهٔ ماژول). */
-function PerfDomainBlock({
+function DomainNavGroups({
   lang,
-  domainId,
-  onNavigate,
+  dom,
+  activeProcesses,
+  selectedSubId,
+  onSelectSub,
+  onOpenModuleSub,
 }: {
   lang: Lang;
-  domainId: string;
-  onNavigate?: (target: { moduleId: string }) => void;
+  dom: Domain;
+  activeProcesses: Process[];
+  selectedSubId?: string;
+  onSelectSub: (processId: string, subId: string) => void;
+  onOpenModuleSub: (moduleId: string, processId: string, subId: string) => void;
 }) {
   const rtl = lang === "fa";
-  const pd = performanceDomainOf(domainId);
+  const pd = performanceDomainOf(dom.id);
   if (!pd) return null;
   const mods = performanceDomainModules(pd.id);
   if (mods.length < 2) return null;
   return (
     <>
-      {/* سرِ دسته — همان مدل سایدبار فرعی «برنامه‌ریزی و تولید»: خط جداکننده + عنوان دسته */}
+      {/* سرِ دستهٔ حوزهٔ عملکردی — مدل سایدبار فرعی «برنامه‌ریزی و تولید» */}
       <div className="flex items-center gap-1.5 px-2 pb-0.5 pt-1 text-[9px] font-semibold tracking-wide tx3" role="presentation">
         <span className="h-px flex-1" style={{ background: "var(--line-soft)" }} aria-hidden="true" />
         <span>{rtl ? `حوزهٔ عملکردی: ${t(pd.title, lang)}` : `Performance domain: ${t(pd.title, lang)}`}</span>
         <span className="h-px flex-1" style={{ background: "var(--line-soft)" }} aria-hidden="true" />
       </div>
-      {mods.map((m, i) => (
-        <button
-          key={m.id}
-          type="button"
-          aria-current={m.id === domainId ? "page" : undefined}
-          onClick={() => { if (m.id !== domainId) onNavigate?.({ moduleId: m.id }); }}
-          className={`group flex w-full items-center gap-2 rounded-lg px-2 py-2 text-start transition glass-row hover:-translate-y-px ${m.id === domainId ? "row-on" : ""}`}
-        >
-          <span className="text-[8px] font-light tabular-nums tx4">
-            {(i + 1).toLocaleString(rtl ? "fa-IR" : "en-US")}
-          </span>
-          <span className="shrink-0 text-[12px]" aria-hidden="true">{m.icon}</span>
-          <span className="min-w-0 flex-1 truncate text-[10px] font-light tx1">{t(m.nav ?? m.title, lang)}</span>
-        </button>
-      ))}
+      {mods.map((m) => {
+        const isCurrent = m.id === dom.id;
+        const procs = isCurrent
+          ? activeProcesses
+          : (domains.find((x) => x.id === m.id)?.processes ?? []);
+        return (
+          <div key={m.id}>
+            {/* سرِ دستهٔ ماژول (فعال = رنگ ماژول) */}
+            <div
+              className="flex items-center gap-1.5 px-2 pb-0.5 pt-3 text-[9px] font-semibold tracking-wide"
+              style={{ color: isCurrent ? m.accent : undefined }}
+              role="presentation"
+            >
+              <span className="h-px flex-1" style={{ background: "var(--line-soft)" }} aria-hidden="true" />
+              <span className="inline-flex items-center gap-1">
+                <span aria-hidden="true">{m.icon}</span>
+                <span>{t(m.nav ?? m.title, lang)}</span>
+              </span>
+              <span className="h-px flex-1" style={{ background: "var(--line-soft)" }} aria-hidden="true" />
+            </div>
+            {procs.map((p, i) => (
+              <div key={p.id} className="rounded-xl border b-line-soft bg-black/10 p-1.5">
+                <div className="flex items-center gap-1.5 px-1 py-1">
+                  <span className="text-[8px] font-light tabular-nums tx4">
+                    {(i + 1).toLocaleString(rtl ? "fa-IR" : "en-US")}
+                  </span>
+                  <span className="text-[10.5px] font-normal" style={{ color: m.accent }}>{t(p.title, lang)}</span>
+                </div>
+                <div className="mt-1 space-y-1">
+                  {p.subs.map((s) => (
+                    <button
+                      key={s.id}
+                      type="button"
+                      onClick={() => (isCurrent
+                        ? onSelectSub(p.id, s.id)
+                        : onOpenModuleSub(m.id, p.id, s.id))}
+                      className={`group flex w-full items-start gap-2 rounded-lg px-2 py-2 text-start transition hover:-translate-y-px glass-row ${
+                        isCurrent && selectedSubId === s.id ? "row-on" : ""
+                      }`}
+                    >
+                      <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: m.accent }} />
+                      <span className="min-w-0 flex-1 truncate text-[10px] font-light tx1">{t(s.title, lang)}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        );
+      })}
     </>
   );
 }
