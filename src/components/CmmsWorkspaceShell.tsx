@@ -540,7 +540,7 @@ export default function CmmsWorkspaceShell({ lang, activeSub, onSelectSub, onBac
         </>
       }
       onBack={onBackHome}
-      navTitle={tr("زیرماژول‌های CMMS", "CMMS Submodules")}
+      navTitle={tr("نگهداری و تعمیرات", "Maintenance Management")}
       navItems={CMMS_SUBMODULES.map((item) => {
         const allowed = canCmmsAccess(userId, item.viewPermission, siteId);
         return {
