@@ -128,9 +128,9 @@ const selectClass =
   "w-full rounded-lg border b-line-soft bg-[var(--row)] px-2 py-1.5 text-[10.5px] font-light tx1 outline-none transition focus:border-[var(--accent)]";
 
 /* گروه‌هایی که در فاز نمایشی، لایهٔ ۲ (حوزهٔ عملکردی) در سایدبار اصلی دارند:
- * «آغازین» (حاکمیت)، «برنامه‌ریزی» (زمان‌بندی/محدوده) و «اجرا»
- * (مالی/منابع/افزونه‌های صنعتی). */
-const PERF_NAV_GROUPS = new Set(["pg1", "pg2", "pg3"]);
+ * «آغازین» (حاکمیت)، «برنامه‌ریزی» (زمان‌بندی/محدوده)، «اجرا»
+ * (مالی/منابع/افزونه‌های صنعتی) و «پایش و کنترل» (مالی/ریسک/افزونه‌های صنعتی). */
+const PERF_NAV_GROUPS = new Set(["pg1", "pg2", "pg3", "pg4"]);
 
 export default function RightSidebar({
   lang,

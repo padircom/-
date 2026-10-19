@@ -150,6 +150,17 @@ export function performanceDomainModules(pdId: PerformanceDomainId): Domain[] {
   return domains.filter((d) => domainPerformance[d.id] === pdId);
 }
 
+/** ترتیب حوزه‌های عملکردی هر گروه فرایندی (نقشهٔ فرایندی).
+ *  مثلاً «پایش و کنترل»: مالی ← ریسک ← افزونه‌های صنعتی. */
+export const performanceDomainOrder: Record<string, PerformanceDomainId[]> = {
+  pg1: ["governance"],
+  pg2: ["schedule", "scope"],
+  pg3: ["finance", "resources", "extension"],
+  pg4: ["finance", "risk", "extension"],
+  pg5: ["scope"],
+  support: ["stakeholders", "extension"],
+};
+
 /** حوزه‌های عملکردی موجود در یک گروه فرایندی، با ماژول‌های هر حوزه.
  *  ترتیب حوزه‌ها = ترتیب ظهور ماژول‌های آن گروه (همان نقشهٔ فرایندی). */
 export function performanceDomainsInGroup(groupId: string): Array<PerformanceDomain & { modules: Domain[] }> {
@@ -166,6 +177,16 @@ export function performanceDomainsInGroup(groupId: string): Array<PerformanceDom
       out.push(bucket);
     }
     bucket.modules.push(m);
+  }
+  /* ترتیب نقشهٔ فرایندی حاکم است؛ اگر گروهی در نقشه نبود، ترتیب
+   * ظهور ماژول‌ها همان ترتیب قبلی می‌ماند. */
+  const order = performanceDomainOrder[groupId];
+  if (order) {
+    const rank = (id: string) => {
+      const i = order.indexOf(id as PerformanceDomainId);
+      return i === -1 ? order.length : i;
+    };
+    out.sort((a, b) => rank(a.id) - rank(b.id));
   }
   return out;
 }
