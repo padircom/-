@@ -45,20 +45,43 @@ export function registerContractRiskRoutes(app, { repo, subjects, evaluate }) {
     if (!row) throw error(404, "CNTRISK_NOT_FOUND", "رکورد در این پروژه یافت نشد");
     return row;
   };
+  /** به‌روزرسانی با کنترل نسخهٔ هم‌زمان — تعارض باید ۴۰۹ صریح باشد، نه پاسخ مبهم. */
+  const patchRow = async (r, table, id, data, actor, expectedRowVersion) => {
+    const res = await r.patch(table, id, data, actor, expectedRowVersion);
+    if (res && res.ok === false) {
+      const notFound = res.code === "NOT_FOUND";
+      throw error(notFound ? 404 : 409, res.code ?? "CONCURRENCY_CONFLICT", res.message ?? "رکورد هم‌زمان تغییر کرده است؛ صفحه را تازه کنید");
+    }
+    return res;
+  };
   const run = (handler) => async (req, res, next) => {
     try {
       const work = async () => handler(await repo(), req);
       const out = req.method === "GET" ? await work() : await serial(`cnt-risk:${req.params.projectId}`, work);
       if (out && out.__send) return out.__send(res);
       res.json({ ok: true, data: out });
-    } catch (e) { next(e); }
+    } catch (e) {
+      /* خطاهای عمدی این ماژول status/code دارند؛ باید با همان کد به کاربر برسند
+       * (پیش از این همهٔ ۴xxها به ۵۰۰ UNHANDLED_ERROR تبدیل می‌شدند و دلیل
+       * دقیق — مثل «مقیاس ۱..۵» یا «تصمیم فقط از مسیر تصویب» — به UI نمی‌رسید). */
+      if (e?.status) return res.status(e.status).json({ ok: false, error: { code: e.code, message: e.message, traceId: req.requestId } });
+      if (e?.code === "ROW_VALIDATION_FAILED") return res.status(422).json({ ok: false, error: { code: e.code, message: e.message, issues: e.issues, traceId: req.requestId } });
+      if (e?.code === "DUPLICATE_KEY" || e?.code === "UNIQUE_VIOLATION") return res.status(409).json({ ok: false, error: { code: e.code, message: e.message, traceId: req.requestId } });
+      next(e);
+    }
   };
   const scoringConfig = async (r, req) => {
     const rules = await r.list("ContractRiskScoringRule", { where: where(req.params.projectId), limit: 200 }).catch(() => []);
     const approved = rules.filter((x) => x.Status === "approved").sort((a, b) => String(b.ApprovedAt ?? "").localeCompare(String(a.ApprovedAt ?? "")))[0];
     if (!approved) return { config: DEFAULT_SCORING_CONFIG, approved: false, rules };
-    try { return { config: { ...DEFAULT_SCORING_CONFIG, ...JSON.parse(approved.Config ?? "{}") }, approved: true, rules }; }
-    catch { return { config: DEFAULT_SCORING_CONFIG, approved: false, rules }; }
+    /* ستون JSON بسته به درایور (JSON/SQL) یا رشته است یا object؛ هر دو حالت باید
+     * خوانده شود وگرنه قاعدهٔ تصویب‌شده هرگز اعمال نمی‌شود. */
+    let parsed = {};
+    try {
+      if (typeof approved.Config === "string") parsed = JSON.parse(approved.Config || "{}");
+      else if (approved.Config && typeof approved.Config === "object") parsed = approved.Config;
+    } catch { parsed = {}; }
+    return { config: { ...DEFAULT_SCORING_CONFIG, ...parsed }, approved: true, rules };
   };
   const scoreRisk = async (r, req, row, subjectId) => {
     const { config, approved } = await scoringConfig(r, req);
@@ -85,7 +108,11 @@ export function registerContractRiskRoutes(app, { repo, subjects, evaluate }) {
       Probability: num(b.Probability), ImpactTime: num(b.ImpactTime), ImpactFinancial: num(b.ImpactFinancial),
       ImpactLegal: num(b.ImpactLegal), ImpactOperational: num(b.ImpactOperational), ImpactQuality: num(b.ImpactQuality),
       ExistingControlsFa: b.ExistingControlsFa ?? null, ControlEffectiveness: b.ControlEffectiveness || "none",
-      ControlEvidenceRefs: Array.isArray(b.ControlEvidenceRefs) ? b.ControlEvidenceRefs : [],
+      ControlEvidenceRefs: Array.isArray(b.ControlEvidenceRefs)
+        ? b.ControlEvidenceRefs.map((x) => String(x).trim()).filter(Boolean)
+        : (typeof b.ControlEvidenceRefs === "string"
+          ? b.ControlEvidenceRefs.split(/[,،;]/).map((s) => s.trim()).filter(Boolean)
+          : []),
       Status: RISK_STATUSES.includes(b.Status) ? b.Status : "identified",
       NextReviewDate: b.NextReviewDate || null, DelayEventCode: b.DelayEventCode || null, ClaimCode: b.ClaimCode || null,
     };
@@ -123,9 +150,20 @@ export function registerContractRiskRoutes(app, { repo, subjects, evaluate }) {
       .sort((a, b) => String(a.AssessedAt).localeCompare(String(b.AssessedAt)))
       .slice(-60)
       .map((a) => ({ at: a.AssessedAt, riskCode: a.RiskCode, inherent: a.InherentScore, residual: a.ResidualScore }));
+    /* وضعیت قاعدهٔ امتیازدهیِ حاکم — تا UI صریح بگوید نتیجه «قطعی» است یا
+     * «برآورد اولیه» (قاعدهٔ سازمانی هنوز تصویب نشده). */
+    const { config } = await scoringConfig(r, req);
+    const approvedRule = rules.filter((x) => x.Status === "approved")
+      .sort((a, b) => String(b.ApprovedAt ?? "").localeCompare(String(a.ApprovedAt ?? "")))[0] ?? null;
     return {
       categories: CONTRACT_RISK_CATEGORIES, riskStatuses: RISK_STATUSES, improvementStatuses: IMPROVEMENT_STATUSES,
       actionStatuses: ACTION_STATUSES, strategies: STRATEGIES, defaultScoringConfig: DEFAULT_SCORING_CONFIG,
+      scoringRule: {
+        approved: Boolean(approvedRule), isDefault: !approvedRule,
+        version: approvedRule?.Version ?? config.version,
+        approvedBy: approvedRule?.ApprovedBy ?? null,
+        approvedAt: approvedRule?.ApprovedAt ?? null,
+      },
       risks, actions, obligations, improvements, findings, scoringRules: rules, assessments: assessments.slice(-500),
       contracts, amendments, trend, summary, today,
       links: {
@@ -155,10 +193,13 @@ export function registerContractRiskRoutes(app, { repo, subjects, evaluate }) {
     const merged = { ...row, ...(req.body ?? {}) };
     const values = validateRiskValues(merged);
     const result = await scoreRisk(r, req, values);
-    const updated = await r.patch("ContractRiskRegister", row.Id, {
+    /* نسخهٔ هم‌زمانی از سمت کاربر: اگر رکورد از زمانِ دیدنِ کاربر تغییر کرده
+     * باشد، ۴۰۹ می‌گیریم و بازنویسیِ بی‌صدا انجام نمی‌شود. */
+    const expectedVersion = req.body?.RowVersion ?? row.RowVersion;
+    const updated = await patchRow(r, "ContractRiskRegister", row.Id, {
       ...values, InherentScore: result.inherentScore, InherentBand: result.inherentBand,
       ResidualScore: result.residualScore, ResidualBand: result.residualBand, ScoringVersion: result.scoringVersion,
-    }, req.cntSubject.id, row.RowVersion);
+    }, req.cntSubject.id, expectedVersion);
     await snapshot(r, req, updated, result, req.cntSubject.id);
     return { risk: updated, scoring: result };
   }));
@@ -166,7 +207,7 @@ export function registerContractRiskRoutes(app, { repo, subjects, evaluate }) {
   app.post(base + "/risks/:id/reassess", need("cnt.risk.edit"), run(async (r, req) => {
     const row = await findById(r, req, "ContractRiskRegister");
     const result = await scoreRisk(r, req, row);
-    const updated = await r.patch("ContractRiskRegister", row.Id, {
+    const updated = await patchRow(r, "ContractRiskRegister", row.Id, {
       InherentScore: result.inherentScore, InherentBand: result.inherentBand,
       ResidualScore: result.residualScore, ResidualBand: result.residualBand, ScoringVersion: result.scoringVersion,
     }, req.cntSubject.id, row.RowVersion);
@@ -194,7 +235,7 @@ export function registerContractRiskRoutes(app, { repo, subjects, evaluate }) {
     const row = await findById(r, req, "ContractRiskScoringRule");
     if (row.Status === "approved") throw error(409, "CNTRISK_RULE_STATE", "این نسخه قبلاً تصویب شده است");
     if (row.CreatedBy && row.CreatedBy === req.cntSubject.id) throw error(403, "CNTRISK_SOD", "سازندهٔ قاعده نمی‌تواند خودش آن را تصویب کند (تفکیک وظایف)");
-    const updated = await r.patch("ContractRiskScoringRule", row.Id, { Status: "approved", ApprovedBy: req.cntSubject.id, ApprovedAt: new Date().toISOString() }, req.cntSubject.id, row.RowVersion);
+    const updated = await patchRow(r, "ContractRiskScoringRule", row.Id, { Status: "approved", ApprovedBy: req.cntSubject.id, ApprovedAt: new Date().toISOString() }, req.cntSubject.id, req.body?.RowVersion ?? row.RowVersion);
     return { rule: updated };
   }));
 
@@ -220,7 +261,7 @@ export function registerContractRiskRoutes(app, { repo, subjects, evaluate }) {
     const status = req.body?.ReviewStatus;
     if (!["accepted", "rejected", "pending"].includes(status)) throw error(400, "CNTRISK_REVIEW", "وضعیت بررسی نامعتبر است");
     /* یافتهٔ تحلیل هرگز خودش «تأیید کارشناسیِ» ریسک محسوب نمی‌شود؛ فقط وضعیت بررسی عوض می‌شود. */
-    const updated = await r.patch("ContractClauseFinding", row.Id, { ReviewStatus: status, ReviewedBy: req.cntSubject.id, ReviewedAt: new Date().toISOString() }, req.cntSubject.id, row.RowVersion);
+    const updated = await patchRow(r, "ContractClauseFinding", row.Id, { ReviewStatus: status, ReviewedBy: req.cntSubject.id, ReviewedAt: new Date().toISOString() }, req.cntSubject.id, req.body?.RowVersion ?? row.RowVersion);
     return { finding: updated };
   }));
 
@@ -296,7 +337,7 @@ export function registerContractRiskRoutes(app, { repo, subjects, evaluate }) {
     const allowed = {};
     for (const k of ["TitleFa", "ResponsibleParty", "BeneficiaryParty", "StartDate", "DueDate", "PreconditionFa", "EvidenceDocumentId", "Status", "NoteFa", "RiskCode", "ClauseRef", "ContractCode"]) if (k in b) allowed[k] = b[k];
     if (allowed.Status && !["pending", "done", "waived", "cancelled"].includes(allowed.Status)) throw error(400, "CNTRISK_OBLIGATION_STATUS", "وضعیت تعهد نامعتبر است");
-    const updated = await r.patch("ContractObligation", row.Id, allowed, req.cntSubject.id, row.RowVersion);
+    const updated = await patchRow(r, "ContractObligation", row.Id, allowed, req.cntSubject.id, req.body?.RowVersion ?? row.RowVersion);
     return { obligation: updated };
   }));
 
@@ -326,7 +367,7 @@ export function registerContractRiskRoutes(app, { repo, subjects, evaluate }) {
       if (["approved", "rejected"].includes(b.Status)) throw error(403, "CNTRISK_DECIDE", "تصمیم نهایی فقط از مسیر تصویب مجاز است");
       allowed.Status = b.Status;
     }
-    const updated = await r.patch("ContractImprovement", row.Id, allowed, req.cntSubject.id, row.RowVersion);
+    const updated = await patchRow(r, "ContractImprovement", row.Id, allowed, req.cntSubject.id, req.body?.RowVersion ?? row.RowVersion);
     return { improvement: updated };
   }));
 
@@ -338,7 +379,7 @@ export function registerContractRiskRoutes(app, { repo, subjects, evaluate }) {
     if (row.CreatedBy && row.CreatedBy === req.cntSubject.id) throw error(403, "CNTRISK_SOD", "پیشنهاددهنده نمی‌تواند پیشنهاد خودش را تصویب کند (تفکیک وظایف)");
     /* تصویب اینجا فقط گردش داخلی است و متن ContractMaster را دست نمی‌زند؛
      * تغییر رسمی قرارداد از مسیر الحاقیهٔ ماژول پیمان انجام می‌شود. */
-    const updated = await r.patch("ContractImprovement", row.Id, { Status: decision, ReviewerBy: req.cntSubject.id, ReviewedAt: new Date().toISOString() }, req.cntSubject.id, row.RowVersion);
+    const updated = await patchRow(r, "ContractImprovement", row.Id, { Status: decision, ReviewerBy: req.cntSubject.id, ReviewedAt: new Date().toISOString() }, req.cntSubject.id, req.body?.RowVersion ?? row.RowVersion);
     return { improvement: updated };
   }));
 
@@ -376,7 +417,7 @@ export function registerContractRiskRoutes(app, { repo, subjects, evaluate }) {
       if (b.Status === "done" && !(b.EvidenceDocumentId || row.EvidenceDocumentId)) throw error(400, "CNTRISK_ACTION_EVIDENCE", "برای بستن اقدام، مدرک اجرای اقدام (سند EDMS) الزامی است");
       allowed.Status = b.Status;
     }
-    const updated = await r.patch("ContractRiskAction", row.Id, allowed, req.cntSubject.id, row.RowVersion);
+    const updated = await patchRow(r, "ContractRiskAction", row.Id, allowed, req.cntSubject.id, req.body?.RowVersion ?? row.RowVersion);
     return { action: updated };
   }));
 }

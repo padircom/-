@@ -18,6 +18,7 @@ type Workspace = {
   scoringRules: Row[]; assessments: Row[]; contracts: Row[]; amendments: Row[];
   trend: { at: string; riskCode: string; inherent: number; residual: number }[];
   summary: Row; today: string; defaultScoringConfig: Row;
+  scoringRule: { approved: boolean; isDefault: boolean; version: string; approvedBy: string | null; approvedAt: string | null };
   links: { delayEvents: Row[]; claims: Row[] };
 };
 
@@ -121,6 +122,20 @@ function Live({ lang, projectId, userId }: { lang: Lang; projectId: string; user
   const labelCls = 'mb-1 block text-[10px] font-light tx3';
   const btnCls = 'rounded-lg px-3 py-1.5 text-[11px] font-light transition toggle-on tx1 disabled:opacity-50';
   const ghostCls = 'glass-row rounded-lg px-2.5 py-1 text-[10.5px] font-light tx2 transition hover:tx1 disabled:opacity-50';
+
+  /* آخرین ارزیابی هر ریسک — برای نمایش «دلیل‌نما» (چرا این امتیاز) */
+  const latestAssessment = (code: string): Row | null => {
+    const list = (ws?.assessments ?? []).filter((a) => a.RiskCode === code)
+      .sort((a, b) => String(b.AssessedAt ?? '').localeCompare(String(a.AssessedAt ?? '')));
+    return list[0] ?? null;
+  };
+  const rationaleOf = (assessment: Row | null): string[] => {
+    if (!assessment) return [];
+    let inputs: any = assessment.Inputs;
+    if (typeof inputs === 'string') { try { inputs = JSON.parse(inputs); } catch { return []; } }
+    const list = inputs?.rationaleFa;
+    return Array.isArray(list) ? list.map((x) => String(x)) : [];
+  };
 
   const renderMatrix = (large: boolean) => (
     <div className="overflow-x-auto">
@@ -291,6 +306,7 @@ function Live({ lang, projectId, userId }: { lang: Lang; projectId: string; user
                 <div key={k}><label className={labelCls}>{t}</label><input type="number" min={1} max={5} className={inputCls} value={riskForm[k] ?? ''} onChange={(e) => setRiskForm({ ...riskForm, [k]: e.target.value === '' ? null : Number(e.target.value) })} /></div>
               ))}
               <div><label className={labelCls}>اثربخشی کنترل موجود</label><select className={inputCls} value={riskForm.ControlEffectiveness} onChange={(e) => setRiskForm({ ...riskForm, ControlEffectiveness: e.target.value })}><option value="none">بدون کنترل</option><option value="weak">ضعیف</option><option value="partial">نسبی (نیازمند شاهد)</option><option value="strong">قوی (نیازمند شاهد)</option></select></div>
+              <div className="md:col-span-3"><label className={labelCls}>شاهد اجرایی کنترل (شناسهٔ سند/مدرک — با ویرگول جدا کنید)</label><input className={inputCls} value={(Array.isArray(riskForm.ControlEvidenceRefs) ? riskForm.ControlEvidenceRefs : (typeof riskForm.ControlEvidenceRefs === 'string' ? riskForm.ControlEvidenceRefs.split(/[,،;]/) : [])).map((x) => String(x).trim()).filter(Boolean).join('، ')} onChange={(e) => setRiskForm({ ...riskForm, ControlEvidenceRefs: e.target.value.split(/[,،;]/).map((s) => s.trim()).filter(Boolean) })} placeholder="مثلاً: PR-1402، گزارش بازرسی ۱۴۰۲" /></div>
               <div><label className={labelCls}>کد رویداد تأخیر (پیوند نرم)</label><input className={inputCls} value={riskForm.DelayEventCode ?? ''} onChange={(e) => setRiskForm({ ...riskForm, DelayEventCode: e.target.value })} /></div>
               <div><label className={labelCls}>کد پروندهٔ خسارت (پیوند نرم)</label><input className={inputCls} value={riskForm.ClaimCode ?? ''} onChange={(e) => setRiskForm({ ...riskForm, ClaimCode: e.target.value })} /></div>
               <div><label className={labelCls}>بازبینی بعدی</label><JalaliDateInput value={riskForm.NextReviewDate ?? ''} onChange={(iso) => setRiskForm({ ...riskForm, NextReviewDate: iso })} /></div>
@@ -304,6 +320,9 @@ function Live({ lang, projectId, userId }: { lang: Lang; projectId: string; user
           </div>
           <div className="glass rounded-2xl p-3">
             <h4 className="mb-2 text-[12px] font-medium tx1">دفتر ثبت ریسک‌ها ({ws.risks.length})</h4>
+            {!ws.scoringRule?.approved && (
+              <p className="mb-2 text-[10.5px] tx3">قاعدهٔ سازمانی امتیازدهی هنوز تصویب نشده است؛ امتیازها با روش پیش‌فرض ({faNum(ws.scoringRule?.version ?? ws.defaultScoringConfig?.version)}) محاسبه شده و «برآورد اولیه» است، نه رتبهٔ قطعی.</p>
+            )}
             {ws.risks.length === 0 ? <p className="text-[11px] tx3">هنوز ریسکی ثبت نشده است.</p> : ws.risks.map((r) => (
               <div key={r.Id} className="glass-row mb-1 rounded-lg px-2 py-1.5 text-[11px]">
                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -314,6 +333,9 @@ function Live({ lang, projectId, userId }: { lang: Lang; projectId: string; user
                   </span>
                 </div>
                 <div className="text-[10px] tx3">{ws.categories.find((c) => c.code === r.Category)?.labelFa ?? r.Category} · مالک: {faNum(r.Owner)} · بند: {faNum(r.ClauseRef)} · روش: {faNum(r.ScoringVersion)}</div>
+                {(() => { const rs = rationaleOf(latestAssessment(r.Code)); return rs.length ? (
+                  <ul className="mt-1 space-y-0.5 text-[10px] tx3">{rs.map((x, i) => <li key={i}>· {x}</li>)}</ul>
+                ) : null; })()}
                 <div className="mt-1 flex gap-1.5">
                   <button type="button" className={ghostCls} onClick={() => { setEditingRiskId(r.Id); setRiskForm({ ...r }); }}>ویرایش</button>
                   <button type="button" className={ghostCls} disabled={busy} onClick={() => void mutate(`/risks/${r.Id}/reassess`, 'POST', {}, 'ارزیابی مجدد ثبت شد')}>ارزیابی مجدد</button>
@@ -328,7 +350,10 @@ function Live({ lang, projectId, userId }: { lang: Lang; projectId: string; user
         <div className="glass rounded-2xl p-3">
           <h4 className="mb-2 text-[12px] font-medium tx1">ماتریس ۵×۵ و روش امتیازدهی</h4>
           {renderMatrix(true)}
-          <p className="mt-2 text-[11px] tx2">امتیاز ذاتی = احتمال × اثر وزن‌دار پنج‌بعدی. وزن ابعاد (روش پیش‌فرض {ws.defaultScoringConfig.version}): زمانی {ws.defaultScoringConfig.impactWeights.time} · مالی {ws.defaultScoringConfig.impactWeights.financial} · حقوقی {ws.defaultScoringConfig.impactWeights.legal} · عملیاتی {ws.defaultScoringConfig.impactWeights.operational} · کیفی {ws.defaultScoringConfig.impactWeights.quality}. آستانه‌ها: بحرانی ≥{ws.defaultScoringConfig.bands.critical} · بالا ≥{ws.defaultScoringConfig.bands.high} · متوسط ≥{ws.defaultScoringConfig.bands.medium}.</p>
+          <p className="mt-2 text-[11px] tx2">امتیاز ذاتی = احتمال × اثر وزن‌دار پنج‌بعدی. وزن ابعاد ({ws.scoringRule?.approved ? `قاعدهٔ مصوب ${faNum(ws.scoringRule.version)}` : `روش پیش‌فرض ${faNum(ws.defaultScoringConfig.version)}`}): زمانی {ws.defaultScoringConfig.impactWeights.time} · مالی {ws.defaultScoringConfig.impactWeights.financial} · حقوقی {ws.defaultScoringConfig.impactWeights.legal} · عملیاتی {ws.defaultScoringConfig.impactWeights.operational} · کیفی {ws.defaultScoringConfig.impactWeights.quality}. آستانه‌ها: بحرانی ≥{ws.defaultScoringConfig.bands.critical} · بالا ≥{ws.defaultScoringConfig.bands.high} · متوسط ≥{ws.defaultScoringConfig.bands.medium}.</p>
+          {ws.scoringRule?.approved
+            ? <p className="text-[11px] tx3">قاعدهٔ سازمانیِ مصوب: نسخهٔ {faNum(ws.scoringRule.version)} — تصویب‌کننده {faNum(ws.scoringRule.approvedBy)} — نتیجهٔ امتیازدهی قطعی است.</p>
+            : <p className="text-[11px] tx3">قاعدهٔ سازمانی هنوز تصویب نشده است؛ امتیازها با روش پیش‌فرض محاسبه شده و «برآورد اولیه» است، نه رتبهٔ قطعی.</p>}
           <p className="text-[11px] tx3">ریسک باقیمانده فقط با کنترلِ دارای شاهد اجرایی کم می‌شود؛ کاهش دستی امتیاز ممکن نیست. قاعدهٔ سازمانی از بخش «تنظیمات و کتابخانهٔ قواعد» ساخته و تصویب می‌شود.</p>
         </div>
       )}

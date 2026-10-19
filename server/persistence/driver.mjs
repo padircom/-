@@ -643,9 +643,28 @@ export function createRepository(driver) {
       return rows[0] ?? null;
     },
 
+    /**
+     * به‌روزرسانی یک ردیف و بازگرداندن «ردیف به‌روزشده».
+     *
+     * قرارداد (رفتار مشترک همهٔ ماژول‌ها):
+     *  - موفق ⇒ شیء برگشتی خودِ ردیفِ به‌روزشده است به‌همراه پرچم‌های نتیجه
+     *    (`ok: true`, `affected: 1`).
+     *  - تعارض هم‌زمان یا ردیف ناموجود ⇒ همان شیء نتیجهٔ درایور با `ok: false`
+     *    و کد `CONCURRENCY_CONFLICT` / `NOT_FOUND` برمی‌گردد تا الگوی
+     *    «if (!result.ok) throw conflict(...)» در ماژول‌ها دست‌نخورده بماند.
+     *
+     * چرا این تغییر: پیش از این فقط `{affected}` برمی‌گشت. هر فراخوانی که
+     * فیلدی از نتیجه می‌خواند (مثل ساخت snapshot ارزیابی در ماژول ریسک قراردادی
+     * که `Code` را لازم داشت) می‌شکست و پاسخ API به‌جای ردیف، شیء نتیجه بود.
+     */
     async patch(tableName, idValue, data, userId = "system", expectedRowVersion) {
       const t = must(tableName);
-      return driver.update(tableName, data, [{ column: t.pk, op: "eq", value: idValue }], { updatedBy: userId, expectedRowVersion });
+      const res = await driver.update(tableName, data, [{ column: t.pk, op: "eq", value: idValue }], { updatedBy: userId, expectedRowVersion });
+      if (!res || res.ok === false) return res; /* تعارض/ناموجود — همان نتیجهٔ درایور */
+      const rows = await driver.select(tableName, { where: [{ column: t.pk, op: "eq", value: idValue }], limit: 1 });
+      const row = rows[0] ?? null;
+      if (!row) return res;
+      return { ...row, affected: res.affected ?? 1, ok: true };
     },
 
     async remove(tableName, idValue) {

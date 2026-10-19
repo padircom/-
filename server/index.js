@@ -20321,6 +20321,12 @@ app.use((err, req, res, next) => {
   if (err.code === "UNSUPPORTED_FILE_TYPE") {
     return res.status(415).json({ ok: false, error: { code: err.code, message: err.message, traceId: req.requestId } });
   }
+  /* خطاهای عمدی ماژول‌ها (400/403/404/409/422) باید با همان کد و پیام به کاربر
+   * برسند؛ پیش از این هر خطای دارای status به ۵۰۰ «Unexpected server error»
+   * تبدیل می‌شد و دلیل واقعی گم می‌شد. خطاهای ۵xx عمداً پنهان می‌مانند. */
+  if (err.status && Number.isInteger(err.status) && err.status >= 400 && err.status < 500) {
+    return res.status(err.status).json({ ok: false, error: { code: err.code ?? "REQUEST_FAILED", message: err.message, traceId: req.requestId } });
+  }
   res.status(500).json({ ok: false, error: { code: "UNHANDLED_ERROR", message: "Unexpected server error", traceId: req.requestId } });
 });
 
