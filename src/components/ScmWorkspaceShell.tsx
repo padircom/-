@@ -35,6 +35,15 @@ import {
 
 export type ScmSubModuleId = "inventory" | "purchasing" | "crm" | "movements" | "finance";
 
+/** دسته‌های سایدبار داخلی — همان الگوی CMMS/MES: خط جداکننده + عنوان دسته. */
+const SCM_NAV_GROUPS: Record<string, { fa: string; en: string }> = {
+  inventory: { fa: "انبار و تأمین", en: "Inventory & Supply" },
+  purchasing: { fa: "انبار و تأمین", en: "Inventory & Supply" },
+  crm: { fa: "بازرگانی و گردش کالا", en: "Commercial & Goods Movement" },
+  movements: { fa: "بازرگانی و گردش کالا", en: "Commercial & Goods Movement" },
+  finance: { fa: "مالی و هزینه‌یابی", en: "Finance & Costing" },
+};
+
 export const SCM_SUBMODULES: Array<{
   id: ScmSubModuleId;
   icon: string;
@@ -268,6 +277,7 @@ export default function ScmWorkspaceShell({ lang, activeSub, onSelectSub, onBack
           id: item.id,
           label: fa ? item.fa : item.en,
           icon: item.icon,
+          group: fa ? SCM_NAV_GROUPS[item.id]?.fa : SCM_NAV_GROUPS[item.id]?.en,
           disabled: !allowed,
           disabledHint: tr(
             `مجوز این بخش را ندارید (${item.viewPermissions.join(" / ")})`,
