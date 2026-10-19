@@ -43,6 +43,7 @@ import {
   computeChangeDashboard,
   LINK_KINDS,
 } from "./changeMgmtLogic.js";
+import { buildChangeReport, CHANGE_REPORT_CHAPTERS, CHANGE_REPORT_TABLES } from "./changeDocLogic.js";
 
 const locks = new Map();
 async function serial(key, work) {
@@ -251,11 +252,8 @@ export function registerChangeMgmtRoutes(app, { repo, subjects, evaluate }) {
     return { request: updated };
   }));
 
-  /* ─────────── فاز ۲: موتور تحلیل اثر زمانی (فقط‌خواندنی از d2) ─────────── */
-  app.get(base + "/requests/:id/analysis/time", need("change.view"), run(async (r, req) => {
-    const row = await findRequest(r, req);
-    const pid = req.params.projectId;
-    const sched = await listChild(r, "PmisChangeScheduleImpacts", pid, row.Code);
+  /* محاسبهٔ مشترک تحلیل زمانی (بین endpoint تحلیل و سند گزارش) */
+  const computeTimeAnalysis = async (r, pid, row, sched) => {
     let activities = [], relations = [];
     let requestForAnalysis = row;
     if (row.ActivityRefs || row.WbsRefs || sched.length) {
@@ -271,7 +269,15 @@ export function registerChangeMgmtRoutes(app, { repo, subjects, evaluate }) {
       relations = (await r.list("ActivityRelation", { limit: 20000 }).catch(() => []))
         .filter((rel) => actIds.has(String(rel.SuccessorId)));
     }
-    const analysis = analyzeTimeImpact(requestForAnalysis, sched, activities, relations);
+    return analyzeTimeImpact(requestForAnalysis, sched, activities, relations);
+  };
+
+  /* ─────────── فاز ۲: موتور تحلیل اثر زمانی (فقط‌خواندنی از d2) ─────────── */
+  app.get(base + "/requests/:id/analysis/time", need("change.view"), run(async (r, req) => {
+    const row = await findRequest(r, req);
+    const pid = req.params.projectId;
+    const sched = await listChild(r, "PmisChangeScheduleImpacts", pid, row.Code);
+    const analysis = await computeTimeAnalysis(r, pid, row, sched);
     return { analysis, llmConnected: CHANGE_LLM_CONNECTED };
   }));
 
@@ -284,9 +290,8 @@ export function registerChangeMgmtRoutes(app, { repo, subjects, evaluate }) {
   }));
 
   /* ─────────── فاز ۲: راستی‌آزمایی پیوندهای نرم در برابر ماژول‌های مبنأ ─────────── */
-  app.get(base + "/requests/:id/analysis/links-verify", need("change.view"), run(async (r, req) => {
-    const row = await findRequest(r, req);
-    const pid = req.params.projectId;
+  /* راستی‌آزمایی پیوندها (بین endpoint تحلیل و سند گزارش) */
+  const verifyLinksFor = async (r, pid, row) => {
     const links = await listChild(r, "PmisChangeModuleLinks", pid, row.Code);
     const codes = (rows, c = "Code") => new Set(rows.map((x) => String(x[c] ?? "")));
     const ids = (rows) => new Set(rows.map((x) => String(x.Id ?? "")));
@@ -307,8 +312,53 @@ export function registerChangeMgmtRoutes(app, { repo, subjects, evaluate }) {
       legacyChangeCodes: codes(legacy), baselineIds: ids(baselines),
     };
     const verified = verifyModuleLinks(links, sets);
-    return { links: verified, totals: { verified: verified.filter((l) => l.verified === true).length, missing: verified.filter((l) => l.verified === false).length }, llmConnected: CHANGE_LLM_CONNECTED };
+    return { links: verified, totals: { verified: verified.filter((l) => l.verified === true).length, missing: verified.filter((l) => l.verified === false).length } };
+  };
+
+  app.get(base + "/requests/:id/analysis/links-verify", need("change.view"), run(async (r, req) => {
+    const row = await findRequest(r, req);
+    const { links, totals } = await verifyLinksFor(r, req.params.projectId, row);
+    return { links, totals, llmConnected: CHANGE_LLM_CONNECTED };
   }));
+
+  /* ─────────── فاز ۴: سند گزارش چرخهٔ تغییر — ۱۲ فصل / ۲۸ جدول + Auto-Cleanup ─────────── */
+  app.get(base + "/requests/:id/report", need("change.view"), async (req, res, next) => {
+    try {
+      const r = await repo();
+      const row = await findRequest(r, req);
+      const pid = req.params.projectId, cc = row.Code;
+      const [impacts, costs, schedules, approvals, riskLinks, claimLinks, documents, implementation, audits, moduleLinks] = await Promise.all([
+        listChild(r, "PmisChangeImpacts", pid, cc), listChild(r, "PmisChangeCostEstimates", pid, cc),
+        listChild(r, "PmisChangeScheduleImpacts", pid, cc), listChild(r, "PmisChangeApprovals", pid, cc),
+        listChild(r, "PmisChangeRiskLinks", pid, cc), listChild(r, "PmisChangeClaimLinks", pid, cc),
+        listChild(r, "PmisChangeDocuments", pid, cc), listChild(r, "PmisChangeImplementation", pid, cc),
+        listChild(r, "PmisChangeAuditTrail", pid, cc), listChild(r, "PmisChangeModuleLinks", pid, cc),
+      ]);
+      const timeAnalysis = await computeTimeAnalysis(r, pid, row, schedules);
+      const costAnalysis = analyzeCostImpact(costs, String(row.Currency ?? "IRR"));
+      const { totals: verifyTotals } = await verifyLinksFor(r, pid, row);
+      const format = req.query.format === "pdf" ? "pdf" : "word";
+      const doc = buildChangeReport({
+        projectId: pid, request: row, impacts, costs, schedules, approvals, riskLinks, claimLinks,
+        documents, implementation, audits, moduleLinks,
+        timeAnalysis, costAnalysis, linksVerify: verifyTotals,
+        generatedAt: new Date().toISOString(), generatedBy: req.chgSubject.id, format,
+      });
+      if (doc.issues.length) return res.status(422).json({ ok: false, error: { code: "CHG_REPORT_GATE", message: doc.issues.join("؛ "), traceId: req.requestId } });
+      await audit(r, pid, cc, format === "pdf" ? "report_pdf_generated" : "report_word_generated", req.chgSubject.id, `تولید ${doc.filename} — ۱۲ فصل/۲۸ جدول`, null, null);
+      if (format === "pdf") {
+        let pdf;
+        try { const { htmlToPdf } = await import("./pdfRenderer.js"); pdf = await htmlToPdf(doc.body); }
+        catch { return res.status(501).json({ ok: false, error: { code: "CHG_PDF_UNAVAILABLE", message: "موتور تولید PDF واقعی روی این سرور در دسترس نیست؛ خروجی Word در دسترس است", traceId: req.requestId } }); }
+        res.setHeader("content-type", "application/pdf");
+        res.setHeader("content-disposition", `attachment; filename="${doc.filename.replace(/\.html$/, ".pdf")}"`);
+        return res.send(pdf);
+      }
+      res.setHeader("content-type", doc.contentType);
+      res.setHeader("content-disposition", `attachment; filename="${doc.filename}"`);
+      return res.send(doc.body);
+    } catch (e) { next(e); }
+  });
 
   /* ─────────── فاز ۲: پیشنهاد نسخهٔ مبنای نامستقر — اعتبارش دهندهٔ baselines_updated ─────────── */
   app.post(base + "/requests/:id/baseline-proposal", need(["change.implement", "change.review"]), run(async (r, req) => {

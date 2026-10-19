@@ -24,6 +24,7 @@ server/schedReconDocLogic.js
 server/disputeExpertLogic.js
 server/disputeExpertDocLogic.js
 server/changeMgmtLogic.js
+server/changeDocLogic.js
 server/sqlLogic.js
 # موتور برنامه‌ریزی فاز ۵ تولید (بازتولید: npm run build:mfgplan)
 server/mfgPlanLogic.js

@@ -68,6 +68,7 @@ const DETAIL_TABS = [
   ['cost', 'لایه‌های هزینه (۵ لایه)'],
   ['links', 'پیوندهای نرم ماژول‌ها'],
   ['implement', 'اجرای مسیر تصویب/مبنا'],
+  ['report', 'گزارش Word/PDF (۱۲ فصل/۲۸ جدول)'],
   ['audit', 'ممیزی'],
 ] as const;
 type DetailTab = (typeof DETAIL_TABS)[number][0];
@@ -185,6 +186,33 @@ function Live({ lang, projectId, userId }: { lang: Lang; projectId: string; user
     }
     setError(`${r.code}: ${r.message}`); setBusy(false); return false;
   }, [userId, bump, detail, base]);
+
+  const [docBusy, setDocBusy] = useState('');
+  const downloadDoc = useCallback(async (id: string, format: 'word' | 'pdf') => {
+    if (docBusy) return;
+    setDocBusy(format); setError('');
+    try {
+      const res = await fetch(`${base}/requests/${encodeURIComponent(id)}/report?format=${format}`, { headers: { ...(userId ? { 'x-user-id': userId } : {}) } });
+      if (!res.ok) {
+        const payload = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;
+        throw new Error(payload?.error?.message ?? (fa ? 'تولید سند انجام نشد' : 'Document generation failed'));
+      }
+      const blob = await res.blob();
+      if (!blob.size) throw new Error(fa ? 'فایل خروجی خالی است' : 'Empty file');
+      const filename = res.headers.get('content-disposition')?.match(/filename="([^"]+)"/)?.[1] ?? `ChangeReport.${format === 'pdf' ? 'pdf' : 'doc'}`;
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url; anchor.download = filename; anchor.style.display = 'none';
+      document.body.appendChild(anchor); anchor.click();
+      window.setTimeout(() => anchor.remove(), 1000);
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      setNotice(fa ? `دانلود آغاز شد: ${filename}` : `Download started: ${filename}`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : (fa ? 'تولید سند انجام نشد' : 'Generation failed'));
+    } finally {
+      setDocBusy('');
+    }
+  }, [docBusy, base, userId, fa]);
 
   const typeFa = useCallback((code: string) => catalog?.types.find((t) => t.code === code)?.fa ?? code, [catalog]);
   const statusFa = useCallback((code: string) => catalog?.statuses.find((s) => s.code === code)?.fa ?? code, [catalog]);
@@ -750,6 +778,29 @@ function Live({ lang, projectId, userId }: { lang: Lang; projectId: string; user
                     <button type="button" className={btnCls} disabled={busy}
                       onClick={() => void act('POST', `${base}/requests/${encodeURIComponent(r.Id)}/rows/PmisChangeImplementation`, implForm, fa ? 'ردیف اجرا ثبت شد' : 'Implementation row saved')}>
                       {fa ? 'ثبت ردیف اجرا' : 'Add implementation row'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ── گزارش Word/PDF ── */}
+            {detailTab === 'report' && (
+              <div className="flex flex-col gap-3">
+                <div className="glass-dark rounded-xl p-4">
+                  <div className="mb-2 text-[11px] font-semibold tx1">{fa ? 'سند گزارش چرخهٔ تغییر — ۱۲ فصل / ۲۸ جدول' : 'Change-cycle report — 12 chapters / 28 tables'}</div>
+                  <ul className="text-[9.5px] tx3 leading-5 space-y-0.5">
+                    <li>✓ {fa ? 'Auto-Cleanup هنگام صدور: راهنمای داخلی حذف، برچسب‌ها پاک، هایلایت زرد شفاف، فونت رسمی B Nazanin' : 'Auto-Cleanup on issue: internal guides/mandatory-optional labels/yellow highlights stripped, B Nazanin font'}</li>
+                    <li>✓ {fa ? 'هر سلول یا دادهٔ واقعی جدول‌های PmisChange* است یا «—» — هیچ مبلغ/استحقاق/ماده‌ای حدس زده نمی‌شود' : 'Every cell is a real PmisChange* value or «—» — no fabricated amounts/entitlements'}</li>
+                    <li>✓ {fa ? 'برای پیش‌نویسِ فاقد هر ردیف واقعی (تحلیل/هزینه/پیوند/سند) گیت ۴۲۲ می‌خورد' : '422 gate for an empty draft (no analysis/cost/link/document rows)'}</li>
+                    <li>✓ {fa ? 'PDF فقط در صورت وجود موتور رندر واقعی سمت سرور (خارج از پیکربندی فعلی: ۵۰۱ با راهنمای Word)' : 'PDF only when a real renderer is available server-side (current config: 501 + Word guidance)'}</li>
+                  </ul>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button type="button" className={btnCls} disabled={!!docBusy} onClick={() => void downloadDoc(String(r.Id), 'word')}>
+                      {docBusy === 'word' ? '…' : fa ? 'دانلود Word (.doc)' : 'Download Word (.doc)'}
+                    </button>
+                    <button type="button" className={btnCls} disabled={!!docBusy} onClick={() => void downloadDoc(String(r.Id), 'pdf')}>
+                      {docBusy === 'pdf' ? '…' : fa ? 'دانلود PDF' : 'Download PDF'}
                     </button>
                   </div>
                 </div>
