@@ -33,7 +33,7 @@ function mkRepo() {
 function mkApp(repo) {
   const handlers = [];
   const push = (m) => (p, ...hs) => handlers.push({ method: m, p, hs });
-  const app = { get: push("GET"), post: push("POST"), patch: push("PATCH"), delete: push("DELETE") };
+  const app = { get: push("GET"), post: push("POST"), patch: push("PATCH"), delete: push("DELETE"), put: push("PUT") };
   registerChangeMgmtRoutes(app, { repo: async () => repo, subjects: SUBJECTS, evaluate });
   const simulate = async (method, path, { sub, params = {}, query = {}, body = {} } = {}) => {
     const route = handlers.find((h) => h.method === method && h.p === path);

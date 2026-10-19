@@ -196,11 +196,11 @@ function errors(ok: boolean, ...list: (string | false)[]): ValidationResult {
 }
 
 /** ورودی ساخت/ویرایش درخواست تغییر. */
-export function validateChangeInput(b: Record<string, unknown>): ValidationResult {
+export function validateChangeInput(b: Record<string, unknown>, extraTypes?: unknown): ValidationResult {
   const e: string[] = [];
   if (!String(b.TitleFa ?? "").trim()) e.push("عنوان تغییر الزامی است");
   const t = String(b.ChangeType ?? "");
-  if (t && !CHANGE_TYPES.some((x) => x.code === t)) e.push("نوع تغییر باید از فهرست استاندارد باشد");
+  if (t && !effectiveChangeTypes(extraTypes).some((x) => x.code === t)) e.push("نوع تغییر باید از فهرست استاندارد (یا انواع سفارشی پروژه در Settings) باشد");
   if (b.RequestDate !== undefined && b.RequestDate !== null && b.RequestDate !== "" && !ISO_DATE.test(String(b.RequestDate))) e.push("تاریخ درخواست باید قالب YYYY-MM-DD باشد");
   const num = (v: unknown, f: string, integer = true) => {
     if (v === undefined || v === null || v === "") return;
@@ -824,4 +824,71 @@ export function buildChangeManagementReport(kind: string, d: ChangeMgmtData): Ch
     default:
       return { title: "گزارش نامعتبر", heads: ["خطا"], rows: [["گزارش مدیریتی با این کد تعریف نشده است"]] };
   }
+}
+
+/* ═══════════════════ فاز ۷: تنظیمات گردش‌کار واقعی (PmisChangeSettings — جدولِ آماده از 0074 که wire نشده بود) ═══════════════════ */
+
+export const CHANGE_SETTING_KEYS = ["change_types_extra", "workflow_defaults"] as const;
+export type ChangeSettingKey = (typeof CHANGE_SETTING_KEYS)[number];
+export const CHANGE_SETTING_FA: Record<ChangeSettingKey, string> = {
+  change_types_extra: "انواع سفارشی تغییر (افزونه بر ۱۱ نوع پایه)",
+  workflow_defaults: "پیش‌فرض‌های گردش‌کار (مهلت بررسی)",
+};
+const EXTRA_TYPE_CODE = /^[a-z][a-z0-9_]{2,29}$/;
+
+/** اعتبارسنجی مقدار تنظیم — تداخل با ۱۱ نوع پایه رد می‌شود؛ def رد و def همان def است (هیچ پیش‌فرض ساختگی). */
+export function validateChangeSetting(key: string, value: unknown): { ok: true; normalized: unknown } | { ok: false; error: string } {
+  if (key === "change_types_extra") {
+    if (!Array.isArray(value)) return { ok: false, error: "change_types_extra باید آرایه‌ای از {code, fa} باشد" };
+    if (value.length > 40) return { ok: false, error: "حداکثر ۴۰ نوع سفارشی مجاز است" };
+    const seen = new Set<string>();
+    for (const item of value as unknown[]) {
+      const i = item as Record<string, unknown>;
+      if (!i || typeof i !== "object" || Array.isArray(i)) return { ok: false, error: "هر نوع سفارشی باید آبجکت «{code, fa}» باشد" };
+      const code = String(i.code ?? ""), fa = String(i.fa ?? "").trim();
+      if (!EXTRA_TYPE_CODE.test(code)) return { ok: false, error: `code «${code}» نامعتبر است — حروف کوچک/عدد/_ با ۳ تا ۳۰ نویسه، شروع با حرف` };
+      if (fa.length < 3 || fa.length > 80) return { ok: false, error: `عنوان فارسی «${code}» باید ۳ تا ۸۰ نویسه باشد` };
+      if (CHANGE_TYPES.some((t) => t.code === code)) return { ok: false, error: `«${code}» با نوع پایه تداخل دارد — انواع پایه قابل بازتعریف نیستند` };
+      if (seen.has(code)) return { ok: false, error: `code «${code}» در آرایه تکراری است` };
+      seen.add(code);
+    }
+    return { ok: true, normalized: (value as Record<string, unknown>[]).map((i) => ({ code: String(i.code), fa: String(i.fa).trim() })) };
+  }
+  if (key === "workflow_defaults") {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return { ok: false, error: "workflow_defaults باید آبجکت باشد" };
+    const raw = (value as Record<string, unknown>).reviewDueDays;
+    /* بدون تبدیل خاموش رشته — فقط عدد واقعی صادق است */
+    if (typeof raw !== "number" || !Number.isInteger(raw) || raw < 1 || raw > 365) return { ok: false, error: "reviewDueDays باید عدد صحیح بین ۱ تا ۳۶۵ باشد (نه رشته)" };
+    return { ok: true, normalized: { reviewDueDays: raw } };
+  }
+  return { ok: false, error: `کلید تنظیم ناشناخته «${key}» — مقادیر مجاز: ${CHANGE_SETTING_KEYS.join(", ")}` };
+}
+
+/** انواع مؤثر = ۱۱ نوع پایه + سفارشی‌های معتبر (سفارشی نامعتبری که از خارج API وارد جدول شده باشد خودکار کنار گذاشته می‌شود). */
+export function effectiveChangeTypes(extra: unknown): { code: string; fa: string }[] {
+  const base: { code: string; fa: string }[] = CHANGE_TYPES.map((t) => ({ code: t.code, fa: t.fa }));
+  if (!Array.isArray(extra)) return base;
+  const legit = (extra as Record<string, unknown>[])
+    .filter((i) => i && typeof i === "object" && !Array.isArray(i)
+      && EXTRA_TYPE_CODE.test(String(i.code ?? ""))
+      && !CHANGE_TYPES.some((t) => t.code === String(i.code ?? ""))
+      && String(i.fa ?? "").trim().length >= 3)
+    .map((i) => ({ code: String(i.code), fa: String(i.fa).trim() }));
+  return [...base, ...legit];
+}
+
+/** مهلت بررسی مؤثر از workflow_defaults — بدون تنظیم null (رفتار pre-existing بدون تغییر باقی می‌ماند). */
+export function effectiveReviewDueDays(v: unknown): number | null {
+  if (!v || typeof v !== "object" || Array.isArray(v)) return null;
+  const raw = (v as Record<string, unknown>).reviewDueDays;
+  return typeof raw === "number" && Number.isInteger(raw) && raw >= 1 && raw <= 365 ? raw : null;
+}
+
+/** افزایش N روز به تاریخ ISO (UTC-safe)؛ ورودی نامعتبر → null. */
+export function addDaysIso(iso: string, days: number): string | null {
+  if (!ISO_DATE.test(String(iso)) || !Number.isInteger(days)) return null;
+  const d = new Date(`${iso}T00:00:00Z`);
+  if (isNaN(d.getTime())) return null;
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
 }

@@ -49,6 +49,12 @@ import {
   validateChangeUploadPayload,
   changeSafeDocFileName,
   publicChangeDocRow,
+  CHANGE_SETTING_KEYS,
+  CHANGE_SETTING_FA,
+  validateChangeSetting,
+  effectiveChangeTypes,
+  effectiveReviewDueDays,
+  addDaysIso,
 } from "./changeMgmtLogic.js";
 import { buildChangeReport, CHANGE_REPORT_CHAPTERS, CHANGE_REPORT_TABLES } from "./changeDocLogic.js";
 import multer from "multer";
@@ -100,6 +106,13 @@ export function registerChangeMgmtRoutes(app, { repo, subjects, evaluate, storag
   const where = (projectId) => [{ column: "ProjectId", op: "eq", value: projectId }];
   const childWhere = (projectId, changeCode) => [...where(projectId), { column: "ChangeCode", op: "eq", value: changeCode }];
   const listChild = (r, table, projectId, changeCode) => r.list(table, { where: childWhere(projectId, changeCode), limit: 5000 }).catch(() => []);
+  /** فاز ۷ — بار تنظیمات گردش‌کار (بدون ردیف = رفتار پایهٔ موتور؛ هیچ پیش‌فرض ساختگی در کد). */
+  const loadChangeSettings = async (r, projectId) => {
+    const rows = await r.list("PmisChangeSettings", { where: where(projectId), limit: 500 }).catch(() => []);
+    const map = new Map();
+    for (const row of rows) map.set(String(row.SettingKey), row);
+    return map;
+  };
   const findRequest = async (r, req) => {
     const row = await r.findOne("PmisChangeRequests", [...where(req.params.projectId), { column: "Id", op: "eq", value: req.params.id }]);
     if (!row) throw error(404, "CHG_NOT_FOUND", "درخواست تغییر در این پروژه یافت نشد");
@@ -257,6 +270,42 @@ export function registerChangeMgmtRoutes(app, { repo, subjects, evaluate, storag
     return { kind, ...report, llmConnected: CHANGE_LLM_CONNECTED };
   }));
 
+  /* ── فاز ۷: تنظیمات گردش‌کار — فقط خواندن برای view و upsert فقط با change.edit ── */
+  app.get(base + "/settings", need("change.view"), run(async (r, req) => {
+    const map = await loadChangeSettings(r, req.params.projectId);
+    const rows = [...map.entries()].map(([key, row]) => ({
+      key, fa: CHANGE_SETTING_FA[key] ?? key, value: row.SettingValueJson,
+      updatedBy: row.UpdatedBy ?? null, updatedAt: row.UpdatedAt ?? null,
+    }));
+    return {
+      settings: rows,
+      allowedKeys: CHANGE_SETTING_KEYS.map((k) => ({ code: k, fa: CHANGE_SETTING_FA[k] ?? k })),
+      effectiveTypes: effectiveChangeTypes(map.get("change_types_extra")?.SettingValueJson),
+      reviewDueDays: effectiveReviewDueDays(map.get("workflow_defaults")?.SettingValueJson),
+      honestyFa: "بدون ردیف تنظیم، موتور با رفتار پایه کار می‌کند (۱۱ نوع استاندارد، بدون مهلت پیش‌فرض بررسی)؛ هیچ مقدار پیش‌فرض ساختگی در کد تعبیه نشده است.",
+    };
+  }));
+
+  app.put(base + "/settings/:key", need(["change.edit", "change.approve"]), run(async (r, req) => {
+    const key = String(req.params.key ?? "").trim();
+    if (!CHANGE_SETTING_KEYS.includes(key)) throw error(400, "CHG_SETTING_KEY", `کلید تنظیم نامعتبر است — مقادیر مجاز: ${CHANGE_SETTING_KEYS.join(", ")}`);
+    const checked = validateChangeSetting(key, req.body?.value);
+    if (!checked.ok) throw error(422, "CHG_SETTING_VALUE", checked.error);
+    const pid = req.params.projectId;
+    const actor = req.chgSubject.id;
+    const existing = (await r.list("PmisChangeSettings", { where: where(pid), limit: 500 })).find((x) => String(x.SettingKey) === key);
+    const now = new Date().toISOString();
+    const oldJson = existing ? JSON.stringify(existing.SettingValueJson ?? null).slice(0, 1900) : null;
+    let saved;
+    if (existing) {
+      saved = await r.patch("PmisChangeSettings", existing.Id, { SettingValueJson: checked.normalized, UpdatedBy: actor, UpdatedAt: now }, actor, existing.RowVersion);
+    } else {
+      saved = await r.create("PmisChangeSettings", { ProjectId: pid, SettingKey: key, SettingValueJson: checked.normalized, UpdatedBy: actor, UpdatedAt: now }, actor, "change");
+    }
+    await audit(r, pid, `CFG-${key}`.slice(0, 40), "setting_updated", actor, `تنظیم گردش‌کار «${key}» به‌روزرسانی شد`, oldJson, JSON.stringify(checked.normalized).slice(0, 1900));
+    return { key, value: checked.normalized, updatedBy: actor, updatedAt: now, row: saved };
+  }));
+
   /* ── فهرست درخواست‌ها ── */
   app.get(base + "/requests", need("change.view"), run(async (r, req) => {
     const rows = await r.list("PmisChangeRequests", { where: where(req.params.projectId), limit: 5000 });
@@ -266,10 +315,15 @@ export function registerChangeMgmtRoutes(app, { repo, subjects, evaluate, storag
   /* ── ثبت درخواست (درخواست‌کننده با change.edit؛ وضعیت draft + ممیزی) ── */
   app.post(base + "/requests", need("change.edit"), run(async (r, req) => {
     const b = req.body ?? {};
-    const v = validateChangeInput(b);
+    const settingsMap = await loadChangeSettings(r, req.params.projectId);
+    const v = validateChangeInput(b, settingsMap.get("change_types_extra")?.SettingValueJson);
     if (!v.ok) throw error(400, "CHG_VALIDATION", v.errors.join("؛ "));
     const actor = req.chgSubject.id;
     const now = new Date().toISOString();
+    /* فاز ۷ — مهلت بررسی پیش‌فرض فقط اگر تنظیم واقعی ثبت شده؛ در غیاب تنظیم رفتار قدیمی (null) می‌ماند */
+    const reqDate = b.RequestDate ?? now.slice(0, 10);
+    const dueDays = effectiveReviewDueDays(settingsMap.get("workflow_defaults")?.SettingValueJson);
+    const fallbackDueDate = b.ReviewDueDate ? b.ReviewDueDate : (dueDays ? addDaysIso(String(reqDate), dueDays) : null);
     const code = String(b.Code ?? "").trim() || newChangeCode();
     const exists = await r.findOne("PmisChangeRequests", [...where(req.params.projectId), { column: "Code", op: "eq", value: code }]);
     if (exists) throw error(409, "CHG_DUP", `کد ${code} در پروژه تکراری است`);
@@ -277,7 +331,7 @@ export function registerChangeMgmtRoutes(app, { repo, subjects, evaluate, storag
       ProjectId: req.params.projectId, Code: code, TitleFa: String(b.TitleFa).trim(),
       ContractCode: b.ContractCode ?? null, DescriptionFa: b.DescriptionFa ?? null,
       RequestedBy: actor, RequestedByRoleCode: b.RequestedByRoleCode ?? null,
-      RequestDate: b.RequestDate ?? now.slice(0, 10), ChangeType: b.ChangeType ?? "other",
+      RequestDate: reqDate, ChangeType: b.ChangeType ?? "other",
       ReasonFa: b.ReasonFa ?? null, NecessityFa: b.NecessityFa ?? null,
       AffectedScopeFa: b.AffectedScopeFa ?? null, WbsRefs: b.WbsRefs ?? null,
       ActivityRefs: b.ActivityRefs ?? null, SupportDocRefs: b.SupportDocRefs ?? null,
@@ -285,7 +339,7 @@ export function registerChangeMgmtRoutes(app, { repo, subjects, evaluate, storag
       InitialCostEstimate: b.InitialCostEstimate ?? null, Currency: b.Currency ?? "IRR",
       InitialTimeImpactDays: b.InitialTimeImpactDays ?? null, InitialRisksJson: b.InitialRisksJson ?? null,
       Priority: b.Priority ?? "normal", ReviewOwnerFa: b.ReviewOwnerFa ?? null,
-      ReviewDueDate: b.ReviewDueDate ?? null,
+      ReviewDueDate: fallbackDueDate,
       Status: "draft", CreatedBy: actor, StatusChangedBy: actor, StatusChangedAt: now,
     }, actor, "change");
     await audit(r, req.params.projectId, code, "change_created", actor, "درخواست تغییر ایجاد شد", null, "draft");
@@ -316,7 +370,8 @@ export function registerChangeMgmtRoutes(app, { repo, subjects, evaluate, storag
     const row = await findRequest(r, req);
     if (isTerminalChange(row.Status)) throw error(409, "CHG_STATUS", "درخواست بایگانی‌شده تغییر نمی‌پذیرد");
     const merged = { ...row, ...(req.body ?? {}), Id: row.Id, ProjectId: row.ProjectId, Code: row.Code, Status: row.Status, RequestedBy: row.RequestedBy, CreatedBy: row.CreatedBy };
-    const v = validateChangeInput(merged);
+    const settingsMap = await loadChangeSettings(r, req.params.projectId);
+    const v = validateChangeInput(merged, settingsMap.get("change_types_extra")?.SettingValueJson);
     if (!v.ok) throw error(400, "CHG_VALIDATION", v.errors.join("؛ "));
     const patch = { ...(req.body ?? {}) };
     delete patch.Id; delete patch.ProjectId; delete patch.Code; delete patch.Status;

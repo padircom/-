@@ -60,8 +60,14 @@ const SECTIONS = [
   ['requests', 'فهرست و ثبت درخواست'],
   ['detail', 'پروندهٔ تغییر (۱۶ مرحله)'],
   ['reports', 'گزارش‌های مدیریتی (۱۴)'],
+  ['settings', 'تنظیمات گردش‌کار'],
 ] as const;
 type MgmtReport = { kind: string; title: string; heads: string[]; rows: string[][]; noteFa?: string };
+type SettingsData = {
+  settings: { key: string; fa: string; value: unknown; updatedBy: string | null; updatedAt: string | null }[];
+  allowedKeys: { code: string; fa: string }[]; effectiveTypes: { code: string; fa: string }[];
+  reviewDueDays: number | null; honestyFa: string;
+};
 const MGMT_KINDS: { code: string; fa: string }[] = [
   { code: 'requests_status', fa: 'وضعیت پرونده‌ها و گردش‌کار' }, { code: 'requests_by_type', fa: 'درخواست‌ها به تفکیک نوع' },
   { code: 'trend_requests', fa: 'روند ثبت ماهانه' }, { code: 'cost_layers_detail', fa: 'جزئیات ۵ لایهٔ هزینه' },
@@ -137,6 +143,10 @@ function Live({ lang, projectId, userId }: { lang: Lang; projectId: string; user
   const [costForm, setCostForm] = useState<Row>({ Layer: 'estimated', Amount: '', FormulaFa: '', SourceFa: '', BasisDate: new Date().toISOString().slice(0, 10) });
   const [linkForm, setLinkForm] = useState<Row>({ LinkKind: 'delay_event', TargetCode: '', TargetTitleFa: '', DescriptionFa: '' });
   const [implForm, setImplForm] = useState<Row>({ Step: 'instruction_issued', Status: 'planned', BaselineUpdateRef: '', ExecutionResultFa: '' });
+  const [settingsData, setSettingsData] = useState<SettingsData | null>(null);
+  const [wfDays, setWfDays] = useState('');
+  const [extraType, setExtraType] = useState<{ code: string; fa: string }>({ code: '', fa: '' });
+  const [settingsBusy, setSettingsBusy] = useState('');
   const [docForm, setDocForm] = useState<{ TitleFa: string; Kind: string; DocNo: string; DocDate: string }>({ TitleFa: '', Kind: 'supporting', DocNo: '', DocDate: '' });
   const [docFile, setDocFile] = useState<File | null>(null);
   const [docUpBusy, setDocUpBusy] = useState(false);
@@ -160,13 +170,15 @@ function Live({ lang, projectId, userId }: { lang: Lang; projectId: string; user
       if (fFrom) q.set('from', fFrom);
       if (fTo) q.set('to', fTo);
       if (fContract) q.set('contract', fContract);
-      const [d, r] = await Promise.all([
+      const [d, r, st] = await Promise.all([
         jsonRequest<Dash>(`${base}/dashboard?${q.toString()}`, userId, 'GET'),
         jsonRequest<{ requests: Row[] }>(`${base}/requests`, userId, 'GET'),
+        jsonRequest<SettingsData>(`${base}/settings`, userId, 'GET'),
       ]);
       if (!mounted.current || seq !== generation.current) return;
       if (d.ok) setDash(d.data);
       if (r.ok) setRequests(r.data.requests);
+      if (st.ok) { setSettingsData(st.data); if (st.data.reviewDueDays) setWfDays(String(st.data.reviewDueDays)); }
       setLoading(false);
     })();
     return () => { mounted.current = false; };
@@ -210,6 +222,34 @@ function Live({ lang, projectId, userId }: { lang: Lang; projectId: string; user
   }, [userId, bump, detail, base]);
 
   const [docBusy, setDocBusy] = useState('');
+  const saveSetting = useCallback(async (key: string, value: unknown, okNoteFa: string, busyKey: string) => {
+    setSettingsBusy(busyKey); setError('');
+    const r = await jsonRequest<{ key: string } & SettingsData>(`${base}/settings/${encodeURIComponent(key)}`, userId, 'PUT', { value });
+    if (!r.ok) { setError(`${r.code}: ${r.message}`); setSettingsBusy(''); return; }
+    setNotice(okNoteFa);
+    const st = await jsonRequest<SettingsData>(`${base}/settings`, userId, 'GET');
+    if (st.ok) { setSettingsData(st.data); if (st.data.reviewDueDays) setWfDays(String(st.data.reviewDueDays)); }
+    setSettingsBusy('');
+  }, [base, userId]);
+
+  const customTypesOf = useCallback((data: SettingsData | null) => {
+    const row = data?.settings.find((x) => x.key === 'change_types_extra');
+    return Array.isArray(row?.value) ? (row!.value as { code: string; fa: string }[]) : [];
+  }, []);
+  const addExtraType = useCallback(() => {
+    const code = extraType.code.trim(), faTxt = extraType.fa.trim();
+    if (!code || faTxt.length < 3) return setError(fa ? 'کد لاتین (۳ تا ۳۰ نویسه، شروع با حرف کوچک) و عنوان فارسی (نویسه ۳+) الزامی است' : 'code + fa required');
+    const current = customTypesOf(settingsData);
+    if ([...customTypesOf(settingsData).map((t) => t.code), ...(catalog?.types ?? []).map((t) => t.code)].includes(code))
+      return setError(fa ? 'این code از قبل در فهرست انواع (پایه یا سفارشی) موجود است' : 'duplicate code');
+    void saveSetting('change_types_extra', [...current, { code, fa: faTxt }], fa ? 'نوع سفارشی به فهرست مؤثر اضافه شد' : 'Custom type added', 'add-type');
+    setExtraType({ code: '', fa: '' });
+  }, [extraType, settingsData, saveSetting, fa, catalog, customTypesOf]);
+
+  const removeExtraType = useCallback((code: string) => {
+    void saveSetting('change_types_extra', customTypesOf(settingsData).filter((t) => t.code !== code), fa ? 'نوع سفارشی حذف شد' : 'Custom type removed', `rm-${code}`);
+  }, [settingsData, saveSetting, fa, customTypesOf]);
+
   const uploadDoc = useCallback(async (id: string) => {
     if (docUpBusy || !docFile) return;
     setDocUpBusy(true); setError('');
@@ -284,7 +324,9 @@ function Live({ lang, projectId, userId }: { lang: Lang; projectId: string; user
     }
   }, [docBusy, base, userId, fa]);
 
-  const typeFa = useCallback((code: string) => catalog?.types.find((t) => t.code === code)?.fa ?? code, [catalog]);
+  /* فاز ۷ — نوع تغییر = انواع مؤثر (واقعی) وقتی settings لود شده؛ در غیراین صورت فقط ۱۱ پایهٔ catalog */
+  const effTypes = settingsData?.effectiveTypes?.length ? settingsData.effectiveTypes : (catalog?.types ?? []);
+  const typeFa = useCallback((code: string) => effTypes.find((t) => t.code === code)?.fa ?? code, [effTypes]);
   const statusFa = useCallback((code: string) => catalog?.statuses.find((s) => s.code === code)?.fa ?? code, [catalog]);
   const statusDef = useCallback((code: string) => catalog?.statuses.find((s) => s.code === code), [catalog]);
 
@@ -424,7 +466,7 @@ function Live({ lang, projectId, userId }: { lang: Lang; projectId: string; user
                   {fa ? l : k}{' '}
                   {k === 'ChangeType' ? (
                     <select className={fieldCls} value={String(reqForm[k] ?? 'other')} onChange={(e) => setReqForm({ ...reqForm, [k]: e.target.value })}>
-                      {(catalog?.types ?? []).map((t) => <option key={t.code} value={t.code}>{t.fa}</option>)}
+                      {effTypes.map((t) => <option key={t.code} value={t.code}>{t.fa}</option>)}
                     </select>
                   ) : k === 'Priority' ? (
                     <select className={fieldCls} value={String(reqForm[k] ?? 'normal')} onChange={(e) => setReqForm({ ...reqForm, [k]: e.target.value })}>
@@ -479,6 +521,70 @@ function Live({ lang, projectId, userId }: { lang: Lang; projectId: string; user
                 </tbody>
               </table>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─────────────── فاز ۷: تنظیمات گردش‌کار (واقعی) ─────────────── */}
+      {section === 'settings' && (
+        <div className="flex flex-col gap-3">
+          <div className="glass-dark rounded-xl p-4">
+            <div className="mb-2 text-[11px] font-semibold tx1">{fa ? 'وضعیت تنظیمات پروژه' : 'Project settings status'}</div>
+            <p className="text-[9.5px] tx3 leading-5">{settingsData?.honestyFa}</p>
+            <div className="mt-2 flex flex-wrap gap-1.5 text-[9.5px]">
+              <span className="rounded-lg toggle-on px-2 py-1 tx1">{fa ? 'انواع مؤثر:' : 'Effective types:'} {fmtNum(effTypes.length, fa)}</span>
+              <span className="rounded-lg toggle-on px-2 py-1 tx1">{fa ? 'مهلت بررسی پیش‌فرض:' : 'Default review due:'} {settingsData?.reviewDueDays ? fmtNum(settingsData.reviewDueDays, fa) + (fa ? ' روز' : ' days') : '—'}</span>
+            </div>
+            {(settingsData?.settings ?? []).length > 0 && (
+              <div className="thin-scroll overflow-x-auto mt-3">
+                <table className="w-full text-[10px] tx2">
+                  <thead><tr className="text-[9px] tx4">{[fa ? 'کلید' : 'Key', fa ? 'توضیح' : 'Desc', fa ? 'به‌روزکننده' : 'By', fa ? 'زمان' : 'At'].map((h) => <th key={h} className="px-2 py-1.5 text-start">{h}</th>)}</tr></thead>
+                  <tbody>
+                    {settingsData!.settings.map((row) => (
+                      <tr key={row.key} className="border-t b-line-soft">
+                        <td className="px-2 py-1.5 font-mono text-[9px]">{row.key}</td>
+                        <td className="px-2 py-1.5">{row.fa}</td>
+                        <td className="px-2 py-1.5">{row.updatedBy ?? '—'}</td>
+                        <td className="px-2 py-1.5">{row.updatedAt ? String(row.updatedAt).slice(0, 16).replace('T', ' ') : '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          <div className="glass-dark rounded-xl p-4">
+            <div className="mb-2 text-[11px] font-semibold tx1">{fa ? 'انواع سفارشی تغییر (افزونه بر ۱۱ نوع پایه)' : 'Custom change types'}</div>
+            <div className="flex flex-wrap gap-1.5 mb-2">
+              {(settingsData?.settings.find((x) => x.key === 'change_types_extra')?.value as { code: string; fa: string }[] | undefined ?? []).map((t) => (
+                <span key={t.code} className="flex items-center gap-1 rounded-lg toggle-on px-2 py-1 text-[10px] tx1">
+                  {t.fa} <span className="text-[8.5px] tx4 font-mono">({t.code})</span>
+                  <button type="button" className="text-red-400 hover:text-red-300" disabled={settingsBusy === `rm-${t.code}`}
+                    onClick={() => removeExtraType(t.code)}>×</button>
+                </span>
+              ))}
+              {(settingsData?.settings.find((x) => x.key === 'change_types_extra')?.value as unknown[] | undefined ?? []).length === 0 && <span className="text-[9.5px] tx4">{fa ? 'نوع سفارشی ثبت نشده — فقط ۱۱ نوع پایه مؤثر است' : 'No custom types'}</span>}
+            </div>
+            <div className="flex flex-wrap items-end gap-2">
+              <label className={labelCls}>{fa ? 'کد لاتین *' : 'code *'}<input className={fieldCls} dir="ltr" placeholder="site_access" value={extraType.code} onChange={(e) => setExtraType({ ...extraType, code: e.target.value })} /></label>
+              <label className={labelCls}>{fa ? 'عنوان فارسی *' : 'fa title *'}<input className={fieldCls} placeholder="دسترسی به کارگاه" value={extraType.fa} onChange={(e) => setExtraType({ ...extraType, fa: e.target.value })} /></label>
+              <button type="button" className={btnCls} disabled={settingsBusy === 'add-type'} onClick={addExtraType}>{settingsBusy === 'add-type' ? '…' : (fa ? 'افزودن نوع' : 'Add type')}</button>
+            </div>
+            <p className="mt-2 text-[9px] tx4">{fa ? 'نوع تازه در فرم ثبت درخواست (تب فهرست) بلافاصله قابل انتخاب است؛ تداخل با انواع پایه یا تکرار code رد می‌شود.' : ''}</p>
+          </div>
+
+          <div className="glass-dark rounded-xl p-4">
+            <div className="mb-2 text-[11px] font-semibold tx1">{fa ? 'مهلت بررسی پیش‌فرض (رو)' : 'Default review due days'}</div>
+            <div className="flex flex-wrap items-end gap-2">
+              <label className={labelCls}>{fa ? 'روز بعد از تاریخ درخواست *' : 'days after request date *'}
+                <input className={fieldCls} dir="ltr" inputMode="numeric" value={wfDays} onChange={(e) => setWfDays(e.target.value)} /></label>
+              <button type="button" className={btnCls} disabled={settingsBusy === 'wf'}
+                onClick={() => { const n = Number(wfDays); if (!Number.isInteger(n) || n < 1 || n > 365) return setError(fa ? 'عدد صحیح بین ۱ تا ۳۶۵ وارد کنید' : '1–365'); void saveSetting('workflow_defaults', { reviewDueDays: n }, fa ? 'مهلت بررسی پیش‌فرض ذخیره شد' : 'saved', 'wf'); }}>
+                {settingsBusy === 'wf' ? '…' : (fa ? 'ذخیره' : 'Save')}
+              </button>
+            </div>
+            <p className="mt-2 text-[9px] tx4">{fa ? 'فقط وقتی اعمال می‌شود که در فرم ثبت درخواست «مهلت بررسی» خالی بماند؛ اثر روی درخواست‌های موجود نیست (خواندنی پروژه‌محور).' : ''}</p>
           </div>
         </div>
       )}
