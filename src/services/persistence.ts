@@ -657,6 +657,323 @@ export const SCHEMA: TableDef[] = [
     indexes: [{ name: "UX_ContractRiskAction_Code", columns: ["ProjectId", "Code"], unique: true }, { name: "IX_ContractRiskAction_Risk", columns: ["ProjectId", "RiskCode"] }],
   },
 
+  /* ── d4 بازسازی کارشناسی زمان‌بندی ادعا (PMO-FORENSIC-SCHEDULE-ENGINE-V1.0) ──
+   * جدول‌های PmisSchedRecon* فقط با کلیدهای نرم (ProjectId/MissionCode/
+   * ActivityCode/ClaimCode/DelayEventCode/DocumentId) به ماژول‌های دیگر وصل
+   * می‌شوند؛ هیچ Foreign Key فیزیکی ساخته نمی‌شود تا Zero-Regression حفظ شود.
+   * خروجی موتور «زمان‌بندی بازسازی‌شده و آنومالی» است و هرگز مبلغ خسارت یا
+   * مدت تمدید تولید نمی‌کند؛ بدون تأیید کارشناس هیچ رکوردی قطعی نیست. */
+  {
+    name: "PmisSchedReconMissions",
+    module: "d4",
+    title: { fa: "مأموریت کارشناسی بازسازی زمان‌بندی ادعا", en: "Forensic schedule reconstruction mission" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("Code", "text", { len: 40 }), req("TitleFa", "text", { len: 400 }), c("PurposeFa", "text", { len: 2000 }), req("PeriodFrom", "date"), req("PeriodTo", "date"), c("AnalysisStandard", "text", { len: 20, default: "'BOTH'", comment: "AACE_29R03|SCL_V2|BOTH" }), c("ClaimCode", "text", { len: 40 }), c("DelayEventCode", "text", { len: 40 }), c("ContractCode", "text", { len: 60 }), c("ScheduleFileRefs", "json"), c("CurrentStep", "int", { default: "1", comment: "۱..۸ دستورالعمل کارشناسی" }), req("Status", "text", { len: 20, default: "'draft'", comment: "draft|in_progress|on_hold|completed|cancelled" }), c("CreatedBy", "text", { len: 60 }), c("StartedAt", "datetime"), c("CompletedAt", "datetime"), c("ExpertNoteFa", "text", { len: 2000 }), c("ApprovedBy", "text", { len: 60 }), c("ApprovedAt", "datetime")],
+    indexes: [{ name: "UX_PmisSchedReconMissions_Code", columns: ["ProjectId", "Code"], unique: true }],
+  },
+  {
+    name: "PmisSchedReconExtractions",
+    module: "d4",
+    title: { fa: "مستندات استخراج‌شده از واقعیت میدانی", en: "Extracted field evidence documents" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("MissionCode", "text", { len: 40 }), req("Code", "text", { len: 40 }), req("DocType", "text", { len: 30, comment: "daily_report|meeting_minute|transmittal|letter|weather_report|progress_photo|ipc|other" }), c("DocumentId", "text", { len: 60, comment: "پیوند نرم به EDMS" }), c("SourceRef", "text", { len: 300 }), req("EventDate", "date"), c("PeriodFrom", "date"), c("PeriodTo", "date"), c("SummaryFa", "text", { len: 2000 }), c("FactsJson", "json"), req("Status", "text", { len: 20, default: "'collected'", comment: "collected|verified|rejected" }), c("VerifiedBy", "text", { len: 60 }), c("VerifiedAt", "datetime"), c("NoteFa", "text", { len: 1000 })],
+    indexes: [{ name: "UX_PmisSchedReconExtractions_Code", columns: ["ProjectId", "Code"], unique: true }, { name: "IX_PmisSchedReconExtractions_Mission", columns: ["ProjectId", "MissionCode"] }],
+  },
+  {
+    name: "PmisSchedReconEvaluations",
+    module: "d4",
+    title: { fa: "ارزیابی آسیب‌دیدگی فایل زمان‌بندی و تصمیم Repair/Reconstruction", en: "Schedule file health evaluation" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("MissionCode", "text", { len: 40 }), req("Code", "text", { len: 40 }), req("FileKind", "text", { len: 10, comment: "xer|xml|mpp|pdf|other" }), c("DocumentId", "text", { len: 60 }), c("BaselineDate", "date"), c("DataDate", "date"), c("ActivityCount", "int"), c("RelationshipCount", "int"), c("OpenEndsCount", "int"), c("NegativeFloatCount", "int"), c("LoopCount", "int"), c("OutOfSequenceCount", "int"), c("MissingCalendarCount", "int"), c("DamageClass", "text", { len: 30, comment: "intact|repairable|reconstruction_required" }), c("Decision", "text", { len: 20, default: "'pending'", comment: "pending|repair|reconstruction" }), c("DecisionReasonFa", "text", { len: 2000 }), req("Status", "text", { len: 20, default: "'pending_review'", comment: "pending_review|confirmed|superseded" }), c("EvaluatedBy", "text", { len: 60 }), c("EvaluatedAt", "datetime")],
+    indexes: [{ name: "UX_PmisSchedReconEvaluations_Code", columns: ["ProjectId", "Code"], unique: true }, { name: "IX_PmisSchedReconEvaluations_Mission", columns: ["ProjectId", "MissionCode"] }],
+  },
+  {
+    name: "PmisSchedReconWbsMaps",
+    module: "d4",
+    title: { fa: "نقشه تطبیق و همسان‌سازی WBS مصوب با واقعیت", en: "WBS alignment map" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("MissionCode", "text", { len: 40 }), req("Code", "text", { len: 40 }), req("BaselineWbsCode", "text", { len: 80 }), c("BaselineWbsTitleFa", "text", { len: 300 }), c("ActualWbsCode", "text", { len: 80 }), c("ActualWbsTitleFa", "text", { len: 300 }), req("MapKind", "text", { len: 20, comment: "one_to_one|merged|split|renumbered|new|dropped" }), c("Confidence", "decimal", { precision: 5, scale: 2 }), c("NoteFa", "text", { len: 1000 }), req("Status", "text", { len: 20, default: "'draft'", comment: "draft|confirmed" })],
+    indexes: [{ name: "UX_PmisSchedReconWbsMaps_Code", columns: ["ProjectId", "MissionCode", "Code"], unique: true }],
+  },
+  {
+    name: "PmisSchedReconActivities",
+    module: "d4",
+    title: { fa: "دیکشنری فعالیت‌های بازسازی‌شده", en: "Reconstructed activity dictionary" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("MissionCode", "text", { len: 40 }), req("Code", "text", { len: 40 }), req("ActivityId", "text", { len: 80, comment: "شناسهٔ فعالیت در فایل مبدأ XER/XML" }), c("WbsMapCode", "text", { len: 40 }), req("TitleFa", "text", { len: 400 }), c("ActivityType", "text", { len: 20, default: "'task'", comment: "task|milestone|hammock|loe" }), c("PlannedStart", "date"), c("PlannedFinish", "date"), c("ActualStart", "date"), c("ActualFinish", "date"), c("OriginalDuration", "decimal", { precision: 10, scale: 2 }), c("ActualDuration", "decimal", { precision: 10, scale: 2 }), c("PctComplete", "decimal", { precision: 5, scale: 2 }), req("StatusFlag", "text", { len: 20, default: "'not_started'", comment: "not_started|in_progress|completed|suspended" }), c("SourceRef", "text", { len: 300 }), c("NoteFa", "text", { len: 1000 })],
+    indexes: [{ name: "UX_PmisSchedReconActivities_Code", columns: ["ProjectId", "MissionCode", "Code"], unique: true }, { name: "IX_PmisSchedReconActivities_Activity", columns: ["ProjectId", "MissionCode", "ActivityId"] }],
+  },
+  {
+    name: "PmisSchedReconCalendars",
+    module: "d4",
+    title: { fa: "تقویم‌های کاری بازسازی‌شده، شیفت‌ها و تعلیق‌های جوی", en: "Reconstructed work calendars" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("MissionCode", "text", { len: 40 }), req("Code", "text", { len: 40 }), req("NameFa", "text", { len: 300 }), req("BaseKind", "text", { len: 30, comment: "standard|modified|weather_suspension" }), c("DaysPerWeek", "int"), c("HoursPerDay", "decimal", { precision: 5, scale: 2 }), c("ShiftDefJson", "json"), c("ExceptionsJson", "json", ), c("ValidFrom", "date"), c("ValidTo", "date"), c("SourceRef", "text", { len: 300 }), req("Status", "text", { len: 20, default: "'draft'", comment: "draft|confirmed" })],
+    indexes: [{ name: "UX_PmisSchedReconCalendars_Code", columns: ["ProjectId", "MissionCode", "Code"], unique: true }],
+  },
+  {
+    name: "PmisSchedReconDurations",
+    module: "d4",
+    title: { fa: "مدت‌های واقعی بازسازی‌شده در برابر برنامه‌ای", en: "Reconstructed actual vs planned durations" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("MissionCode", "text", { len: 40 }), req("ActivityCode", "text", { len: 40 }), c("PlannedDuration", "decimal", { precision: 10, scale: 2 }), c("ObservedDuration", "decimal", { precision: 10, scale: 2 }), c("Deviation", "decimal", { precision: 10, scale: 2 }), req("Method", "text", { len: 20, comment: "records|interview|interpolation" }), c("EvidenceRefs", "json"), req("Status", "text", { len: 20, default: "'estimated'", comment: "estimated|evidenced|confirmed" }), c("NoteFa", "text", { len: 1000 })],
+    indexes: [{ name: "UX_PmisSchedReconDurations_Activity", columns: ["ProjectId", "MissionCode", "ActivityCode"], unique: true }],
+  },
+  {
+    name: "PmisSchedReconLogic",
+    module: "d4",
+    title: { fa: "منطق شبکهٔ بازسازی‌شده؛ روابط FS/SS/FF/SF و Lag/Lead", en: "Reconstructed network logic" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("MissionCode", "text", { len: 40 }), req("Code", "text", { len: 40 }), req("PredecessorCode", "text", { len: 40 }), req("SuccessorCode", "text", { len: 40 }), req("RelType", "text", { len: 4, comment: "FS|SS|FF|SF" }), c("Lag", "decimal", { precision: 10, scale: 2, default: "0" }), c("LagUnit", "text", { len: 5, default: "'d'", comment: "d|h|pct" }), req("ReconstructionBasis", "text", { len: 30, comment: "file_record|inferred_physical|inferred_documented|assumed" }), c("EvidenceRef", "text", { len: 300 }), c("Confidence", "decimal", { precision: 5, scale: 2 }), req("Flag", "text", { len: 10, default: "'normal'", comment: "normal|suspect|broken" }), c("NoteFa", "text", { len: 1000 })],
+    indexes: [{ name: "UX_PmisSchedReconLogic_Code", columns: ["ProjectId", "MissionCode", "Code"], unique: true }, { name: "IX_PmisSchedReconLogic_Pred", columns: ["ProjectId", "MissionCode", "PredecessorCode"] }],
+  },
+  {
+    name: "PmisSchedReconCriticalPaths",
+    module: "d4",
+    title: { fa: "ردیابی تغییرات مسیر بحرانی در مقاطع زمانی", en: "Critical path tracking over cut-off dates" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("MissionCode", "text", { len: 40 }), req("Code", "text", { len: 40 }), req("SnapshotCode", "text", { len: 40 }), c("PathRank", "int", { default: "1" }), c("ActivityCodes", "json"), c("TotalDuration", "decimal", { precision: 10, scale: 2 }), c("DrivingLogic", "json"), c("ChangeKind", "text", { len: 20, comment: "new|extended|shortened|shifted|unchanged" }), c("NoteFa", "text", { len: 1000 })],
+    indexes: [{ name: "UX_PmisSchedReconCriticalPaths_Code", columns: ["ProjectId", "MissionCode", "Code"], unique: true }, { name: "IX_PmisSchedReconCriticalPaths_Snapshot", columns: ["ProjectId", "MissionCode", "SnapshotCode"] }],
+  },
+  {
+    name: "PmisSchedReconSnapshots",
+    module: "d4",
+    title: { fa: "مقاطع زمانی و قطع‌های دوره‌ای (Cut-Off Dates)", en: "Time slice snapshots / cut-off dates" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("MissionCode", "text", { len: 40 }), req("Code", "text", { len: 40 }), req("LabelFa", "text", { len: 300 }), req("CutoffDate", "date"), c("DataKind", "text", { len: 20, comment: "periodic_update|claim_event|milestone|other" }), c("SourceRefs", "json"), c("MetricsJson", "json"), req("Status", "text", { len: 10, default: "'open'", comment: "open|frozen" }), c("CreatedBy", "text", { len: 60 }), c("CreatedAt", "datetime"), c("NoteFa", "text", { len: 1000 })],
+    indexes: [{ name: "UX_PmisSchedReconSnapshots_Code", columns: ["ProjectId", "MissionCode", "Code"], unique: true }],
+  },
+  {
+    name: "PmisSchedReconValidations",
+    module: "d4",
+    title: { fa: "یافته‌های اعتبارسنجی مدل زمان‌بندی", en: "Schedule model validation findings" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("MissionCode", "text", { len: 40 }), req("Code", "text", { len: 40 }), c("SnapshotCode", "text", { len: 40 }), req("CheckKind", "text", { len: 30, comment: "negative_float|open_end|loop|lag_abuse|out_of_sequence|dangling_logic|constraint_abuse|missing_calendar" }), req("Severity", "text", { len: 10, comment: "info|minor|major|critical" }), c("ActivityCode", "text", { len: 40 }), c("DetailFa", "text", { len: 2000 }), c("AutoDetected", "bool"), req("Resolution", "text", { len: 20, default: "'open'", comment: "open|accepted_risk|fixed|not_applicable" }), c("ResolvedBy", "text", { len: 60 }), c("ResolvedAt", "datetime"), c("NoteFa", "text", { len: 1000 })],
+    indexes: [{ name: "UX_PmisSchedReconValidations_Code", columns: ["ProjectId", "MissionCode", "Code"], unique: true }, { name: "IX_PmisSchedReconValidations_Kind", columns: ["ProjectId", "MissionCode", "CheckKind"] }],
+  },
+  {
+    name: "PmisSchedReconMipMappings",
+    module: "d4",
+    title: { fa: "تطبیق دادهٔ بازسازی با پروتکل‌های AACE 29R-03 (MIP 3.1..3.9)", en: "AACE 29R-03 MIP mapping" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("MissionCode", "text", { len: 40 }), req("Code", "text", { len: 40 }), req("MipCode", "text", { len: 5, comment: "3.1..3.9" }), c("Family", "text", { len: 20, comment: "observational|modeled" }), c("Feasibility", "text", { len: 20, comment: "feasible|partial|not_feasible" }), c("FeasibilityReasonFa", "text", { len: 2000 }), c("RequiredDataJson", "json"), c("ProvidedDataJson", "json"), c("SelectedFlag", "bool"), c("SelectedBy", "text", { len: 60 }), c("SelectedAt", "datetime"), c("OutputTableRefs", "json", ), c("NoteFa", "text", { len: 1000 })],
+    indexes: [{ name: "UX_PmisSchedReconMipMappings_Mip", columns: ["ProjectId", "MissionCode", "MipCode"], unique: true }],
+  },
+
+  /* ── d4 کارشناسی، داوری و تحلیل دعاوی ساخت (PMO-CONSTRUCTION-DISPUTE-EXPERT-ENGINE-V1.0) ──
+   * ۱۳ جدول PmisDispute* فقط با کلیدهای نرم (ProjectId/CaseCode/ClaimCode/
+   * ContractCode/DocumentId/PartyCode/ReferenceCode) وصل‌اند؛ هیچ FK فیزیکی
+   * بین ‌ماژولی ساخته نمی‌شود (Zero-Regression). مبالغ مطالبه/بررسی/تأیید
+   * جدا نگه داشته می‌شوند و منبع/روش هر مبلغ الزامی است (مبلغ بدون
+   * مبنا نمایش داده نمی‌شود). رأی داوری/قضایی هرگز تولید نمی‌شود. */
+  {
+    name: "PmisDisputeCases",
+    module: "d4",
+    title: { fa: "پرونده اختلاف", en: "Dispute case" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("Code", "text", { len: 40 }), req("TitleFa", "text", { len: 400 }), req("SubjectCode", "text", { len: 30, comment: "DISPUTE_SUBJECTS.code" }), c("DescriptionFa", "text", { len: 2000 }), c("EmployerFa", "text", { len: 300 }), c("ContractorFa", "text", { len: 300 }), c("ConsultantFa", "text", { len: 300 }), c("CourtRefFa", "text", { len: 300, comment: "مرجع ارجاع/رسیدگی" }), c("ExpertScopeFa", "text", { len: 2000, comment: "حدود مأموریت کارشناسی" }), c("ClaimDescriptionFa", "text", { len: 2000, comment: "شرح خواسته‌ها" }), c("ClaimedAmount", "decimal", { precision: 20, scale: 2 }), c("Currency", "text", { len: 10, default: "'IRR'" }), c("ClaimedDelayDays", "int"), c("ContractCode", "text", { len: 60 }), c("ClaimCode", "text", { len: 40 }), c("DelayEventCode", "text", { len: 40 }), c("DelayCaseId", "text", { len: 60 }), c("LossCaseId", "text", { len: 60 }), c("ContractRiskId", "text", { len: 60 }), c("IncidentDate", "date"), c("RegistrationDate", "date"), c("ResponseDeadline", "date"), c("DeliveryDeadline", "date"), c("Priority", "text", { len: 10, default: "'normal'", comment: "low|normal|high|urgent" }), c("InternalOwnerFa", "text", { len: 200 }), req("Status", "text", { len: 25, default: "'draft'", comment: "draft|registered|awaiting_documents|under_review|awaiting_party_response|report_drafting|pending_review|ready_for_delivery|delivered|closed|archived" }), c("CreatedBy", "text", { len: 60 }), c("StatusChangedBy", "text", { len: 60 }), c("StatusChangedAt", "datetime"), c("StatusNoteFa", "text", { len: 1000 }), c("ExpertNoteFa", "text", { len: 2000 })],
+    indexes: [{ name: "UX_PmisDisputeCases_Code", columns: ["ProjectId", "Code"], unique: true }, { name: "IX_PmisDisputeCases_Status", columns: ["ProjectId", "Status"] }, { name: "IX_PmisDisputeCases_Contract", columns: ["ProjectId", "ContractCode"] }],
+  },
+  {
+    name: "PmisDisputeParties",
+    module: "d4",
+    title: { fa: "طرفین و نمایندگان پرونده", en: "Dispute parties & representatives" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("CaseCode", "text", { len: 40 }), req("Code", "text", { len: 40 }), req("Role", "text", { len: 20, comment: "employer|contractor|consultant|arbitrator|insurer|subcontractor|other" }), req("NameFa", "text", { len: 300 }), c("OrgInfoFa", "text", { len: 1000 }), c("RepresentativeFa", "text", { len: 300 }), c("ContactInfo", "text", { len: 500 }), c("ClaimLinkNoteFa", "text", { len: 500, comment: "ارتباط او با ادعاها" }), c("Status", "text", { len: 20, default: "'active'", comment: "active|inactive" })],
+    indexes: [{ name: "UX_PmisDisputeParties_Code", columns: ["ProjectId", "CaseCode", "Code"], unique: true }, { name: "IX_PmisDisputeParties_Case", columns: ["ProjectId", "CaseCode"] }],
+  },
+  {
+    name: "PmisDisputeClaims",
+    module: "d4",
+    title: { fa: "ادعای پرونده", en: "Dispute claim" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("CaseCode", "text", { len: 40 }), req("Code", "text", { len: 40 }), req("TitleFa", "text", { len: 400 }), c("DemandFa", "text", { len: 1000, comment: "خواسته و مبنا" }), req("ClaimantPartyCode", "text", { len: 40 }), req("BasisKind", "text", { len: 15, comment: "time|money|both|declaratory" }), c("ClaimedAmount", "decimal", { precision: 20, scale: 2 }), c("Currency", "text", { len: 10, default: "'IRR'" }), c("ClaimedDelayDays", "int"), c("ContractClauseRef", "text", { len: 200 }), c("EventRefs", "json"), c("EvidenceRefs", "json"), c("ResponseFa", "text", { len: 2000, comment: "پاسخ/دفاع طرف مقابل" }), c("AgreementsFa", "text", { len: 1000 }), c("DisagreementsFa", "text", { len: 1000 }), c("EvidenceSufficiency", "text", { len: 15, default: "'unchecked'", comment: "unchecked|sufficient|insufficient|contested" }), c("ContradictionsFa", "text", { len: 1000 }), c("QuestionsJson", "json"), c("ReviewedAmount", "decimal", { precision: 20, scale: 2 }), c("ReviewBasisFa", "text", { len: 1000 }), c("ReviewedBy", "text", { len: 60 }), c("ReviewedAt", "datetime"), c("ApprovedAmount", "decimal", { precision: 20, scale: 2 }), c("ApprovedBasisFa", "text", { len: 1000 }), c("ApprovedBy", "text", { len: 60 }), c("ApprovedAt", "datetime"), c("ReviewResultFa", "text", { len: 1000 }), c("ReviewStatus", "text", { len: 20, default: "'open'", comment: "open|under_analysis|question_sent|reviewed|superseded" }), c("ExpertNoteFa", "text", { len: 1000 })],
+    indexes: [{ name: "UX_PmisDisputeClaims_Code", columns: ["ProjectId", "CaseCode", "Code"], unique: true }, { name: "IX_PmisDisputeClaims_Case", columns: ["ProjectId", "CaseCode"] }],
+  },
+  {
+    name: "PmisDisputeResponses",
+    module: "d4",
+    title: { fa: "پاسخ و دفاعیه طرف مقابل", en: "Response / defense" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("CaseCode", "text", { len: 40 }), req("ClaimCode", "text", { len: 40 }), req("Code", "text", { len: 40 }), req("ResponderPartyCode", "text", { len: 40 }), req("BodyFa", "text", { len: 2000 }), c("EvidenceRefs", "json"), c("ReceivedAt", "date"), c("DocumentId", "text", { len: 60, comment: "پیوند نرم EDMS" }), c("AssessmentFa", "text", { len: 1000, comment: "ارزیابی کارشناسی پاسخ" }), c("Status", "text", { len: 20, default: "'received'", comment: "received|reviewed|contested" })],
+    indexes: [{ name: "UX_PmisDisputeResponses_Code", columns: ["ProjectId", "CaseCode", "Code"], unique: true }, { name: "IX_PmisDisputeResponses_Claim", columns: ["ProjectId", "CaseCode", "ClaimCode"] }],
+  },
+  {
+    name: "PmisDisputeEvidence",
+    module: "d4",
+    title: { fa: "مدرک/سند پرونده", en: "Dispute evidence" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("CaseCode", "text", { len: 40 }), req("Code", "text", { len: 40 }), req("DocType", "text", { len: 20 }), req("TitleFa", "text", { len: 400 }), c("DocumentId", "text", { len: 60, comment: "پیوند نرم EDMS - انتخاب از مخزن مرکزی" }), c("DocNo", "text", { len: 100 }), c("Revision", "text", { len: 20 }), c("IssuedAt", "date"), c("ReceivedAt", "date"), c("SenderFa", "text", { len: 200 }), c("ReceiverFa", "text", { len: 200 }), c("ContractClauseRef", "text", { len: 200 }), c("ClaimRefs", "json"), c("EventRefs", "json"), c("CalculationRefs", "json"), c("ExpertNoteFa", "text", { len: 1000 }), c("ReviewStatus", "text", { len: 20, default: "'pending'", comment: "pending|reviewed|flagged" }), c("AuthenticityStatus", "text", { len: 15, default: "'pending'", comment: "pending|verified|rejected|contested - استقلال از وجود فایل" }), c("SufficiencyStatus", "text", { len: 15, default: "'unchecked'", comment: "unchecked|sufficient|insufficient|contested" }), c("DeficiencyNoteFa", "text", { len: 1000 })],
+    indexes: [{ name: "UX_PmisDisputeEvidence_Code", columns: ["ProjectId", "CaseCode", "Code"], unique: true }, { name: "IX_PmisDisputeEvidence_Case", columns: ["ProjectId", "CaseCode"] }],
+  },
+  {
+    name: "PmisDisputeAnalyses",
+    module: "d4",
+    title: { fa: "تحلیل کارشناسی", en: "Expert analysis" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("CaseCode", "text", { len: 40 }), req("Code", "text", { len: 40 }), req("TopicFa", "text", { len: 400 }), req("QuestionFa", "text", { len: 1000, comment: "سؤال کارشناسی" }), c("InputDataJson", "json", ), c("EvidenceRefs", "json"), req("MethodFa", "text", { len: 1000, comment: "روش تحلیل" }), c("AssumptionsFa", "text", { len: 1000 }), c("CalculationsFa", "text", { len: 2000 }), c("ResultsFa", "text", { len: 2000 }), c("UncertaintiesFa", "text", { len: 1000 }), c("InfoGapsFa", "text", { len: 1000 }), c("MethodLimitsFa", "text", { len: 1000 }), c("SuggestedConclusionFa", "text", { len: 2000, comment: "پیشنهاد کارشناسی — بدون تأیید قطعی نیست" }), c("AnalyzedBy", "text", { len: 60 }), c("AnalyzedAt", "datetime"), c("ApprovedBy", "text", { len: 60 }), c("ApprovedAt", "datetime"), c("ApprovalStatus", "text", { len: 20, default: "'draft'", comment: "draft|under_review|approved|rejected" })],
+    indexes: [{ name: "UX_PmisDisputeAnalyses_Code", columns: ["ProjectId", "CaseCode", "Code"], unique: true }, { name: "IX_PmisDisputeAnalyses_Case", columns: ["ProjectId", "CaseCode"] }],
+  },
+  {
+    name: "PmisDisputeCalculations",
+    module: "d4",
+    title: { fa: "محاسبه مستقل کارشناسی برای مقایسه", en: "Independent expert calculation" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("CaseCode", "text", { len: 40 }), req("Code", "text", { len: 40 }), req("TitleFa", "text", { len: 400 }), c("PurposeFa", "text", { len: 1000, comment: "هدف مقایسه با محاسبه اصلی — نه جایگزینی" }), req("MethodFa", "text", { len: 1000 }), c("InputsJson", "json"), c("ResultAmount", "decimal", { precision: 20, scale: 2 }), c("Currency", "text", { len: 10 }), c("ResultBaseDate", "date"), c("DataSourceFa", "text", { len: 1000 }), c("ComparedWithClaimCode", "text", { len: 40 }), c("VarianceNoteFa", "text", { len: 1000 }), c("CalculatedBy", "text", { len: 60 }), c("CalculatedAt", "datetime"), c("ReviewedBy", "text", { len: 60 }), c("Status", "text", { len: 20, default: "'draft'" })],
+    indexes: [{ name: "UX_PmisDisputeCalculations_Code", columns: ["ProjectId", "CaseCode", "Code"], unique: true }, { name: "IX_PmisDisputeCalculations_Case", columns: ["ProjectId", "CaseCode"] }],
+  },
+  {
+    name: "PmisDisputeHearings",
+    module: "d4",
+    title: { fa: "جلسه و صورت‌جلسه", en: "Hearing / meeting" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("CaseCode", "text", { len: 40 }), req("Code", "text", { len: 40 }), req("TitleFa", "text", { len: 400 }), req("MeetingDate", "date"), c("LocationFa", "text", { len: 200 }), c("AttendeesJson", "json"), c("TopicsJson", "json"), c("QuestionsJson", "json"), c("ResponsesJson", "json"), c("DocsShownJson", "json"), c("QuestionDeadline", "date"), c("MinutesBodyFa", "text", { len: 4000 }), c("MinutesDocumentId", "text", { len: 60 }), c("MinutesStatus", "text", { len: 20, default: "'draft'", comment: "draft|awaiting_sign|signed" }), c("SignedAt", "date"), c("NoteFa", "text", { len: 1000 })],
+    indexes: [{ name: "UX_PmisDisputeHearings_Code", columns: ["ProjectId", "CaseCode", "Code"], unique: true }, { name: "IX_PmisDisputeHearings_Case", columns: ["ProjectId", "CaseCode"] }],
+  },
+  {
+    name: "PmisDisputeOpinions",
+    module: "d4",
+    title: { fa: "نظریه کارشناسی", en: "Expert opinion" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("CaseCode", "text", { len: 40 }), req("Code", "text", { len: 40 }), req("TitleFa", "text", { len: 400 }), req("BodyFa", "text", { len: 4000 }), c("SourcesJson", "json", ), req("Version", "int", { default: "1" }), c("PreviousVersionCode", "text", { len: 40 }), c("SupplementaryNoteFa", "text", { len: 2000 }), c("AuthoredBy", "text", { len: 60 }), c("AuthoredAt", "datetime"), c("ReviewedBy", "text", { len: 60 }), c("ReviewStatus", "text", { len: 20, default: "'draft'", comment: "draft|in_review|approved|final" })],
+    indexes: [{ name: "UX_PmisDisputeOpinions_Code", columns: ["ProjectId", "CaseCode", "Code"], unique: true }, { name: "IX_PmisDisputeOpinions_Case", columns: ["ProjectId", "CaseCode"] }],
+  },
+  {
+    name: "PmisDisputeReports",
+    module: "d4",
+    title: { fa: "نسخهٔ گزارش کارشناسی", en: "Expert report version" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("CaseCode", "text", { len: 40 }), req("Code", "text", { len: 40 }), req("TitleFa", "text", { len: 400 }), req("Version", "int", { default: "1" }), c("PreviousVersionCode", "text", { len: 40 }), c("EnabledSectionsJson", "json", { comment: "ترتیب/انتخاب ۲۰ بخش — قابل تنظیم" }), c("GeneratedAt", "datetime"), c("GeneratedBy", "text", { len: 60 }), req("Status", "text", { len: 15, default: "'draft'", comment: "draft|in_review|approved|issued|superseded" }), c("ApprovedBy", "text", { len: 60, comment: "تأییدکنندهٔ نسخه — SoD ≠ تولیدکننده" }), c("ApprovedAt", "datetime"), c("IssuedAt", "datetime"), c("IssuedBy", "text", { len: 60 }), c("DataVersionNoteFa", "text", { len: 500, comment: "نسخهٔ داده‌هایی که گزارش از آن‌ها ساخته شد" }), c("WordFileRef", "text", { len: 300 }), c("PdfFileRef", "text", { len: 300 })],
+    indexes: [{ name: "UX_PmisDisputeReports_Code", columns: ["ProjectId", "CaseCode", "Code"], unique: true }, { name: "IX_PmisDisputeReports_Case", columns: ["ProjectId", "CaseCode", "Status"] }],
+  },
+  {
+    name: "PmisDisputeDeadlines",
+    module: "d4",
+    title: { fa: "ارجاع و مهلت", en: "Referral / deadline" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("CaseCode", "text", { len: 40 }), req("Code", "text", { len: 40 }), req("TitleFa", "text", { len: 400 }), req("Kind", "text", { len: 25, comment: "question|document|response|report_delivery|other" }), req("DueDate", "date"), c("OwnerPartyCode", "text", { len: 40 }), c("RelatedCode", "text", { len: 40, comment: "کد مرتبط: سؤال/ادعا/سند" }), c("Status", "text", { len: 15, default: "'open'", comment: "open|met|missed|cancelled" }), c("MetAt", "date"), c("NoteFa", "text", { len: 1000 })],
+    indexes: [{ name: "UX_PmisDisputeDeadlines_Code", columns: ["ProjectId", "CaseCode", "Code"], unique: true }, { name: "IX_PmisDisputeDeadlines_Due", columns: ["ProjectId", "Status", "DueDate"] }],
+  },
+  {
+    name: "PmisDisputeModuleLinks",
+    module: "d4",
+    title: { fa: "پیوند نرم به ماژول/پرونده بیرونی", en: "Soft link to other module cases" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("CaseCode", "text", { len: 40 }), req("Code", "text", { len: 40 }), req("LinkKind", "text", { len: 25, comment: "delay_case|loss_case|contract_risk|claim|contract|edms_document" }), req("TargetCode", "text", { len: 80 }), req("TargetTitleFa", "text", { len: 400 }), c("TargetId", "text", { len: 60 }), c("ConsistencyCheckFa", "text", { len: 1000 }), c("QuestionSentFa", "text", { len: 1000 }), c("CorrectionRequestFa", "text", { len: 1000 }), c("EstablishedBy", "text", { len: 60 }), c("EstablishedAt", "datetime"), c("Status", "text", { len: 20, default: "'active'" })],
+    indexes: [{ name: "UX_PmisDisputeModuleLinks_Code", columns: ["ProjectId", "CaseCode", "Code"], unique: true }, { name: "IX_PmisDisputeModuleLinks_Case", columns: ["ProjectId", "CaseCode"] }],
+  },
+  {
+    name: "PmisDisputeAuditTrail",
+    module: "d4",
+    title: { fa: "رویداد تاریخچهٔ پرونده", en: "Case audit trail event" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("CaseCode", "text", { len: 40 }), req("Code", "text", { len: 40 }), req("Action", "text", { len: 40, comment: "case_created|status_changed|claim_added|evidence_added|report_issued|..." }), req("Actor", "text", { len: 60 }), c("DetailFa", "text", { len: 1000 }), c("FromValue", "text", { len: 200 }), c("ToValue", "text", { len: 200 }), req("OccurredAt", "datetime")],
+    indexes: [{ name: "IX_PmisDisputeAuditTrail_Case", columns: ["ProjectId", "CaseCode", "OccurredAt"] }],
+  },
+
+  /* ── PMO-INTEGRATED-CHANGE-MANAGEMENT-V1.0 ──
+   * ۱۲ جدول PmisChange* (چرخهٔ کامل تغییر: ثبت تا تصویب، اجرا و بستن). هیچ
+   * FK فیزیکی به ماژول‌های دیگر وجود ندارد (Zero-Regression)؛ پیوندها به
+   * تأخیر/ضرر/ریسک/کارشناسی دعاوی/EDMS نرم است (Code/ID). لایه‌های مبلغ
+   * (برآوردی/پیشنهادی/مذاکره/مصوب/پرداخت) جدا نگهداری می‌شوند و هیچ تغییر
+   * تأییدنشده‌ای خودکار در مبنا اعمال نمی‌شود. */
+  {
+    name: "PmisChangeRequests",
+    module: "d4",
+    title: { fa: "درخواست تغییر (چرخهٔ کامل)", en: "Change request (full lifecycle)" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("Code", "text", { len: 40 }), req("TitleFa", "text", { len: 400 }), c("ContractCode", "text", { len: 60 }), c("DescriptionFa", "text", { len: 4000 }), req("RequestedBy", "text", { len: 60 }), c("RequestedByRoleCode", "text", { len: 30, comment: "CHANGE_ROLES.code" }), c("RequestDate", "date"), c("ChangeType", "text", { len: 30, comment: "CHANGE_TYPES.code" }), c("ReasonFa", "text", { len: 2000 }), c("NecessityFa", "text", { len: 2000 }), c("AffectedScopeFa", "text", { len: 2000 }), c("WbsRefs", "json"), c("ActivityRefs", "json"), c("SupportDocRefs", "json"), c("ClauseRefs", "json"), c("OptionsJson", "json"), c("InitialCostEstimate", "decimal", { precision: 20, scale: 2 }), c("Currency", "text", { len: 10, default: "'IRR'" }), c("InitialTimeImpactDays", "int"), c("InitialRisksJson", "json"), c("Priority", "text", { len: 10, default: "'normal'" }), c("ReviewOwnerFa", "text", { len: 200 }), c("ReviewDueDate", "date"), req("Status", "text", { len: 30, default: "'draft'", comment: "CHANGE_STATUSES" }), c("CreatedBy", "text", { len: 60 }), c("StatusChangedBy", "text", { len: 60 }), c("StatusChangedAt", "datetime"), c("StatusNoteFa", "text", { len: 1000 }), c("DecisionFa", "text", { len: 2000, comment: "متن تصمیم مرجع مجاز" }), c("RejectionReasonFa", "text", { len: 2000 }), c("DecidedBy", "text", { len: 60 }), c("DecidedAt", "datetime"), c("ClosedAt", "datetime"), c("ClosedBy", "text", { len: 60 })],
+    indexes: [{ name: "UX_PmisChangeRequests_Code", columns: ["ProjectId", "Code"], unique: true }, { name: "IX_PmisChangeRequests_Status", columns: ["ProjectId", "Status"] }, { name: "IX_PmisChangeRequests_Contract", columns: ["ProjectId", "ContractCode"] }],
+  },
+  {
+    name: "PmisChangeImpacts",
+    module: "d4",
+    title: { fa: "بررسی فنی/مهندسی اثر تغییر", en: "Technical impact assessment" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("ChangeCode", "text", { len: 40 }), req("Code", "text", { len: 40 }), req("TopicFa", "text", { len: 400 }), c("Aspect", "text", { len: 20, comment: "technical|method|spec|resource" }), c("AffectedItemsJson", "json"), req("ConclusionFa", "text", { len: 2000 }), c("AssumptionsFa", "text", { len: 2000 }), c("LimitationsFa", "text", { len: 2000 }), c("AnalyzedBy", "text", { len: 60 }), c("AnalyzedAt", "datetime"), c("ReviewStatus", "text", { len: 15, default: "'draft'" }), c("ReviewedBy", "text", { len: 60 }), c("ReviewedAt", "datetime"), c("ReviewNoteFa", "text", { len: 1000 })],
+    indexes: [{ name: "UX_PmisChangeImpacts_Code", columns: ["ProjectId", "ChangeCode", "Code"], unique: true }],
+  },
+  {
+    name: "PmisChangeCostEstimates",
+    module: "d4",
+    title: { fa: "برآورد هزینهٔ لایه‌ای تغییر", en: "Layered cost estimate" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("ChangeCode", "text", { len: 40 }), req("Code", "text", { len: 40 }), req("Layer", "text", { len: 15, comment: "estimated|proposed|negotiated|approved|paid" }), req("Amount", "decimal", { precision: 20, scale: 2 }), c("Currency", "text", { len: 10, default: "'IRR'" }), req("FormulaFa", "text", { len: 1000 }), c("UnitFa", "text", { len: 60 }), c("InputDataJson", "json"), req("SourceFa", "text", { len: 400, comment: "منبع و مبنای مبلغ" }), req("BasisDate", "date"), c("DirectAmount", "decimal", { precision: 20, scale: 2 }), c("IndirectAmount", "decimal", { precision: 20, scale: 2 }), c("TimeRelatedAmount", "decimal", { precision: 20, scale: 2 }), c("ScopeNoteFa", "text", { len: 1000 }), c("PreparedBy", "text", { len: 60 }), c("PreparedAt", "datetime"), c("ReviewStatus", "text", { len: 15, default: "'draft'" }), c("ReviewedBy", "text", { len: 60 }), c("ReviewedAt", "datetime"), c("ReviewNoteFa", "text", { len: 1000 }), c("ApprovedBy", "text", { len: 60 }), c("ApprovedAt", "datetime")],
+    indexes: [{ name: "UX_PmisChangeCostEstimates_Code", columns: ["ProjectId", "ChangeCode", "Code"], unique: true }, { name: "IX_PmisChangeCostEstimates_Layer", columns: ["ProjectId", "Layer"] }],
+  },
+  {
+    name: "PmisChangeScheduleImpacts",
+    module: "d4",
+    title: { fa: "تحلیل اثر تغییر بر زمان‌بندی", en: "Schedule impact analysis" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("ChangeCode", "text", { len: 40 }), req("Code", "text", { len: 40 }), c("BaselineVersionRef", "text", { len: 80, comment: "پیوند نرم به نسخه/مبنا" }), req("MethodFa", "text", { len: 400 }), c("AffectedActivitiesJson", "json"), c("CriticalPathEffect", "text", { len: 20, comment: "none|partial|critical" }), c("FloatEffectDays", "int"), c("EstimatedDurationDeltaDays", "int", { comment: "اثر تخمینی بر مدت — با تمدید قراردادی یکی نیست" }), c("CompletionEffectDays", "int"), c("ApprovedEotDays", "int", { comment: "تمدید تأییدشده — فقط با مبنای استحقاق + تأیید" }), c("EotEntitlementFa", "text", { len: 2000 }), req("AssumptionsFa", "text", { len: 2000 }), c("LimitationsFa", "text", { len: 2000 }), c("DataVersionNoteFa", "text", { len: 400 }), c("PreparedBy", "text", { len: 60 }), c("PreparedAt", "datetime"), c("ReviewStatus", "text", { len: 15, default: "'draft'" }), c("ReviewedBy", "text", { len: 60 }), c("ReviewedAt", "datetime"), c("ReviewNoteFa", "text", { len: 1000 })],
+    indexes: [{ name: "UX_PmisChangeScheduleImpacts_Code", columns: ["ProjectId", "ChangeCode", "Code"], unique: true }],
+  },
+  {
+    name: "PmisChangeApprovals",
+    module: "d4",
+    title: { fa: "گام تصویب گردش‌کار", en: "Workflow approval step" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("ChangeCode", "text", { len: 40 }), req("Code", "text", { len: 40 }), req("StepCode", "text", { len: 40 }), c("Stage", "text", { len: 20, comment: "review|approval|final" }), c("Decision", "text", { len: 25, default: "'pending'", comment: "pending|approved|approved_conditionally|rejected" }), c("DecidedBy", "text", { len: 60 }), c("DecidedAt", "datetime"), c("NoteFa", "text", { len: 1000 }), c("ConditionsFa", "text", { len: 2000 }), c("Sequence", "int")],
+    indexes: [{ name: "UX_PmisChangeApprovals_Code", columns: ["ProjectId", "ChangeCode", "Code"], unique: true }],
+  },
+  {
+    name: "PmisChangeRiskLinks",
+    module: "d4",
+    title: { fa: "پیوند ریسکِ ناشی از تغییر", en: "Change risk link" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("ChangeCode", "text", { len: 40 }), req("Code", "text", { len: 40 }), req("LinkType", "text", { len: 15, comment: "new|escalated|reduced" }), req("DescriptionFa", "text", { len: 2000 }), c("RiskRegisterRef", "text", { len: 60, comment: "پیوند نرم به ثبت ریسک اصلی" }), c("Probability", "int"), c("Severity", "int"), c("Score", "int"), c("MethodFa", "text", { len: 400 }), c("OwnerFa", "text", { len: 200 }), c("ControlActionsJson", "json"), c("ActionDueDate", "date"), c("ResidualNoteFa", "text", { len: 1000 }), c("CreatedBy", "text", { len: 60 }), c("CreatedAt", "datetime")],
+    indexes: [{ name: "UX_PmisChangeRiskLinks_Code", columns: ["ProjectId", "ChangeCode", "Code"], unique: true }],
+  },
+  {
+    name: "PmisChangeClaimLinks",
+    module: "d4",
+    title: { fa: "ادعا/اختلاف مرتبط با تغییر", en: "Change claim/dispute link" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("ChangeCode", "text", { len: 40 }), req("Code", "text", { len: 40 }), req("LinkType", "text", { len: 30, comment: "objection|work_order_dispute|rate_quantity|delay_effect|cost_claim|time_effect|monitoring" }), req("DescriptionFa", "text", { len: 2000 }), c("ClaimRefCode", "text", { len: 40, comment: "پیوند نرم به ادعای RCC" }), c("ExpertCaseRef", "text", { len: 40, comment: "پیوند نرم به PmisDisputeCases.Code" }), c("CorrespondenceJson", "json"), c("SupportingDocRefsJson", "json"), c("Status", "text", { len: 20, default: "'open'", comment: "open|escalated|linked|resolved|closed" }), c("CreatedBy", "text", { len: 60 }), c("CreatedAt", "datetime")],
+    indexes: [{ name: "UX_PmisChangeClaimLinks_Code", columns: ["ProjectId", "ChangeCode", "Code"], unique: true }],
+  },
+  {
+    name: "PmisChangeDocuments",
+    module: "d4",
+    title: { fa: "سند پشتیبان تغییر", en: "Change supporting document" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("ChangeCode", "text", { len: 40 }), req("Code", "text", { len: 40 }), req("TitleFa", "text", { len: 400 }), req("Kind", "text", { len: 20, comment: "supporting|decision|instruction|evidence|correspondence" }), c("DocNo", "text", { len: 60 }), c("DocRef", "text", { len: 80, comment: "پیوند نرم به EDMS" }), c("VersionFa", "text", { len: 60 }), c("DocDate", "date"), c("FileRef", "text", { len: 200, comment: "کلید ذخیره‌سازی داخلی — هرگز در API نمایش داده نمی‌شود" }), c("FileNameFa", "text", { len: 300 }), c("MimeType", "text", { len: 100 }), c("SizeBytes", "int"), c("Sha256", "text", { len: 64, comment: "کنترل یکپارچگی فایل هنگام دانلود" }), c("UploadedBy", "text", { len: 60 }), c("UploadedAt", "datetime"), c("NoteFa", "text", { len: 1000 })],
+    indexes: [{ name: "UX_PmisChangeDocuments_Code", columns: ["ProjectId", "ChangeCode", "Code"], unique: true }],
+  },
+  {
+    name: "PmisChangeImplementation",
+    module: "d4",
+    title: { fa: "کنترل اجرای تغییر مصوب", en: "Approved change implementation" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("ChangeCode", "text", { len: 40 }), req("Code", "text", { len: 40 }), req("Step", "text", { len: 30, comment: "instruction_issued|started|baselines_updated|execution_control|verified|completed" }), req("Status", "text", { len: 20, comment: "planned|in_progress|done|blocked" }), c("BaselineUpdateRef", "text", { len: 80, comment: "پیوند نرم به نسخه مبنای به‌روزشده" }), c("ExecutionResultFa", "text", { len: 2000 }), c("VerifiedBy", "text", { len: 60 }), c("VerifiedAt", "datetime"), c("VerifiedNoteFa", "text", { len: 1000 }), c("UpdatedBy", "text", { len: 60 }), c("UpdatedAt", "datetime")],
+    indexes: [{ name: "UX_PmisChangeImplementation_Code", columns: ["ProjectId", "ChangeCode", "Code"], unique: true }],
+  },
+  {
+    name: "PmisChangeAuditTrail",
+    module: "d4",
+    title: { fa: "رویداد تاریخچهٔ تغییر", en: "Change audit trail event" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("ChangeCode", "text", { len: 40 }), req("Code", "text", { len: 40 }), req("Action", "text", { len: 40 }), req("Actor", "text", { len: 60 }), c("DetailFa", "text", { len: 1000 }), c("FromValue", "text", { len: 200 }), c("ToValue", "text", { len: 200 }), req("OccurredAt", "datetime")],
+    indexes: [{ name: "IX_PmisChangeAuditTrail_Change", columns: ["ProjectId", "ChangeCode", "OccurredAt"] }],
+  },
+  {
+    name: "PmisChangeModuleLinks",
+    module: "d4",
+    title: { fa: "پیوند نرم تغییر به ماژول‌ها", en: "Change soft link to modules" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("ChangeCode", "text", { len: 40 }), req("Code", "text", { len: 40 }), req("LinkKind", "text", { len: 30, comment: "LINK_KINDS.code" }), req("TargetCode", "text", { len: 80 }), req("TargetTitleFa", "text", { len: 400 }), c("TargetId", "text", { len: 60 }), c("NoteFa", "text", { len: 1000 }), c("EstablishedBy", "text", { len: 60 }), c("EstablishedAt", "datetime"), c("Status", "text", { len: 20, default: "'active'" })],
+    indexes: [{ name: "UX_PmisChangeModuleLinks_Code", columns: ["ProjectId", "ChangeCode", "Code"], unique: true }],
+  },
+  {
+    name: "PmisChangeSettings",
+    module: "d4",
+    title: { fa: "تنظیمات گردش‌کار تغییر", en: "Change workflow setting" },
+    pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("SettingKey", "text", { len: 60 }), req("SettingValueJson", "json"), c("UpdatedBy", "text", { len: 60 }), c("UpdatedAt", "datetime")],
+    indexes: [{ name: "UX_PmisChangeSettings_Key", columns: ["ProjectId", "SettingKey"], unique: true }],
+  },
+
   /* ── d5 مالی ── */
   {
     name: "CostAccount",
@@ -6586,6 +6903,34 @@ export const MIGRATIONS: Migration[] = [
   {
     version: "0070", name: "contract_risk_engine_tables",
     statements: ["ContractRiskRegister", "ContractRiskAssessment", "ContractRiskScoringRule", "ContractClauseFinding", "ContractObligation", "ContractImprovement", "ContractRiskAction"].flatMap((name) => { const table = tableDef(name); if (!table) throw new Error(`Missing table definition: ${name}`); return [tableDdl(table, "mssql"), ...(table.indexes ?? []).map((index) => indexDdl(table, index, "mssql"))]; }),
+  },
+  {
+    /* PMO-FORENSIC-SCHEDULE-ENGINE-V1.0: دوازده جدول اختصاصی PmisSchedRecon —
+     * بدون FK فیزیکی (Zero-Regression) و با گارد tableDef. */
+    version: "0071", name: "pmis_sched_recon_engine_tables",
+    statements: ["PmisSchedReconMissions", "PmisSchedReconExtractions", "PmisSchedReconEvaluations", "PmisSchedReconWbsMaps", "PmisSchedReconActivities", "PmisSchedReconCalendars", "PmisSchedReconDurations", "PmisSchedReconLogic", "PmisSchedReconCriticalPaths", "PmisSchedReconSnapshots", "PmisSchedReconValidations", "PmisSchedReconMipMappings"].flatMap((name) => { const table = tableDef(name); if (!table) throw new Error(`Missing table definition: ${name}`); return [tableDdl(table, "mssql"), ...(table.indexes ?? []).map((index) => indexDdl(table, index, "mssql"))]; }),
+  },
+  {
+    version: "0072", name: "pmis_dispute_expert_engine_tables",
+    statements: ["PmisDisputeCases", "PmisDisputeParties", "PmisDisputeClaims", "PmisDisputeResponses", "PmisDisputeEvidence", "PmisDisputeAnalyses", "PmisDisputeCalculations", "PmisDisputeHearings", "PmisDisputeOpinions", "PmisDisputeReports", "PmisDisputeDeadlines", "PmisDisputeModuleLinks", "PmisDisputeAuditTrail"].flatMap((name) => { const table = tableDef(name); if (!table) throw new Error(`Missing table definition: ${name}`); return [tableDdl(table, "mssql"), ...(table.indexes ?? []).map(index => indexDdl(table, index, "mssql"))]; }),
+  },
+  {
+    /* PMO-CONSTRUCTION-DISPUTE-EXPERT-ENGINE-V1.0 فاز ۴ — ستون‌های SoD نسخهٔ گزارش.
+     * مهاجرت افزایشی؛ 0072 دست‌نخورده. */
+    version: "0073", name: "pmis_dispute_report_approval_fields",
+    statements: ["ApprovedBy", "ApprovedAt"].map((col) => addColumnDdl("PmisDisputeReports", col, "mssql")),
+  },
+  {
+    /* PMO-INTEGRATED-CHANGE-MANAGEMENT-V1.0 — ۱۲ جدول PmisChange*؛
+     * بدون FK فیزیکی (Zero-Regression) و با گارد tableDef. */
+    version: "0074", name: "pmis_change_management_tables",
+    statements: ["PmisChangeRequests", "PmisChangeImpacts", "PmisChangeCostEstimates", "PmisChangeScheduleImpacts", "PmisChangeApprovals", "PmisChangeRiskLinks", "PmisChangeClaimLinks", "PmisChangeDocuments", "PmisChangeImplementation", "PmisChangeAuditTrail", "PmisChangeModuleLinks", "PmisChangeSettings"].flatMap((name) => { const table = tableDef(name); if (!table) throw new Error(`Missing table definition: ${name}`); return [tableDdl(table, "mssql"), ...(table.indexes ?? []).map((index) => indexDdl(table, index, "mssql"))]; }),
+  },
+  {
+    /* PMO-INTEGRATED-CHANGE-MANAGEMENT-V1.0 فاز ۶ — ستون‌های فایل واقعی سند.
+     * مهاجرت افزایشی با همان الگوی 0073؛ 0074 دست‌نخورده. */
+    version: "0075", name: "pmis_change_document_file_fields",
+    statements: ["DocNo", "FileNameFa", "MimeType", "SizeBytes", "Sha256"].map((col) => addColumnDdl("PmisChangeDocuments", col, "mssql")),
   },
 ];
 

@@ -7,17 +7,21 @@ import { type ClaimLifecycleAction, type RccKind, type RccRow, type RccWorkspace
 import { buildConcurrencyTimeline } from '../services/delayAnalysis';
 import { LOSS_CATEGORIES, lossCategoryFa } from '../services/claimLoss';
 import JalaliDateInput from './JalaliDateInput';
+import SchedReconWorkspace from './SchedReconWorkspace';
+import DisputeExpertWorkspace from './DisputeExpertWorkspace';
+import ProcessFlowMaps from './ProcessFlowMaps';
+import ChangeMgmtWorkspace from './ChangeMgmtWorkspace';
 
-export type D4Tab = 'matrix' | 'register' | 'reserve' | 'issue' | 'change' | 'ccb' | 'delay' | 'claim' | 'notice' | 'dispute' | 'invest' | 'exec' | 'loss';
+export type D4Tab = 'process' | 'matrix' | 'register' | 'reserve' | 'issue' | 'change' | 'ccb' | 'chm' | 'delay' | 'claim' | 'notice' | 'dispute' | 'invest' | 'exec' | 'loss' | 'recon' | 'dexp';
 type Props = { lang: Lang; projectId: string; subId?: string; initialTab?: D4Tab; hideTabs?: boolean };
 const TABS: [D4Tab, string, string][] = [
-  ['matrix', 'ماتریس', 'Matrix'], ['register', 'ثبت ریسک', 'Risks'], ['reserve', 'ذخیره و پایش', 'Reserve & monitor'], ['issue', 'مسئله و هشدار زود', 'Issues & EWS'],
-  ['change', 'تغییر', 'Changes'], ['ccb', 'تصویب تغییر', 'CCB'],
-  ['claim', 'ادعا', 'Claims'], ['notice', 'اعلان قراردادی', 'Notices'], ['delay', 'تحلیل تأخیر', 'Delay analysis'], ['loss', 'خسارات و لایحه ضرر و زیان', 'Loss & damages'], ['exec', 'خلاصه', 'Summary'],
+  ['process', 'نقشهٔ فرایند', 'Process map'], ['matrix', 'ماتریس', 'Matrix'], ['register', 'ثبت ریسک', 'Risks'], ['reserve', 'ذخیره و پایش', 'Reserve & monitor'], ['issue', 'مسئله و هشدار زود', 'Issues & EWS'],
+  ['change', 'تغییر', 'Changes'], ['ccb', 'تصویب تغییر', 'CCB'], ['chm', 'مدیریت تغییر یکپارچه', 'Integrated change'],
+  ['claim', 'ادعا', 'Claims'], ['notice', 'اعلان قراردادی', 'Notices'], ['delay', 'تحلیل تأخیر', 'Delay analysis'], ['loss', 'خسارات و لایحه ضرر و زیان', 'Loss & damages'], ['recon', 'بازسازی زمان‌بندی ادعا', 'Forensic schedule reconstruction'], ['dexp', 'کارشناسی دعاوی ساخت', 'Dispute expert'], ['exec', 'خلاصه', 'Summary'],
 ];
 function tabFromSub(sub = ''): D4Tab {
-  const explicit: Record<string, D4Tab> = { 'd4-p1-rsv': 'reserve', 'd4-p1-iss': 'issue', 'd4-p1-mx': 'matrix', 'd4-p3-ccb': 'ccb', 'd4-p5-ntc': 'notice', 'd4-p5-tb': 'notice', 'd4-p5-dsp': 'dispute', 'd4-p5-exe': 'exec', 'd4-p5-loss': 'loss' };
-  return explicit[sub] ?? (sub.startsWith('d4-p3') ? 'change' : sub.startsWith('d4-p4') ? 'delay' : sub.startsWith('d4-p5') ? 'claim' : 'register');
+  const explicit: Record<string, D4Tab> = { 'd4-p1-rsv': 'reserve', 'd4-p1-iss': 'issue', 'd4-p1-mx': 'matrix', 'd4-p3-ccb': 'ccb', 'd4-p4-fsr': 'recon', 'd4-p5-ntc': 'notice', 'd4-p5-tb': 'notice', 'd4-p5-dsp': 'dispute', 'd4-p5-exe': 'exec', 'd4-p5-loss': 'loss', 'd4-p7-dxp': 'dexp' };
+  return explicit[sub] ?? (sub === 'd4-p3-chm' ? 'chm' : sub.startsWith('d4-p3') ? 'change' : sub.startsWith('d4-p4') ? 'delay' : sub.startsWith('d4-p5') ? 'claim' : 'process');
 }
 const FIELDS: Record<RccKind, [string, string, string, string?][]> = {
   risks: [['Code', 'کد', 'Code'], ['TitleFa', 'عنوان', 'Title'], ['Owner', 'مالک', 'Owner'], ['Probability', 'احتمال ۱ تا ۵', 'Probability 1–5', 'number'], ['Impact', 'اثر ۱ تا ۵', 'Impact 1–5', 'number'], ['Cause', 'علت', 'Cause'], ['Event', 'رویداد', 'Event'], ['Effect', 'پیامد', 'Effect'], ['Response', 'پاسخ / اقدام', 'Response'], ['SourceRef', 'مرجع', 'Source reference']],
@@ -263,13 +267,15 @@ function LiveRcc({ lang, projectId, subId, initialTab, hideTabs, userId }: Props
       <h3 className="tx1 font-semibold">{label('ریسک، تغییر و ادعا — دادهٔ ماندگار', 'Risk, change & claims — persisted data')}</h3>
       <span className="tx3 text-xs" dir="ltr">{projectId}</span>
       <button className={btn} disabled={busy || loading} onClick={() => void load()}>{label('تازه‌سازی', 'Refresh')}</button>
+      {tab !== 'process' && <button className={btn} onClick={() => setTab('process')}>{label('↩ بازگشت به نقشهٔ فرایند', '↩ Back to process map')}</button>}
       <span className="tx3 text-xs">{label('این بخش برنامه و بودجهٔ مصوب را بازنویسی نمی‌کند.', 'Approved schedule and budget are not overwritten.')}</span>
     </header>
     {!hideTabs && <nav className="flex flex-wrap gap-2">{TABS.map(([id, a, b]) => <button key={id} className={`${btn} ${tab === id ? 'toggle-on' : ''}`} onClick={() => setTab(id)}>{label(a, b)}</button>)}</nav>}
     {error && <p role="alert" className="rounded-xl bg-rose-500/10 text-rose-400 p-3 text-sm">{error}</p>}
     {loading && <p className="tx3">{label('در حال بارگذاری…', 'Loading…')}</p>}
-    {!loading && workspace && <>
-      {tab === 'invest' ? <section className="glass-dark rounded-xl p-4 tx2 text-sm">
+    {tab === 'process' && <ProcessFlowMaps lang={lang} only={['integrated', 'delay', 'loss', 'dispute']} defaultMap="integrated" onNavigate={(t) => setTab(t as D4Tab)} />}
+    {!loading && workspace && tab !== 'process' && <>
+      {tab === 'chm' ? <ChangeMgmtWorkspace lang={lang} projectId={projectId} /> : tab === 'dexp' ? <DisputeExpertWorkspace lang={lang} projectId={projectId} /> : tab === 'recon' ? <SchedReconWorkspace lang={lang} projectId={projectId} /> : tab === 'invest' ? <section className="glass-dark rounded-xl p-4 tx2 text-sm">
         {label('این ابزار هنوز به گردش‌کار ماندگار متصل نیست. اعداد و دکمه‌های نمونهٔ قبلی حذف شده‌اند؛ برای ثبت عملیاتی از ریسک، تغییر و ادعا استفاده کنید.', 'This tool is not yet connected to a persisted workflow. Previous demo values and actions have been removed. Use risks, changes and claims for operational records.')}
       </section> : tab === 'exec' ? <section className="grid grid-cols-2 gap-3 md:grid-cols-4">{(['risks', 'changes', 'claims', 'issues'] as const).map(k => <div className="glass-dark rounded-xl p-4 tx1" key={k}>{k}: {workspace[`${k}Hidden`] ? label('بدون مجوز', 'Restricted') : workspace[k].length}</div>)}</section> : <>
         {tab === 'matrix' && !workspace.risksHidden && <section className="glass-dark rounded-xl p-3 grid grid-cols-5 gap-2">{[5, 4, 3, 2, 1].flatMap(p => [1, 2, 3, 4, 5].map(i => <div key={`${p}-${i}`} className="rounded-lg p-3 text-center text-sm" style={{ border: `1px solid ${scoreColor(p * i)}`, color: scoreColor(p * i) }}><div>P{p} × I{i}</div>{workspace.risks.filter(r => r.Probability === p && r.Impact === i).length}</div>))}</section>}

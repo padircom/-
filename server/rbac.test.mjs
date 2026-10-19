@@ -100,7 +100,10 @@ test("کاتالوگ: نسخه موتور و اندازه‌ها", () => {
   /* بخش ۶ (HRM) سیزده مجوز `hrm.*` افزود (org/skill/attendance/payroll/
      training/performance) و بخش ۷ (EDMS/KMS) یازده مجوز `edms.*`
      (document/revision/workflow/transmittal/archive/kms) — ۴۱۳ + ۲۴. */
-  assert.equal(PERMISSION_CATALOG.length, 445);
+  /* بخش ۸ (PMO-FORENSIC-SCHEDULE-ENGINE) سه مجوز `sched.recon.*` افزود:
+     مشاهده، ثبت/ویرایش و تأیید تکمیل مأموریت بازسازی زمان‌بندی — هم‌تراز
+     با تفکیک تحلیل تأخیر (d4). */
+  assert.equal(PERMISSION_CATALOG.length, 448);
   /* ۲۸ نقش پیشین + ۷ نقش نت: maintenance_manager، maintenance_planner،
      reliability_engineer، maintenance_engineer، maintenance_technician،
      maintenance_storekeeper و condition_monitoring_analyst. تفکیک وظایف

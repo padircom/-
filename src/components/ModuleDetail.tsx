@@ -147,11 +147,14 @@ const D4_PAGE_SUBS: Record<string, { id: string; title: Bi; tab: D4Tab; sql: str
   "d4-p3": [
     { id: "d4-p3-imp", title: { fa: "اثر بر Baseline قفل", en: "Impact on locked BL" }, tab: "change", sql: ["Change_Request"] },
     { id: "d4-p3-ccb", title: { fa: "CCB و اختیار", en: "CCB + authority" }, tab: "ccb", sql: ["CCB_Meeting"] },
+    { id: "d4-p3-chm", title: { fa: "مدیریت تغییر یکپارچه (PMO-INTEGRATED-CHANGE-MANAGEMENT-V1.0)", en: "Integrated change lifecycle" }, tab: "chm", sql: ["PmisChangeRequests", "PmisChangeImpacts", "PmisChangeCostEstimates", "PmisChangeScheduleImpacts", "PmisChangeApprovals", "PmisChangeRiskLinks", "PmisChangeClaimLinks", "PmisChangeModuleLinks", "PmisChangeImplementation", "PmisChangeAuditTrail"] },
   ],
-  /* «d4-p4» ردیف اضافه ندارد: زیرفرآیند چارچوبی «تحلیل تأخیر» (d4-p4-s1)
-     همان تب delay را باز می‌کند و هر سه موتور ۵۰۹۰، ۱۳۰۰ و زمان‌بندی در آن
-     صفحه هست؛ ردیف «تحلیل تأخیر ۵۰۹۰» دقیقاً همان صفحه را باز می‌کرد و
-     فقط عنوان محدودتری داشت، پس حذف شد. */
+  /* زیرفرآیند چارچوبی «تحلیل تأخیر» (d4-p4-s1) همان تب delay را باز می‌کند؛
+     ردیف «بازسازی کارشناسی زمان‌بندی» (PMO-FORENSIC-SCHEDULE-ENGINE-V1.0)
+     صفحهٔ جدای خودش را دارد: زیربنای کارشناسی موتورهای ۵۰۹۰/۱۳۰۰ است. */
+  "d4-p4": [
+    { id: "d4-p4-fsr", title: { fa: "بازسازی و تحلیل زمان‌بندی ادعا", en: "Forensic schedule reconstruction" }, tab: "recon", sql: ["PmisSchedReconMissions", "PmisSchedReconActivities", "PmisSchedReconLogic", "PmisSchedReconCriticalPaths"] },
+  ],
   /* ردیف «دروازه Baseline+DataDate» (d4-p5-gate) حذف شد: دقیقاً همان تب
      claim «بسته ادعا» (d4-p5-s1) را باز می‌کرد و کنترل Baseline/DataDate
      داخل نهایی‌سازی همان بسته انجام می‌شود؛ صفحهٔ جدایی نداشت. */
@@ -160,6 +163,9 @@ const D4_PAGE_SUBS: Record<string, { id: string; title: Bi; tab: D4Tab; sql: str
     { id: "d4-p5-dsp", title: { fa: "مذاکره و اختلاف", en: "Negotiation & dispute" }, tab: "dispute", sql: ["Claim_Settlement"] },
     { id: "d4-p5-exe", title: { fa: "گراف EXEC", en: "EXEC graph" }, tab: "exec", sql: ["Trace_Link"] },
     { id: "d4-p5-loss", title: { fa: "مدیریت خسارات و دعاوی مالی پیمان", en: "Contract losses & financial claims" }, tab: "loss", sql: ["ClaimCostItem", "ClaimCalculationRule", "ClaimCalculationRun"] },
+  ],
+  "d4-p7": [
+    { id: "d4-p7-dxp", title: { fa: "کارشناسی، داوری و تحلیل دعاوی ساخت", en: "Dispute expert workspace" }, tab: "dexp", sql: ["PmisDisputeCases", "PmisDisputeParties", "PmisDisputeClaims", "PmisDisputeResponses", "PmisDisputeEvidence", "PmisDisputeExpertReports"] },
   ],
 };
 
@@ -172,12 +178,15 @@ const D4_TAB_BY_SUB: Record<string, D4Tab> = {
   "d4-p3-s1": "change",
   "d4-p3-imp": "change",
   "d4-p3-ccb": "ccb",
+  "d4-p3-chm": "chm",
   "d4-p4-s1": "delay",
+  "d4-p4-fsr": "recon",
   "d4-p5-s1": "claim",
   "d4-p5-ntc": "notice",
   "d4-p5-dsp": "dispute",
   "d4-p5-exe": "exec",
   "d4-p5-loss": "loss",
+  "d4-p7-dxp": "dexp",
   "d4-p6-s1": "invest",
   "d4-p6-s2": "invest",
 };
@@ -776,7 +785,7 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
   const d4Tab = ((): D4Tab => {
     const sid = selected?.sId ?? target.subId;
     if (sid && D4_TAB_BY_SUB[sid]) return D4_TAB_BY_SUB[sid];
-    return "matrix";
+    return "process";
   })();
 
   if (dom.id === "d4") {
@@ -846,7 +855,7 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
                     {[
                       ...p.subs.map((s) => ({ id: s.id, title: s.title, sql: s.sql })),
                       ...(D4_PAGE_SUBS[p.id] ?? []),
-                    ].map((s) => (
+                    ].filter((s, i, arr) => arr.findIndex((x) => x.id === s.id) === i).map((s) => (
                       <button
                         key={s.id}
                         onClick={() => {

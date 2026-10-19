@@ -19,6 +19,12 @@ server/hrmLogic.js
 server/ckmLogic.js
 server/rptLogic.js
 server/rbacLogic.js
+server/schedReconLogic.js
+server/schedReconDocLogic.js
+server/disputeExpertLogic.js
+server/disputeExpertDocLogic.js
+server/changeMgmtLogic.js
+server/changeDocLogic.js
 server/sqlLogic.js
 # موتور برنامه‌ریزی فاز ۵ تولید (بازتولید: npm run build:mfgplan)
 server/mfgPlanLogic.js
@@ -91,3 +97,4 @@ server/cmmsAiLogic.js
 
 # پیوست‌های DPR/CPMS زمان اجرا — داده است، نه کد
 server/storage/cpm-dpr/
+server/storage/change/

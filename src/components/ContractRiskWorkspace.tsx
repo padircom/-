@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { jsonRequest } from '../services/apiClient';
 import JalaliDateInput from './JalaliDateInput';
+import ProcessFlowMaps from './ProcessFlowMaps';
 import { type Lang } from '../data/framework';
 
 /**
@@ -21,6 +22,7 @@ type Workspace = {
 };
 
 const SECTIONS = [
+  ['map', 'نقشهٔ فرایند'],
   ['dashboard', 'مرکز کنترل ریسک قراردادی'],
   ['contracts', 'مدیریت قراردادها و نسخه‌ها'],
   ['clauses', 'تحلیل بندهای قرارداد'],
@@ -53,7 +55,7 @@ export default function ContractRiskWorkspace({ lang, projectId }: { lang: Lang;
 
 function Live({ lang, projectId, userId }: { lang: Lang; projectId: string; userId: string | null }) {
   const fa = lang === 'fa';
-  const [section, setSection] = useState<Section>('dashboard');
+  const [section, setSection] = useState<Section>('map');
   const [ws, setWs] = useState<Workspace | null>(null);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -156,10 +158,17 @@ function Live({ lang, projectId, userId }: { lang: Lang; projectId: string; user
         {SECTIONS.map(([k, label]) => (
           <button key={k} type="button" onClick={() => setSection(k)} className={`rounded-lg px-2.5 py-1 text-[10.5px] font-light transition ${section === k ? 'toggle-on tx1' : 'tx3 hover:tx2'}`}>{label}</button>
         ))}
+        {section !== 'map' && (
+          <button type="button" onClick={() => setSection('map')} className="rounded-lg border b-line-soft px-2.5 py-1 text-[10.5px] font-light tx2 transition hover:tx1">{fa ? '↩ بازگشت به نقشهٔ فرایند' : '↩ Back to process map'}</button>
+        )}
       </div>
 
       {error && <div className="glass rounded-xl px-3 py-2 text-[11px]" style={{ color: '#dc2626' }}>{error}</div>}
       {notice && <div className="glass rounded-xl px-3 py-2 text-[11px]" style={{ color: '#16a34a' }}>{notice}</div>}
+      {section === 'map' && (
+        <ProcessFlowMaps lang={lang} only={['integrated', 'risk']} defaultMap="risk" onNavigate={(t) => setSection(t as Section)} />
+      )}
+
       {loading && <div className="py-8 text-center text-[11px] tx3">{fa ? 'در حال بارگذاری…' : 'Loading…'}</div>}
 
       {!loading && ws && section === 'dashboard' && s && (
