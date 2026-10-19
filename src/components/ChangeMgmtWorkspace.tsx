@@ -59,7 +59,18 @@ const SECTIONS = [
   ['dashboard', 'داشبورد و drill-down'],
   ['requests', 'فهرست و ثبت درخواست'],
   ['detail', 'پروندهٔ تغییر (۱۶ مرحله)'],
+  ['reports', 'گزارش‌های مدیریتی (۱۴)'],
 ] as const;
+type MgmtReport = { kind: string; title: string; heads: string[]; rows: string[][]; noteFa?: string };
+const MGMT_KINDS: { code: string; fa: string }[] = [
+  { code: 'requests_status', fa: 'وضعیت پرونده‌ها و گردش‌کار' }, { code: 'requests_by_type', fa: 'درخواست‌ها به تفکیک نوع' },
+  { code: 'trend_requests', fa: 'روند ثبت ماهانه' }, { code: 'cost_layers_detail', fa: 'جزئیات ۵ لایهٔ هزینه' },
+  { code: 'cost_warnings', fa: 'ثبت مصوب/پرداخت بی‌منبع' }, { code: 'analyze_rows', fa: 'ردیف‌های اثر زمان‌بندی' },
+  { code: 'links_register', fa: 'دفتر پیوندهای نرم' }, { code: 'links_gaps', fa: 'پیوندهای بی‌مقصد' },
+  { code: 'risk_claim_links', fa: 'پیوندهای ریسک/ادعا/اختلاف' }, { code: 'implementation', fa: 'مسیر اجرا/مبنا' },
+  { code: 'documents_register', fa: 'دفتر اسناد' }, { code: 'audit_trail', fa: 'ردپای ممیزی' },
+  { code: 'review_sod_gaps', fa: 'کنترل SoD' }, { code: 'dashboard_detail', fa: 'جزئیات داشبورد' },
+];
 type Section = (typeof SECTIONS)[number][0];
 
 const DETAIL_TABS = [
@@ -96,6 +107,8 @@ function Live({ lang, projectId, userId }: { lang: Lang; projectId: string; user
   const [timeA, setTimeA] = useState<TimeAnalysis | null>(null);
   const [costA, setCostA] = useState<CostAnalysis | null>(null);
   const [linksV, setLinksV] = useState<{ links: Row[]; totals: { verified: number; missing: number } } | null>(null);
+  const [mgmt, setMgmt] = useState<MgmtReport | null>(null);
+  const [mgmtKind, setMgmtKind] = useState<string>('requests_status');
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
@@ -227,6 +240,18 @@ function Live({ lang, projectId, userId }: { lang: Lang; projectId: string; user
 
   const statusMembers: { code: string; fa: string }[] = catalog?.statuses.map((s) => ({ code: s.code, fa: s.fa })) ?? [];
   const implSteps = ['instruction_issued', 'started', 'baselines_updated', 'execution_control', 'verified', 'completed'];
+
+  /* بارگذاری گزارش مدیریتی وقتی وارد تب می‌شویم */
+  useEffect(() => {
+    if (section !== 'reports') return;
+    (async () => {
+      const r = await jsonRequest<MgmtReport>(`${base}/management-reports?kind=${encodeURIComponent(mgmtKind)}`, userId, 'GET');
+      if (!mounted.current) return;
+      setMgmt(r.ok ? r.data : null);
+      if (!r.ok) setError(`${r.code}: ${r.message}`);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [section, mgmtKind, base, userId]);
 
   if (loading && !dash) return <div className="py-8 text-center text-[11px] tx3">{fa ? 'در حال بارگذاری…' : 'Loading…'}</div>;
 
@@ -398,6 +423,34 @@ function Live({ lang, projectId, userId }: { lang: Lang; projectId: string; user
               </table>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* ─────────────── گزارش‌های مدیریتی ─────────────── */}
+      {section === 'reports' && (
+        <div className="flex flex-col gap-3">
+          <div className="glass-dark rounded-xl p-3 flex flex-wrap gap-1.5">
+            {MGMT_KINDS.map((k) => (
+              <button key={k.code} type="button" onClick={() => setMgmtKind(k.code)}
+                className={`rounded-lg px-2.5 py-1 text-[10px] font-light transition ${mgmtKind === k.code ? 'toggle-on tx1' : 'tx3 hover:tx2'}`}>{k.fa}</button>
+            ))}
+          </div>
+          {mgmt && (
+            <div className="glass-dark rounded-xl p-3">
+              <div className="mb-2 text-[11px] font-semibold tx1">{mgmt.title}</div>
+              {mgmt.noteFa && <div className="mb-2 text-[9.5px] tx3">{mgmt.noteFa}</div>}
+              <div className="thin-scroll overflow-x-auto">
+                <table className="w-full text-[10px] tx2">
+                  <thead><tr className="text-[9px] tx4">{mgmt.heads.map((h) => <th key={h} className="px-2 py-1.5 text-start">{h}</th>)}</tr></thead>
+                  <tbody>
+                    {mgmt.rows.map((row, i) => <tr key={i} className="border-t b-line-soft">{row.map((c, j) => <td key={j} className="px-2 py-1.5">{c}</td>)}</tr>)}
+                    {mgmt.rows.length === 0 && <tr><td colSpan={mgmt.heads.length} className="px-2 py-4 text-center tx4">—</td></tr>}
+                  </tbody>
+                </table>
+              </div>
+              {mgmt.rows.length > 0 && <div className="mt-2 text-[9px] tx4">{fa ? `${fmtNum(mgmt.rows.length, fa)} سطر (از دادهٔ واقعی محاسبه‌شده)` : `${mgmt.rows.length} rows`}</div>}
+            </div>
+          )}
         </div>
       )}
 

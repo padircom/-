@@ -42,6 +42,8 @@ import {
   validateChildRow,
   computeChangeDashboard,
   LINK_KINDS,
+  CHANGE_MGMT_KINDS,
+  buildChangeManagementReport,
 } from "./changeMgmtLogic.js";
 import { buildChangeReport, CHANGE_REPORT_CHAPTERS, CHANGE_REPORT_TABLES } from "./changeDocLogic.js";
 
@@ -146,6 +148,22 @@ export function registerChangeMgmtRoutes(app, { repo, subjects, evaluate }) {
           .map((x) => ({ Id: x.Id, Code: x.Code, TitleFa: x.TitleFa, Status: x.Status, ChangeType: x.ChangeType, Priority: x.Priority, RequestDate: x.RequestDate, ContractCode: x.ContractCode ?? null, InitialCostEstimate: x.InitialCostEstimate ?? null, InitialTimeImpactDays: x.InitialTimeImpactDays ?? null, ReviewDueDate: x.ReviewDueDate ?? null })),
       },
     };
+  }));
+
+  /* ── فاز ۵: ۱۴ گزارش مدیریتی (فقط‌خواندنی از رکوردهای واقعی، با مجوز مشاهدهٔ تغییر) ── */
+  app.get(base + "/management-reports", need("change.view"), run(async (r, req) => {
+    const kind = String(req.query.kind ?? "");
+    if (!CHANGE_MGMT_KINDS.includes(kind)) throw error(400, "CHG_MGMT_KIND", `گزارش مدیریتی نامعتبر است — مقادیر مجاز: ${CHANGE_MGMT_KINDS.join(", ")}`);
+    const pid = req.params.projectId;
+    const full = async (table) => r.list(table, { where: where(pid), limit: 10000 }).catch(() => []);
+    const [requests, costs, schedules, moduleLinks, riskLinks, claimLinks, documents, implementation, audits] = await Promise.all([
+      full("PmisChangeRequests"), full("PmisChangeCostEstimates"), full("PmisChangeScheduleImpacts"),
+      full("PmisChangeModuleLinks"), full("PmisChangeRiskLinks"), full("PmisChangeClaimLinks"),
+      full("PmisChangeDocuments"), full("PmisChangeImplementation"), full("PmisChangeAuditTrail"),
+    ]);
+    const today = new Date().toISOString().slice(0, 10);
+    const report = buildChangeManagementReport(kind, { requests, costs, schedules, moduleLinks, riskLinks, claimLinks, documents, implementation, audits, today });
+    return { kind, ...report, llmConnected: CHANGE_LLM_CONNECTED };
   }));
 
   /* ── فهرست درخواست‌ها ── */

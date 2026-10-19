@@ -645,3 +645,144 @@ export function isPostApproval(status: string): boolean {
 }
 
 
+
+/* ═══════════════════ فاز ۵: ۱۴ گزارش مدیریتی ماژول تغییر (فقط‌خواندنی از دادهٔ واقعی) ═══════════════════ */
+
+export const CHANGE_MGMT_REPORTS = [
+  { code: "requests_status", fa: "وضعیت پرونده‌ها و گردش‌کار" },
+  { code: "requests_by_type", fa: "درخواست‌ها به تفکیک نوع" },
+  { code: "trend_requests", fa: "روند ثبت درخواست‌ها (ماهانه)" },
+  { code: "cost_layers_detail", fa: "جزئیات پنج لایهٔ هزینه" },
+  { code: "cost_warnings", fa: "ثبت‌های لایهٔ مصوب/پرداخت بدون منبع" },
+  { code: "analyze_rows", fa: "ردیف‌های تحلیل اثر زمان‌بندی" },
+  { code: "links_register", fa: "دفتر پیوندهای نرم ماژول‌ها" },
+  { code: "links_gaps", fa: "پیوندهای مفقود/بی‌مقصد (راستی‌آزمایی)" },
+  { code: "risk_claim_links", fa: "پیوندهای ریسک و ادعا/اختلاف" },
+  { code: "implementation", fa: "مسیر اجرا و نسخهٔ نامستقر مبنا" },
+  { code: "documents_register", fa: "دفتر اسناد مدیریت تغییر" },
+  { code: "audit_trail", fa: "ردپای ممیزی پروژه" },
+  { code: "review_sod_gaps", fa: "شناسه‌های SoD و لایهٔ تأییدشدهٔ بی‌مبنا" },
+  { code: "dashboard_detail", fa: "جزئیات داشبورد مبالغ و وضعیت‌ها" },
+] as const;
+export const CHANGE_MGMT_REPORT_FA: Record<string, string> = Object.fromEntries(CHANGE_MGMT_REPORTS.map((m) => [m.code, m.fa]));
+export const CHANGE_MGMT_KINDS = CHANGE_MGMT_REPORTS.map((m) => m.code);
+
+export type ChangeMgmtRows = Record<string, unknown>;
+export interface ChangeMgmtData {
+  requests: ChangeMgmtRows[]; costs: ChangeMgmtRows[]; schedules: ChangeMgmtRows[];
+  moduleLinks: ChangeMgmtRows[]; riskLinks: ChangeMgmtRows[]; claimLinks: ChangeMgmtRows[];
+  documents: ChangeMgmtRows[]; implementation: ChangeMgmtRows[]; audits: ChangeMgmtRows[];
+  today: string;
+}
+export interface ChangeMgmtReportOut { title: string; heads: string[]; rows: string[][]; noteFa?: string }
+
+export function buildChangeManagementReport(kind: string, d: ChangeMgmtData): ChangeMgmtReportOut {
+  const dash = CHANGE_EMPTY;
+  const s = (v: unknown) => (v === undefined || v === null || v === "" ? dash : String(v));
+  const m = (v: unknown) => { const n = Number(v); return v === undefined || v === null || v === "" || !Number.isFinite(n) ? dash : n.toLocaleString("en-US"); };
+  const stFa = (v: unknown) => CHANGE_STATUS_FA[String(v) as ChangeStatus] ?? s(v);
+  const tpFa = (v: unknown) => (CHANGE_TYPE_FA as Record<string, string>)[String(v)] ?? s(v);
+  const lyFa = (v: unknown) => (COST_LAYER_FA as Record<string, string>)[String(v)] ?? s(v);
+  const stepFa = (v: unknown) => IMPLEMENTATION_STEP_FA[String(v)] ?? s(v);
+  switch (kind) {
+    case "requests_status": {
+      return { title: CHANGE_MGMT_REPORT_FA[kind], heads: ["کد", "عنوان", "نوع", "وضعیت", "اولویت", "درخواست‌کننده", "تاریخ", "مهلت بررسی", "آخرین تصمیم"],
+        rows: d.requests.map((r) => [s(r.Code), s(r.TitleFa), tpFa(r.ChangeType), stFa(r.Status), s(r.Priority), s(r.RequestedBy), s(r.RequestDate), s(r.ReviewDueDate), s(r.DecidedBy)]) };
+    }
+    case "requests_by_type": {
+      const by = new Map<string, number>();
+      for (const r of d.requests) { const k = String(r.ChangeType ?? "other"); by.set(k, (by.get(k) ?? 0) + 1); }
+      return { title: CHANGE_MGMT_REPORT_FA[kind], heads: ["نوع تغییر", "تعداد"], rows: [...by.entries()].map(([k, n]) => [tpFa(k), String(n)]), noteFa: d.requests.length ? undefined : "درخواستی ثبت نشده است" };
+    }
+    case "trend_requests": {
+      const by = new Map<string, number>();
+      for (const r of d.requests) { const k = String(r.RequestDate ?? "").slice(0, 7) || "نامشخص"; by.set(k, (by.get(k) ?? 0) + 1); }
+      return { title: CHANGE_MGMT_REPORT_FA[kind], heads: ["ماه", "درخواست‌های ثبت‌شده"], rows: [...by.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([k, n]) => [k, String(n)]) };
+    }
+    case "cost_layers_detail": {
+      const layers = Object.fromEntries(COST_LAYERS.map((l) => [l, { count: 0, total: 0 }]));
+      for (const c of d.costs) { const layer = COST_LAYERS.includes(String(c.Layer) as never) ? String(c.Layer) : "estimated"; layers[layer].count += 1; layers[layer].total += Number(c.Amount) || 0; }
+      return { title: CHANGE_MGMT_REPORT_FA[kind], heads: ["لایه", "تعداد ردیف", "جمع مبلغ"],
+        rows: COST_LAYERS.map((l) => [lyFa(l), String(layers[l].count), String(layers[l].total)]),
+        noteFa: "پنج لایهٔ مبلغ جدا و منفاوت‌اند؛ «مصوب» فقط با منبع معتبر." };
+    }
+    case "cost_warnings": {
+      const bad = d.costs.filter((c) => ["approved", "paid"].includes(String(c.Layer)) && !String(c.SourceFa ?? "").trim());
+      return { title: CHANGE_MGMT_REPORT_FA[kind], heads: ["تغییر", "کد ردیف", "لایه", "مبلغ", "تهیه‌کننده"],
+        rows: bad.map((c) => [s(c.ChangeCode), s(c.Code), lyFa(c.Layer), m(c.Amount), s(c.PreparedBy)]),
+        noteFa: bad.length ? "این ردیف‌ها در وب‌مسیر POST رد می‌شدند — اگر دیده می‌شوند یعنی از خارج فرایند ثبت شده‌اند" : "همهٔ ردیف‌های لایهٔ مصوب/پرداخت منبع معتبر دارند" };
+    }
+    case "analyze_rows": {
+      return { title: CHANGE_MGMT_REPORT_FA[kind], heads: ["تغییر", "کد ردیف", "روش", "Δمدت تخمینی (روز)", "اثر پایان (روز)", "تمدید مصوب", "مبنای استحقاق", "تهیه‌کننده"],
+        rows: d.schedules.map((x) => [s(x.ChangeCode), s(x.Code), s(x.MethodFa), m(x.EstimatedDurationDeltaDays), m(x.CompletionEffectDays), m(x.ApprovedEotDays), s(x.EotEntitlementFa), s(x.PreparedBy)]),
+        noteFa: "اثر مدت تغییر با تمدید قراردادی یکی نیست؛ متن EOT جدا است." };
+    }
+    case "links_register": {
+      return { title: CHANGE_MGMT_REPORT_FA[kind], heads: ["تغییر", "کد پیوند", "نوع", "کد هدف", "عنوان هدف", "ثبت‌کننده"],
+        rows: d.moduleLinks.map((l) => [s(l.ChangeCode), s(l.Code), LINK_KIND_FA[String(l.LinkKind)] ?? s(l.LinkKind), s(l.TargetCode), s(l.TargetTitleFa), s(l.EstablishedBy)]),
+        noteFa: "پیوندها مرجع‌اند — دادهٔ ماژول مقصد را تغییر نمی‌دهند." };
+    }
+    case "links_gaps": {
+      /* راستی‌آزمایی دوباره توسط server انجام می‌شود — اینجا فقط ردیف‌های مشخص الگوی نیازمند توجه */
+      const bad = d.moduleLinks.filter((l) => !String(l.TargetCode ?? "").trim() || !String(l.TargetTitleFa ?? "").trim());
+      return { title: CHANGE_MGMT_REPORT_FA[kind], heads: ["تغییر", "کد پیوند", "نوع", "کد هدف", "عیب"],
+        rows: bad.map((l) => [s(l.ChangeCode), s(l.Code), s(l.LinkKind), s(l.TargetCode), !String(l.TargetCode ?? "").trim() ? "کد هدف تهی" : "عنوان هدف تهی"]),
+        noteFa: "برای راستی‌آزمایی عدد پیوند معتبر/مفقود در درخواست: /requests/:id/analysis/links-verify" };
+    }
+    case "risk_claim_links": {
+      const heads = ["مدل", "کد ردیف", "منبع/رتبه", "نوع", "توضیح", "ایجادکننده"];
+      return { title: CHANGE_MGMT_REPORT_FA[kind], heads,
+        rows: [
+          ...d.riskLinks.map((l) => ["ریسک", s(l.Code), s(l.RiskRegistryRef), s(l.LinkType), s(l.DescriptionFa), s(l.CreatedBy)]),
+          ...d.claimLinks.map((l) => ["ادعا/اختلاف", s(l.Code), s(l.ClaimRef ?? l.DisputeCaseRef), s(l.LinkType), s(l.DescriptionFa), s(l.CreatedBy)]),
+        ] };
+    }
+    case "implementation": {
+      return { title: CHANGE_MGMT_REPORT_FA[kind], heads: ["تغییر", "کد", "مرحله", "وضعیت", "ارجاع مبنا", "نتیجه"],
+        rows: d.implementation.map((i) => [s(i.ChangeCode), s(i.Code), stepFa(i.Step), s(i.Status), s(i.BaselineUpdateRef), s(i.ExecutionResultFa)]),
+        noteFa: "به‌روزرسانی مبنا فقط با نسخهٔ نامستقر پیشنهادی انجام می‌شود؛ مبنای جاری خلاف Zero-Regression بازنویسی نمی‌شود." };
+    }
+    case "documents_register": {
+      return { title: CHANGE_MGMT_REPORT_FA[kind], heads: ["تغییر", "کد", "عنوان سند", "نوع", "شماره", "بارگذارنده", "زمان"],
+        rows: d.documents.map((doc) => [s(doc.ChangeCode), s(doc.Code), s(doc.TitleFa), s(doc.Kind), s(doc.DocNo), s(doc.UploadedBy), s(doc.UploadedAt)]) };
+    }
+    case "audit_trail": {
+      const sorted = [...d.audits].sort((a, b) => String(b.OccurredAt ?? "").localeCompare(String(a.OccurredAt ?? "")));
+      return { title: CHANGE_MGMT_REPORT_FA[kind], heads: ["زمان", "تغییر", "اقدام", "مجری", "جزئیات", "از → به"],
+        rows: sorted.slice(0, 300).map((a) => [s(a.OccurredAt), s(a.ChangeCode), s(a.Action), s(a.Actor), s(a.DetailFa), `${s(a.FromValue)} → ${s(a.ToValue)}`]),
+        noteFa: sorted.length > 300 ? "تکمیل: ۳۰۰ ردیف اخیر نمایش داده می‌شود" : undefined };
+    }
+    case "review_sod_gaps": {
+      /* SoD: تصمیم غیر SoD‌دار اجرای سرور — هر تصمیم با همان آماده‌کننده مسدود است. این گزارش تطابق رکوردها را بررسی می‌کند. */
+      const ready = new Map<string, ChangeMgmtRows>();
+      for (const r of d.requests) {
+        if (["approved", "approved_conditional", "rejected"].includes(String(r.Status))) {
+          if (String(r.DecidedBy) === String(r.StatusChangedBy)) ready.set(String(r.Code), r);
+        }
+      }
+      const approvedNoSource = d.costs.filter((c) => ["approved", "paid"].includes(String(c.Layer)) && !String(c.SourceFa ?? "").trim());
+      return { title: CHANGE_MGMT_REPORT_FA[kind], heads: ["شناسه", "نوع وضعیت", "تصمیم‌گیرنده", "آماده‌کننده", "مسئله"],
+        rows: [
+          ...[...ready.values()].map((r) => [s(r.Code), "تصمیم نهایی", s(r.DecidedBy), s(r.StatusChangedBy), "SoD نقض: تصمیم‌گیرنده = آماده‌کننده"]),
+          ...approvedNoSource.map((c) => [s(c.ChangeCode), "لایهٔ مصوب/پرداخت", s(c.PreparedBy), dash, "لایهٔ مصوب/پرداخت بدون منبع مستدل"]),
+        ],
+        noteFa: "هر دو رویهٔ سمت سرور (در POST /transition یا POST rows) جلوی این حالت را می‌گیرند — این گزارش بازرسی است." };
+    }
+    case "dashboard_detail": {
+      const dash = computeChangeDashboard(d.requests, d.costs, d.schedules, d.riskLinks, d.claimLinks, d.today);
+      return { title: CHANGE_MGMT_REPORT_FA[kind], heads: ["شاخص", "مقدار"],
+        rows: [
+          ["کل درخواست‌ها", String(dash.totalRequests)], ["در انتظار بررسی", String(dash.awaitingReview)],
+          ["در انتظار تصمیم", String(dash.awaitingApproval)], ["تأییدشده", String(dash.approvedCount)],
+          ["ردشده", String(dash.rejectedCount)], ["مسیر تصویب/اجرا", String(dash.implementingCount)],
+          ["عقب‌افتاده", String(dash.overdueCount)], ["میانگین تکمیل (روز)", dash.avgCompletionDays === null ? CHANGE_EMPTY : String(dash.avgCompletionDays)],
+          ["ریسک بالا", String(dash.highRiskCount)], ["پیوند به پیکان/دعوا", String(dash.disputeLinkedCount)],
+          ["۵ لایهٔ مبلغ — برآورد", String(dash.costLayers.estimated)], ["۵ لایهٔ مبلغ — پیشنهاد", String(dash.costLayers.proposed)],
+          ["۵ لایهٔ مبلغ — مذاکره", String(dash.costLayers.negotiated)], ["۵ لایهٔ مبلغ — مصوب", String(dash.costLayers.approved)],
+          ["۵ لایهٔ مبلغ — پرداخت", String(dash.costLayers.paid)],
+        ], noteFa: "هر لایهٔ مبلغ از رکوردهای واقعی مستقل محاسبه شده است." };
+    }
+    default:
+      return { title: "گزارش نامعتبر", heads: ["خطا"], rows: [["گزارش مدیریتی با این کد تعریف نشده است"]] };
+  }
+}

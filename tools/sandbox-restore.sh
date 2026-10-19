@@ -20,8 +20,9 @@ if [ ! -x node_modules/.bin/esbuild ]; then
   npm ci --silent
 fi
 echo "── rebuild logic bundles"
-for s in sql rbac schedrecon schedrecondoc dispute aiassist ckm ckmws cmms cmmsai cntipc cpmws dprt fin finws hrm itg itgout mcsdrill mfgplan pex pexdata pmows qms rpt rptbuilder monitoring rccws delay claimdoc sxws cntrisk cntclause cntriskdoc claimloss lossdoc lossassist; do
-  npm run build:$s --silent >/dev/null 2>&1 || echo "  !! build:$s failed (احتمالاً اسکریپت وجود ندارد یا وابستگی — بررسی)"
+# تمام build:* scriptهای package.json را کشف و اجرا کن (b:rptbuilder و دیگر کلیدهای ممکن هم)
+for s in $(node -e 'const s=require("./package.json").scripts; console.log(Object.keys(s).filter(k=>k.startsWith("build:")).map(k=>k.slice(6)).join(" "))'); do
+  npm run build:$s --silent >/dev/null 2>&1 || echo "  !! build:$s failed (احتمالاً اسکریپت ناقص/وابستگی — بررسی)"
 done
 node -e '
 const fs=require("fs"),path=require("path");
