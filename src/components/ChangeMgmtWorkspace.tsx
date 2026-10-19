@@ -79,12 +79,17 @@ const DETAIL_TABS = [
   ['cost', 'لایه‌های هزینه (۵ لایه)'],
   ['links', 'پیوندهای نرم ماژول‌ها'],
   ['implement', 'اجرای مسیر تصویب/مبنا'],
+  ['docs', 'اسناد پشتیبان (آپلود/دانلود واقعی)'],
   ['report', 'گزارش Word/PDF (۱۲ فصل/۲۸ جدول)'],
   ['audit', 'ممیزی'],
 ] as const;
 type DetailTab = (typeof DETAIL_TABS)[number][0];
 
 const CP_FA: Record<string, string> = { none: 'بدون اثر', partial: 'اثر جزئی مسیر بحرانی', critical: 'اثر کامل بحرانی', unknown: 'نامشخص (بدون کد رزربرنامه)' };
+const DOC_KIND_FA: Record<string, string> = {
+  supporting: 'مستند پشتیبان', decision: 'سند تصمیم CCB', instruction: 'دستورکار اجرا',
+  evidence: 'مدرک اجرایی', correspondence: 'مکاتبه',
+};
 const LINK_FA: Record<string, string> = {
   delay_event: 'رویداد تأخیر (ماژول تأخیر)', loss_case: 'پروندهٔ ضرر و زیان', contract_risk: 'ریسک قرارداد d14',
   claim: 'ادعا', dispute_case: 'پروندهٔ کارشناسی دعاوی', edms_document: 'سند EDMS',
@@ -132,6 +137,10 @@ function Live({ lang, projectId, userId }: { lang: Lang; projectId: string; user
   const [costForm, setCostForm] = useState<Row>({ Layer: 'estimated', Amount: '', FormulaFa: '', SourceFa: '', BasisDate: new Date().toISOString().slice(0, 10) });
   const [linkForm, setLinkForm] = useState<Row>({ LinkKind: 'delay_event', TargetCode: '', TargetTitleFa: '', DescriptionFa: '' });
   const [implForm, setImplForm] = useState<Row>({ Step: 'instruction_issued', Status: 'planned', BaselineUpdateRef: '', ExecutionResultFa: '' });
+  const [docForm, setDocForm] = useState<{ TitleFa: string; Kind: string; DocNo: string; DocDate: string }>({ TitleFa: '', Kind: 'supporting', DocNo: '', DocDate: '' });
+  const [docFile, setDocFile] = useState<File | null>(null);
+  const [docUpBusy, setDocUpBusy] = useState(false);
+  const [docDlBusy, setDocDlBusy] = useState('');
   const [baselineForm, setBaselineForm] = useState<Row>({ noteFa: '', sourceBaselineId: '' });
 
   const bump = useCallback(() => setRefresh((x) => x + 1), []);
@@ -201,6 +210,54 @@ function Live({ lang, projectId, userId }: { lang: Lang; projectId: string; user
   }, [userId, bump, detail, base]);
 
   const [docBusy, setDocBusy] = useState('');
+  const uploadDoc = useCallback(async (id: string) => {
+    if (docUpBusy || !docFile) return;
+    setDocUpBusy(true); setError('');
+    try {
+      const fd = new FormData();
+      fd.append('TitleFa', docForm.TitleFa);
+      fd.append('Kind', docForm.Kind);
+      if (docForm.DocNo) fd.append('DocNo', docForm.DocNo);
+      if (docForm.DocDate) fd.append('DocDate', docForm.DocDate);
+      fd.append('file', docFile);
+      const res = await fetch(`${base}/requests/${encodeURIComponent(id)}/documents/upload`, {
+        method: 'POST', headers: { ...(userId ? { 'x-user-id': userId } : {}) }, body: fd,
+      });
+      const payload = (await res.json().catch(() => null)) as { error?: { code?: string; message?: string } } | null;
+      if (!res.ok) throw new Error(payload?.error?.message ?? (fa ? 'بارگذاری انجام نشد' : 'Upload failed'));
+      setNotice(fa ? 'سند بارگذاری شد (sha256 کنترل شد)' : 'Document uploaded (sha256 verified)');
+      setDocForm({ TitleFa: '', Kind: 'supporting', DocNo: '', DocDate: '' }); setDocFile(null);
+      const dd = await jsonRequest<Detail>(`${base}/requests/${encodeURIComponent(id)}`, userId, 'GET');
+      if (dd.ok && detail) setDetail(dd.data);
+    } catch (e) { setError(e instanceof Error ? e.message : (fa ? 'بارگذاری انجام نشد' : 'Upload failed')); }
+    finally { setDocUpBusy(false); }
+  }, [docUpBusy, docFile, docForm, base, userId, fa, detail]);
+
+  const downloadDocFile = useCallback(async (id: string, docId: string, fallbackName: string) => {
+    if (docDlBusy) return;
+    setDocDlBusy(String(docId)); setError('');
+    try {
+      const res = await fetch(`${base}/requests/${encodeURIComponent(id)}/documents/${encodeURIComponent(docId)}/download`, { headers: { ...(userId ? { 'x-user-id': userId } : {}) } });
+      if (!res.ok) {
+        const payload = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;
+        throw new Error(payload?.error?.message ?? (fa ? 'دانلود سند انجام نشد' : 'Download failed'));
+      }
+      const blob = await res.blob();
+      const cd = res.headers.get('content-disposition');
+      const utf8Name = cd?.match(/filename\*=UTF-8''([^;]+)/)?.[1];
+      const asciiName = cd?.match(/filename="([^"]+)"/)?.[1];
+      const filename = utf8Name ? decodeURIComponent(utf8Name) : (asciiName ?? fallbackName ?? 'document.bin');
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url; anchor.download = filename; anchor.style.display = 'none';
+      document.body.appendChild(anchor); anchor.click();
+      window.setTimeout(() => anchor.remove(), 1000);
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      setNotice(fa ? `دانلود انجام شد: ${filename} (sha256: ${String(res.headers.get('x-doc-sha256') ?? '').slice(0, 12)}…)` : 'Downloaded');
+    } catch (e) { setError(e instanceof Error ? e.message : (fa ? 'دانلود سند انجام نشد' : 'Download failed')); }
+    finally { setDocDlBusy(''); }
+  }, [docDlBusy, base, userId, fa]);
+
   const downloadDoc = useCallback(async (id: string, format: 'word' | 'pdf') => {
     if (docBusy) return;
     setDocBusy(format); setError('');
@@ -856,6 +913,70 @@ function Live({ lang, projectId, userId }: { lang: Lang; projectId: string; user
                       {docBusy === 'pdf' ? '…' : fa ? 'دانلود PDF' : 'Download PDF'}
                     </button>
                   </div>
+                </div>
+              </div>
+            )}
+
+            {/* ── فاز ۶: اسناد پشتیبان — آپلود/دانلود واقعی با sha256 ── */}
+            {detailTab === 'docs' && (
+              <div className="flex flex-col gap-3">
+                <div className="glass-dark rounded-xl p-4">
+                  <div className="mb-2 text-[11px] font-semibold tx1">{fa ? 'بارگذاری سند واقعی' : 'Upload real document'}</div>
+                  <div className="grid gap-2 md:grid-cols-4">
+                    <label className={labelCls}>{fa ? 'عنوان سند *' : 'Title *'}
+                      <input className={fieldCls} value={docForm.TitleFa} onChange={(e) => setDocForm({ ...docForm, TitleFa: e.target.value })} />
+                    </label>
+                    <label className={labelCls}>{fa ? 'نوع سند *' : 'Kind *'}
+                      <select className={fieldCls} value={docForm.Kind} onChange={(e) => setDocForm({ ...docForm, Kind: e.target.value })}>
+                        {Object.entries(DOC_KIND_FA).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                      </select>
+                    </label>
+                    <label className={labelCls}>{fa ? 'شمارهٔ سند' : 'Doc no'}<input className={fieldCls} value={docForm.DocNo} onChange={(e) => setDocForm({ ...docForm, DocNo: e.target.value })} /></label>
+                    <label className={labelCls}>{fa ? 'تاریخ سند' : 'Doc date'}<input type="date" className={fieldCls} value={docForm.DocDate} onChange={(e) => setDocForm({ ...docForm, DocDate: e.target.value })} /></label>
+                  </div>
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <input type="file" className="text-[10px] tx2"
+                      accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.json,.xml,.png,.jpg,.jpeg,.webp"
+                      onChange={(e) => setDocFile(e.target.files?.[0] ?? null)} />
+                    <button type="button" className={btnCls} disabled={docUpBusy || !docFile || docForm.TitleFa.trim().length < 3}
+                      onClick={() => void uploadDoc(r.Id)}>
+                      {docUpBusy ? (fa ? 'در حال بارگذاری…' : 'Uploading…') : (fa ? 'بارگذاری فایل + متادیتا' : 'Upload file + metadata')}
+                    </button>
+                    <span className="text-[9px] tx4">{fa ? 'حداکثر ۲۵MB — sha256 هنگام دانلود کنترل می‌شود' : 'Max 25MB — sha256 checked on download'}</span>
+                  </div>
+                </div>
+                <div className="glass-dark rounded-xl p-4">
+                  <div className="mb-2 text-[11px] font-semibold tx1">{fa ? 'دفتر اسناد این پرونده' : 'Document register'}</div>
+                  <div className="thin-scroll overflow-x-auto">
+                    <table className="w-full text-[10px] tx2">
+                      <thead><tr className="text-[9px] tx4">
+                        {[fa ? 'کد' : 'Code', fa ? 'عنوان' : 'Title', fa ? 'نوع' : 'Kind', fa ? 'فایل' : 'File', fa ? 'حجم' : 'Size', 'SHA-256', fa ? 'بارگذارنده' : 'By', fa ? 'دانلود' : 'Download'].map((h) => <th key={h} className="px-2 py-1.5 text-start">{h}</th>)}
+                      </tr></thead>
+                      <tbody>
+                        {(children.PmisChangeDocuments ?? []).map((doc) => {
+                          const hasFile = Boolean(doc.Sha256);
+                          return (
+                            <tr key={doc.Id} className="border-t b-line-soft">
+                              <td className="px-2 py-1.5">{String(doc.Code ?? '—')}</td>
+                              <td className="px-2 py-1.5">{String(doc.TitleFa ?? '—')}</td>
+                              <td className="px-2 py-1.5">{DOC_KIND_FA[String(doc.Kind)] ?? String(doc.Kind ?? '—')}</td>
+                              <td className="px-2 py-1.5">{hasFile ? String(doc.FileNameFa ?? '—') : (fa ? 'فقط متادیتا (بدون فایل)' : 'Metadata only')}</td>
+                              <td className="px-2 py-1.5">{hasFile && doc.SizeBytes ? `${Math.round(Number(doc.SizeBytes) / 1024)}KB` : '—'}</td>
+                              <td className="px-2 py-1.5 font-mono text-[8.5px]" title={String(doc.Sha256 ?? '')}>{hasFile ? `${String(doc.Sha256).slice(0, 12)}…` : '—'}</td>
+                              <td className="px-2 py-1.5">{String(doc.UploadedBy ?? '—')}</td>
+                              <td className="px-2 py-1.5">
+                                {hasFile
+                                  ? <button type="button" className={btnCls} disabled={docDlBusy === String(doc.Id)} onClick={() => void downloadDocFile(r.Id, String(doc.Id), String(doc.FileNameFa ?? 'document.bin'))}>{docDlBusy === String(doc.Id) ? '…' : (fa ? 'دانلود' : 'Download')}</button>
+                                  : <span className="text-[9px] tx4">—</span>}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                        {(children.PmisChangeDocuments ?? []).length === 0 && <tr><td colSpan={8} className="px-2 py-4 text-center tx4">—</td></tr>}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="mt-2 text-[9px] tx4">{fa ? 'متادیتا در PmisChangeDocuments (Zero-Regression)؛ بدنهٔ فایل جدا با کنترل شا۲۵۶ — راستی‌آزمایی آسیب‌دیدگی خودکار قبل از دانلود.' : ''}</div>
                 </div>
               </div>
             )}

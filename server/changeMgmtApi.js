@@ -44,8 +44,17 @@ import {
   LINK_KINDS,
   CHANGE_MGMT_KINDS,
   buildChangeManagementReport,
+  CHANGE_DOC_KINDS,
+  CHANGE_DOC_KIND_FA,
+  validateChangeUploadPayload,
+  changeSafeDocFileName,
+  publicChangeDocRow,
 } from "./changeMgmtLogic.js";
 import { buildChangeReport, CHANGE_REPORT_CHAPTERS, CHANGE_REPORT_TABLES } from "./changeDocLogic.js";
+import multer from "multer";
+import fs from "node:fs";
+import path from "node:path";
+import crypto from "node:crypto";
 
 const locks = new Map();
 async function serial(key, work) {
@@ -58,7 +67,26 @@ function error(status, code, message) { return Object.assign(new Error(message),
 
 const CHILD_SET = new Set(CHANGE_CHILD_TABLES);
 
-export function registerChangeMgmtRoutes(app, { repo, subjects, evaluate }) {
+export function registerChangeMgmtRoutes(app, { repo, subjects, evaluate, storageRoot, acceptedMimeTypes, maxFileBytes } = {}) {
+  /* فاز ۶ — ذخیرهٔ بدنهٔ سند روی دیسک؛ متادیتاهای کامل یافته در PmisChangeDocuments (Zero-Regression). */
+  const docDir = path.join(path.resolve(storageRoot || path.join(process.cwd(), "server", "storage")), "change");
+  fs.mkdirSync(docDir, { recursive: true });
+  const docUpload = multer({
+    storage: multer.diskStorage({
+      destination: (_req, _file, cb) => cb(null, docDir),
+      filename: (_req, _file, cb) => cb(null, `${Date.now()}-${crypto.randomUUID()}.bin`),
+    }),
+    limits: { fileSize: Number(maxFileBytes) > 0 ? Number(maxFileBytes) : 25 * 1024 * 1024, files: 1 },
+    fileFilter: (_req, file, cb) => {
+      if (acceptedMimeTypes instanceof Set && !acceptedMimeTypes.has(file.mimetype)) {
+        const e = new Error(`نوع فایل مجاز نیست: ${file.mimetype}`); e.code = "UNSUPPORTED_FILE_TYPE"; return cb(e);
+      }
+      cb(null, true);
+    },
+  });
+  const sha256File = (fp) => crypto.createHash("sha256").update(fs.readFileSync(fp)).digest("hex");
+  const fixUtf8 = (n) => { try { return Buffer.from(String(n || ""), "latin1").toString("utf8"); } catch { return String(n || ""); } };
+  const apiFail = (res, req, status, code, message) => res.status(status).json({ ok: false, error: { code, message, traceId: req.requestId } });
   const base = "/api/change-mgmt/:projectId";
   const can = (req, permission) => evaluate(req.chgSubject, permission, { projectId: req.params.projectId }).allow;
   const need = (perms) => (req, res, next) => {
@@ -96,6 +124,69 @@ export function registerChangeMgmtRoutes(app, { repo, subjects, evaluate }) {
       }, actor, "change");
     } catch { /* ممیزی فرعی شکستش جریان اصلی را متوقف نمی‌کند */ }
   };
+
+  /* ── فاز ۶: آپلود سند واقعی (multipart، متادیتا در PmisChangeDocuments، کنترل sha256) ── */
+  app.post(base + "/requests/:id/documents/upload", need("change.edit"), (req, res) => {
+    docUpload.single("file")(req, res, async (err) => {
+      const trace = () => req.requestId;
+      const cleanup = () => { if (req.file) fs.promises.unlink(req.file.path).catch(() => {}); };
+      if (err) {
+        const tooBig = err.code === "LIMIT_FILE_SIZE";
+        const badType = err.code === "UNSUPPORTED_FILE_TYPE";
+        return apiFail(res, req, tooBig ? 413 : badType ? 415 : 400,
+          tooBig ? "CHG_DOC_TOO_LARGE" : badType ? "CHG_DOC_TYPE" : "CHG_DOC_UPLOAD", err.message);
+      }
+      if (!req.file) return apiFail(res, req, 400, "CHG_DOC_NO_FILE", "فایلی در فیلد file ارسال نشده است");
+      try {
+        const checked = validateChangeUploadPayload(req.body ?? {});
+        if (!checked.ok) { cleanup(); return apiFail(res, req, 422, "CHG_DOC_VALIDATION", checked.error); }
+        const pid = req.params.projectId;
+        await serial(`change-mgmt:${pid}`, async () => {
+          const r = await repo();
+          const request = await findRequest(r, req); /* 404 CHG_NOT_FOUND */
+          const actor = String(req.chgSubject.id);
+          const fileNameFa = changeSafeDocFileName(fixUtf8(req.file.originalname));
+          const sha256 = sha256File(req.file.path);
+          const row = await r.create("PmisChangeDocuments", {
+            Code: newRecordCode("doc"), ChangeCode: request.Code, ProjectId: pid,
+            TitleFa: checked.fields.titleFa, Kind: checked.fields.kind,
+            DocNo: checked.fields.docNo, DocDate: checked.fields.docDate, NoteFa: checked.fields.noteFa,
+            FileRef: req.file.filename, FileNameFa: fileNameFa,
+            MimeType: req.file.mimetype, SizeBytes: req.file.size, Sha256: sha256,
+            UploadedBy: actor, UploadedAt: new Date().toISOString(),
+          }, actor, "change");
+          await audit(r, pid, request.Code, "document_uploaded", actor,
+            `بارگذاری فایل «${fileNameFa}» (${req.file.size} B, sha256 ${sha256.slice(0, 12)}…) به سند ${row.Code}`, null, checked.fields.kind);
+          res.status(201).json({ ok: true, data: { document: publicChangeDocRow(row) }, meta: { traceId: trace() } });
+        });
+      } catch (e) {
+        cleanup();
+        if (e?.status) return apiFail(res, req, e.status, e.code, e.message);
+        return apiFail(res, req, 500, "CHG_DOC_STORE", e.message);
+      }
+    });
+  });
+
+  /* ── فاز ۶: دانلود سند با راستی‌آزمایی sha256 — فایل دست‌نخورده پاس داده می‌شود ── */
+  app.get(base + "/requests/:id/documents/:docId/download", need("change.view"), async (req, res) => {
+    try {
+      const r = await repo();
+      const request = await findRequest(r, req); /* 404 CHG_NOT_FOUND */
+      const doc = (await listChild(r, "PmisChangeDocuments", req.params.projectId, request.Code))
+        .find((d) => String(d.Id) === String(req.params.docId));
+      if (!doc) return apiFail(res, req, 404, "CHG_DOC_NOT_FOUND", "سند در این پرونده یافت نشد");
+      if (!doc.FileRef || !doc.Sha256) return apiFail(res, req, 404, "CHG_DOC_NO_FILE", "این سند فقط متادیتا ثبت دارد و فایل بارگذاری‌شده‌ای ندارد");
+      const fp = path.join(docDir, path.basename(String(doc.FileRef)));
+      if (!fp.startsWith(docDir + path.sep) || !fs.existsSync(fp)) return apiFail(res, req, 404, "CHG_DOC_MISSING", "فایل سند روی دیسک نیست");
+      if (sha256File(fp) !== String(doc.Sha256)) return apiFail(res, req, 409, "CHG_DOC_CORRUPT", "یکپارچگی فایل سند با اثر ثبت‌شده تطابق ندارد — دانلود متوقف شد");
+      res.setHeader("x-doc-sha256", String(doc.Sha256));
+      res.type(String(doc.MimeType || "application/octet-stream"));
+      return res.download(fp, String(doc.FileNameFa || "document.bin"));
+    } catch (e) {
+      if (e?.status) return apiFail(res, req, e.status, e.code, e.message);
+      return apiFail(res, req, 500, "CHG_DOC_DOWNLOAD", e.message);
+    }
+  });
 
   /* ── کاتالوگ (فقط‌خواندنی) ── */
   app.get(base + "/catalog", (req, res) => {

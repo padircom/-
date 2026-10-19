@@ -646,7 +646,46 @@ export function isPostApproval(status: string): boolean {
 
 
 
-/* ═══════════════════ فاز ۵: ۱۴ گزارش مدیریتی ماژول تغییر (فقط‌خواندنی از دادهٔ واقعی) ═══════════════════ */
+/* ═══════════════════ فاز ۶: آپلود سند واقعی (متادیتا در PmisChangeDocuments، بدنه در دیسک، کنترل sha256) ═══════════════════ */
+
+export const CHANGE_DOC_KINDS = ["supporting", "decision", "instruction", "evidence", "correspondence"] as const;
+export type ChangeDocKind = (typeof CHANGE_DOC_KINDS)[number];
+export const CHANGE_DOC_KIND_FA: Record<ChangeDocKind, string> = {
+  supporting: "مستند پشتیبان", decision: "سند تصمیم CCB", instruction: "دستورکار اجرا",
+  evidence: "مدرک اجرایی", correspondence: "مکاتبه",
+};
+
+/** بدنهٔ آپلود سند (multipart fields به‌جز file). نتیجهٔ پاک‌سازی‌شده برای درج ردیف. */
+export interface ChangeUploadFields { titleFa: string; kind: ChangeDocKind; docNo: string | null; docDate: string | null; noteFa: string | null }
+const CHANGE_ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+export function validateChangeUploadPayload(b: Record<string, unknown>): ({ ok: true; fields: ChangeUploadFields } | { ok: false; error: string }) {
+  const titleFa = String(b.TitleFa ?? "").trim();
+  if (titleFa.length < 3 || titleFa.length > 400) return { ok: false, error: "عنوان سند باید بین ۳ تا ۴۰۰ نویسه باشد" };
+  const kind = String(b.Kind ?? "").trim();
+  if (!CHANGE_DOC_KINDS.includes(kind as ChangeDocKind)) return { ok: false, error: `نوع سند نامعتبر است — مقادیر مجاز: ${CHANGE_DOC_KINDS.join(", ")}` };
+  const docNoRaw = b.DocNo === undefined || b.DocNo === null ? "" : String(b.DocNo).trim();
+  if (docNoRaw.length > 60) return { ok: false, error: "شمارهٔ سند حداکثر ۶۰ نویسه است" };
+  const docDateRaw = b.DocDate === undefined || b.DocDate === null ? "" : String(b.DocDate).trim();
+  if (docDateRaw && !CHANGE_ISO_DATE.test(docDateRaw)) return { ok: false, error: "تاریخ سند باید YYYY-MM-DD باشد" };
+  const noteRaw = b.NoteFa === undefined || b.NoteFa === null ? "" : String(b.NoteFa).trim();
+  if (noteRaw.length > 1000) return { ok: false, error: "یادداشت حداکثر ۱۰۰۰ نویسه است" };
+  return { ok: true, fields: { titleFa, kind: kind as ChangeDocKind, docNo: docNoRaw || null, docDate: docDateRaw || null, noteFa: noteRaw || null } };
+}
+
+/** نام امن دانلود — حذف مسیر، نویسه‌های کنترلی و کاراکترهای ممنوعهٔ فایل‌سیستم (هوم‌الگوی dprDocApi). */
+export function changeSafeDocFileName(name: unknown): string {
+  const base = String(name === undefined || name === null ? "" : name).replace(/\\/g, "/").split("/").pop() || "";
+  const cleaned = base.replace(/[\u0000-\u001f"\\/:,*?<>|]+/g, "_").slice(-180);
+  return cleaned || "file.bin";
+}
+
+/** ردیف سند برای خروجی API — FileRef (کلید ذخیره‌سازی داخلی) هرگز نمایش داده نمی‌شود. */
+export function publicChangeDocRow<T extends Record<string, unknown>>(row: T): Omit<T, "FileRef"> {
+  const { FileRef: _internal, ...pub } = row;
+  return pub;
+}
+
+/* ── فاز ۵: ۱۴ گزارش مدیریتی ماژول تغییر (فقط‌خواندنی از دادهٔ واقعی) ── */
 
 export const CHANGE_MGMT_REPORTS = [
   { code: "requests_status", fa: "وضعیت پرونده‌ها و گردش‌کار" },

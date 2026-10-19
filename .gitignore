@@ -97,3 +97,4 @@ server/cmmsAiLogic.js
 
 # پیوست‌های DPR/CPMS زمان اجرا — داده است، نه کد
 server/storage/cpm-dpr/
+server/storage/change/

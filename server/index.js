@@ -1029,7 +1029,7 @@ registerContractRiskRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: r
 registerSchedReconRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
 registerDisputeExpertRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
 /* PMO-INTEGRATED-CHANGE-MANAGEMENT-V1.0: چرخهٔ تغییر — پیوندها نرم؛ تصمیم با SoD. */
-registerChangeMgmtRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
+registerChangeMgmtRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate, storageRoot, acceptedMimeTypes, maxFileBytes });
 registerEqmWorkspaceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
 registerMonitoringWorkspaceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
 registerStrategyExcellenceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });

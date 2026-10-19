@@ -938,7 +938,7 @@ export const SCHEMA: TableDef[] = [
     module: "d4",
     title: { fa: "سند پشتیبان تغییر", en: "Change supporting document" },
     pk: "Id",
-    columns: [id(), req("ProjectId", "text", { len: 60 }), req("ChangeCode", "text", { len: 40 }), req("Code", "text", { len: 40 }), req("TitleFa", "text", { len: 400 }), req("Kind", "text", { len: 20, comment: "supporting|decision|instruction|evidence|correspondence" }), c("DocRef", "text", { len: 80, comment: "پیوند نرم به EDMS" }), c("VersionFa", "text", { len: 60 }), c("DocDate", "date"), c("FileRef", "text", { len: 200 }), c("UploadedBy", "text", { len: 60 }), c("UploadedAt", "datetime"), c("NoteFa", "text", { len: 1000 })],
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("ChangeCode", "text", { len: 40 }), req("Code", "text", { len: 40 }), req("TitleFa", "text", { len: 400 }), req("Kind", "text", { len: 20, comment: "supporting|decision|instruction|evidence|correspondence" }), c("DocNo", "text", { len: 60 }), c("DocRef", "text", { len: 80, comment: "پیوند نرم به EDMS" }), c("VersionFa", "text", { len: 60 }), c("DocDate", "date"), c("FileRef", "text", { len: 200, comment: "کلید ذخیره‌سازی داخلی — هرگز در API نمایش داده نمی‌شود" }), c("FileNameFa", "text", { len: 300 }), c("MimeType", "text", { len: 100 }), c("SizeBytes", "int"), c("Sha256", "text", { len: 64, comment: "کنترل یکپارچگی فایل هنگام دانلود" }), c("UploadedBy", "text", { len: 60 }), c("UploadedAt", "datetime"), c("NoteFa", "text", { len: 1000 })],
     indexes: [{ name: "UX_PmisChangeDocuments_Code", columns: ["ProjectId", "ChangeCode", "Code"], unique: true }],
   },
   {
@@ -6925,6 +6925,12 @@ export const MIGRATIONS: Migration[] = [
      * بدون FK فیزیکی (Zero-Regression) و با گارد tableDef. */
     version: "0074", name: "pmis_change_management_tables",
     statements: ["PmisChangeRequests", "PmisChangeImpacts", "PmisChangeCostEstimates", "PmisChangeScheduleImpacts", "PmisChangeApprovals", "PmisChangeRiskLinks", "PmisChangeClaimLinks", "PmisChangeDocuments", "PmisChangeImplementation", "PmisChangeAuditTrail", "PmisChangeModuleLinks", "PmisChangeSettings"].flatMap((name) => { const table = tableDef(name); if (!table) throw new Error(`Missing table definition: ${name}`); return [tableDdl(table, "mssql"), ...(table.indexes ?? []).map((index) => indexDdl(table, index, "mssql"))]; }),
+  },
+  {
+    /* PMO-INTEGRATED-CHANGE-MANAGEMENT-V1.0 فاز ۶ — ستون‌های فایل واقعی سند.
+     * مهاجرت افزایشی با همان الگوی 0073؛ 0074 دست‌نخورده. */
+    version: "0075", name: "pmis_change_document_file_fields",
+    statements: ["DocNo", "FileNameFa", "MimeType", "SizeBytes", "Sha256"].map((col) => addColumnDdl("PmisChangeDocuments", col, "mssql")),
   },
 ];
 
