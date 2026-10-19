@@ -2207,8 +2207,8 @@ function DomainNavGroups({
 
             {procs.map((p, i) => (
               <div key={p.id}>
-                {/* فرآیند — آیتم هم‌سطح با الگوی MES: شماره + نشان + عنوان */}
-                <div className="flex w-full items-center gap-2 rounded-lg px-2 py-2 glass-row">
+                {/* فرآیند — سطر ساده (بدون کارت) با الگوی MES: شماره + نشان + عنوان */}
+                <div className="flex w-full items-center gap-2 rounded-lg px-2 py-2 transition hover:bg-[var(--row-hover)]">
                   <span className="text-[8px] font-light tabular-nums tx4">
                     {(i + 1).toLocaleString(rtl ? "fa-IR" : "en-US")}
                   </span>
@@ -2223,7 +2223,7 @@ function DomainNavGroups({
                     onClick={() => (isCurrent
                       ? onSelectSub(p.id, s.id)
                       : onOpenModuleSub(m.id, p.id, s.id))}
-                    className={`group flex w-full items-center gap-2 rounded-lg py-1.5 pe-2 ps-7 text-start transition hover:-translate-y-px glass-row ${
+                    className={`group flex w-full items-center gap-2 rounded-lg py-1.5 pe-2 ps-7 text-start transition hover:bg-[var(--row-hover)] ${
                       isCurrent && selectedSubId === s.id ? "row-on" : ""
                     }`}
                   >
