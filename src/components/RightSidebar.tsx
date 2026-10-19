@@ -10,7 +10,6 @@ import {
   type Bi,
   type Domain,
   type Lang,
-  type PerformanceDomainId,
   type Process,
 } from "../data/framework";
 import { useSystem } from "../context/SystemContext";
@@ -149,9 +148,9 @@ export default function RightSidebar({
     supportOpen: false,
   });
   const [query, setQuery] = useState("");
-  /* فیلتر «حوزهٔ عملکردی» PMBOK — ساختارِ سایدبار همان گروه‌های فرایندی
-   * می‌ماند و حوزهٔ عملکردی فقط محورِ فیلتر/برچسب است (نه درخت دوم). */
-  const [perfFilter, setPerfFilter] = useState<PerformanceDomainId | "all">("all");
+  /* لنزِ گروه‌بندی سایدبار: «گروه‌های فرایندی» (چرخهٔ حیات PMBOK) یا
+   * «حوزه‌های عملکردی» (محورهای کاری PMBOK). پیش‌فرض: چرخهٔ حیات. */
+  const [pmisLens, setPmisLens] = useState<"lifecycle" | "performance">("lifecycle");
   const [taxonomyOverrides, setTaxonomyOverrides] = useState<Record<string, Process[]>>({});
   const [sectionsOpen, setSectionsOpen] = useState<{
     pmis: boolean;
@@ -245,20 +244,24 @@ export default function RightSidebar({
     .filter((d) => d.id !== "d7" || can("system.manage"))
     .map((d) => taxonomyOverrides[d.id] ? { ...d, processes: taxonomyOverrides[d.id] } : d);
 
-  /* گروه‌های سایدبار همیشه گروه‌های فرایندی‌اند؛ «حوزهٔ عملکردی» فقط
-   * فیلتر است و ماژول از جای خودش (گروه فرایندی) تکان نمی‌خورد. */
-  const scopedDomains = perfFilter === "all"
-    ? visibleDomains
-    : visibleDomains.filter((d) => domainPerformance[d.id] === perfFilter);
-
-  const pmisGroups = sidebarGroups.map((g) => ({
-    id: g.id,
-    title: g.title,
-    icon: g.icon,
-    color: g.color,
-    pinned: Boolean(g.pinned),
-    members: scopedDomains.filter((d) => d.group === g.id),
-  }));
+  /* گروه‌های سایدبار بر پایهٔ لنز انتخابی: گروه فرایندی یا حوزهٔ عملکردی. */
+  const pmisGroups = pmisLens === "lifecycle"
+    ? sidebarGroups.map((g) => ({
+        id: g.id,
+        title: g.title,
+        icon: g.icon,
+        color: g.color,
+        pinned: Boolean(g.pinned),
+        members: visibleDomains.filter((d) => d.group === g.id),
+      }))
+    : performanceDomains.map((p) => ({
+        id: p.id,
+        title: p.title,
+        icon: p.icon,
+        color: p.color,
+        pinned: false,
+        members: visibleDomains.filter((d) => domainPerformance[d.id] === p.id),
+      }));
 
   const q = query.trim().toLowerCase();
   const matchesQuery = (d: Domain) => {
@@ -272,7 +275,7 @@ export default function RightSidebar({
     return q.split(/\s+/).every((part) => hay.includes(part));
   };
   const searching = q.length > 0;
-  const searchHits = searching ? scopedDomains.filter(matchesQuery) : [];
+  const searchHits = searching ? visibleDomains.filter(matchesQuery) : [];
 
   /* سطر دامنه عمداً کارت نیست: فهرست فشرده با جداکنندهٔ مویی.
    * حالت باز فقط با ته‌مایهٔ رنگ دامنه مشخص می‌شود. */
@@ -325,25 +328,6 @@ export default function RightSidebar({
                   </div>
                 </div>
               ))}
-            </div>
-
-            {/* جایگاه ماژول در دو محور PMBOK: حوزهٔ عملکردی و گروه فرایندی */}
-            <div className="flex flex-wrap items-center gap-1.5 px-1">
-              {perf && (
-                <span
-                  className="flex items-center gap-1 rounded-md border b-line-soft px-1.5 py-0.5 text-[8.5px] font-extralight"
-                  style={{ color: perf.color }}
-                >
-                  <span className="text-[9px] leading-none">{perf.icon}</span>
-                  {rtl ? `حوزهٔ عملکردی: ${t(perf.title, lang)}` : `Performance: ${t(perf.title, lang)}`}
-                </span>
-              )}
-              {life && (
-                <span className="flex items-center gap-1 rounded-md border b-line-soft px-1.5 py-0.5 text-[8.5px] font-extralight tx3">
-                  <span className="text-[9px] leading-none">{life.icon}</span>
-                  {rtl ? `گروه فرایندی: ${t(life.title, lang)}` : `Process group: ${t(life.title, lang)}`}
-                </span>
-              )}
             </div>
 
             {/* Mini navigation card */}
@@ -494,40 +478,22 @@ export default function RightSidebar({
 
               {sectionsOpen.pmis && (
                 <div className="fade-rise space-y-1 border-s-2 border-sky-500/30 ps-2 pt-0.5">
-                  {/* فیلتر حوزهٔ عملکردی PMBOK — فقط محورِ فیلتر است؛
-                      ماژول‌ها سرِ جای خودشان در گروه فرایندی می‌مانند. */}
-                  <div className="mb-1 flex flex-wrap items-center gap-1">
-                    <button
-                      type="button"
-                      onClick={() => setPerfFilter("all")}
-                      className={`shrink-0 rounded-full border px-1.5 py-0.5 text-[8.5px] leading-4 transition ${
-                        perfFilter === "all" ? "b-line-soft bg-[var(--row)] font-medium tx1" : "b-line-soft tx3 hover:tx1"
-                      }`}
-                    >
-                      {rtl ? "همه" : "All"}
-                    </button>
-                    {performanceDomains.map((p) => {
-                      const active = perfFilter === p.id;
-                      return (
-                        <button
-                          key={p.id}
-                          type="button"
-                          onClick={() => setPerfFilter(p.id)}
-                          title={rtl ? `حوزهٔ عملکردی: ${t(p.title, lang)}` : `Performance domain: ${t(p.title, lang)}`}
-                          className={`flex shrink-0 items-center gap-1 rounded-full border px-1.5 py-0.5 text-[8.5px] leading-4 transition ${
-                            active ? "font-medium" : "b-line-soft tx3 hover:tx1"
-                          }`}
-                          style={active
-                            ? { background: `${p.color}22`, borderColor: `${p.color}66`, color: p.color }
-                            : undefined}
-                        >
-                          <span className="text-[10px] leading-none">{p.icon}</span>
-                          {p.id === "extension"
-                            ? (rtl ? "افزونه‌ها" : "Extensions")
-                            : t(p.title, lang)}
-                        </button>
-                      );
-                    })}
+                  {/* انتخاب لنز گروه‌بندی: چرخهٔ حیات (گروه فرایندی) یا حوزهٔ عملکردی PMBOK */}
+                  <div className="mb-1 flex items-center gap-1 rounded-lg bg-black/20 p-0.5">
+                    {(["lifecycle", "performance"] as const).map((k) => (
+                      <button
+                        key={k}
+                        type="button"
+                        onClick={() => setPmisLens(k)}
+                        className={`flex-1 rounded-md px-1.5 py-1 text-[9.5px] leading-4 transition ${
+                          pmisLens === k ? "bg-[var(--row)] font-medium tx1" : "tx3 hover:tx2"
+                        }`}
+                      >
+                        {k === "lifecycle"
+                          ? (rtl ? "گروه‌های فرایندی" : "Process Groups")
+                          : (rtl ? "حوزه‌های عملکردی" : "Performance Domains")}
+                      </button>
+                    ))}
                   </div>
 
                   {pmisGroups.map((g) => {
