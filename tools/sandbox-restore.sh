@@ -7,11 +7,21 @@ cd "$(dirname "$0")/.."
 echo "── git sync"
 # نکتهٔ حیاتی: reset --hard ویرایش‌های uncommitted را نابود می‌کند.
 # فقط وقتی hard لازم است که working tree نسبت به origin پشت باشد؛ در غیراین صورت mixed.
-git fetch origin arena/a94888dd-repo --quiet
-if git diff --quiet HEAD origin/arena/a94888dd-repo -- 2>/dev/null && [ -z "$(git status --porcelain | grep -v '^??')" ]; then
-  git reset --hard origin/arena/a94888dd-repo --quiet
+#
+# مبنای همگام‌سازی = شاخهٔ جاری همین نشست (نه شاخهٔ نشست‌های قبلی).
+# اگر شاخهٔ جاری در origin نبود، به main برمی‌گردیم. این کار جلوی
+# «reset --hard به شاخهٔ غریبه و از دست رفتن کار نشست» را می‌گیرد.
+BRANCH="$(git rev-parse --abbrev-ref HEAD)"
+git fetch origin "$BRANCH" --quiet 2>/dev/null || git fetch origin main --quiet
+TARGET="origin/$BRANCH"
+if ! git rev-parse --verify --quiet "$TARGET" >/dev/null; then
+  TARGET="origin/main"
+fi
+echo "  شاخه: $BRANCH · مبنا: $TARGET"
+if git diff --quiet HEAD "$TARGET" -- 2>/dev/null && [ -z "$(git status --porcelain | grep -v '^??')" ]; then
+  git reset --hard "$TARGET" --quiet
 else
-  git reset origin/arena/a94888dd-repo --quiet 2>/dev/null || true
+  git reset "$TARGET" --quiet 2>/dev/null || true
   echo "  !! working tree دارای تغییرات uncommitted است — hard reset انجام نشد"
 fi
 git log --oneline -1
