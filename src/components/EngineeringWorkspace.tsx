@@ -4,6 +4,7 @@ import { useAuth } from "../context/AuthContext";
 import { useCurrentProjectId } from "../context/SystemContext";
 import { logAudit } from "../services/auditLogger";
 import SystemBadge from "./SystemBadge";
+import ModuleWorkspaceShell from "./ModuleWorkspaceShell";
 import {
   DISCIPLINE_FA,
   DISCIPLINES,
@@ -18,13 +19,28 @@ import {
 /* شش تب = شش زیرماژول «مدیریت مهندسی و طراحی» */
 export type EngTab = "mdr" | "review" | "idc" | "field" | "vendor" | "dashboard";
 
-const TABS: { id: EngTab; fa: string; en: string; icon: string }[] = [
-  { id: "mdr", fa: "فهرست مدارک", en: "Document Register", icon: "📋" },
-  { id: "review", fa: "بررسی و نظرات", en: "Review & CRS", icon: "✍️" },
-  { id: "idc", fa: "بین‌دیسیپلینی", en: "Inter-Discipline", icon: "🔗" },
-  { id: "field", fa: "تغییرات کارگاهی", en: "Field Changes", icon: "🏗" },
-  { id: "vendor", fa: "مدارک سازندگان", en: "Vendor Prints", icon: "🏭" },
-  { id: "dashboard", fa: "پیشرفت و شاخص‌ها", en: "Progress & KPIs", icon: "📈" },
+/**
+ * دسته‌بندی سایدبار داخلی «مدیریت مهندسی و طراحی» — همان ریتم
+ * سایدبار «نگهداری و تعمیرات» (CMMS): چند دسته، و هر بخش یک آیتم
+ * با آیکن اختصاصی و شمارهٔ فارسی.
+ */
+const ENG_NAV_GROUPS = {
+  documents: { fa: "مدارک و طراحی", en: "Documents & Design" },
+  execution: { fa: "اجرا و تحویل", en: "Execution & Delivery" },
+  monitoring: { fa: "پایش و شاخص", en: "Monitoring & KPIs" },
+} as const;
+type EngNavGroupId = keyof typeof ENG_NAV_GROUPS;
+
+/** رنگ تأکیدی ماژول مهندسی (هم‌رنگ d12). */
+const ENG_ACCENT = "#A78BFA";
+
+const TABS: { id: EngTab; fa: string; en: string; icon: string; group: EngNavGroupId }[] = [
+  { id: "mdr", fa: "فهرست مدارک", en: "Document Register", icon: "📋", group: "documents" },
+  { id: "review", fa: "بررسی و نظرات", en: "Review & CRS", icon: "✍️", group: "documents" },
+  { id: "idc", fa: "بین‌دیسیپلینی", en: "Inter-Discipline", icon: "🔗", group: "documents" },
+  { id: "field", fa: "تغییرات کارگاهی", en: "Field Changes", icon: "🏗", group: "execution" },
+  { id: "vendor", fa: "مدارک سازندگان", en: "Vendor Prints", icon: "🏭", group: "execution" },
+  { id: "dashboard", fa: "پیشرفت و شاخص‌ها", en: "Progress & KPIs", icon: "📈", group: "monitoring" },
 ];
 
 
@@ -607,33 +623,33 @@ export default function EngineeringWorkspace({ lang, onBack }: Props) {
     ];
   }, [overview, alerts]);
 
-  return (
-    <div className="flex h-full min-h-0 flex-col gap-3 overflow-hidden" dir={rtl ? "rtl" : "ltr"}>
-      {/* نوار بالا */}
-      <div className="glass flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl px-3 py-2.5">
-        <button
-          onClick={onBack}
-          className="glass-row flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-[10.5px] font-light tx2 transition hover:tx1"
-        >
-          {rtl ? "→ بازگشت" : "← Back"}
-        </button>
-        <div className="flex min-w-0 flex-1 items-center gap-2">
-          <span className="text-lg">📐</span>
-          <div className="min-w-0">
-            <div className="truncate text-[12px] font-light tx1">
-              {rtl ? "مدیریت مهندسی و طراحی" : "Engineering & Design Management"}
-            </div>
-            <div className="truncate text-[9.5px] font-light tx3">
-              {rtl ? `موتور ${ENG_VERSION} · دامنه d12` : `${ENG_VERSION} · domain d12`}
-            </div>
-            <SystemBadge domainId="d12" lang={lang} className="mt-1" />
-          </div>
-        </div>
-        {loading && <span className="text-[10px] font-light tx3">{rtl ? "در حال بارگذاری…" : "Loading…"}</span>}
-      </div>
+  const activeTab = TABS.find((t) => t.id === tab);
 
+  return (
+    <ModuleWorkspaceShell
+      lang={lang}
+      accent={ENG_ACCENT}
+      icon="📐"
+      title={rtl ? "مدیریت مهندسی و طراحی" : "Engineering & Design Management"}
+      subtitle={rtl ? `موتور ${ENG_VERSION} · دامنه d12` : `${ENG_VERSION} · domain d12`}
+      badges={<SystemBadge domainId="d12" lang={lang} />}
+      actions={loading ? <span className="text-[10px] font-light tx3">{rtl ? "در حال بارگذاری…" : "Loading…"}</span> : undefined}
+      onBack={onBack}
+      navTitle={rtl ? "حوزهٔ عملکردی: محدوده" : "Performance domain: Scope"}
+      navIcon="🎯"
+      navItems={TABS.map((t) => ({
+        id: t.id,
+        label: rtl ? t.fa : t.en,
+        icon: t.icon,
+        group: rtl ? ENG_NAV_GROUPS[t.group].fa : ENG_NAV_GROUPS[t.group].en,
+      }))}
+      activeId={tab}
+      onSelect={(next) => setTab(next)}
+      panelTitle={activeTab ? (rtl ? activeTab.fa : activeTab.en) : undefined}
+      panelIcon={activeTab?.icon}
+    >
       {/* شاخص‌های سرصفحه */}
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+      <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
         {headline.map((h) => (
           <div key={h.fa} className="glass rounded-xl px-3 py-2.5">
             <div className="text-[9px] font-light tx3">{h.fa}</div>
@@ -642,32 +658,14 @@ export default function EngineeringWorkspace({ lang, onBack }: Props) {
         ))}
       </div>
 
-      {/* تب‌ها */}
-      <div className="glass flex flex-wrap gap-1 rounded-2xl p-1.5">
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            onClick={() => setTab(t.id)}
-            className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-[10.5px] font-light transition ${
-              tab === t.id ? "glass-row tx1" : "tx3 hover:tx2"
-            }`}
-          >
-            <span>{t.icon}</span>
-            <span>{rtl ? t.fa : t.en}</span>
-          </button>
-        ))}
-      </div>
-
       {/* محتوا */}
-      <div className="min-h-0 flex-1 overflow-auto pb-4">
-        {tab === "mdr" && <MdrTab rtl={rtl} data={mdr} userId={userId} onSaved={loadAll} />}
-        {tab === "review" && <ReviewTab rtl={rtl} aging={aging} crs={crs} mdr={mdr} userId={userId} onSaved={loadAll} />}
-        {tab === "idc" && <IdcTab rtl={rtl} data={idc} />}
-        {tab === "field" && <FieldTab rtl={rtl} data={tq} userId={userId} onSaved={loadAll} />}
-        {tab === "vendor" && <VendorTab rtl={rtl} data={vpr} procurement={procurement} />}
-        {tab === "dashboard" && <DashboardTab rtl={rtl} overview={overview} kpis={kpis} alerts={alerts} coverage={coverage} poAudit={poAudit} userId={userId} onApplied={loadAll} />}
-      </div>
-    </div>
+      {tab === "mdr" && <MdrTab rtl={rtl} data={mdr} userId={userId} onSaved={loadAll} />}
+      {tab === "review" && <ReviewTab rtl={rtl} aging={aging} crs={crs} mdr={mdr} userId={userId} onSaved={loadAll} />}
+      {tab === "idc" && <IdcTab rtl={rtl} data={idc} />}
+      {tab === "field" && <FieldTab rtl={rtl} data={tq} userId={userId} onSaved={loadAll} />}
+      {tab === "vendor" && <VendorTab rtl={rtl} data={vpr} procurement={procurement} />}
+      {tab === "dashboard" && <DashboardTab rtl={rtl} overview={overview} kpis={kpis} alerts={alerts} coverage={coverage} poAudit={poAudit} userId={userId} onApplied={loadAll} />}
+    </ModuleWorkspaceShell>
   );
 }
 
