@@ -3,8 +3,6 @@ import type { ReactNode } from "react";
 import {
   domains,
   sidebarGroups,
-  performanceDomains,
-  domainPerformance,
   ui,
   t,
   type Bi,
@@ -148,9 +146,6 @@ export default function RightSidebar({
     supportOpen: false,
   });
   const [query, setQuery] = useState("");
-  /* لنزِ گروه‌بندی سایدبار: «گروه‌های فرایندی» (چرخهٔ حیات PMBOK) یا
-   * «حوزه‌های عملکردی» (محورهای کاری PMBOK). پیش‌فرض: چرخهٔ حیات. */
-  const [pmisLens, setPmisLens] = useState<"lifecycle" | "performance">("lifecycle");
   const [taxonomyOverrides, setTaxonomyOverrides] = useState<Record<string, Process[]>>({});
   const [sectionsOpen, setSectionsOpen] = useState<{
     pmis: boolean;
@@ -244,25 +239,6 @@ export default function RightSidebar({
     .filter((d) => d.id !== "d7" || can("system.manage"))
     .map((d) => taxonomyOverrides[d.id] ? { ...d, processes: taxonomyOverrides[d.id] } : d);
 
-  /* گروه‌های سایدبار بر پایهٔ لنز انتخابی: گروه فرایندی یا حوزهٔ عملکردی. */
-  const pmisGroups = pmisLens === "lifecycle"
-    ? sidebarGroups.map((g) => ({
-        id: g.id,
-        title: g.title,
-        icon: g.icon,
-        color: g.color,
-        pinned: Boolean(g.pinned),
-        members: visibleDomains.filter((d) => d.group === g.id),
-      }))
-    : performanceDomains.map((p) => ({
-        id: p.id,
-        title: p.title,
-        icon: p.icon,
-        color: p.color,
-        pinned: false,
-        members: visibleDomains.filter((d) => domainPerformance[d.id] === p.id),
-      }));
-
   const q = query.trim().toLowerCase();
   const matchesQuery = (d: Domain) => {
     if (!q) return true;
@@ -281,12 +257,6 @@ export default function RightSidebar({
    * حالت باز فقط با ته‌مایهٔ رنگ دامنه مشخص می‌شود. */
   const renderDomain = (d: Domain) => {
     const domainOpen = openDomain === d.id;
-    /* یادداشت دو-لنزی: هر ماژول هم حوزهٔ عملکردی و هم گروه فرایندی خود را دارد. */
-    const perf = performanceDomains.find((p) => p.id === domainPerformance[d.id]);
-    const life = sidebarGroups.find((g) => g.id === d.group);
-    const lensNote = rtl
-      ? `حوزهٔ عملکردی: ${perf ? t(perf.title, lang) : "—"} · گروه فرایندی: ${life ? t(life.title, lang) : "—"}`
-      : `Performance domain: ${perf ? t(perf.title, lang) : "—"} · Process group: ${life ? t(life.title, lang) : "—"}`;
     return (
       <div key={d.id} className="border-b b-line-soft last:border-b-0">
         {/* Domain row (level 1) */}
@@ -301,7 +271,7 @@ export default function RightSidebar({
           <h3
             className="min-w-0 flex-1 truncate text-[11px] font-normal leading-4"
             style={{ color: d.accent }}
-            title={`${t(d.title, lang)} — ${lensNote}`}
+            title={t(d.title, lang)}
           >
             {t(d.nav ?? d.title, lang)}
           </h3>
@@ -478,26 +448,8 @@ export default function RightSidebar({
 
               {sectionsOpen.pmis && (
                 <div className="fade-rise space-y-1 border-s-2 border-sky-500/30 ps-2 pt-0.5">
-                  {/* انتخاب لنز گروه‌بندی: چرخهٔ حیات (گروه فرایندی) یا حوزهٔ عملکردی PMBOK */}
-                  <div className="mb-1 flex items-center gap-1 rounded-lg bg-black/20 p-0.5">
-                    {(["lifecycle", "performance"] as const).map((k) => (
-                      <button
-                        key={k}
-                        type="button"
-                        onClick={() => setPmisLens(k)}
-                        className={`flex-1 rounded-md px-1.5 py-1 text-[9.5px] leading-4 transition ${
-                          pmisLens === k ? "bg-[var(--row)] font-medium tx1" : "tx3 hover:tx2"
-                        }`}
-                      >
-                        {k === "lifecycle"
-                          ? (rtl ? "گروه‌های فرایندی" : "Process Groups")
-                          : (rtl ? "حوزه‌های عملکردی" : "Performance Domains")}
-                      </button>
-                    ))}
-                  </div>
-
-                  {pmisGroups.map((g) => {
-                    const members = g.members;
+                  {sidebarGroups.map((g) => {
+                    const members = visibleDomains.filter((d) => d.group === g.id);
                     if (!members.length) return null;
                     const isOpen = g.pinned ? supportOpen : openGroup === g.id;
                     return (
