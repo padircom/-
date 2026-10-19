@@ -25,12 +25,10 @@ import { createPortal } from "react-dom";
 import type { Lang } from "../data/framework";
 import { parseClauses, sourceRefFa, type ParsedClause } from "../services/clauseParser";
 import {
-  TEMPLATE_PROFILES,
   detectGlossaryTerms,
   detectLanguage,
   offlineGlossaryTranslate,
   seedFromTemplate,
-  type TemplateKind,
 } from "../services/ogWbs";
 import { useSystem } from "../context/SystemContext";
 import {
@@ -137,12 +135,10 @@ export default function ContractWorkshop({ lang, projectCode = "PRJ", projectTit
   const [templateId] = useState<string>(seed.templateId);
   const [exportOpen, setExportOpen] = useState(false);
   const [exportId, setExportId] = useState("pdf");
-  const [templateOpen, setTemplateOpen] = useState(false);
+  const [, setTemplateOpen] = useState(false);
   const exportAnchor = useRef<HTMLButtonElement>(null);
-  const templateAnchor = useRef<HTMLButtonElement>(null);
   const [command, setCommand] = useState("");
   const [history, setHistory] = useState<HistoryEntry[]>([]);
-  const [templateKind, setTemplateKind] = useState<TemplateKind>("internal");
 
   /* ── خروجی استخراج ── */
   const [nodes, setNodes] = useState<ExportNode[]>(seed.nodes as ExportNode[]);
@@ -420,8 +416,6 @@ export default function ContractWorkshop({ lang, projectCode = "PRJ", projectTit
     });
   };
 
-  const onExtract = () => runExtract(rawText);
-
   /* خروجی JSON مدل را به گره‌های WBS تبدیل می‌کند؛ عمق از زنجیرهٔ والد
    * حساب می‌شود (تا ۸). هر خروجی ناقص/نامعتبر null برمی‌گرداند تا
    * کف قاعده‌محور بی‌صدا جای آن بنشیند. */
@@ -469,7 +463,10 @@ export default function ContractWorkshop({ lang, projectCode = "PRJ", projectTit
       setNote({ kind: "err", text: rtl ? "متنی برای استخراج نیست." : "Nothing to extract." });
       return;
     }
-    if (provider === "mock" || provider === "rule" || !secret.trim()) {
+    /* «rule» در این لایه ارائه‌دهنده نیست (ارائه‌دهندگان: arena/openai/deepseek/local/mock
+     * و «local» سمت سرور به موتور قاعده‌محور نگاشت می‌شود) ⇒ این شاخه همان
+     * مسیر «mock» یا نبودِ کلید API است. */
+    if (provider === "mock" || !secret.trim()) {
       runExtract(source);
       setNote({
         kind: "warn",

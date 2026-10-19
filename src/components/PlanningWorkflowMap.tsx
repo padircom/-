@@ -180,7 +180,7 @@ export default function PlanningWorkflowMap({
           <div className={arrow}>←</div>
           <NodeBox node={{ titleFa: "جلسات بازبینی", titleEn: "Review meetings", subFa: "هفتگی و ماهانه", subEn: "Weekly and monthly", tab: "alerts", kind: "proc" }} rtl={rtl} onNavigate={onNavigate} />
           <div className={arrow}>→</div>
-          <NodeBox node={{ titleFa: "کارفرما و PMO", titleEn: "Client and PMO", subFa: "بازبینی و تأیید وضعیت", subEn: "Status review", tab: "reports", kind: "io" }} rtl={rtl} onNavigate={onNavigate} />
+          <NodeBox node={{ titleFa: "کارفرما و PMO", titleEn: "Client and PMO", subFa: "بازبینی و تأیید وضعیت", subEn: "Status review", tab: "mpr", kind: "io" }} rtl={rtl} onNavigate={onNavigate} />
         </div>
         <p className="mt-2 text-center text-[9.5px] text-[#7a8a84]">
           {rtl ? "↺ اقدام‌های جبرانی دوباره به‌عنوان ورودی به گزارش‌های سایت و چرخهٔ به‌روزرسانی برمی‌گردد." : "↺ Recovery actions feed back into site reports and the next update cycle."}

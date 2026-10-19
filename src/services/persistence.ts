@@ -6877,12 +6877,12 @@ export const MIGRATIONS: Migration[] = [
     version: "0064", name: "rcc_reserve_issue_ews_live",
     statements: [
       ...["ReserveAmount", "ReserveUsedAmount", "ReserveStatus", "NextReviewDate", "LastReviewedAt", "LastReviewedBy", "MonitoringNote"].map((col) => addColumnDdl("Risk", col, "mssql")),
-      ...(() => { const table = tableDef("RccIssue"); return [tableDdl(table, "mssql"), ...(table.indexes ?? []).map((index) => indexDdl(table, index, "mssql"))]; })(),
+      ...(() => { const table = tableDef("RccIssue"); if (!table) throw new Error(`Missing table definition: RccIssue`); return [tableDdl(table, "mssql"), ...(table.indexes ?? []).map((index) => indexDdl(table, index, "mssql"))]; })(),
     ],
   },
   {
     version: "0065", name: "delay_events_and_calculations",
-    statements: ["DelayEvent", "DelayCalculation"].flatMap((name) => { const table = tableDef(name); return [tableDdl(table, "mssql"), ...(table.indexes ?? []).map((index) => indexDdl(table, index, "mssql"))]; }),
+    statements: ["DelayEvent", "DelayCalculation"].flatMap((name) => { const table = tableDef(name); if (!table) throw new Error(`Missing table definition: ${name}`); return [tableDdl(table, "mssql"), ...(table.indexes ?? []).map((index) => indexDdl(table, index, "mssql"))]; }),
   },
   {
     version: "0066", name: "delay_event_edms_document_refs",
@@ -6890,7 +6890,7 @@ export const MIGRATIONS: Migration[] = [
   },
   {
     version: "0067", name: "claim_cost_items",
-    statements: [(() => { const table = tableDef("ClaimCostItem"); return [tableDdl(table, "mssql"), ...(table.indexes ?? []).map((index) => indexDdl(table, index, "mssql"))]; })()].flat(),
+    statements: [(() => { const table = tableDef("ClaimCostItem"); if (!table) throw new Error(`Missing table definition: ClaimCostItem`); return [tableDdl(table, "mssql"), ...(table.indexes ?? []).map((index) => indexDdl(table, index, "mssql"))]; })()].flat(),
   },
   {
     version: "0068", name: "claim_loss_engine_tables",

@@ -1300,6 +1300,13 @@ function MonthlyOverallProgressSheet({
   return (
     <MonthlySheet title={fa ? "پیشرفت کلی پروژه فیزیکی / ریالی" : "Overall physical / cost progress"} dense>
       <div className="h-full overflow-hidden bg-white font-sans text-[8px] text-[#152536]">
+        {/* شناسنامهٔ شیت — مثل بقیهٔ شیت‌های گزارش: پروژه، شمارهٔ گزارش و دوره.
+            مقدار خالی «—» می‌ماند (قاعدهٔ سلول خالی) و چیزی ساخته نمی‌شود. */}
+        <div className="mb-1 flex flex-wrap items-center justify-between gap-x-4 border-b border-[#8aa4bc] pb-1 text-[9.5px] text-[#2f5570]">
+          <span>{fa ? `پروژه: ${cover.projectTitle || "—"}` : `Project: ${cover.projectTitle || "—"}`}</span>
+          <span>{fa ? `شمارهٔ گزارش: ${cover.reportNo || "—"}` : `Report no.: ${cover.reportNo || "—"}`}</span>
+          <span>{fa ? `دوره: ${digits(cover.periodStart, fa)} تا ${digits(cover.periodEnd, fa)}` : `Period: ${digits(cover.periodStart, fa)} to ${digits(cover.periodEnd, fa)}`}</span>
+        </div>
         {renderTable(
           fa ? "پیشرفت کلی - ساختار شکست سطح-۲ فیزیکی" : "Overall progress — WBS level-2 physical",
           headers,

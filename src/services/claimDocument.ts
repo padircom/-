@@ -1,5 +1,5 @@
 import { escapeHtml, toPrintHtml, toWordHtml, type Letterhead, type ReportDef, type Row } from './reporting';
-import { selectApprovedExtensionCalculations, buildConcurrencyTimeline, concurrencyTimelineSvg, delayPartyOf } from './delayAnalysis';
+import { selectApprovedExtensionCalculations, buildConcurrencyTimeline, concurrencyTimelineSvg } from './delayAnalysis';
 
 export type ClaimDocumentInput = {
   projectId: string;
