@@ -2191,7 +2191,7 @@ function DomainNavGroups({
           : (domains.find((x) => x.id === m.id)?.processes ?? []);
         return (
           <div key={m.id}>
-            {/* سرِ دستهٔ ماژول (فعال = رنگ ماژول) */}
+            {/* سرِ دستهٔ ماژول (فعال = رنگ ماژول) — ریتم سایدبار «برنامه‌ریزی و تولید» */}
             <div
               className="flex items-center gap-1.5 px-2 pb-0.5 pt-3 text-[9px] font-semibold tracking-wide"
               style={{ color: isCurrent ? m.accent : undefined }}
@@ -2204,31 +2204,33 @@ function DomainNavGroups({
               </span>
               <span className="h-px flex-1" style={{ background: "var(--line-soft)" }} aria-hidden="true" />
             </div>
+
             {procs.map((p, i) => (
-              <div key={p.id} className="rounded-xl border b-line-soft bg-black/10 p-1.5">
-                <div className="flex items-center gap-1.5 px-1 py-1">
+              <div key={p.id}>
+                {/* فرآیند — آیتم هم‌سطح با الگوی MES: شماره + نشان + عنوان */}
+                <div className="flex w-full items-center gap-2 rounded-lg px-2 py-2 glass-row">
                   <span className="text-[8px] font-light tabular-nums tx4">
                     {(i + 1).toLocaleString(rtl ? "fa-IR" : "en-US")}
                   </span>
-                  <span className="text-[10.5px] font-normal" style={{ color: m.accent }}>{t(p.title, lang)}</span>
+                  <span className="shrink-0 text-[11px] leading-none" style={{ color: m.accent }} aria-hidden="true">▪</span>
+                  <span className="min-w-0 flex-1 truncate text-[10px] font-light tx1">{t(p.title, lang)}</span>
                 </div>
-                <div className="mt-1 space-y-1">
-                  {p.subs.map((s) => (
-                    <button
-                      key={s.id}
-                      type="button"
-                      onClick={() => (isCurrent
-                        ? onSelectSub(p.id, s.id)
-                        : onOpenModuleSub(m.id, p.id, s.id))}
-                      className={`group flex w-full items-start gap-2 rounded-lg px-2 py-2 text-start transition hover:-translate-y-px glass-row ${
-                        isCurrent && selectedSubId === s.id ? "row-on" : ""
-                      }`}
-                    >
-                      <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: m.accent }} />
-                      <span className="min-w-0 flex-1 truncate text-[10px] font-light tx1">{t(s.title, lang)}</span>
-                    </button>
-                  ))}
-                </div>
+                {/* زیرفرآیندها — تودرتو، با حالت انتخاب‌شده */}
+                {p.subs.map((s) => (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => (isCurrent
+                      ? onSelectSub(p.id, s.id)
+                      : onOpenModuleSub(m.id, p.id, s.id))}
+                    className={`group flex w-full items-center gap-2 rounded-lg py-1.5 pe-2 ps-7 text-start transition hover:-translate-y-px glass-row ${
+                      isCurrent && selectedSubId === s.id ? "row-on" : ""
+                    }`}
+                  >
+                    <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: m.accent }} />
+                    <span className="min-w-0 flex-1 truncate text-[10px] font-light tx1">{t(s.title, lang)}</span>
+                  </button>
+                ))}
               </div>
             ))}
           </div>
