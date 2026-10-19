@@ -424,6 +424,12 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
   const { clusters, projectsByCluster } = useSystem();
   const { user, can, audit } = useAuth();
   const dom = domains.find((d) => d.id === target.moduleId);
+  /* سربرگ سایدبار فرعی = حوزهٔ عملکردیِ ماژول (برای ماژول‌های حوزه‌دار). */
+  const domPerf = performanceDomainOf(dom?.id ?? "");
+  const domPerfIcon = domPerf?.icon ?? dom?.icon;
+  const domPerfTitle = domPerf
+    ? (rtl ? `حوزهٔ عملکردی: ${t(domPerf.title, lang)}` : `Performance domain: ${t(domPerf.title, lang)}`)
+    : (dom ? t(dom.title, lang) : "");
   const cluster = clusters.find((c) => c.id === target.clusterId);
   const project = (projectsByCluster[target.clusterId] ?? []).find((p) => p.id === target.projectId);
   const [selected, setSelected] = useState<{ pId: string; sId: string } | null>(
@@ -1689,9 +1695,9 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
               <div className="flex items-center gap-2">
                 <span className="grid h-6 w-6 place-items-center rounded-md text-[12px]"
                       style={{ background: `${dom.accent}1a`, border: `1px solid ${dom.accent}55`, color: dom.accent }}>
-                  {dom.icon}
+                  {domPerfIcon}
                 </span>
-                <div className="text-[10.5px] font-normal tx1">{t(dom.title, lang)}</div>
+                <div className="text-[10.5px] font-normal tx1">{domPerfTitle}</div>
               </div>
             </div>
             <div className="thin-scroll flex-1 overflow-y-auto p-2 space-y-1">
@@ -1788,10 +1794,10 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
             <div className="b-line border-b px-3 py-2.5">
               <div className="flex items-center gap-2">
                 <span className="grid h-6 w-6 place-items-center rounded-md text-[12px]" style={{ background: `${dom.accent}1a`, border: `1px solid ${dom.accent}55`, color: dom.accent }}>
-                  {dom.icon}
+                  {domPerfIcon}
                 </span>
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-[10.5px] font-normal tx1">{t(dom.title, lang)}</div>
+                  <div className="truncate text-[10.5px] font-normal tx1">{domPerfTitle}</div>
                   <div className="text-[8.5px] tx4">{rtl ? "فرآیندها و زیرفرایندها" : "Processes & sub-processes"} · {activeProcesses.length.toLocaleString(rtl ? "fa-IR" : "en-US")} · {activeProcesses.reduce((n, p) => n + p.subs.length, 0).toLocaleString(rtl ? "fa-IR" : "en-US")}</div>
                 </div>
               </div>
@@ -2177,12 +2183,7 @@ function DomainNavGroups({
   if (mods.length < 2) return null;
   return (
     <>
-      {/* سرِ دستهٔ حوزهٔ عملکردی — مدل سایدبار فرعی «برنامه‌ریزی و تولید» */}
-      <div className="flex items-center gap-1.5 px-2 pb-0.5 pt-1 text-[9px] font-semibold tracking-wide tx3" role="presentation">
-        <span className="h-px flex-1" style={{ background: "var(--line-soft)" }} aria-hidden="true" />
-        <span>{rtl ? `حوزهٔ عملکردی: ${t(pd.title, lang)}` : `Performance domain: ${t(pd.title, lang)}`}</span>
-        <span className="h-px flex-1" style={{ background: "var(--line-soft)" }} aria-hidden="true" />
-      </div>
+      {/* عنوان حوزهٔ عملکردی در سربرگ سایدبار آمده است؛ اینجا سرِ دستهٔ هر ماژول می‌آید. */}
       {mods.map((m) => {
         const isCurrent = m.id === dom.id;
         const procs = isCurrent
