@@ -743,7 +743,7 @@ export default function RightSidebar({
               >
                 <span className="text-[12px]">👥</span>
                 <span className="min-w-0 flex-1 truncate text-[11px] font-semibold">
-                  {rtl ? "مدیریت منابع انسانی و کارکرد (HRM)" : "Human Resource Management (HRM)"}
+                  {rtl ? "مدیریت منابع انسانی و کارکرد" : "Human Resource Management"}
                 </span>
                 <svg
                   viewBox="0 0 24 24"
@@ -800,7 +800,7 @@ export default function RightSidebar({
               >
                 <span className="text-[12px]">🗂️</span>
                 <span className="min-w-0 flex-1 truncate text-[11px] font-semibold">
-                  {rtl ? "مدیریت اسناد و دانش سازمانی (EDMS/KMS)" : "Document & Knowledge Management (EDMS/KMS)"}
+                  {rtl ? "مدیریت اسناد و دانش سازمانی" : "Document & Knowledge Management"}
                 </span>
                 <svg
                   viewBox="0 0 24 24"
