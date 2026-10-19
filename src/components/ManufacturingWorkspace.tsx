@@ -1789,7 +1789,7 @@ export default function ManufacturingWorkspace({
           )}
         </>
       }
-      navTitle={tr("ماژول‌های MES", "MES Modules")}
+      navTitle={tr("زیرماژول‌های MES", "MES Submodules")}
       navIcon="🏭"
       navItems={TABS.map((tItem) => ({
         id: tItem.id,
