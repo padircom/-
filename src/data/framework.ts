@@ -45,6 +45,10 @@ export type Domain = {
   icon: string;
   accent: string;
   title: Bi;
+  /** نام کوتاهِ سایدبار — برای ماژول‌هایی که نام کاملشان در عرض سایدبار
+   * بریده می‌شد («...»)، این مقدار نمایش داده می‌شود و نام کامل در
+   * `title` (سرصفحهٔ صفحه و tooltip) باقی می‌ماند. */
+  nav?: Bi;
   /** گروه چرخهٔ حیات PMBOK در سایدبار؛ `field` یعنی میان‌بر اقدام سریع (بدون گروه). */
   group: SidebarGroupId;
   processes: Process[];
@@ -80,6 +84,7 @@ export const domains: Domain[] = [
     icon: "🏛",
     accent: "#B8D4FF",
     title: { fa: "مدیریت حاکمیت و فرآیندهای PMBOK", en: "Governance & PMBOK Processes" },
+    nav: { fa: "مدیریت حاکمیت پروژه (PMBOK)", en: "Governance & PMBOK" },
     processes: [
       {
         id: "d6-p1",
@@ -262,6 +267,7 @@ export const domains: Domain[] = [
     icon: "🧭",
     accent: "#8FE3C8",
     title: { fa: "مدیریت برنامه‌ریزی و اجرای عملیات پروژه", en: "Planning & Execution" },
+    nav: { fa: "مدیریت برنامه‌ریزی و اجرا", en: "Planning & Execution" },
     processes: [
       {
         id: "d2-p2",
@@ -429,6 +435,7 @@ export const domains: Domain[] = [
 
 
     title: { fa: "مدیریت هزینه، تأمین و لجستیک پروژه", en: "Cost, Procurement & Logistics" },
+    nav: { fa: "مدیریت هزینه، تأمین و لجستیک", en: "Cost, Supply & Logistics" },
     processes: [
 
 
@@ -648,6 +655,7 @@ export const domains: Domain[] = [
     icon: "👷",
     accent: "#F59E0B",
     title: { fa: "مدیریت منابع انسانی و بهره‌وری نیروی کار", en: "Human Resources & Workforce Productivity" },
+    nav: { fa: "مدیریت منابع انسانی و کارکرد", en: "HR & Workforce Productivity" },
     processes: [
       {
         id: "d10-p1",
@@ -824,6 +832,7 @@ export const domains: Domain[] = [
     icon: "🦺",
     accent: "#DC2626",
     title: { fa: "مدیریت ایمنی، بهداشت و محیط‌زیست", en: "Health, Safety & Environment" },
+    nav: { fa: "مدیریت ایمنی و بهداشت", en: "Health & Safety" },
     processes: [
       {
         id: "d16-p1",
@@ -899,6 +908,7 @@ export const domains: Domain[] = [
     icon: "📈",
     accent: "#FFD48A",
     title: { fa: "مدیریت پایش و کنترل عملکرد پروژه", en: "Performance Monitoring & Control" },
+    nav: { fa: "مدیریت عملکرد پروژه", en: "Project Performance" },
     processes: [
       {
         id: "d3-p1",
@@ -1352,6 +1362,7 @@ export const domains: Domain[] = [
     icon: "🏁",
     accent: "#F97316",
     title: { fa: "مدیریت راه‌اندازی، تحویل و اختتام نهایی", en: "Commissioning, Handover & Project Closure" },
+    nav: { fa: "مدیریت راه‌اندازی و تحویل", en: "Handover & Closeout" },
     processes: [
       {
         id: "d15-p1",
@@ -1525,6 +1536,7 @@ export const domains: Domain[] = [
     icon: "🛰",
     accent: "#22D3EE",
     title: { fa: "مدیریت موقعیت مکانی پروژه‌ها (GIS)", en: "Project Geo-Location (GIS)" },
+    nav: { fa: "مدیریت موقعیت مکانی (GIS)", en: "Geospatial (GIS)" },
     processes: [
       {
         id: "d18-p1",

@@ -245,6 +245,7 @@ export default function RightSidebar({
     const hay = [
       d.id,
       d.title.fa, d.title.en,
+      ...(d.nav ? [d.nav.fa, d.nav.en] : []),
       ...d.processes.flatMap((p) => [p.id, p.title.fa, p.title.en, ...p.subs.flatMap((s) => [s.id, s.title.fa, s.title.en])]),
     ].join(" ").toLowerCase();
     return q.split(/\s+/).every((part) => hay.includes(part));
@@ -267,8 +268,12 @@ export default function RightSidebar({
           aria-expanded={d.id === "d7" ? undefined : domainOpen}
         >
           <span className="grid h-6 w-6 shrink-0 place-items-center text-[15px]">{d.icon}</span>
-          <h3 className="min-w-0 flex-1 truncate text-[11px] font-normal leading-4" style={{ color: d.accent }}>
-            {t(d.title, lang)}
+          <h3
+            className="min-w-0 flex-1 truncate text-[11px] font-normal leading-4"
+            style={{ color: d.accent }}
+            title={t(d.title, lang)}
+          >
+            {t(d.nav ?? d.title, lang)}
           </h3>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"
                className={`h-3 w-3 shrink-0 tx4 transition-transform ${domainOpen ? "rotate-180" : ""}`}>
