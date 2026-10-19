@@ -1693,8 +1693,14 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
                 <div className="text-[10.5px] font-normal tx1">{t(dom.title, lang)}</div>
               </div>
             </div>
-                        <PerfDomainBlock lang={lang} domainId={dom.id} onNavigate={(tg) => onNavigate?.({ ...target, ...tg })} />
-<div className="thin-scroll flex-1 overflow-y-auto p-1.5 space-y-1">
+            <div className="thin-scroll flex-1 overflow-y-auto p-2 space-y-1">
+              <PerfDomainBlock lang={lang} domainId={dom.id} onNavigate={(tg) => onNavigate?.({ ...target, ...tg })} />
+              {/* سرِ دستهٔ فرآیندها — همان ریتم سایدبار فرعی «برنامه‌ریزی و تولید» */}
+              <div className="flex items-center gap-1.5 px-2 pb-0.5 pt-3 text-[9px] font-semibold tracking-wide tx3" role="presentation">
+                <span className="h-px flex-1" style={{ background: "var(--line-soft)" }} aria-hidden="true" />
+                <span>{rtl ? "فرآیندها و زیرفرایندها" : "Processes & sub-processes"}</span>
+                <span className="h-px flex-1" style={{ background: "var(--line-soft)" }} aria-hidden="true" />
+              </div>
               {activeProcesses.map((p, i) => (
                 <div key={p.id} className="rounded-xl border b-line-soft bg-black/10 p-1">
                   <div className="flex items-center gap-1.5 px-1 py-0.5">
@@ -1807,13 +1813,19 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
                   {dom.icon}
                 </span>
                 <div className="min-w-0 flex-1">
-                  <div className="text-[10.5px] font-normal tx1">{rtl ? "فرایندها و زیرفرایندها" : "Processes & sub-processes"}</div>
-                  <div className="text-[8.5px] tx4">{activeProcesses.length.toLocaleString(rtl ? "fa-IR" : "en-US")} · {activeProcesses.reduce((n, p) => n + p.subs.length, 0).toLocaleString(rtl ? "fa-IR" : "en-US")}</div>
+                  <div className="truncate text-[10.5px] font-normal tx1">{t(dom.title, lang)}</div>
+                  <div className="text-[8.5px] tx4">{rtl ? "فرآیندها و زیرفرایندها" : "Processes & sub-processes"} · {activeProcesses.length.toLocaleString(rtl ? "fa-IR" : "en-US")} · {activeProcesses.reduce((n, p) => n + p.subs.length, 0).toLocaleString(rtl ? "fa-IR" : "en-US")}</div>
                 </div>
               </div>
             </div>
-                        <PerfDomainBlock lang={lang} domainId={dom.id} onNavigate={(tg) => onNavigate?.({ ...target, ...tg })} />
-<div className="thin-scroll flex-1 overflow-y-auto p-2 space-y-2">
+            <div className="thin-scroll flex-1 overflow-y-auto p-2 space-y-1">
+              <PerfDomainBlock lang={lang} domainId={dom.id} onNavigate={(tg) => onNavigate?.({ ...target, ...tg })} />
+              {/* سرِ دستهٔ فرآیندها — همان ریتم سایدبار فرعی «برنامه‌ریزی و تولید» */}
+              <div className="flex items-center gap-1.5 px-2 pb-0.5 pt-3 text-[9px] font-semibold tracking-wide tx3" role="presentation">
+                <span className="h-px flex-1" style={{ background: "var(--line-soft)" }} aria-hidden="true" />
+                <span>{rtl ? "فرآیندها و زیرفرایندها" : "Processes & sub-processes"}</span>
+                <span className="h-px flex-1" style={{ background: "var(--line-soft)" }} aria-hidden="true" />
+              </div>
               {activeProcesses.map((p, i) => (
                 <div key={p.id} className="rounded-xl border b-line-soft bg-black/10 p-1.5">
                   <div className="flex items-center gap-1.5 px-1 py-1">
@@ -2200,29 +2212,29 @@ function PerfDomainBlock({
   const mods = performanceDomainModules(pd.id);
   if (mods.length < 2) return null;
   return (
-    <div className="b-line border-b px-2.5 py-2">
-      <div className="mb-1 flex items-center gap-1.5 px-1">
-        <span className="text-[11px] leading-none">{pd.icon}</span>
-        <span className="text-[9.5px] font-semibold" style={{ color: pd.color }}>
-          {rtl ? `حوزهٔ عملکردی: ${t(pd.title, lang)}` : `Performance domain: ${t(pd.title, lang)}`}
-        </span>
+    <>
+      {/* سرِ دسته — همان مدل سایدبار فرعی «برنامه‌ریزی و تولید»: خط جداکننده + عنوان دسته */}
+      <div className="flex items-center gap-1.5 px-2 pb-0.5 pt-1 text-[9px] font-semibold tracking-wide tx3" role="presentation">
+        <span className="h-px flex-1" style={{ background: "var(--line-soft)" }} aria-hidden="true" />
+        <span>{rtl ? `حوزهٔ عملکردی: ${t(pd.title, lang)}` : `Performance domain: ${t(pd.title, lang)}`}</span>
+        <span className="h-px flex-1" style={{ background: "var(--line-soft)" }} aria-hidden="true" />
       </div>
-      <div className="space-y-0.5">
-        {mods.map((m) => (
-          <button
-            key={m.id}
-            type="button"
-            onClick={() => { if (m.id !== domainId) onNavigate?.({ moduleId: m.id }); }}
-            className={`flex w-full items-center gap-1.5 rounded-lg px-2 py-1 text-start text-[9.5px] font-light transition ${
-              m.id === domainId ? "row-on tx1" : "tx3 hover:tx1"
-            }`}
-          >
-            <span className="text-[11px] leading-none">{m.icon}</span>
-            <span className="min-w-0 flex-1 truncate">{t(m.nav ?? m.title, lang)}</span>
-          </button>
-        ))}
-      </div>
-    </div>
+      {mods.map((m, i) => (
+        <button
+          key={m.id}
+          type="button"
+          aria-current={m.id === domainId ? "page" : undefined}
+          onClick={() => { if (m.id !== domainId) onNavigate?.({ moduleId: m.id }); }}
+          className={`group flex w-full items-center gap-2 rounded-lg px-2 py-2 text-start transition glass-row hover:-translate-y-px ${m.id === domainId ? "row-on" : ""}`}
+        >
+          <span className="text-[8px] font-light tabular-nums tx4">
+            {(i + 1).toLocaleString(rtl ? "fa-IR" : "en-US")}
+          </span>
+          <span className="shrink-0 text-[12px]" aria-hidden="true">{m.icon}</span>
+          <span className="min-w-0 flex-1 truncate text-[10px] font-light tx1">{t(m.nav ?? m.title, lang)}</span>
+        </button>
+      ))}
+    </>
   );
 }
 
