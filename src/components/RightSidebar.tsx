@@ -148,8 +148,6 @@ export default function RightSidebar({
     supportOpen: false,
   });
   const [query, setQuery] = useState("");
-  /* محور دوم سایدبار: کدام حوزهٔ عملکردی PMBOK باز است (فقط نمای مرجع). */
-  const [openPerf, setOpenPerf] = useState<string | null>(null);
   const [taxonomyOverrides, setTaxonomyOverrides] = useState<Record<string, Process[]>>({});
   const [sectionsOpen, setSectionsOpen] = useState<{
     pmis: boolean;
@@ -261,6 +259,9 @@ export default function RightSidebar({
    * حالت باز فقط با ته‌مایهٔ رنگ دامنه مشخص می‌شود. */
   const renderDomain = (d: Domain) => {
     const domainOpen = openDomain === d.id;
+    /* جایگاه ماژول در دو محور PMBOK: حوزهٔ عملکردی و گروه فرایندی. */
+    const perf = performanceDomains.find((p) => p.id === domainPerformance[d.id]);
+    const life = sidebarGroups.find((g) => g.id === d.group);
     return (
       <div key={d.id} className="border-b b-line-soft last:border-b-0">
         {/* Domain row (level 1) */}
@@ -287,6 +288,25 @@ export default function RightSidebar({
 
         {domainOpen && (
           <div className="fade-rise mt-1 space-y-1">
+            {/* جایگاه ماژول در دو محور PMBOK: حوزهٔ عملکردی و گروه فرایندی */}
+            <div className="flex flex-wrap items-center gap-1.5 px-1">
+              {perf && (
+                <span
+                  className="flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[8.5px] font-extralight"
+                  style={{ color: perf.color, borderColor: `${perf.color}44`, background: `${perf.color}14` }}
+                >
+                  <span className="text-[9px] leading-none">{perf.icon}</span>
+                  {rtl ? `حوزهٔ عملکردی: ${t(perf.title, lang)}` : `Performance: ${t(perf.title, lang)}`}
+                </span>
+              )}
+              {life && (
+                <span className="flex items-center gap-1 rounded-md border b-line-soft px-1.5 py-0.5 text-[8.5px] font-extralight tx3">
+                  <span className="text-[9px] leading-none">{life.icon}</span>
+                  {rtl ? `گروه فرایندی: ${t(life.title, lang)}` : `Process group: ${t(life.title, lang)}`}
+                </span>
+              )}
+            </div>
+
             {/* Level 2 — processes */}
             <div className="rounded-xl border b-line-soft bg-black/10 p-2 space-y-1">
               {/* فرایندها فهرست می‌شوند ولی باز نمی‌شوند.
@@ -491,68 +511,6 @@ export default function RightSidebar({
                     );
                   })}
 
-                  {/* ── محور دوم: حوزه‌های عملکردی PMBOK ──
-                      * بلوکِ مرجع: هر ماژول همین‌جا هم یک «حوزهٔ عملکردی»
-                      * دارد. عمداً دکمهٔ ناوبری ندارد تا راهِ ورودِ دوم ساخته
-                      * نشود؛ فقط نامِ ماژول‌های هر حوزه نشان داده می‌شود. */}
-                  <div className="mt-2 border-t b-line-soft pt-2">
-                    <div className="mb-1 flex items-center gap-1.5 px-2">
-                      <span className="shrink-0 text-[10px] leading-none">📊</span>
-                      <span className="truncate whitespace-nowrap text-[9.5px] font-semibold tx2">
-                        {rtl ? "حوزه‌های عملکردی PMBOK" : "PMBOK Performance Domains"}
-                      </span>
-                      <span className="shrink-0 text-[8.5px] font-extralight tx4">
-                        {rtl ? "محور دوم" : "second axis"}
-                      </span>
-                    </div>
-                    {performanceDomains.map((p) => {
-                      const mods = visibleDomains.filter((d) => domainPerformance[d.id] === p.id);
-                      if (!mods.length) return null;
-                      const isOpen = openPerf === p.id;
-                      return (
-                        <div key={p.id}>
-                          <button
-                            type="button"
-                            onClick={() => setOpenPerf(isOpen ? null : p.id)}
-                            aria-expanded={isOpen}
-                            className="flex w-full items-center gap-2 rounded-lg px-2 py-1 text-start transition hover:bg-[var(--row-hover)]"
-                            style={isOpen ? { background: `${p.color}12` } : undefined}
-                          >
-                            <span className="shrink-0 text-[11px] leading-none">{p.icon}</span>
-                            <span className="min-w-0 flex-1 truncate text-[10px] font-medium" style={{ color: p.color }}>
-                              {t(p.title, lang)}
-                            </span>
-                            <span
-                              className="shrink-0 rounded-full px-1.5 py-px text-[8.5px] font-light leading-4"
-                              style={{ background: `${p.color}22`, color: p.color }}
-                            >
-                              {mods.length}
-                            </span>
-                            <svg
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="1.8"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              className={`h-2.5 w-2.5 shrink-0 tx4 transition-transform ${isOpen ? "rotate-180" : ""}`}
-                            >
-                              <path d="m6 9 6 6 6-6" />
-                            </svg>
-                          </button>
-                          {isOpen && (
-                            <div className="fade-rise space-y-0.5 pb-1 ps-6 pe-2">
-                              {mods.map((d) => (
-                                <div key={d.id} className="truncate text-[9px] font-light tx3">
-                                  {t(d.nav ?? d.title, lang)}
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
                 </div>
               )}
             </section>
