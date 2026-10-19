@@ -1789,8 +1789,10 @@ export default function ManufacturingWorkspace({
           )}
         </>
       }
-      navTitle={tr("زیرماژول‌های MES", "MES Submodules")}
-      navIcon="🏭"
+      /* سربرگ سایدبار فرعی: عنوان خودِ ماژول با اختصار انگلیسی، بدون کاشیِ
+         آیکن (همان زبانِ سربرگ اصلی صفحه). */
+      navTitle={tr("سامانهٔ مستقل برنامه‌ریزی و کنترل تولید (Standalone MES)", "Standalone Manufacturing Execution System (MES)")}
+      navIcon={null}
       navItems={TABS.map((tItem) => ({
         id: tItem.id,
         label: fa ? tItem.fa : tItem.en,
