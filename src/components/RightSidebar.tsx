@@ -412,26 +412,6 @@ export default function RightSidebar({
 
         {isOpen && (
           <div className="fade-rise mt-1 space-y-1">
-            <div className="rounded-xl border b-line-soft bg-black/10 p-2">
-              <div className="mb-1.5 flex items-center gap-1.5 px-1">
-                <span className="text-[10px] leading-none">{pd.icon}</span>
-                <span className="text-[9.5px] font-normal" style={{ color: pd.color }}>
-                  {rtl ? `حوزهٔ عملکردی: ${t(pd.title, lang)}` : `Performance domain: ${t(pd.title, lang)}`}
-                </span>
-                <span className="text-[8.5px] font-extralight tx4">
-                  {rtl ? `${pd.modules.length} ماژول` : `${pd.modules.length} modules`}
-                </span>
-              </div>
-              <div className="space-y-0.5">
-                {pd.modules.map((m) => (
-                  <div key={m.id} className="flex items-center gap-1.5 px-1">
-                    <span className="text-[10px] leading-none">{m.icon}</span>
-                    <span className="min-w-0 flex-1 truncate text-[9.5px] font-light tx2">{t(m.nav ?? m.title, lang)}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
             <div className="glass rounded-xl p-3" style={{ borderColor: `${pd.color}55` }}>
               <div className="mb-2 flex items-center gap-1.5">
                 <i className="h-1.5 w-1.5 rounded-full" style={{ background: pd.color }} />
