@@ -234,6 +234,9 @@ export const CHANGE_CHILD_SPECS: Record<string, { required: string[] }> = {
   PmisChangeModuleLinks: { required: ["LinkKind", "TargetCode", "TargetTitleFa"] },
 };
 
+/** فاز ۸ — جنبه‌های مجاز ارزیابی اثر تغییر (بازبینی‌پذیر). */
+export const IMPACT_ASPECTS = ["technical", "method", "spec", "resource", "schedule", "contract", "cost", "other"] as const;
+
 export function validateChildRow(table: string, body: Record<string, unknown>): ValidationResult {
   const spec = CHANGE_CHILD_SPECS[table];
   if (!spec) return { ok: false, errors: ["جدول فرزند نامعتبر است"] };
@@ -243,6 +246,12 @@ export function validateChildRow(table: string, body: Record<string, unknown>): 
     if (v === undefined || v === null || String(v).trim() === "") e.push(`فیلد «${f}» الزامی است`);
   }
   /* قوانین تخصصی هر جدول */
+  if (table === "PmisChangeImpacts") {
+    /* فاز ۸ — بحث واقعی: نتیجه‌گیری باید ۱۰+ نویسه و topic ۳+*/
+    if (String(body.TopicFa ?? "").trim().length < 3) e.push("TopicFa باید حداقل ۳ نویسهٔ واقعی باشد");
+    if (String(body.ConclusionFa ?? "").trim().length < 10) e.push("ConclusionFa باید حداقل ۱۰ نویسهٔ واقعی باشد");
+    if (body.Aspect !== undefined && body.Aspect !== null && body.Aspect !== "" && !IMPACT_ASPECTS.includes(String(body.Aspect) as never)) e.push(`Aspect باید یکی از ${IMPACT_ASPECTS.join("/")} باشد`);
+  }
   if (table === "PmisChangeCostEstimates") {
     if (!COST_LAYERS.includes(String(body.Layer) as CostLayer)) e.push("لایهٔ مبلغ باید estimated|proposed|negotiated|approved|paid باشد");
     const n = Number(body.Amount);

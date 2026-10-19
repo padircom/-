@@ -599,7 +599,8 @@ export function registerChangeMgmtRoutes(app, { repo, subjects, evaluate, storag
     const actor = req.chgSubject.id;
     /* تزریق سمت سرور هویت تهیه‌کننده — هرگز از کلاینت پذیرفته نمی‌شود */
     /* تزریق هویت تهیه‌کننده — هر جدول فقط ستون‌های تعریف‌شدهٔ خودش */
-    if (table === "PmisChangeImpacts") { b.AnalyzedBy = actor; b.AnalyzedAt = new Date().toISOString(); }
+    /* فاز ۸ — تزریق سمت سرور ReviewStatus=draft؛ هرگز پذیرفته‌شده از payload کلاینت نیست */
+    if (table === "PmisChangeImpacts") { b.AnalyzedBy = actor; b.AnalyzedAt = new Date().toISOString(); b.ReviewStatus = "draft"; delete b.ReviewedBy; delete b.ReviewedAt; delete b.ReviewNoteFa; }
     if (table === "PmisChangeScheduleImpacts") { b.PreparedBy = actor; b.PreparedAt = new Date().toISOString(); }
     if (table === "PmisChangeCostEstimates") { b.PreparedBy = actor; b.PreparedAt = new Date().toISOString(); }
     if (table === "PmisChangeRiskLinks" || table === "PmisChangeClaimLinks" || table === "PmisChangeModuleLinks") { b.CreatedBy = actor; b.CreatedAt = new Date().toISOString(); b.EstablishedBy = actor; b.EstablishedAt = new Date().toISOString(); }
@@ -625,7 +626,7 @@ export function registerChangeMgmtRoutes(app, { repo, subjects, evaluate, storag
   }));
 
   /* ── ویرایش رکورد فرزند + SoD لایه‌های مبلغ ── */
-  app.patch(base + "/requests/:id/rows/:table/:rowId", need(["change.edit", "change.analyze", "change.review"]), run(async (r, req) => {
+  app.patch(base + "/requests/:id/rows/:table/:rowId", need(["change.edit", "change.analyze", "change.review", "change.approve"]), run(async (r, req) => {
     const table = String(req.params.table);
     if (!CHILD_SET.has(table) || table === "PmisChangeAuditTrail" || table === "PmisChangeApprovals") throw error(400, "CHG_TABLE", "جدول قابل ویرایش نیست");
     const row = await findRequest(r, req);
@@ -640,9 +641,13 @@ export function registerChangeMgmtRoutes(app, { repo, subjects, evaluate, storag
     const actor = req.chgSubject.id;
     /* تغییر وضعیت بازبینی (draft/under_review/approved/rejected) فقط با change.review
      * و SoD: تأییدکننده ≠ تهیه‌کنندهٔ رکورد */
+    /* فاز ۸ — دو مسیر اقتدار واقعی: change.review (قراردادی) یا change.approve (تصمیم نهایی)؛
+     * SoD wedge: اگر تهیه‌کنندهٔ رکورد و تأییدکننده یکی باشند حتی مجوز تصمیم نهایی قطع نمی‌شود
+     * (تصمیم‌گیرنده هرگز تهیه‌کننده نیست — این یکسان ساختن لایهٔ تصمیم نهایی نیست؛ این تعیین
+     * ارزیابی پلان است با دوم-جنس نگاه جداگانه در ردیف فرزند). */
     if (patch.ReviewStatus !== undefined) {
       if (!REVIEW_STATUSES.includes(String(patch.ReviewStatus))) throw error(400, "CHG_VALIDATION", "وضعیت بازبینی نامعتبر است");
-      if (!can(req, "change.review")) throw error(403, "CHG_FORBIDDEN", "تغییر وضعیت بازبینی نیازمند مجوز بازبینی است");
+      if (!can(req, "change.review") && !can(req, "change.approve")) throw error(403, "CHG_FORBIDDEN", "تغییر وضعیت بازبینی نیازمند مجوز بازبینی یا تصمیم است");
       if (String(patch.ReviewStatus) === "approved") {
         const prepared = String(existing.PreparedBy ?? existing.AnalyzedBy ?? existing.CreatedBy ?? "");
         if (prepared && prepared === actor) throw error(403, "CHG_SOD", "تهیه‌کنندهٔ رکورد نمی‌تواند همان را تأیید کند (جدایی وظایف)");
@@ -669,7 +674,9 @@ export function registerChangeMgmtRoutes(app, { repo, subjects, evaluate, storag
     if (isTerminalChange(row.Status) || row.Status === "closed") throw error(409, "CHG_STATUS", "درخواست بسته/بایگانی تغییر نمی‌پذیرد");
     const existing = await r.findOne(table, [...childWhere(req.params.projectId, row.Code), { column: "Id", op: "eq", value: req.params.rowId }]);
     if (!existing) throw error(404, "CHG_NOT_FOUND", "رکورد یافت نشد");
-    if (["approved"].includes(String(existing.ReviewStatus ?? ""))) throw error(409, "CHG_REVIEW_LOCKED", "رکورد تأییدشده حذف نمی‌شود");
+    /* فاز ۸ — گزینه‌ماعجر سند واقعی: draft بدون سند و delete-founded است؛
+    تأیید یا ردشده سند شماره‌دار شده و حذف‌ناپذیر (فقط پیش‌نویس و مرجع‌دار با بازده‌انمایی) — هماهنگ با متن UI. */
+    if (["approved", "rejected"].includes(String(existing.ReviewStatus ?? ""))) throw error(409, "CHG_REVIEW_LOCKED", "رکورد تأیید/ردشده سند شده و حذف نمی‌شود — فقط پیش‌نویس قابل حذف است");
     await r.remove(table, existing.Id);
     await audit(r, req.params.projectId, row.Code, `${table.replace("PmisChange", "").toLowerCase()}_deleted`, req.chgSubject.id, `حذف ${existing.Code}`, existing.Code, null);
     return { deleted: true, code: existing.Code };

@@ -81,6 +81,7 @@ type Section = (typeof SECTIONS)[number][0];
 
 const DETAIL_TABS = [
   ['workflow', 'گردش‌کار و انتقال'],
+  ['impacts', 'ارزیابی اثر تغییر (CBA)'],
   ['schedule', 'اثر زمان‌بندی + تحلیل'],
   ['cost', 'لایه‌های هزینه (۵ لایه)'],
   ['links', 'پیوندهای نرم ماژول‌ها'],
@@ -96,6 +97,10 @@ const DOC_KIND_FA: Record<string, string> = {
   supporting: 'مستند پشتیبان', decision: 'سند تصمیم CCB', instruction: 'دستورکار اجرا',
   evidence: 'مدرک اجرایی', correspondence: 'مکاتبه',
 };
+const IMPACT_ASPECT_FA: Record<string, string> = {
+  technical: 'فنی/طراحی', method: 'روش اجرا', spec: 'مشخصات مصالح', resource: 'منابع/ماشین‌آلات', schedule: 'زمان‌بندی', contract: 'قراردادی/حقوقی', cost: 'هزینه‌ای', other: 'سایر',
+};
+const REVIEW_FA: Record<string, string> = { draft: 'پیش‌نویس', under_review: 'در حال بررسی', approved: 'تأییدشده', rejected: 'ردشده' };
 const LINK_FA: Record<string, string> = {
   delay_event: 'رویداد تأخیر (ماژول تأخیر)', loss_case: 'پروندهٔ ضرر و زیان', contract_risk: 'ریسک قرارداد d14',
   claim: 'ادعا', dispute_case: 'پروندهٔ کارشناسی دعاوی', edms_document: 'سند EDMS',
@@ -152,6 +157,7 @@ function Live({ lang, projectId, userId }: { lang: Lang; projectId: string; user
   const [docUpBusy, setDocUpBusy] = useState(false);
   const [docDlBusy, setDocDlBusy] = useState('');
   const [baselineForm, setBaselineForm] = useState<Row>({ noteFa: '', sourceBaselineId: '' });
+  const [impactForm, setImpactForm] = useState<Row>({ TopicFa: '', Aspect: 'technical', ConclusionFa: '', AssumptionsFa: '', LimitationsFa: '' });
 
   const bump = useCallback(() => setRefresh((x) => x + 1), []);
 
@@ -1000,7 +1006,102 @@ function Live({ lang, projectId, userId }: { lang: Lang; projectId: string; user
               </div>
             )}
 
-            {/* ── گزارش Word/PDF ── */}
+                  {/* ── فاز ۸: ارزیابی اثر تغییر (CBA) — با بازبینی و SoD ── */}
+            {detailTab === 'impacts' && (
+              <div className="flex flex-col gap-3">
+                <div className="glass-dark rounded-xl p-4">
+                  <div className="mb-2 text-[11px] font-semibold tx1">{fa ? 'ثبت ارزیابی اثر تغییر (CBA)' : 'Register change impact'}</div>
+                  <div className="grid gap-2 md:grid-cols-3">
+                    <label className={labelCls}>{fa ? 'موضوع ارزیابی *' : 'Topic *'}
+                      <input className={fieldCls} value={impactForm.TopicFa} onChange={(e) => setImpactForm({ ...impactForm, TopicFa: e.target.value })} />
+                    </label>
+                    <label className={labelCls}>{fa ? 'جنبه *' : 'Aspect *'}
+                      <select className={fieldCls} value={impactForm.Aspect} onChange={(e) => setImpactForm({ ...impactForm, Aspect: e.target.value })}>
+                        {Object.entries(IMPACT_ASPECT_FA).map(([k, v]) => <option key={k} value={k}>{fa ? v : k}</option>)}
+                      </select>
+                    </label>
+                    <label className={labelCls}>{fa ? 'اقلام متاثر (هر خط یک آیتم)' : 'Affected items'}
+                      <input className={fieldCls} value={impactForm._itemsText ?? ''} placeholder="بخش پی‌کنی
+بخش بتن‌ریزی" onChange={(e) => setImpactForm({ ...impactForm, _itemsText: e.target.value })} />
+                    </label>
+                  </div>
+                  <div className="mt-2 grid gap-2">
+                    <label className={labelCls}>{fa ? 'نتیجه‌گیری ارزیابی *' : 'Conclusion *'}
+                      <textarea rows={2} className={fieldCls} value={impactForm.ConclusionFa} onChange={(e) => setImpactForm({ ...impactForm, ConclusionFa: e.target.value })} />
+                    </label>
+                    <div className="grid gap-2 md:grid-cols-2">
+                      <label className={labelCls}>{fa ? 'مفروضات' : 'Assumptions'}<textarea rows={2} className={fieldCls} value={impactForm.AssumptionsFa} onChange={(e) => setImpactForm({ ...impactForm, AssumptionsFa: e.target.value })} /></label>
+                      <label className={labelCls}>{fa ? 'محدودیت‌ها/چارچوب معتبر بودن' : 'Validity limits'}<textarea rows={2} className={fieldCls} value={impactForm.LimitationsFa} onChange={(e) => setImpactForm({ ...impactForm, LimitationsFa: e.target.value })} /></label>
+                    </div>
+                  </div>
+                  <div className="mt-2 flex gap-2">
+                    <button type="button" className={btnCls} disabled={busy || impactForm.TopicFa.trim().length < 3 || impactForm.ConclusionFa.trim().length < 10}
+                      onClick={() => {
+                        const body = { ...impactForm } as Record<string, unknown>;
+                        const items = String(body._itemsText ?? '').split('\n').map((x) => x.trim()).filter(Boolean);
+                        delete body._itemsText;
+                        if (items.length) body.AffectedItemsJson = items;
+                        void act('POST', `${base}/requests/${encodeURIComponent(r.Id)}/rows/PmisChangeImpacts`, body, fa ? 'ارزیابی ثبت شد' : 'Impact registered');
+                      }}>
+                      {fa ? 'ثبت ارزیابی' : 'Register impact'}
+                    </button>
+                    <span className="text-[9px] tx4 self-center">{fa ? 'تلاش: موضوع (۳+) و نتیجه‌گیری (۱۰+) واقعی نویسه — مسیر باین هر دو تا سرور بدافزار MessageRecipient ذخیره' : ''}</span>
+                  </div>
+                </div>
+
+                <div className="glass-dark rounded-xl p-4">
+                  <div className="mb-2 text-[11px] font-semibold tx1">{fa ? 'فهرست ارزیابی‌ها (بازبینی + SoD)' : 'Impacts list (review + SoD)'}</div>
+                  <div className="thin-scroll overflow-x-auto">
+                    <table className="w-full text-[10px] tx2">
+                      <thead><tr className="text-[9px] tx4">
+                        {[fa ? 'کد' : 'Code', fa ? 'موضوع' : 'Topic', fa ? 'جنبه' : 'Aspect', fa ? 'اقلام' : 'Items', fa ? 'نتیجه‌گیری' : 'Conclusion', fa ? 'تحلیل‌کننده' : 'By', fa ? 'بازبینی' : 'Review', fa ? 'تأییدشد' : 'Approve', fa ? 'رد' : 'Reject', fa ? 'حذف' : 'Del'].map((h) => <th key={h} className="px-2 py-1.5 text-start">{h}</th>)}
+                      </tr></thead>
+                      <tbody>
+                        {(children.PmisChangeImpacts ?? []).map((imp) => {
+                          const itemsN = Array.isArray(imp.AffectedItemsJson) ? (imp.AffectedItemsJson as unknown[]).length : 0;
+                          const rs = String(imp.ReviewStatus ?? 'draft');
+                          return (
+                            <tr key={imp.Id} className="border-t b-line-soft">
+                              <td className="px-2 py-1.5 tabular-nums" dir="ltr">{imp.Code}</td>
+                              <td className="px-2 py-1.5 max-w-[180px] truncate" title={String(imp.TopicFa ?? '')}>{imp.TopicFa}</td>
+                              <td className="px-2 py-1.5">{(IMPACT_ASPECT_FA as Record<string, string>)[String(imp.Aspect)] ?? String(imp.Aspect ?? '—')}</td>
+                              <td className="px-2 py-1.5 tabular-nums">{itemsN || '—'}</td>
+                              <td className="px-2 py-1.5 max-w-[200px] truncate" title={String(imp.ConclusionFa ?? '')}>{imp.ConclusionFa}</td>
+                              <td className="px-2 py-1.5 text-[9px]">{imp.AnalyzedBy ?? '—'}</td>
+                              <td className="px-2 py-1.5">
+                                <span className={`${chipClsBase}`} style={{ background: rs === 'approved' ? 'rgba(22,163,74,0.12)' : rs === 'rejected' ? 'rgba(220,38,38,0.12)' : 'rgba(245,158,11,0.12)', color: rs === 'approved' ? '#16a34a' : rs === 'rejected' ? '#dc2626' : '#f59e0b' }}>{REVIEW_FA[rs] ?? rs}</span>
+                                {imp.ReviewedBy ? <div className="text-[8.5px] tx4 mt-0.5">{fa ? 'توسط' : 'by'} {imp.ReviewedBy}</div> : null}
+                              </td>
+                              <td className="px-2 py-1.5">
+                                <button type="button" className="rounded-lg px-2 py-1 text-[10px] font-light transition hover:bg-emerald-500/20 text-emerald-400 disabled:opacity-40"
+                                  disabled={busy || rs === 'approved' || String(imp.AnalyzedBy ?? '') === userId}
+                                  title={fa ? (String(imp.AnalyzedBy ?? '') === userId ? 'تهیه‌کننده نمی‌تواند تأیید کند (SoD)' : 'تأیید ارزیابی') : ''}
+                                  onClick={() => void act('PATCH', `${base}/requests/${encodeURIComponent(r.Id)}/rows/PmisChangeImpacts/${encodeURIComponent(String(imp.Id))}`, { ReviewStatus: 'approved' }, fa ? 'ارزیابی تأیید شد' : 'Approved')}>{fa ? '✓' : 'OK'}</button>
+                              </td>
+                              <td className="px-2 py-1.5">
+                                <button type="button" className="rounded-lg px-2 py-1 text-[10px] font-light transition hover:bg-red-500/20 text-red-400 disabled:opacity-40"
+                                  disabled={busy || rs === 'rejected'}
+                                  onClick={() => { const note = window.prompt(fa ? 'دلیل رد این ارزیابی:' : 'Rejection note:'); if (note !== null) void act('PATCH', `${base}/requests/${encodeURIComponent(r.Id)}/rows/PmisChangeImpacts/${encodeURIComponent(String(imp.Id))}`, { ReviewStatus: 'rejected', ReviewNoteFa: note }, fa ? 'ارزیابی رد شد' : 'Rejected'); }}>{fa ? '✗' : 'X'}</button>
+                              </td>
+                              <td className="px-2 py-1.5">
+                                <button type="button" className="rounded-lg px-2 py-1 text-[10px] font-light transition hover:bg-red-500/20 text-red-400 disabled:opacity-40"
+                                  disabled={busy || rs !== 'draft'}
+                                  title={fa ? 'فقط پیش‌نویس قابل حذف است — تأییدشده/ردشده سند شماره‌دار است' : ''}
+                                  onClick={() => { if (window.confirm(fa ? `حذف پیش‌نویس ${imp.Code}؟` : 'Delete draft?')) void act('DELETE', `${base}/requests/${encodeURIComponent(r.Id)}/rows/PmisChangeImpacts/${encodeURIComponent(String(imp.Id))}`, undefined, fa ? 'حذف شد' : 'Deleted'); }}>🗑</button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                        {(children.PmisChangeImpacts ?? []).length === 0 && <tr><td colSpan={10} className="px-2 py-4 text-center tx4">—</td></tr>}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="mt-2 text-[9px] tx4">{fa ? 'SoD: تهیه‌کنندهٔ ارزیابی نمی‌تواند همان را تأیید کند (درخواست ۴۰۳ CHG_SOD بازمی‌گردد)؛ فقط پیش‌نویس قابل حذف است — ردشده/تأییدشده سند می‌شود.' : ''}</div>
+                </div>
+              </div>
+            )}
+
+      {/* ── گزارش Word/PDF ── */}
             {detailTab === 'report' && (
               <div className="flex flex-col gap-3">
                 <div className="glass-dark rounded-xl p-4">
