@@ -2192,12 +2192,12 @@ function DomainNavGroups({
 
             {procs.map((p, i) => (
               <div key={p.id}>
-                {/* فرآیند — سطر ساده (بدون کارت) با الگوی MES: شماره + نشان + عنوان */}
-                <div className="flex w-full items-center gap-2 rounded-lg px-2 py-2 transition hover:bg-[var(--row-hover)]">
+                {/* فرآیند — آیتم هم‌سطح با سایدبار «برنامه‌ریزی و تولید»: شماره + آیکن + عنوان */}
+                <div className="group flex w-full items-center gap-2 rounded-lg px-2 py-2 text-start transition glass-row hover:-translate-y-px">
                   <span className="text-[8px] font-light tabular-nums tx4">
                     {(i + 1).toLocaleString(rtl ? "fa-IR" : "en-US")}
                   </span>
-                  <span className="shrink-0 text-[11px] leading-none" style={{ color: m.accent }} aria-hidden="true">▪</span>
+                  <span className="shrink-0 text-[12px] leading-none" style={{ color: m.accent }} aria-hidden="true">▪</span>
                   <span className="min-w-0 flex-1 truncate text-[10px] font-light tx1">{t(p.title, lang)}</span>
                 </div>
                 {/* زیرفرآیندها — تودرتو، با حالت انتخاب‌شده */}
