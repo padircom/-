@@ -98,3 +98,8 @@ server/cmmsAiLogic.js
 # پیوست‌های DPR/CPMS زمان اجرا — داده است، نه کد
 server/storage/cpm-dpr/
 server/storage/change/
+
+# Generated Pmis contract-risk engines (بازتولید: npm run build:cntrisk / build:cntclause / build:cntriskdoc)
+server/contractRiskLogic.js
+server/contractClauseLogic.js
+server/contractRiskDocLogic.js
