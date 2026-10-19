@@ -111,8 +111,8 @@ const TABS: Array<{
   group: MesNavGroupId;
 }> = [
   { id: "overview", fa: "داشبورد، OEE و هشدارها", en: "Overview, OEE & Alerts", defaultUser: "u-mfg-manager", permission: "mfg.dashboard.view", icon: "📊", group: "overview" },
-  { id: "engineering", fa: "مهندسی ساخت (قطعه/BOM/مسیر/مرکز کاری)", en: "Engineering Master", defaultUser: "u-mfg-eng", permission: "mfg.part.view", icon: "🔩", group: "overview" },
-  { id: "planning", fa: "برنامه‌ریزی پیشرفته (MPS، لات، ATP، تقسیم)", en: "Advanced Planning (MPS, Lot Sizing, ATP, Splitting)", defaultUser: "u-mfg-plan", permission: "mfg.mps.view", icon: "🗓️", group: "planning" },
+  { id: "engineering", fa: "مهندسی ساخت", en: "Engineering Master", defaultUser: "u-mfg-eng", permission: "mfg.part.view", icon: "🔩", group: "overview" },
+  { id: "planning", fa: "برنامه‌ریزی پیشرفته", en: "Advanced Planning", defaultUser: "u-mfg-plan", permission: "mfg.mps.view", icon: "🗓️", group: "planning" },
   { id: "orders", fa: "سفارش‌های تولید", en: "Production Orders", defaultUser: "u-mfg-plan", permission: "mfg.order.view", icon: "📋", group: "planning" },
   { id: "scheduling", fa: "زمان‌بندی ظرفیت، گانت و گلوگاه", en: "Scheduling, Gantt & Capacity", defaultUser: "u-mfg-plan", permission: "mfg.schedule.view", icon: "📅", group: "planning" },
   { id: "execution", fa: "اجرای کارگاهی، توقف و ضایعات", en: "Shop-Floor Execution", defaultUser: "u-mfg-supervisor", permission: "mfg.execution.view", icon: "⚙️", group: "execution" },
