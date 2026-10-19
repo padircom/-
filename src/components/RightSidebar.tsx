@@ -239,9 +239,6 @@ export default function RightSidebar({
     .filter((d) => d.id !== "d7" || can("system.manage"))
     .map((d) => taxonomyOverrides[d.id] ? { ...d, processes: taxonomyOverrides[d.id] } : d);
 
-  const faDigits = (n: number) => n.toLocaleString("fa-IR", { useGrouping: false });
-
-
   const q = query.trim().toLowerCase();
   const matchesQuery = (d: Domain) => {
     if (!q) return true;
@@ -254,11 +251,6 @@ export default function RightSidebar({
   };
   const searching = q.length > 0;
   const searchHits = searching ? visibleDomains.filter(matchesQuery) : [];
-
-  const groupCounts = (ids: Domain[]) => ({
-    dc: ids.length,
-    pc: ids.reduce((n, d) => n + d.processes.length, 0),
-  });
 
   /* سطر دامنه عمداً کارت نیست: فهرست فشرده با جداکنندهٔ مویی.
    * حالت باز فقط با ته‌مایهٔ رنگ دامنه مشخص می‌شود. */
@@ -455,7 +447,6 @@ export default function RightSidebar({
                     const members = visibleDomains.filter((d) => d.group === g.id);
                     if (!members.length) return null;
                     const isOpen = g.pinned ? supportOpen : openGroup === g.id;
-                    const { dc, pc } = groupCounts(members);
                     return (
                       <div key={g.id} className="border-b b-line-soft pb-1 last:border-b-0 last:pb-0">
                         <button
@@ -468,9 +459,6 @@ export default function RightSidebar({
                           <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: g.color }} />
                           <span className="min-w-0 flex-1 truncate text-[10.5px] font-medium" style={{ color: g.color }}>
                             {t(g.title, lang)}
-                          </span>
-                          <span className="shrink-0 text-[8.5px] font-extralight tabular-nums tx4">
-                            {rtl ? `${faDigits(dc)} حوزه · ${faDigits(pc)} فرآیند` : `${dc} · ${pc}`}
                           </span>
                           <svg
                             viewBox="0 0 24 24"
