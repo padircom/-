@@ -1,5 +1,13 @@
 import { useEffect, useState } from "react";
-import { domains, t, type Bi, type Lang, type Process } from "../data/framework";
+import {
+  performanceDomainModules,
+  performanceDomainOf,
+  domains,
+  t,
+  type Bi,
+  type Lang,
+  type Process,
+} from "../data/framework";
 import { useSystem } from "../context/SystemContext";
 import { roleLabel, useAuth } from "../context/AuthContext";
 import type { ModuleNavTarget } from "./RightSidebar";
@@ -1685,7 +1693,8 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
                 <div className="text-[10.5px] font-normal tx1">{t(dom.title, lang)}</div>
               </div>
             </div>
-            <div className="thin-scroll flex-1 overflow-y-auto p-1.5 space-y-1">
+                        <PerfDomainBlock lang={lang} domainId={dom.id} onNavigate={(tg) => onNavigate?.({ ...target, ...tg })} />
+<div className="thin-scroll flex-1 overflow-y-auto p-1.5 space-y-1">
               {activeProcesses.map((p, i) => (
                 <div key={p.id} className="rounded-xl border b-line-soft bg-black/10 p-1">
                   <div className="flex items-center gap-1.5 px-1 py-0.5">
@@ -1803,7 +1812,8 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
                 </div>
               </div>
             </div>
-            <div className="thin-scroll flex-1 overflow-y-auto p-2 space-y-2">
+                        <PerfDomainBlock lang={lang} domainId={dom.id} onNavigate={(tg) => onNavigate?.({ ...target, ...tg })} />
+<div className="thin-scroll flex-1 overflow-y-auto p-2 space-y-2">
               {activeProcesses.map((p, i) => (
                 <div key={p.id} className="rounded-xl border b-line-soft bg-black/10 p-1.5">
                   <div className="flex items-center gap-1.5 px-1 py-1">
@@ -2172,6 +2182,50 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
  * برای بقیهٔ حوزه‌ها اضافه می‌کند؛ داده از همان API پروژه‌ای می‌آید و مجوز
  * `gov.process.edit` سمت سرور کنترل می‌شود (بدون مجوز، دکمه نمایش داده نمی‌شود).
  */
+/* ── لایهٔ ۳ — ماژول‌های هم‌حوزه در سایدبار فرعی ──
+ * ساختار سه‌لایه: گروه فرایندی (لایهٔ ۱) ← حوزهٔ عملکردی (لایهٔ ۲،
+ * سایدبار اصلی) ← ماژول (لایهٔ ۳، همین‌جا در سایدبار فرعی صفحهٔ ماژول). */
+function PerfDomainBlock({
+  lang,
+  domainId,
+  onNavigate,
+}: {
+  lang: Lang;
+  domainId: string;
+  onNavigate?: (target: { moduleId: string }) => void;
+}) {
+  const rtl = lang === "fa";
+  const pd = performanceDomainOf(domainId);
+  if (!pd) return null;
+  const mods = performanceDomainModules(pd.id);
+  if (mods.length < 2) return null;
+  return (
+    <div className="b-line border-b px-2.5 py-2">
+      <div className="mb-1 flex items-center gap-1.5 px-1">
+        <span className="text-[11px] leading-none">{pd.icon}</span>
+        <span className="text-[9.5px] font-semibold" style={{ color: pd.color }}>
+          {rtl ? `حوزهٔ عملکردی: ${t(pd.title, lang)}` : `Performance domain: ${t(pd.title, lang)}`}
+        </span>
+      </div>
+      <div className="space-y-0.5">
+        {mods.map((m) => (
+          <button
+            key={m.id}
+            type="button"
+            onClick={() => { if (m.id !== domainId) onNavigate?.({ moduleId: m.id }); }}
+            className={`flex w-full items-center gap-1.5 rounded-lg px-2 py-1 text-start text-[9.5px] font-light transition ${
+              m.id === domainId ? "row-on tx1" : "tx3 hover:tx1"
+            }`}
+          >
+            <span className="text-[11px] leading-none">{m.icon}</span>
+            <span className="min-w-0 flex-1 truncate">{t(m.nav ?? m.title, lang)}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function ModuleDetail(props: Props) {
   const { lang, target } = props;
   const rtl = lang === "fa";
