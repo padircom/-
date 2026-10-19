@@ -147,6 +147,7 @@ const D4_PAGE_SUBS: Record<string, { id: string; title: Bi; tab: D4Tab; sql: str
   "d4-p3": [
     { id: "d4-p3-imp", title: { fa: "اثر بر Baseline قفل", en: "Impact on locked BL" }, tab: "change", sql: ["Change_Request"] },
     { id: "d4-p3-ccb", title: { fa: "CCB و اختیار", en: "CCB + authority" }, tab: "ccb", sql: ["CCB_Meeting"] },
+    { id: "d4-p3-chm", title: { fa: "مدیریت تغییر یکپارچه (PMO-INTEGRATED-CHANGE-MANAGEMENT-V1.0)", en: "Integrated change lifecycle" }, tab: "chm", sql: ["PmisChangeRequests", "PmisChangeImpacts", "PmisChangeCostEstimates", "PmisChangeScheduleImpacts", "PmisChangeApprovals", "PmisChangeRiskLinks", "PmisChangeClaimLinks", "PmisChangeModuleLinks", "PmisChangeImplementation", "PmisChangeAuditTrail"] },
   ],
   /* زیرفرآیند چارچوبی «تحلیل تأخیر» (d4-p4-s1) همان تب delay را باز می‌کند؛
      ردیف «بازسازی کارشناسی زمان‌بندی» (PMO-FORENSIC-SCHEDULE-ENGINE-V1.0)
@@ -177,6 +178,7 @@ const D4_TAB_BY_SUB: Record<string, D4Tab> = {
   "d4-p3-s1": "change",
   "d4-p3-imp": "change",
   "d4-p3-ccb": "ccb",
+  "d4-p3-chm": "chm",
   "d4-p4-s1": "delay",
   "d4-p4-fsr": "recon",
   "d4-p5-s1": "claim",

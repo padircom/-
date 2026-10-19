@@ -61,15 +61,15 @@ const MAP_LOSS: MapDef = {
   id: 'loss',
   titleFa: 'فلوچارت تهیه لایحه ضرر و زیان',
   titleEn: 'Loss & damages dossier workflow',
-  subtitleFa: 'شناسایی سرفصل‌های خسارت، ارائه فرمول‌های پیشنهادی و محاسبه دقیق ضرر و زیان',
-  subtitleEn: 'Loss-head identification, suggested formulas & precise loss and damages calculation',
+  subtitleFa: 'بر پایهٔ قرارداد، مستندات، شواهد و قواعد معتبر؛ هر سرفصل با مستندات کافی و قابل استناد',
+  subtitleEn: 'Based on contract, records, evidence and valid rules; every head with sufficient citable evidence',
   steps: [
     {
-      n: 1, fa: 'بارگذاری اسناد بنیاد پروژه', en: 'Upload underlying documents', tab: 'loss',
+      n: 1, fa: 'بارگذاری اسناد بنیاد پروژه', en: 'Upload project baseline records', tab: 'loss',
       side: {
         titleFa: 'اسناد قابل بارگذاری', titleEn: 'Uploadable documents',
-        itemsFa: ['قرارداد، الحاقیه و متمم', 'برنامه‌های به‌روزرسانی‌شده', 'درخواست چون‌ساخت', 'اسناد مالی پروژه', 'ادعاها و اعتراضات', 'گزارش‌های دوره‌ای', 'سایر اسناد مرتبط', 'صورت‌جلسات', 'دستورکارها', 'مکاتبات', 'برنامه اولیه'],
-        itemsEn: ['Contract, amendments & annexes', 'Schedule updates', 'As-built program', 'Project financial records', 'Claims & objections', 'Periodic reports', 'Other related documents', 'Minutes', 'Work orders', 'Correspondence', 'Baseline program'],
+        itemsFa: ['قرارداد', 'الحاقیه و متمم', 'صورت‌جلسات', 'دستورکارها', 'مکاتبات', 'برنامه اولیه', 'برنامه‌های به‌روزرسانی‌شده', 'برنامه چون‌ساخت', 'اسناد مالی پروژه', 'ادعاها و اعتراضات', 'گزارش‌های دوره‌ای', 'سایر اسناد مرتبط'],
+        itemsEn: ['Contract', 'Amendments & annexes', 'Minutes', 'Work orders', 'Correspondence', 'Baseline program', 'Schedule updates', 'As-built program', 'Project financial records', 'Claims & objections', 'Periodic reports', 'Other related records'],
         noteFa: 'فرمت‌ها: MSP ,Primavera P6, Word, PDF, تصویر', noteEn: 'Formats: MSP, Primavera P6, Word, PDF, image',
       },
     },
@@ -78,49 +78,51 @@ const MAP_LOSS: MapDef = {
       side: {
         titleFa: 'سرفصل‌های خسارت شناسایی‌شده', titleEn: 'Identified loss heads',
         itemsFa: ['دوباره‌کاری‌ها', 'تغییرات', 'کارهای جدید', 'هزینه‌های منابع', 'نیروی انسانی', 'ماشین‌آلات', 'سایر خسارات', 'کاهش بهره‌وری', 'هزینه‌های مستقیم کارگاه', 'هزینه‌های بالاسری', 'توقف کار', 'تأخیر در پرداخت صورت‌وضعیت', 'تأخیر در پرداخت تعدیل', 'عدم آزادسازی تضامین'],
-        itemsEn: ['Re-work', 'Variations', 'New works', 'Resource costs', 'Labour', 'Equipment', 'Other losses', 'Loss of productivity', 'Site direct costs', 'Overheads', 'Suspension', 'Late IPC payment', 'Late price-adjustment payment', 'Non-release of guarantees'],
+        itemsEn: ['Rework', 'Variations', 'New work items', 'Resource costs', 'Manpower', 'Machinery', 'Other losses', 'Productivity reduction', 'Direct site running costs', 'Overheads', 'Work stoppage', 'Payment delay (IPC)', 'Escalation payment delay', 'Guarantee non-release'],
       },
     },
     {
-      n: 3, fa: 'ارائه فرمول‌های پیشنهادی', en: 'Suggested formulas', tab: 'loss',
+      n: 3, fa: 'ارائه فرمول‌های پیشنهادی', en: 'Suggested formulae', tab: 'loss',
       side: {
-        titleFa: 'ویرایش فرمول توسط کاربر', titleEn: 'User formula editing',
+        titleFa: 'ویرایش فرمول توسط کاربر', titleEn: 'User-editable formulae',
         itemsFa: ['فرمول پیشنهادی برای هر سرفصل', 'تعریف و ویرایش متغیرها و مقادیر', 'اعمال تغییرات و ثبت تاریخچه تغییرات'],
         itemsEn: ['Suggested formula per loss head', 'Define & edit variables and values', 'Apply changes with change history'],
       },
     },
     {
       n: 4, fa: 'محاسبات دقیق ضرر و زیان', en: 'Precise loss calculation', tab: 'loss',
-      dashedBackFa: 'نیاز به بررسی', dashedBackEn: 'Needs review',
       side: {
         titleFa: 'مبنای محاسبه', titleEn: 'Calculation basis',
         itemsFa: ['قوانین ایران', 'مستندات بین‌المللی', 'منابع معتبر برای فرمول‌ها'],
-        itemsEn: ['Iranian law', 'International references', 'Authoritative formula sources'],
+        itemsEn: ['Iranian law', 'International references', 'Credible formula sources'],
       },
     },
     {
-      n: 5, fa: 'بررسی و نهایی‌سازی', en: 'Review & finalization', tab: 'loss',
-      noteFa: 'تأیید شده', noteEn: 'Approved',
+      n: 5, fa: 'بررسی و نهایی‌سازی', en: 'Review & finalisation', tab: 'loss',
+      dashedBackFa: 'نیاز به بررسی', dashedBackEn: 'Needs review',
+      noteFa: 'وضعیت «نیاز به بررسی» به مرحلهٔ ۳ بازمی‌گردد تا فرمول‌ها اصلاح شوند.', noteEn: '“Needs review” loops back to step 3 so formulae can be adjusted.',
       side: {
         titleFa: 'نتایج بررسی', titleEn: 'Review results',
-        itemsFa: ['وضعیت هر سرفصل: تأیید شده / نیاز به بررسی (ریال)', 'جمع کل ضرر و زیان (ریال)'],
-        itemsEn: ['Status per loss head: approved / needs review', 'Total loss & damages (IRR)'],
+        itemsFa: ['وضعیت هر سرفصل: تأیید شده / نیاز به بررسی', 'جمع کل ضرر و زیان (ریال)'],
+        itemsEn: ['Status per head: approved / needs review', 'Total loss (IRR)'],
+        noteFa: 'تأیید شده مدت', noteEn: 'Approved',
       },
     },
     { n: 6, fa: 'تولید لایحه ضرر و زیان', en: 'Generate loss dossier', tab: 'loss' },
   ],
-  finalFa: 'لایحه ضرر و زیان', finalEn: 'Loss & damages dossier', finalKind: 'output',
-  finalItemsFa: ['Word قابل ویرایش', 'PDF آماده ارائه'], finalItemsEn: ['Editable Word', 'Presentation-ready PDF'],
-  dashedLegendFa: 'مسیر بازگشت برای اصلاح', dashedLegendEn: 'Return path for correction',
+  finalFa: 'لایحه ضرر و زیان', finalEn: 'Loss dossier', finalKind: 'output',
+  finalItemsFa: ['Word قابل ویرایش', 'PDF آماده ارائه'],
+  finalItemsEn: ['Editable Word', 'Submission-ready PDF'],
+  dashedLegendFa: 'مسیر بررسی و بازگشت برای اصلاح', dashedLegendEn: 'Review / rework loop',
 };
 
-/* ————— نقشهٔ ۳: مدیریت ریسک قراردادها و بهبود قرارداد ————— */
+/* ————— نقشهٔ ۳: مدیریت ریسک قراردادها و بهبود قرارداد (ماژول d14) ————— */
 const MAP_RISK: MapDef = {
   id: 'risk',
   titleFa: 'فلوچارت مدیریت ریسک قراردادها و بهبود قرارداد',
-  titleEn: 'Contract risk & improvement workflow',
-  subtitleFa: 'تحلیل هوشمند قرارداد برای شناسایی ریسک‌ها و ارائه پیشنهادهای اصلاحی',
-  subtitleEn: 'In-depth contract analysis for risk identification & improvement suggestions',
+  titleEn: 'Contract risk management & improvement workflow',
+  subtitleFa: 'شناسایی، اولویت‌بندی ریسک‌ها و مسیر بهبود قرارداد',
+  subtitleEn: 'Identify & prioritise contractual risks and the contract-improvement path',
   steps: [
     {
       n: 1, fa: 'بارگذاری قرارداد', en: 'Upload contract', tab: 'contracts',
@@ -128,115 +130,115 @@ const MAP_RISK: MapDef = {
         titleFa: 'اسناد قابل بارگذاری', titleEn: 'Uploadable documents',
         itemsFa: ['قرارداد', 'الحاقیه و متمم', 'صورت‌جلسات', 'مکاتبات', 'اسناد پشتیبان', 'دستورکارها'],
         itemsEn: ['Contract', 'Amendments & annexes', 'Minutes', 'Correspondence', 'Supporting records', 'Work orders'],
-        noteFa: 'فرمت: Word, PDF, تصویر', noteEn: 'Formats: Word, PDF, image',
+        noteFa: 'فرمت‌ها: Word, PDF, تصویر', noteEn: 'Formats: Word, PDF, image',
       },
     },
-    { n: 2, fa: 'دریافت اطلاعات اولیه', en: 'Initial data intake', tab: 'contracts' },
+    { n: 2, fa: 'دریافت اطلاعات اولیه', en: 'Collect initial data', tab: 'contracts' },
     {
       n: 3, fa: 'تحلیل هوشمند قرارداد', en: 'Contract analysis', tab: 'clauses',
       side: {
         titleFa: 'بندهای تحلیل‌شده قرارداد', titleEn: 'Analysed contract clauses',
         itemsFa: ['قلمرو کار', 'مدت و برنامه زمانی', 'پرداخت‌ها', 'تضامین و ضمانت‌نامه‌ها', 'مسئولیت‌ها و تعهدات', 'تغییرات و تعدیل', 'فسخ و خاتمه', 'حل اختلاف'],
-        itemsEn: ['Scope of work', 'Duration & schedule', 'Payments', 'Guarantees & bonds', 'Liabilities & obligations', 'Variations & adjustments', 'Termination', 'Dispute resolution'],
+        itemsEn: ['Scope of work', 'Time & schedule', 'Payments', 'Bonds & guarantees', 'Liabilities & obligations', 'Variations & escalation', 'Termination', 'Dispute resolution'],
       },
     },
     {
-      n: 4, fa: 'شناسایی ریسک‌ها', en: 'Risk identification', tab: 'register',
+      n: 4, fa: 'شناسایی ریسک‌ها', en: 'Identify risks', tab: 'register',
       side: {
         titleFa: 'ریسک‌های قابل شناسایی', titleEn: 'Identifiable risks',
         itemsFa: ['تضامین', 'تأخیرات', 'تغییرات', 'خسارات', 'مسئولیت‌ها', 'حل اختلاف', 'پرداخت', 'فسخ', 'خاتمه', 'سطح ریسک: بالا / متوسط / پایین / بدون ریسک', 'اولویت‌بندی بر اساس احتمال وقوع و تأثیر'],
-        itemsEn: ['Guarantees', 'Delays', 'Variations', 'Damages', 'Liabilities', 'Disputes', 'Payment', 'Termination', 'Closure', 'Risk level: high / medium / low / none', 'Prioritised by likelihood & impact'],
+        itemsEn: ['Guarantees', 'Delays', 'Variations', 'Damages', 'Liabilities', 'Dispute resolution', 'Payment', 'Termination', 'Closure', 'Risk level: high / medium / low / none', 'Prioritised by likelihood & impact'],
       },
     },
     {
-      n: 5, fa: 'پیشنهاد اصلاحات', en: 'Improvement suggestions', tab: 'improve',
+      n: 5, fa: 'پیشنهاد اصلاحات', en: 'Propose amendments', tab: 'improve',
       dashedBackFa: 'بازبینی و اصلاح', dashedBackEn: 'Review & amend',
+      noteFa: 'بازبینی و اصلاح — چرخهٔ تکرار', noteEn: 'Review & amend — iterative loop',
       side: {
-        titleFa: 'نمونه پیشنهادهای اصلاحی', titleEn: 'Sample improvements',
+        titleFa: 'نمونه پیشنهادهای اصلاحی', titleEn: 'Sample improvement proposals',
         itemsFa: ['تعدیل شرایط پرداخت‌ها و تأخیر', 'اصلاح شرایط فسخ یک‌طرفه', 'تکمیل و شفاف‌سازی بند تغییرات', 'تعیین دقیق مسئولیت‌ها و حدود تعهدات', 'بازنگری در سازوکار حل اختلاف', 'پیش‌نمایش بند اصلاح‌شده (پیشنهادی)'],
-        itemsEn: ['Adjust payment & delay terms', 'Amend unilateral termination terms', 'Clarify variation clause', 'Precise liabilities & limits', 'Review dispute-resolution mechanics', 'Preview amended clause (suggested)'],
+        itemsEn: ['Adjust payment & delay terms', 'Amend unilateral termination conditions', 'Complete & clarify the variations clause', 'Define liabilities & obligation limits precisely', 'Rework the dispute-resolution mechanism', 'Amended clause preview (suggested)'],
       },
     },
     { n: 6, fa: 'بهبود قرارداد', en: 'Contract improvement', tab: 'improve' },
   ],
-  finalFa: 'خروجی این بخش', finalEn: 'This section\u2019s outputs', finalKind: 'section',
+  finalFa: 'خروجی این بخش', finalEn: 'Section outputs', finalKind: 'section',
   finalItemsFa: ['فهرست ریسک‌ها', 'تحلیل بندهای قرارداد', 'پیشنهادهای اصلاحی برای بهبود قرارداد'],
-  finalItemsEn: ['Risk register', 'Contract clause analysis', 'Suggestions to improve the contract'],
-  dashedLegendFa: 'مسیر بازگشت برای بازبینی و اصلاح', dashedLegendEn: 'Return path for review & amendment',
+  finalItemsEn: ['Risk register', 'Clause analysis', 'Contract improvement proposals'],
+  dashedLegendFa: 'مسیر بازگشت برای اصلاح و بهبود', dashedLegendEn: 'Rework / improvement loop',
 };
 
 /* ————— نقشهٔ ۴: کارشناسی، داوری و قضاوت دعوای ساخت ————— */
 const MAP_DISPUTE: MapDef = {
   id: 'dispute',
   titleFa: 'فلوچارت کارشناسی، داوری و قضاوت دعوای ساخت',
-  titleEn: 'Construction dispute expert, arbitration & adjudication workflow',
-  subtitleFa: 'تحلیل منصفانه و ساختارمند دعوای ساخت بر اساس قوانین ایران، اسناد پروژه و مستندات طرفین',
-  subtitleEn: 'Impartial, structured analysis of construction disputes based on Iranian law, project documents and parties\u2019 evidence',
+  titleEn: 'Construction dispute expert determination, arbitration & judgement workflow',
+  subtitleFa: 'گردش‌کار تحلیل و مقایسهٔ استدلال طرفین از استخراج اطلاعات تا گزارش تحلیل دعوا',
+  subtitleEn: 'From information extraction to the dispute analysis report — comparing both parties’ arguments',
   steps: [
     {
-      n: 1, fa: 'بارگذاری اسناد طرفین', en: 'Upload parties\u2019 documents', tab: 'dexp',
+      n: 2, fa: 'بارگذاری اسناد طرفین', en: 'Upload parties’ records', tab: 'dexp',
       side: {
-        titleFa: 'اسناد قابل بارگذاری', titleEn: 'Uploadable documents',
-        itemsFa: ['قرارداد، الحاقیه و متمم', 'صورت‌جلسات و دستورکارها', 'مکاتبات، ادعاها و اعتراضات', 'اسناد مالی و صورت‌وضعیت', 'برنامه‌های زمان‌بندی', 'درخواست چون‌ساخت', 'گزارش‌های دوره‌ای', 'سایر مستندات مرتبط'],
-        itemsEn: ['Contract, amendments & annexes', 'Minutes & work orders', 'Correspondence, claims & objections', 'Financial records & IPCs', 'Schedules', 'As-built program', 'Periodic reports', 'Other related documents'],
+        titleFa: 'اسناد طرفین خواهان و خوانده', titleEn: 'Claimant & respondent records',
+        itemsFa: ['قرارداد', 'الحاقیه و متمم', 'صورت‌جلسات و دستورکارها', 'مکاتبات', 'ادعاها و اعتراضات', 'اسناد مالی و صورت‌وضعیت', 'برنامه‌های زمان‌بندی', 'برنامه چون‌ساخت', 'گزارش‌های دوره‌ای', 'سایر مستندات مرتبط'],
+        itemsEn: ['Contract', 'Amendments & annexes', 'Minutes & work orders', 'Correspondence', 'Claims & objections', 'Financial records & IPC', 'Schedules', 'As-built program', 'Periodic reports', 'Other related documents'],
         noteFa: 'فرمت‌ها: MSP ,Primavera P6, Word, PDF, تصویر', noteEn: 'Formats: MSP, Primavera P6, Word, PDF, image',
       },
     },
     {
-      n: 2, fa: 'استخراج اطلاعات و رویدادها', en: 'Information & event extraction', tab: 'dexp',
+      n: 1, fa: 'استخراج اطلاعات و رویدادها', en: 'Extract information & events', tab: 'dexp',
       side: {
         titleFa: 'نتایج استخراج', titleEn: 'Extraction results',
-        itemsFa: ['موضوع دعوا', 'رویدادها و اطلاعات کلیدی', 'اسناد هر طرف (خواهان / خوانده)'],
-        itemsEn: ['Dispute subject', 'Key events & information', 'Each party\u2019s documents (claimant / respondent)'],
+        itemsFa: ['موضوع دعوا', 'رویدادها و اطلاعات کلیدی', 'اسناد هر طرف (خواهان/خوانده)', 'استدلال‌های طرفین'],
+        itemsEn: ['Dispute subject', 'Key events & information', 'Each party’s records', 'Parties’ arguments'],
       },
     },
     {
-      n: 3, fa: 'تحلیل قوانین و دستورالعمل‌ها', en: 'Legal & guideline analysis', tab: 'dexp',
+      n: 3, fa: 'تحلیل قوانین و دستورالعمل‌ها', en: 'Analyse laws & guidelines', tab: 'dexp',
       side: {
         titleFa: 'مبانی تحلیل', titleEn: 'Analysis basis',
         itemsFa: ['قوانین و قواعد ایران', 'اسناد پروژه و قرارداد', 'مستندات طرفین دعوا', 'دستورالعمل‌های معتبر داخلی و بین‌المللی'],
-        itemsEn: ['Iranian laws & regulations', 'Project & contractual documents', 'Parties\u2019 evidence', 'Authoritative national & international guidelines'],
+        itemsEn: ['Iranian laws & regulations', 'Project records & contract', 'Dispute parties’ records', 'Valid national & international guidelines'],
       },
     },
     {
-      n: 4, fa: 'تحلیل استدلال‌ها و مستندات', en: 'Arguments & evidence analysis', tab: 'dexp',
+      n: 4, fa: 'تحلیل استدلال‌ها و مستندات', en: 'Analyse arguments & evidence', tab: 'dexp',
       side: {
-        titleFa: 'تحلیل ساختارمند', titleEn: 'Structured analysis',
+        titleFa: 'تحلیل ساختارمند استدلال‌ها و مستندات طرفین', titleEn: 'Structured analysis of parties’ arguments & evidence',
         itemsFa: ['استدلال‌های طرف خواهان و خوانده', 'نقاط توافق و اختلاف', 'مسائل کلیدی دعوا:', 'تأخیرات مجاز و غیرمجاز', 'قابلیت جبران خسارت', 'اثر تغییرات بر مدت و هزینه', 'مسئولیت‌های قراردادی'],
-        itemsEn: ['Claimant & respondent arguments', 'Points of agreement & dispute', 'Key dispute issues:', 'Excusable / non-excusable delays', 'Compensability of loss', 'Time & cost effect of variations', 'Contractual liabilities'],
+        itemsEn: ['Claimant & respondent arguments', 'Points of agreement & dispute', 'Key dispute issues:', 'Excusable / non-excusable delays', 'Compensability', 'Variation effect on time & cost', 'Contractual liabilities'],
       },
     },
     {
-      n: 5, fa: 'جمع‌بندی و ارائه پیشنهادها', en: 'Conclusion & recommendations', tab: 'dexp',
+      n: 5, fa: 'جمع‌بندی و ارائه پیشنهادها', en: 'Conclude & propose', tab: 'dexp',
       side: {
-        titleFa: 'نتایج جمع‌بندی', titleEn: 'Conclusion results',
+        titleFa: 'نتایج جمع‌بندی', titleEn: 'Conclusions',
         itemsFa: ['نتیجه‌گیری تحلیلی', 'پیشنهادهای تخصصی'],
-        itemsEn: ['Analytical conclusion', 'Expert recommendations'],
+        itemsEn: ['Analytical conclusion', 'Expert proposals'],
       },
     },
     { n: 6, fa: 'گزارش تحلیل و خروجی نهایی', en: 'Analysis report & final output', tab: 'dexp' },
   ],
   finalFa: 'خروجی‌های نرم‌افزار', finalEn: 'Software outputs', finalKind: 'output',
   finalItemsFa: ['گزارش تحلیل دعوا', 'جدول مقایسه استدلال‌ها', 'نقاط توافق و اختلاف', 'پیش‌نویس استدلال‌های تحلیلی', 'خروجی Word و PDF'],
-  finalItemsEn: ['Dispute analysis report', 'Arguments comparison table', 'Points of agreement & dispute', 'Draft analytical reasoning', 'Word & PDF output'],
-  footerFa: 'مناسب برای: پیمانکاران، کارفرمایان، مشاوران، وکلا، داوران، کارشناسان — این بخش ابزار کمک تحلیلی است و جایگزین قضاوت انسانی نیست',
-  footerEn: 'For contractors, employers, consultants, counsel, arbitrators & experts — an analytical aid, not a substitute for human judgement',
+  finalItemsEn: ['Dispute analysis report', 'Argument comparison table', 'Agreement & dispute points', 'Draft analytical arguments', 'Word & PDF export'],
+  footerFa: 'مناسب برای: پیمانکاران، کارفرمایان، مشاوران، وکلا، داوران، کارشناسان — این بخش ابزار کمک تحلیلی است و جایگزین قضاوت انسانی نیست.',
+  footerEn: 'For contractors, employers, consultants, lawyers, arbitrators & experts — this section is an analytical aid, not a substitute for human judgement.',
 };
 
-export const PROCESS_MAP_IDS = ['delay', 'loss', 'risk', 'dispute'] as const;
 const MAPS: MapDef[] = [MAP_DELAY, MAP_LOSS, MAP_RISK, MAP_DISPUTE];
 
-/* ————— سبک‌ها — هم‌سان با PlanningWorkflowMap (پالت نعنایی/کرم/خط‌چین طلایی) ————— */
+/* ————— اجزای ترسیم (هماهنگ با نقشهٔ برنامه‌ریزی: کاپ‌ها، رنگ خردمند پاستیلی، فلش ممتد/خط‌چین) ————— */
 const boxCls = {
-  io: 'border-[#c9cfc9] bg-[#efeee9] text-[#26332e]',
   proc: 'border-[#57a773] bg-[#e2f2e7] text-[#17563a]',
-  cross: 'border-dashed border-[#b9a86a] bg-[#f7f4ec] text-[#6b5d24]',
+  io: 'border-[#c9cfc9] bg-[#efeee9] text-[#26332e]',
   fin: 'border-[#b9a86a] bg-[#f7f4ec] text-[#6b5d24]',
-} as const;
-const sectionCls = 'rounded-2xl border border-[#d8ded8] bg-[#f6f8f6] p-4 text-[#21322c] shadow-sm';
-const titleCls = 'text-center text-[16px] font-extrabold text-[#1c2b26]';
-const subCls = 'mt-0.5 text-center text-[11px] text-[#6b7a74]';
-const colHead = 'text-center text-[11px] font-normal text-[#6b7a74]';
+  cross: 'border-[#d9c9a9] bg-[#faf8f2] border-dashed text-[#7a6a35]',
+};
+const sectionCls = 'rounded-2xl border border-[#d8ded8] bg-[#f6f8f6] px-4 py-3';
+const colHead = 'text-center text-[11px] font-semibold text-[#55665f]';
+const titleCls = 'text-center text-[15px] font-bold text-[#1c2b26]';
+const subCls = 'mt-1 text-center text-[11px] font-light text-[#55665f]';
 const arrowCls = 'flex items-center justify-center text-[13px] text-[#5c6f68]';
 const vArrowCls = 'mx-auto py-0.5 text-[13px] leading-4 text-[#5c6f68]';
 const stepCls = `flex w-full flex-col items-center justify-center rounded-[10px] border-[1.5px] px-3 py-2.5 text-center cursor-pointer transition hover:shadow-md hover:brightness-[1.03] focus:outline-none focus:ring-2 focus:ring-[#57a773] ${boxCls.proc}`;
@@ -265,7 +267,7 @@ function FlowChart({ map, fa, onNavigate }: { map: MapDef; fa: boolean; onNaviga
       <p className={subCls} dir="rtl">{L(map.subtitleFa, map.subtitleEn)}</p>
 
       {/* سرستون‌ها — عین نقشهٔ برنامه‌ریزی */}
-      <div className="mt-3 grid grid-cols-[1.15fr_22px_1fr]">
+      <div className="mt-3 grid grid-cols-[1.15fr_22px_1fr]" >
         <div className={colHead} dir="rtl">{fa ? 'ورودی‌ها و خروجی‌های هر مرحله' : 'Step inputs / outputs'}</div>
         <div />
         <div className={colHead} dir="rtl">{fa ? 'مراحل فرایند' : 'Process steps'}</div>
@@ -416,7 +418,7 @@ function IntegratedMap({ fa, onSelect, allowed }: { fa: boolean; onSelect: (id: 
             <Row
               box={B('loss', '۲', 'تهیه لایحه ضرر و زیان', 'Section 2')}
               card="out"
-              cardNode={<><div className={outHead}>{fa ? 'خروجی‌های لایحه ضرر و زیان' : 'Loss & damages outputs'}</div><ul>{[fa ? 'سرفصل‌های خسارت و فرمول‌ها' : 'Loss heads & formulas', fa ? 'محاسبه دقیق ضرر و زیان' : 'Precise calculation', fa ? 'جمع کل ضرر و زیان (ریال)' : 'Total loss (IRR)'].map((t, i) => <li key={i} className={li}>· {t}</li>)}</ul></>}
+              cardNode={<><div className={outHead}>{fa ? 'خروجی‌های لایحه ضرر و زیان' : 'Loss & damages outputs'}</div><ul>{[fa ? 'سرفصل‌های خسارت و فرمول‌ها' : 'Loss heads & formulae', fa ? 'محاسبه دقیق ضرر و زیان' : 'Precise calculation', fa ? 'جمع کل ضرر و زیان (ریال)' : 'Total loss (IRR)'].map((t, i) => <li key={i} className={li}>· {t}</li>)}</ul></>}
             />
           </div>
         </div>
@@ -504,7 +506,7 @@ export default function ProcessFlowMaps({ lang, onNavigate, only, defaultMap }: 
           ))}
         </div>
       )}
-      {...MAPS.filter((m) => m.id === active).map((m) => <FlowChart key={m.id} map={m} fa={fa} onNavigate={onNavigate} />)}
+      {MAPS.filter((m) => m.id === active).map((m) => <FlowChart key={m.id} map={m} fa={fa} onNavigate={onNavigate} />)}
       {active === 'integrated' && <IntegratedMap fa={fa} allowed={allowed} onSelect={(id) => { if (allowed.includes(id)) setSel(id); }} />}
     </div>
   );
