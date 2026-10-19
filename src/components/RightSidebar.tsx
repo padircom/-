@@ -462,6 +462,7 @@ export default function RightSidebar({
                           style={isOpen ? { background: `${g.color}14` } : undefined}
                         >
                           <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: g.color }} />
+                          <span className="shrink-0 text-[11px] leading-none">{g.icon}</span>
                           <span className="min-w-0 flex-1 truncate text-[10.5px] font-medium" style={{ color: g.color }}>
                             {t(g.title, lang)}
                           </span>

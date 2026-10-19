@@ -64,17 +64,20 @@ export type SidebarGroup = {
   title: Bi;
   short: string;
   color: string;
+  /** آیکن گروه فرایندی — همان آیکن‌های بنر استاندارد PMBOK
+   * (موشک/کلیپ‌بورد/چرخ‌دنده/ذره‌بین/پرچم) تا سایدبار و بنر یکی باشند. */
+  icon: string;
   /** گروه سنجاق‌شدهٔ انتهای سایدبار (مستقل از آکاردئون فازها). */
   pinned?: boolean;
 };
 
 export const sidebarGroups: SidebarGroup[] = [
-  { id: "pg1", title: { fa: "آغازین", en: "Initiating" }, short: "IN", color: "#7FB2FF" },
-  { id: "pg2", title: { fa: "برنامه‌ریزی", en: "Planning" }, short: "PL", color: "#8FE3C8" },
-  { id: "pg3", title: { fa: "اجرا", en: "Executing" }, short: "EX", color: "#FFD48A" },
-  { id: "pg4", title: { fa: "پایش و کنترل", en: "Monitoring & Controlling" }, short: "MC", color: "#FF9F9F" },
-  { id: "pg5", title: { fa: "اختتامیه", en: "Closing" }, short: "CL", color: "#C9A7FF" },
-  { id: "support", title: { fa: "پشتیبان", en: "Supporting" }, short: "SP", color: "#94A3B8", pinned: true },
+  { id: "pg1", title: { fa: "آغازین", en: "Initiating" }, short: "IN", color: "#7FB2FF", icon: "🚀" },
+  { id: "pg2", title: { fa: "برنامه‌ریزی", en: "Planning" }, short: "PL", color: "#8FE3C8", icon: "📋" },
+  { id: "pg3", title: { fa: "اجرا", en: "Executing" }, short: "EX", color: "#FFD48A", icon: "⚙️" },
+  { id: "pg4", title: { fa: "پایش و کنترل", en: "Monitoring & Controlling" }, short: "MC", color: "#FF9F9F", icon: "🔍" },
+  { id: "pg5", title: { fa: "اختتامیه", en: "Closing" }, short: "CL", color: "#C9A7FF", icon: "🏁" },
+  { id: "support", title: { fa: "پشتیبان", en: "Supporting" }, short: "SP", color: "#94A3B8", icon: "🧰", pinned: true },
 ];
 
 export const domains: Domain[] = [
