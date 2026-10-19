@@ -120,6 +120,7 @@ export const performanceDomains: PerformanceDomain[] = [
 /** نگاشت ماژول (دامنه) ← حوزهٔ عملکردی PMBOK. */
 export const domainPerformance: Record<string, PerformanceDomainId> = {
   d6: "governance",
+  d7: "governance",
   d20: "governance",
   d12: "scope",
   d15: "scope",
@@ -133,7 +134,6 @@ export const domainPerformance: Record<string, PerformanceDomainId> = {
   d4: "risk",
   d3: "risk",
   d8: "extension",
-  d7: "extension",
   d16: "extension",
   d17: "extension",
   d18: "extension",
