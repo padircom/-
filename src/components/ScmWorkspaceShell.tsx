@@ -261,7 +261,7 @@ export default function ScmWorkspaceShell({ lang, activeSub, onSelectSub, onBack
         </>
       }
       onBack={onBackHome}
-      navTitle={tr("زیرماژول‌های SCM", "SCM Submodules")}
+      navTitle={tr("زنجیره تأمین، بازرگانی و مالی", "Supply Chain, Commercial & Finance")}
       navItems={SCM_SUBMODULES.map((item) => {
         const allowed = canAny(item.viewPermissions);
         return {
