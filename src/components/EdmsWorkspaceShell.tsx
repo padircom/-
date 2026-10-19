@@ -190,7 +190,7 @@ export const EdmsWorkspaceShell: React.FC<EdmsWorkspaceShellProps> = ({
         </>
       }
       onBack={onBackHome ?? (() => {})}
-      navTitle={tr("زیرماژول‌های اسناد و دانش (EDMS/KMS)", "EDMS & KMS Submodules")}
+      navTitle={tr("مدیریت اسناد و دانش سازمانی (EDMS/KMS)", "Document & Knowledge Management (EDMS/KMS)")}
       navItems={EDMS_TABS.map((item) => {
         const allowed = effectivePerms.has(item.viewPerm);
         return {

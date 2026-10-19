@@ -189,7 +189,7 @@ export const HrmWorkspaceShell: React.FC<HrmWorkspaceShellProps> = ({
         </>
       }
       onBack={onBackHome ?? (() => {})}
-      navTitle={tr("زیرماژول‌های منابع انسانی (HRM)", "HRM Submodules")}
+      navTitle={tr("مدیریت منابع انسانی و کارکرد (HRM)", "Human Resource Management (HRM)")}
       navItems={HRM_TABS.map((item) => {
         const allowed = effectivePerms.has(item.viewPerm);
         return {

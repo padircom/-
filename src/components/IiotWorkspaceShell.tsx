@@ -410,7 +410,7 @@ export default function IiotWorkspaceShell({ lang, activeSub, onSelectSub, onBac
         </>
       }
       onBack={onBackHome}
-      navTitle={tr("زیرماژول‌های IIoT", "IIoT Submodules")}
+      navTitle={tr("پایش میدانی و اینترنت اشیاء", "Field Monitoring & Industrial IoT")}
       navItems={IIOT_SUBMODULES.map((item) => {
         const allowed = canIiotAccess(userId, item.viewPermission, rigId);
         return {
