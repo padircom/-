@@ -80,66 +80,6 @@ export const sidebarGroups: SidebarGroup[] = [
   { id: "support", title: { fa: "پشتیبان", en: "Supporting" }, short: "SP", color: "#94A3B8", icon: "🧰", pinned: true },
 ];
 
-/* ============================================================
-   حوزه‌های عملکردی PMBOK — محور دوم کنار گروه‌های فرایندی
-   ------------------------------------------------------------
-   گروه‌های فرایندی بالا «چرخهٔ حیات» را نشان می‌دهند؛ حوزه‌های
-   عملکردی زیر «محورهای کاری» PMBOK را. هر ماژول (دامنه) دقیقاً
-   در یک حوزهٔ عملکردی می‌نشیند. ماژول‌هایی که معادل مستقیمی
-   در PMBOK ندارند (کیفیت، HSE، GIS، تعالی سازمانی) در
-   `domainPerformance` برایشان «افزونه‌های صنعتی» آمده است.
-   ============================================================ */
-export type PerformanceDomainId =
-  | "governance"
-  | "scope"
-  | "schedule"
-  | "finance"
-  | "stakeholders"
-  | "resources"
-  | "risk"
-  | "extension";
-
-export type PerformanceDomain = {
-  id: PerformanceDomainId;
-  title: Bi;
-  icon: string;
-  color: string;
-};
-
-export const performanceDomains: PerformanceDomain[] = [
-  { id: "governance", title: { fa: "حاکمیت", en: "Governance" }, icon: "🏛", color: "#4C7FD1" },
-  { id: "scope", title: { fa: "محدوده", en: "Scope" }, icon: "🎯", color: "#0FA08C" },
-  { id: "schedule", title: { fa: "زمان‌بندی", en: "Schedule" }, icon: "📅", color: "#2E9E4F" },
-  { id: "finance", title: { fa: "مالی", en: "Finance" }, icon: "💰", color: "#D08A16" },
-  { id: "stakeholders", title: { fa: "ذی‌نفعان", en: "Stakeholders" }, icon: "👥", color: "#E2711D" },
-  { id: "resources", title: { fa: "منابع", en: "Resources" }, icon: "🔧", color: "#7A4BB8" },
-  { id: "risk", title: { fa: "ریسک", en: "Risk" }, icon: "⚠️", color: "#D64A4A" },
-  { id: "extension", title: { fa: "افزونه‌های صنعتی", en: "Industry Extensions" }, icon: "🧩", color: "#94A3B8" },
-];
-
-/** نگاشت ماژول (دامنه) ← حوزهٔ عملکردی PMBOK. */
-export const domainPerformance: Record<string, PerformanceDomainId> = {
-  d6: "governance",
-  d7: "governance",
-  d20: "governance",
-  d12: "scope",
-  d15: "scope",
-  d2: "schedule",
-  d5: "finance",
-  d14: "finance",
-  d11: "stakeholders",
-  d1: "stakeholders",
-  d10: "resources",
-  d9: "resources",
-  d4: "risk",
-  d3: "risk",
-  d8: "extension",
-  d16: "extension",
-  d17: "extension",
-  d18: "extension",
-  d19: "extension",
-};
-
 export const domains: Domain[] = [
   {
     id: "d6",
