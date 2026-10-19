@@ -107,11 +107,9 @@ export type ModuleWorkspaceShellProps<T extends string = string> = {
   onBack?: () => void;
   backLabel?: string;
 
-  /** عنوان سایدبار داخلی و آیکن آن.
-   *  `navIcon = null` یعنی آیکنِ کاشی‌دار نمایش داده نشود (سربرگ سایدبار فقط
-   *  عنوان ماژول را نشان می‌دهد). اگر `undefined` باشد، آیکن ماژول (`icon`) می‌آید. */
+  /** عنوان سایدبار داخلی و آیکن آن. */
   navTitle: string;
-  navIcon?: ReactNode | null;
+  navIcon?: ReactNode;
   navItems: ModuleNavItem<T>[];
   activeId: T;
   onSelect: (id: T) => void;
@@ -230,7 +228,7 @@ export default function ModuleWorkspaceShell<T extends string>({
         <aside dir={dirValue} aria-label={navTitle} className="glass-dark flex w-[300px] shrink-0 flex-col overflow-hidden rounded-2xl">
           <div className="b-line border-b px-3 py-2.5">
             <div className="flex items-center gap-2">
-              {navIcon === null ? null : <ModuleIconTile accent={accent} size="sm">{navIcon ?? icon}</ModuleIconTile>}
+              <ModuleIconTile accent={accent} size="sm">{navIcon ?? icon}</ModuleIconTile>
               <div className="text-[10.5px] font-normal tx1">{navTitle}</div>
             </div>
           </div>
