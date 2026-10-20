@@ -1,0 +1,29 @@
+/* تایپوگرافی جدول‌ها — فقط وزن و خوانایی.
+ *
+ * ریشهٔ بدنهٔ رابط کاربری با وزن ۲۰۰ (Vazirmatn ExtraLight) رسم شده و سلول‌های
+ * جدول آن را به ارث می‌برند؛ در اندازهٔ ۱۲ پیکسلی این وزن بسیار نازک و
+ * خسته‌کننده خوانده می‌شود. این فایل وزن متنِ جدول‌ها را به وزن عادی
+ * (۴۰۰) و سرستون‌ها را به نیمه‌ضخیم (۶۰۰) می‌برد.
+ *
+ * اندازهٔ قلم در `workspace-typography.css` می‌ماند و توکن‌های رنگ/شیشه در
+ * `index.css` دست‌نخورده است. تأکیدهای صریح نویسنده (`font-semibold`,
+ * `font-bold`) حفظ می‌شوند.
+ */
+@media screen {
+  .app-main table {
+    font-weight: 400;
+  }
+
+  .app-main table :is(td, th):not(.font-semibold):not(.font-bold) {
+    font-weight: 400;
+  }
+
+  .app-main table thead :is(th, td):not(.font-semibold):not(.font-bold) {
+    font-weight: 600;
+  }
+
+  /* ارقام جدول هم‌عرض بمانند تا ستون‌های عددی تراز دیده شوند. */
+  .app-main table :is(td, th) {
+    font-variant-numeric: lining-nums tabular-nums;
+  }
+}
