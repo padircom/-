@@ -586,9 +586,9 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
   const d2Tab = ((): PexTab => {
     const sid = selected?.sId ?? target.subId;
     if (sid && D2_TAB_BY_SUB[sid]) return D2_TAB_BY_SUB[sid];
-    /* نقطهٔ ورود ماژول، نقشهٔ گردش‌کار در وسط صفحه است؛ از روی گره‌ها
-     * به زیربخش‌ها می‌روند و با دکمهٔ بازگشت به نقشه برمی‌گردند. */
-    return "workflow";
+    /* نقطهٔ ورود ماژول، داشبورد کنترل پیشرفت است؛ بخش‌های دیگر از سایدبار
+     * دامنه در دسترس‌اند. */
+    return "dashboard";
   })();
 
   if (dom.id === "d2") {
