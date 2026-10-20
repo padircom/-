@@ -16,6 +16,7 @@ import CapabilityDetail from "./CapabilityDetail";
 import AdminWorkspace from "./AdminWorkspace";
 import DocumentWorkspace, { type EdmsTab } from "./DocumentWorkspace";
 import PlanningWorkspace, { type PexTab } from "./PlanningWorkspace";
+import ControlWorkflowMap from "./ControlWorkflowMap";
 import PmaWorkspace, { type PmaTab } from "./PmaWorkspace";
 import RiskClaimsWorkspace, { type D4Tab } from "./RiskClaimsWorkspace";
 import GovernanceWorkspace, { type GovTab } from "./GovernanceWorkspace";
@@ -458,6 +459,13 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
     if (destination) onNavigate?.({ ...target, moduleId: "d16", processId: "d16-p7", subId: destination });
   }, [target, onNavigate]);
 
+  /* جابه‌جایی بین ماژول‌ها (مثلاً از نقشهٔ گردش‌کار کنترل در d6 به ماژول
+     پایش و کنترل) باید زیرفرآیند انتخاب‌شده را با مقصد هم‌ریتم کند؛ وگرنه
+     تب مقصد از انتخابِ ماژول قبلی پر می‌شود. */
+  useEffect(() => {
+    setSelected(target.processId && target.subId ? { pId: target.processId, sId: target.subId } : null);
+  }, [target.moduleId, target.processId, target.subId]);
+
   if (!dom) return null;
 
   const hasAccess = dom.id === "d7" ? can("system.manage") : can("project.view", target.projectId);
@@ -791,7 +799,7 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
 
   /* P8: میز کار دفتر پروژه (PMO-1..3) کنار میز حاکمیت d6؛ نوار کنار و
      حوزه‌های اصلی دست‌نخورده می‌مانند و فقط نمای درون d6 عوض می‌شود. */
-  const [d6View, setD6View] = useState<"gov" | "pmo">("gov");
+  const [d6View, setD6View] = useState<"gov" | "pmo" | "ctl">("gov");
 
   const [d14View, setD14View] = useState<"contract" | "ipc" | "rating" | "risk">(
     target.subId === "d14-p1-risk" ? "risk" : target.processId === "d14-p8" ? "rating" : "contract",
@@ -1409,11 +1417,12 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
           {([
             ["gov", rtl ? "حاکمیت و فرآیندها (GOV)" : "Governance (GOV)"],
             ["pmo", rtl ? "دفتر پروژه (PMO)" : "PMO desk"],
+            ["ctl", rtl ? "گردش‌کار کنترل پروژه (CTL)" : "Control workflow (CTL)"],
           ] as const).map(([k, label]) => (
             <button
               key={k}
               type="button"
-              onClick={() => { setD6View(k); setD6Guide(false); }}
+              onClick={() => { setD6View(k); setD6Guide(false); if (k === "ctl") setSelected(null); }}
               className={`rounded-lg px-2.5 py-1 text-[10px] font-light transition ${
                 d6View === k ? "toggle-on tx1" : "tx3 hover:tx2"
               }`}
@@ -1424,7 +1433,25 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
         </div>
         <div className="workspace-columns flex min-h-0 flex-1 gap-3 overflow-hidden">
           <div dir={rtl ? "rtl" : "ltr"} className="glass flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl p-3">
-            {d6Guide || (d6View === "gov" && !selected) ? (
+            {d6View === "ctl" ? (
+              /* نقشهٔ گردش‌کار پایش و کنترل پروژه — همان جلوهٔ بصری نقشهٔ
+                 گردش‌کار برنامه‌ریزی (d2). کلیک روی هر گره به ماژول
+                 مقصد (پایش، هزینه، کیفیت، ریسک) می‌رود. */
+              <div className="fade-rise flex min-h-full items-center justify-center py-2">
+                <div className="w-full max-w-[1060px]">
+                  <ControlWorkflowMap
+                    rtl={rtl}
+                    onOpenModule={(moduleId, processId, subId) => {
+                      setSelected(null);
+                      onNavigate?.({ ...target, moduleId, processId, subId });
+                    }}
+                  />
+                  <p className="mt-2 text-center text-[10px] tx3">
+                    {rtl ? "برای شروع، روی هر گره از نقشه کلیک کنید تا به ماژول مربوط بروید." : "Start by clicking any node on the map to open its module."}
+                  </p>
+                </div>
+              </div>
+            ) : d6Guide || (d6View === "gov" && !selected) ? (
               <InitiatingGuide lang={lang} processes={activeProcesses} projectName={project ? t(project.name, lang) : target.projectId} currentRole={user?.role} canEditStructure={canEditTaxonomy} guide={d6Guide} onSelect={(pId, sId) => { setSelected({ pId, sId }); setD6Guide(false); setD6View("gov"); audit("OPEN_SUBPROCESS", { projectId: target.projectId, entity: dom.id, entityId: sId }); }} />
             ) : d6View === "pmo" ? (
               <PmoWorkspace lang={lang} />
