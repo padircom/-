@@ -396,13 +396,6 @@ export default function RightSidebar({
           <span className="min-w-0 flex-1 truncate text-[10.5px] font-medium" style={{ color: pd.color }}>
             {t(pd.title, lang)}
           </span>
-          <span
-            className="shrink-0 rounded-full px-1.5 py-px text-[8.5px] font-light leading-4"
-            style={{ background: `${pd.color}22`, color: pd.color }}
-            title={rtl ? "تعداد ماژول‌های این حوزه" : "Modules in this domain"}
-          >
-            {pd.modules.length}
-          </span>
           <svg
             viewBox="0 0 24 24"
             fill="none"
