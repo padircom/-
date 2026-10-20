@@ -129,8 +129,9 @@ const selectClass =
 
 /* گروه‌هایی که در فاز نمایشی، لایهٔ ۲ (حوزهٔ عملکردی) در سایدبار اصلی دارند:
  * «آغازین» (حاکمیت)، «برنامه‌ریزی» (زمان‌بندی/محدوده)، «اجرا»
- * (مالی/منابع/افزونه‌های صنعتی) و «پایش و کنترل» (مالی/ریسک/افزونه‌های صنعتی). */
-const PERF_NAV_GROUPS = new Set(["pg1", "pg2", "pg3", "pg4"]);
+ * (مالی/منابع/افزونه‌های صنعتی)، «پایش و کنترل» (مالی/ریسک/افزونه‌های صنعتی)،
+ * «اختتامیه» (محدوده) و «پشتیبان» (ذی‌نفعان/افزونه‌های صنعتی). */
+const PERF_NAV_GROUPS = new Set(["pg1", "pg2", "pg3", "pg4", "pg5", "support"]);
 
 export default function RightSidebar({
   lang,
@@ -592,7 +593,16 @@ export default function RightSidebar({
                           <div className="fade-rise mt-1 border-s-2 ps-2" style={{ borderColor: `${g.color}33` }}>
                             {/* لایهٔ ۲ (حوزهٔ عملکردی) زیر گروه‌های فاز نمایشی */}
                             {PERF_NAV_GROUPS.has(g.id)
-                              ? performanceDomainsInGroup(g.id).map(renderPerfDomain)
+                              ? performanceDomainsInGroup(g.id)
+                                /* ماژول‌هایی که کاربر حق دیدنشان را ندارد
+                                 * (مثل d7 که فقط مدیر سامانه می‌بیند) از شمارش و
+                                 * ورودِ حوزه کنار گذاشته می‌شوند. */
+                                .map((pd) => ({
+                                  ...pd,
+                                  modules: pd.modules.filter((m) => visibleDomains.some((v) => v.id === m.id)),
+                                }))
+                                .filter((pd) => pd.modules.length > 0)
+                                .map(renderPerfDomain)
                               : members.map(renderDomain)}
                           </div>
                         )}
