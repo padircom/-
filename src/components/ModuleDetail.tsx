@@ -1861,7 +1861,13 @@ function DomainNavGroups({
   if (!pd) return null;
   /* ماژول «مدیریت سامانه و پیکربندی پایه» (d7) فقط مدیر سامانه می‌بیند؛
    * همان قاعده‌ای که در سایدبار اصلی اعمال می‌شود. */
-  const mods = performanceDomainModules(pd.id).filter((m) => m.id !== "d7" || can("system.manage"));
+  /* ماژول‌های هم‌حوزه، اما فقط از همین گروه فرایندی. یعنی ماژولی که
+   * خانگی‌اش «اجرا» است در سایدبار «پایش و کنترل» دیده نمی‌شود و برعکس.
+   *  نمونه: حوزهٔ «مالی» = d14 (اجرا) + d5 (پایش و کنترل) ⇒ در صفحهٔ d14
+   *  فقط d14 و در صفحهٔ d5 فقط d5 فهرست می‌شود. */
+  const mods = performanceDomainModules(pd.id)
+    .filter((m) => m.group === dom.group)
+    .filter((m) => m.id !== "d7" || can("system.manage"));
   if (!mods.length) return null;
   return (
     <>
