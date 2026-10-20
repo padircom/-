@@ -21,9 +21,11 @@ import DprProgressFallback from "./DprProgressFallback";
 import DprSupportTables from "./DprSupportTables";
 import { isDprFormatActive, isDprSupportBoxActive } from "../data/dprScope";
 import MspAnalysisPanel from "./MspAnalysisPanel";
+import PlanningWorkflowMap from "./PlanningWorkflowMap";
 import { ScheduleImportActions } from "./ConnectorActions";
 
 export type PexTab =
+  | "workflow"
   | "dashboard"
   | "insight"
   | "workshop"
@@ -43,6 +45,7 @@ export type PexTab =
   | "roc";
 
 const TABS: { id: PexTab; fa: string; en: string }[] = [
+  { id: "workflow", fa: "نقشهٔ گردش‌کار", en: "Workflow Map" },
   { id: "dashboard", fa: "داشبورد", en: "Dashboard" },
   { id: "insight", fa: "تحلیل MSP/P6", en: "MSP/P6 Insight" },
   { id: "workshop", fa: "کارگاه برنامه‌ریزی", en: "Planning Workshop" },
@@ -407,6 +410,38 @@ export default function PlanningWorkspace({
       )}
 
       <div className="thin-scroll min-h-0 flex-1 overflow-y-auto pe-1">
+        {/* در حالت بدون نوار تب (ورود از مسیر پروژه)، بعد از پرش از روی نقشه
+            به یک زیربخش، راه برگشت فقط همین دکمه است. */}
+        {hideTabs && tab !== "workflow" && (
+          <div className="fade-rise mb-2 flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setTab("workflow")}
+              className="glass-row flex items-center gap-1.5 rounded-lg px-3 py-2 text-[10.5px] font-light tx2 transition hover:tx1"
+            >
+              <span aria-hidden="true">{rtl ? "→" : "←"}</span>
+              {rtl ? "بازگشت به نقشهٔ گردش‌کار" : "Back to workflow map"}
+            </button>
+            <span className="text-[10px] tx3">
+              {rtl ? "برای دیدن دوبارهٔ نقشهٔ فرایند و انتخاب گرهٔ دیگر" : "To see the process map again and pick another node"}
+            </span>
+          </div>
+        )}
+
+        {/* نقشهٔ گردش‌کار: صفحهٔ مرکزی و مستقل ماژول؛ نقطهٔ ورود پیش‌فرض.
+            کلیک روی هر گره به زیربخش/ماژول مربوط می‌رود و دکمهٔ بازگشت
+            بالای زیربخش‌ها دوباره به همین نقشه برمی‌گردد. */}
+        {tab === "workflow" && (
+          <div className="fade-rise flex min-h-full items-center justify-center py-3">
+            <div className="w-full max-w-[1060px]">
+              <PlanningWorkflowMap rtl={rtl} onNavigate={(next) => setTab(next)} />
+              <p className="mt-2 text-center text-[10px] tx3">
+                {rtl ? "برای شروع، روی هر گره از نقشه کلیک کنید تا به بخش مربوط بروید." : "Start by clicking any node on the map to open its section."}
+              </p>
+            </div>
+          </div>
+        )}
+
         {tab === "dashboard" && (
           <div className="fade-rise space-y-2">
             <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">

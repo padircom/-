@@ -42,7 +42,6 @@ import CntIpcPanel from "./CntIpcPanel";
 import { loadProcessTreeFull, type ProcessTreeResult } from "../services/taxonomyApi";
 import SystemBadge from "./SystemBadge";
 import InitiatingGuide from "./InitiatingGuide";
-import ModuleProcessMap from "./ModuleProcessMap";
 import { EDITABLE_TAXONOMY_DOMAINS } from "../services/taxonomyApi";
 
 /** Extra submodules only on the d1 inner page — not in the main right sidebar. */
@@ -586,9 +585,9 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
   const d2Tab = ((): PexTab => {
     const sid = selected?.sId ?? target.subId;
     if (sid && D2_TAB_BY_SUB[sid]) return D2_TAB_BY_SUB[sid];
-    /* نقطهٔ ورود ماژول، داشبورد کنترل پیشرفت است؛ بخش‌های دیگر از سایدبار
-     * دامنه در دسترس‌اند. */
-    return "dashboard";
+    /* نقطهٔ ورود ماژول، نقشهٔ گردش‌کار در وسط صفحه است؛ از روی گره‌ها
+     * به زیربخش‌ها می‌روند و با دکمهٔ بازگشت به نقشه برمی‌گردند. */
+    return "workflow";
   })();
 
   if (dom.id === "d2") {
@@ -792,7 +791,7 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
 
   /* P8: میز کار دفتر پروژه (PMO-1..3) کنار میز حاکمیت d6؛ نوار کنار و
      حوزه‌های اصلی دست‌نخورده می‌مانند و فقط نمای درون d6 عوض می‌شود. */
-  const [d6View, setD6View] = useState<"gov" | "pmo" | "map">("gov");
+  const [d6View, setD6View] = useState<"gov" | "pmo">("gov");
 
   const [d14View, setD14View] = useState<"contract" | "ipc" | "rating" | "risk">(
     target.subId === "d14-p1-risk" ? "risk" : target.processId === "d14-p8" ? "rating" : "contract",
@@ -1410,7 +1409,6 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
           {([
             ["gov", rtl ? "حاکمیت و فرآیندها (GOV)" : "Governance (GOV)"],
             ["pmo", rtl ? "دفتر پروژه (PMO)" : "PMO desk"],
-            ["map", rtl ? "نقشهٔ ماژول‌ها (PMBOK)" : "Module map (PMBOK)"],
           ] as const).map(([k, label]) => (
             <button
               key={k}
@@ -1430,17 +1428,10 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
               <InitiatingGuide lang={lang} processes={activeProcesses} projectName={project ? t(project.name, lang) : target.projectId} currentRole={user?.role} canEditStructure={canEditTaxonomy} guide={d6Guide} onSelect={(pId, sId) => { setSelected({ pId, sId }); setD6Guide(false); setD6View("gov"); audit("OPEN_SUBPROCESS", { projectId: target.projectId, entity: dom.id, entityId: sId }); }} />
             ) : d6View === "pmo" ? (
               <PmoWorkspace lang={lang} />
-            ) : d6View === "map" ? (
-              /* نقشهٔ فرایندی ماژول‌ها — با کلیک روی هر کارت، ورود به همان ماژول. */
-              <ModuleProcessMap
-                lang={lang}
-                onOpenModule={(moduleId) => onNavigate?.({ clusterId: target.clusterId, projectId: target.projectId, moduleId })}
-              />
             ) : (
               <GovernanceWorkspace lang={lang} initialTab={d6Tab} hideTabs />
             )}
           </div>
-          {d6View !== "map" && (
           <DomainAside
               lang={lang}
               dom={dom}
@@ -1453,7 +1444,6 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
               }}
               onOpenModuleSub={(moduleId, pId, sId) => onNavigate?.({ ...target, moduleId, processId: pId, subId: sId })}
             />
-          )}
         </div>
         {taxonomyEditorOpen && (
           <TaxonomyEditor
