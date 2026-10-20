@@ -1889,13 +1889,14 @@ function DomainNavGroups({
 
             {procs.map((p, i) => (
               <div key={p.id}>
-                {/* فرآیند — آیتم هم‌سطح با سایدبار «برنامه‌ریزی و تولید»: شماره + آیکن + عنوان */}
-                <div className="group flex w-full items-center gap-2 rounded-lg px-2 py-2 text-start transition glass-row hover:-translate-y-px">
+                {/* فرآیند — سطر تخت و بدون قاب کارت؛ فقط شماره + نشانگر مربعی +
+                    عنوان پررنگ‌تر تا سلسله‌مراتب با زیرفرآیندها (نقطهٔ گرد) روشن بماند. */}
+                <div className="group flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-start transition hover:bg-[var(--row-hover)]">
                   <span className="text-[8px] font-light tabular-nums tx4">
                     {(i + 1).toLocaleString(rtl ? "fa-IR" : "en-US")}
                   </span>
-                  <span className="shrink-0 text-[12px] leading-none" style={{ color: m.accent }} aria-hidden="true">▪</span>
-                  <span className="min-w-0 flex-1 truncate text-[10px] font-light tx1">{t(p.title, lang)}</span>
+                  <span className="shrink-0 text-[11px] leading-none" style={{ color: m.accent }} aria-hidden="true">▪</span>
+                  <span className="min-w-0 flex-1 truncate text-[10px] font-normal tx1">{t(p.title, lang)}</span>
                 </div>
                 {/* زیرفرآیندها — تودرتو، با حالت انتخاب‌شده */}
                 {[...p.subs, ...(extraSubs?.[p.id] ?? [])]
