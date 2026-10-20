@@ -1,12 +1,13 @@
 /**
  * نقشهٔ گردش‌کار برنامه‌ریزی و کنترل پروژه (EPC) — بالای داشبورد برنامه‌ریزی.
  * ═══════════════════════════════════════════════════════════════════════
- * چیدمان و رنگ‌ها عین فلوچارت مرجع کارفرما: چهار ستون چپ‌به‌راست
- * (ورودی‌ها ← هاب داده ← چرخهٔ به‌روزرسانی ← خروجی‌ها)، جعبه‌های پردازش
- * سبز نعنایی، ورودی/خروجی کرم، ورودی‌های بین‌ماژولی خط‌چین و حلقهٔ
- * حاکمیت خط‌چین در پایین. گره‌های داخل ماژول کلیک‌پذیرند و به زیربخش
- * مربوط می‌روند؛ گره‌های بین‌ماژولی (تأمین، کیفیت) کلیک ندارند.
+ * چیدمان چهار ستون (ورودی‌ها ← هاب داده ← چرخهٔ به‌روزرسانی ← خروجی‌ها)
+ * با زبان بصری «نقشهٔ فرایندی ماژول‌ها»: سرستون رنگیِ هر ستون، کارت‌های
+ * تیره با نوار رنگی در لبه، گره‌های بین‌ماژولی خط‌چین و حلقهٔ حاکمیت در پایین.
+ * گره‌های داخل ماژول کلیک‌پذیرند و به زیربخش مربوط می‌روند؛ گره‌های
+ * بین‌ماژولی (تأمین، کیفیت) کلیک ندارند.
  */
+import type { ReactElement } from "react";
 import type { PexTab } from "./PlanningWorkspace";
 
 interface MapNode {
@@ -47,40 +48,107 @@ const OUTPUTS: MapNode[] = [
   { titleFa: "تأخیرها و نقاط عطف", titleEn: "Delay and claims", subFa: "تحلیل تأخیر، جریمه و تصعید", subEn: "Delay analysis & escalation", tab: "alerts", kind: "io" },
 ];
 
-const boxCls: Record<MapNode["kind"], string> = {
-  io: "border-[#c9cfc9] bg-[#efeee9] text-[#26332e]",
-  proc: "border-[#57a773] bg-[#e2f2e7] text-[#17563a]",
-  cross: "border-dashed border-[#b9a86a] bg-[#f7f4ec] text-[#6b5d24]",
-};
+/* رنگ ستون‌ها — هم‌خانواده با رنگ حوزه‌های عملکردی در نقشهٔ ماژول‌ها. */
+const C_INPUT = "#D08A16";
+const C_HUB = "#0FA08C";
+const C_CYCLE = "#2E9E4F";
+const C_OUTPUT = "#4C7FD1";
+const C_CROSS = "#B08900";
 
-function NodeBox({ node, rtl, onNavigate }: { node: MapNode; rtl: boolean; onNavigate: (tab: PexTab) => void }) {
+function NodeBox({
+  node,
+  rtl,
+  accent,
+  onNavigate,
+}: {
+  node: MapNode;
+  rtl: boolean;
+  accent: string;
+  onNavigate: (tab: PexTab) => void;
+}) {
   const title = rtl ? node.titleFa : node.titleEn;
   const sub = rtl ? node.subFa : node.subEn;
+  const isCross = node.kind === "cross";
   const inner = (
     <>
-      <span className="block text-[13px] font-bold leading-5">{title}</span>
-      {sub && <span className="mt-0.5 block text-[10px] font-normal leading-4 opacity-70">{sub}</span>}
-      {node.kind === "cross" && (
-        <span className="mx-auto mt-1 block w-fit rounded-full bg-[#e7dfc8] px-2 py-px text-[8.5px] font-bold text-[#6b5d24]">
+      <span
+        aria-hidden="true"
+        className="absolute end-0 top-2 bottom-2 w-[3px] rounded-full"
+        style={{ background: isCross ? C_CROSS : accent, opacity: isCross ? 0.75 : 0.9 }}
+      />
+      <span className="block text-[11px] font-medium leading-4 text-start tx1">{title}</span>
+      {sub && <span className="mt-1 block text-[9.5px] font-light leading-4 text-start tx3">{sub}</span>}
+      {isCross && (
+        <span
+          className="mt-1.5 block w-fit rounded-full px-2 py-px text-[8px] font-medium"
+          style={{ background: `${C_CROSS}22`, color: "var(--ink)" }}
+        >
           {rtl ? "بین‌ماژولی" : "cross-module"}
         </span>
       )}
     </>
   );
-  const cls = `flex w-full flex-1 flex-col items-center justify-center rounded-[10px] border-[1.5px] px-2.5 py-2 text-center ${boxCls[node.kind]}`;
+  const cls = `relative flex w-full flex-1 flex-col justify-center overflow-hidden rounded-xl border px-3 py-2 text-start transition ${
+    isCross
+      ? "border-dashed"
+      : "border-solid"
+  }`;
+  const style = {
+    background: isCross ? `${C_CROSS}12` : node.kind === "proc" ? `${accent}1a` : "var(--row)",
+    borderColor: isCross ? `${C_CROSS}55` : node.kind === "proc" ? `${accent}55` : "var(--line-soft)",
+  };
   if (!node.tab) {
-    return <div className={cls} aria-label={title}>{inner}</div>;
+    return <div className={cls} style={style} aria-label={title}>{inner}</div>;
   }
   return (
     <button
       type="button"
-      className={`${cls} cursor-pointer transition hover:shadow-md hover:brightness-[1.03] focus:outline-none focus:ring-2 focus:ring-[#57a773]`}
+      className={`${cls} cursor-pointer hover:-translate-y-px focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/70`}
+      style={{ ...style, transitionProperty: "transform, box-shadow, border-color, background-color" }}
+      onMouseEnter={(e) => { e.currentTarget.style.borderColor = `${accent}99`; }}
+      onMouseLeave={(e) => { e.currentTarget.style.borderColor = isCross ? `${C_CROSS}55` : node.kind === "proc" ? `${accent}55` : "var(--line-soft)"; }}
       title={rtl ? `رفتن به «${title}»` : `Go to ${title}`}
       aria-label={rtl ? `رفتن به ${title}` : `Go to ${title}`}
       onClick={() => onNavigate(node.tab!)}
     >
       {inner}
     </button>
+  );
+}
+
+/* آیکن‌های ستون‌ها به‌صورت SVG درون‌خطی تا به فونت ایموجی وابسته نباشند. */
+const ICONS: Record<string, ReactElement> = {
+  inputs: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-3 w-3">
+      <path d="M12 3v11" /><path d="m8 10 4 4 4-4" /><path d="M4 15v3a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3v-3" />
+    </svg>
+  ),
+  hub: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-3 w-3">
+      <ellipse cx="12" cy="6" rx="7.5" ry="3" /><path d="M4.5 6v6c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3V6" /><path d="M4.5 12v6c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3v-6" />
+    </svg>
+  ),
+  cycle: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-3 w-3">
+      <path d="M20 12a8 8 0 1 1-2.3-5.6" /><path d="M20 4v4h-4" />
+    </svg>
+  ),
+  outputs: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-3 w-3">
+      <path d="M12 21V10" /><path d="m8 13 4-4 4 4" /><path d="M4 9V6a3 3 0 0 1 3-3h10a3 3 0 0 1 3 3v3" />
+    </svg>
+  ),
+};
+
+function ColumnHead({ fa, en, rtl, color, icon }: { fa: string; en: string; rtl: boolean; color: string; icon: keyof typeof ICONS }) {
+  return (
+    <div
+      className="flex items-center justify-center gap-1.5 rounded-xl px-2 py-1.5 text-[10.5px] font-medium text-white"
+      style={{ background: `linear-gradient(180deg, ${color}, ${color}cc)`, boxShadow: `0 6px 16px -8px ${color}` }}
+    >
+      <span aria-hidden="true" className="inline-flex">{ICONS[icon]}</span>
+      <span>{rtl ? fa : en}</span>
+    </div>
   );
 }
 
@@ -91,34 +159,39 @@ export default function PlanningWorkflowMap({
   rtl: boolean;
   onNavigate: (tab: PexTab) => void;
 }) {
-  const colHead = "text-center text-[11px] font-normal text-[#6b7a74]";
-  const arrow = "flex items-center justify-center text-[13px] text-[#5c6f68]";
+  const arrow = "flex items-center justify-center text-[12px] leading-none tx4";
+  const gridCols = "grid-cols-[1.25fr_20px_1.05fr_20px_1.25fr_20px_1.1fr]";
   return (
     <section
       dir="ltr"
       aria-label={rtl ? "نقشهٔ گردش‌کار برنامه‌ریزی و کنترل پروژه" : "EPC planning and control workflow map"}
-      className="rounded-2xl border border-[#d8ded8] bg-[#f6f8f6] p-4 text-[#21322c] shadow-sm"
+      className="rounded-2xl border b-line bg-[var(--row)] p-3"
     >
-      <h3 className="text-center text-[16px] font-extrabold text-[#1c2b26]">
-        {rtl ? "گردش‌کار برنامه‌ریزی و کنترل پروژه (EPC)" : "EPC planning and control workflow"}
-      </h3>
-
-      {/* سرستون‌ها — عین شکل مرجع */}
-      <div className="mt-3 grid grid-cols-[1.25fr_22px_1.05fr_22px_1.25fr_22px_1.1fr]">
-        <div className={colHead}>{rtl ? "ورودی‌ها" : "Inputs"}</div>
-        <div />
-        <div className={colHead}>{rtl ? "هاب داده" : "Data hub"}</div>
-        <div />
-        <div className={colHead}>{rtl ? "چرخهٔ به‌روزرسانی PMS" : "PMS update cycle"}</div>
-        <div />
-        <div className={colHead}>{rtl ? "خروجی‌ها" : "Outputs"}</div>
+      <div className="flex flex-wrap items-baseline justify-between gap-2 px-1">
+        <h3 className="text-[13px] font-medium tx1">
+          {rtl ? "گردش‌کار برنامه‌ریزی و کنترل پروژه (EPC)" : "EPC planning and control workflow"}
+        </h3>
+        <span className="text-[9.5px] font-light tx3">
+          {rtl ? "با کلیک روی هر گره، به همان زیربخش بروید" : "Click a node to open its section"}
+        </span>
       </div>
 
-      <div className="mt-1.5 grid grid-cols-[1.25fr_22px_1.05fr_22px_1.25fr_22px_1.1fr] items-stretch">
+      {/* سرستون‌ها — نوار رنگی هر ستون */}
+      <div className={`mt-3 grid ${gridCols}`}>
+        <ColumnHead fa="ورودی‌ها" en="Inputs" rtl={rtl} color={C_INPUT} icon="inputs" />
+        <div />
+        <ColumnHead fa="هاب داده" en="Data hub" rtl={rtl} color={C_HUB} icon="hub" />
+        <div />
+        <ColumnHead fa="چرخهٔ به‌روزرسانی PMS" en="PMS update cycle" rtl={rtl} color={C_CYCLE} icon="cycle" />
+        <div />
+        <ColumnHead fa="خروجی‌ها" en="Outputs" rtl={rtl} color={C_OUTPUT} icon="outputs" />
+      </div>
+
+      <div className={`mt-2 grid ${gridCols} items-stretch`}>
         {/* ورودی‌ها */}
         <div className="flex flex-col gap-2">
           {INPUTS.map((node) => (
-            <NodeBox key={node.titleEn} node={node} rtl={rtl} onNavigate={onNavigate} />
+            <NodeBox key={node.titleEn} node={node} rtl={rtl} accent={C_INPUT} onNavigate={onNavigate} />
           ))}
         </div>
         <div className="flex flex-col">
@@ -132,10 +205,14 @@ export default function PlanningWorkflowMap({
           type="button"
           onClick={() => onNavigate("workshop")}
           title={rtl ? "رفتن به «کارگاه برنامه‌ریزی»" : "Go to Planning Workshop"}
-          className="flex flex-col items-center justify-center rounded-[10px] border-[1.5px] border-[#57a773] bg-[#e2f2e7] px-3 py-3 text-center text-[#17563a] transition hover:shadow-md focus:outline-none focus:ring-2 focus:ring-[#57a773]"
+          className="relative flex flex-col items-center justify-center overflow-hidden rounded-xl border px-3 py-3 text-center transition hover:-translate-y-px focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/70"
+          style={{ background: `${C_HUB}18`, borderColor: `${C_HUB}66` }}
+          onMouseEnter={(e) => { e.currentTarget.style.borderColor = `${C_HUB}aa`; }}
+          onMouseLeave={(e) => { e.currentTarget.style.borderColor = `${C_HUB}66`; }}
         >
-          <span className="text-[15px] font-extrabold leading-6">{rtl ? "لایهٔ یکپارچهٔ دادهٔ پروژه" : "Project database"}</span>
-          <span className="mt-1 text-[10px] leading-4 opacity-75">
+          <span aria-hidden="true" className="absolute end-0 top-2 bottom-2 w-[3px] rounded-full" style={{ background: C_HUB, opacity: 0.9 }} />
+          <span className="text-[12.5px] font-medium leading-5 tx1">{rtl ? "لایهٔ یکپارچهٔ دادهٔ پروژه" : "Project database"}</span>
+          <span className="mt-1 text-[9.5px] font-light leading-4 tx3">
             {rtl ? "اتصال ماژول‌ها با API و کانکتورها · اعتبارسنجی داده · قواعد پیشرفت (ROC) · قفل دوره‌های بسته" : "Validated data hub"}
           </span>
         </button>
@@ -149,8 +226,8 @@ export default function PlanningWorkflowMap({
         <div className="flex flex-col gap-2">
           {CYCLE.map((node, i) => (
             <div key={node.titleEn} className="flex flex-1 flex-col gap-2">
-              <NodeBox node={node} rtl={rtl} onNavigate={onNavigate} />
-              {i < CYCLE.length - 1 && <div className="text-center text-[13px] leading-3 text-[#5c6f68]">↓</div>}
+              <NodeBox node={node} rtl={rtl} accent={C_CYCLE} onNavigate={onNavigate} />
+              {i < CYCLE.length - 1 && <div className="text-center text-[12px] leading-3 tx4">↓</div>}
             </div>
           ))}
         </div>
@@ -163,45 +240,44 @@ export default function PlanningWorkflowMap({
         {/* خروجی‌ها */}
         <div className="flex flex-col gap-2">
           {OUTPUTS.map((node) => (
-            <NodeBox key={node.titleEn} node={node} rtl={rtl} onNavigate={onNavigate} />
+            <NodeBox key={node.titleEn} node={node} rtl={rtl} accent={C_OUTPUT} onNavigate={onNavigate} />
           ))}
         </div>
       </div>
 
       {/* حلقهٔ حاکمیت و کنترل */}
-      <div className="relative mt-5 rounded-[14px] border-[1.5px] border-dashed border-[#a9b6b0] px-3 pb-3 pt-4">
-        <span className="absolute -top-2 left-5 bg-[#f6f8f6] px-2 text-[10.5px] text-[#6b7a74]">
+      <div className="relative mt-5 rounded-2xl border border-dashed b-line px-3 pb-3 pt-4">
+        <span className="absolute -top-2 start-5 rounded-full border b-line bg-[var(--bg-b)] px-2 text-[9.5px] tx3">
           {rtl ? "حلقهٔ حاکمیت و کنترل" : "Governance and control loop"}
         </span>
-        <div className="grid grid-cols-[1fr_22px_1fr_22px_1fr_22px_1fr] items-stretch">
-          <NodeBox node={{ titleFa: "اجرای سایت", titleEn: "Site execution", subFa: "اقدام‌های جبرانی", subEn: "Recovery actions", tab: "dpr", kind: "io" }} rtl={rtl} onNavigate={onNavigate} />
+        <div className="grid grid-cols-[1fr_20px_1fr_20px_1fr_20px_1fr] items-stretch">
+          <NodeBox node={{ titleFa: "اجرای سایت", titleEn: "Site execution", subFa: "اقدام‌های جبرانی", subEn: "Recovery actions", tab: "dpr", kind: "io" }} rtl={rtl} accent={C_OUTPUT} onNavigate={onNavigate} />
           <div className={arrow}>←</div>
-          <NodeBox node={{ titleFa: "اقدام اصلاحی", titleEn: "Corrective plan", subFa: "مالک اقدام و موعد انجام", subEn: "Owner and due date", tab: "alerts", kind: "proc" }} rtl={rtl} onNavigate={onNavigate} />
+          <NodeBox node={{ titleFa: "اقدام اصلاحی", titleEn: "Corrective plan", subFa: "مالک اقدام و موعد انجام", subEn: "Owner and due date", tab: "alerts", kind: "proc" }} rtl={rtl} accent={C_CYCLE} onNavigate={onNavigate} />
           <div className={arrow}>←</div>
-          <NodeBox node={{ titleFa: "جلسات بازبینی", titleEn: "Review meetings", subFa: "هفتگی و ماهانه", subEn: "Weekly and monthly", tab: "alerts", kind: "proc" }} rtl={rtl} onNavigate={onNavigate} />
+          <NodeBox node={{ titleFa: "جلسات بازبینی", titleEn: "Review meetings", subFa: "هفتگی و ماهانه", subEn: "Weekly and monthly", tab: "alerts", kind: "proc" }} rtl={rtl} accent={C_CYCLE} onNavigate={onNavigate} />
           <div className={arrow}>→</div>
-          <NodeBox node={{ titleFa: "کارفرما و PMO", titleEn: "Client and PMO", subFa: "بازبینی و تأیید وضعیت", subEn: "Status review", tab: "mpr", kind: "io" }} rtl={rtl} onNavigate={onNavigate} />
+          <NodeBox node={{ titleFa: "کارفرما و PMO", titleEn: "Client and PMO", subFa: "بازبینی و تأیید وضعیت", subEn: "Status review", tab: "mpr", kind: "io" }} rtl={rtl} accent={C_OUTPUT} onNavigate={onNavigate} />
         </div>
-        <p className="mt-2 text-center text-[9.5px] text-[#7a8a84]">
+        <p className="mt-2 text-center text-[9px] font-light tx4">
           {rtl ? "↺ اقدام‌های جبرانی دوباره به‌عنوان ورودی به گزارش‌های سایت و چرخهٔ به‌روزرسانی برمی‌گردد." : "↺ Recovery actions feed back into site reports and the next update cycle."}
         </p>
       </div>
 
       {/* راهنما */}
-      <div className="mt-3 flex flex-wrap gap-x-7 gap-y-1 text-[10px] text-[#55665f]">
-        <span>
-          <i className="ml-1.5 inline-block h-3 w-3 rounded-[4px] border-[1.5px] border-[#c9cfc9] bg-[#efeee9] align-[-2px]" />
+      <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1.5 px-1 text-[9.5px] font-light tx3">
+        <span className="inline-flex items-center gap-1.5">
+          <i className="inline-block h-2.5 w-2.5 rounded-[4px]" style={{ background: "var(--row)", border: "1px solid var(--line-soft)" }} />
           {rtl ? "ورودی‌ها و خروجی‌ها" : "Inputs and outputs"}
         </span>
-        <span>
-          <i className="ml-1.5 inline-block h-3 w-3 rounded-[4px] border-[1.5px] border-[#57a773] bg-[#e2f2e7] align-[-2px]" />
+        <span className="inline-flex items-center gap-1.5">
+          <i className="inline-block h-2.5 w-2.5 rounded-[4px]" style={{ background: `${C_CYCLE}33`, border: `1px solid ${C_CYCLE}88` }} />
           {rtl ? "پردازش و کنترل" : "Processing and control"}
         </span>
-        <span>
-          <i className="ml-1.5 inline-block h-3 w-3 rounded-[4px] border-[1.5px] border-dashed border-[#b9a86a] bg-[#f7f4ec] align-[-2px]" />
+        <span className="inline-flex items-center gap-1.5">
+          <i className="inline-block h-2.5 w-2.5 rounded-[4px]" style={{ background: `${C_CROSS}22`, border: `1px dashed ${C_CROSS}88` }} />
           {rtl ? "ورودی بین‌ماژولی" : "Cross-module input"}
         </span>
-        <span className="opacity-70">{rtl ? "با کلیک روی هر گره به زیربخش مربوط می‌روید." : "Click a node to open its section."}</span>
       </div>
     </section>
   );
