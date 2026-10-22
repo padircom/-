@@ -73,6 +73,15 @@ export type IiotSubModuleId =
   | "condition-monitoring"
   | "sensor-alerts";
 
+/** دسته‌های سایدبار داخلی — همان الگوی CMMS/MES: خط جداکننده + عنوان دسته. */
+const IIOT_NAV_GROUPS: Record<string, { fa: string; en: string }> = {
+  dashboard: { fa: "نمای یکپارچه و عملیات زنده", en: "Unified View & Live Operations" },
+  "drilling-das": { fa: "نمای یکپارچه و عملیات زنده", en: "Unified View & Live Operations" },
+  "iot-devices": { fa: "تجهیزات و پایش وضعیت", en: "Devices & Condition Monitoring" },
+  "condition-monitoring": { fa: "تجهیزات و پایش وضعیت", en: "Devices & Condition Monitoring" },
+  "sensor-alerts": { fa: "هشدار و واکنش", en: "Alerts & Response" },
+};
+
 export const IIOT_SUBMODULES: Array<{
   id: IiotSubModuleId;
   icon: string;
@@ -410,13 +419,14 @@ export default function IiotWorkspaceShell({ lang, activeSub, onSelectSub, onBac
         </>
       }
       onBack={onBackHome}
-      navTitle={tr("زیرماژول‌های IIoT", "IIoT Submodules")}
+      navTitle={tr("پایش میدانی و اینترنت اشیاء", "Field Monitoring & Industrial IoT")}
       navItems={IIOT_SUBMODULES.map((item) => {
         const allowed = canIiotAccess(userId, item.viewPermission, rigId);
         return {
           id: item.id,
           label: fa ? item.fa : item.en,
           icon: item.icon,
+          group: fa ? IIOT_NAV_GROUPS[item.id]?.fa : IIOT_NAV_GROUPS[item.id]?.en,
           disabled: !allowed,
           disabledHint: tr(`مجوز لازم: ${item.viewPermission}`, `Required permission: ${item.viewPermission}`),
         };

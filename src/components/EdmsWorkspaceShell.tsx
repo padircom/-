@@ -39,6 +39,15 @@ interface EdmsTabSpec {
   descEn: string;
 }
 
+/** دسته‌های سایدبار داخلی — همان الگوی CMMS/MES: خط جداکننده + عنوان دسته. */
+const EDMS_NAV_GROUPS: Record<string, { fa: string; en: string }> = {
+  dmi: { fa: "شناسنامه و کنترل نسخه", en: "Master Index & Revision Control" },
+  revisions: { fa: "شناسنامه و کنترل نسخه", en: "Master Index & Revision Control" },
+  workflows: { fa: "گردش کار و بایگانی", en: "Workflows & Archive" },
+  archive: { fa: "گردش کار و بایگانی", en: "Workflows & Archive" },
+  kms: { fa: "مدیریت دانش", en: "Knowledge Management" },
+};
+
 export const EDMS_TABS: readonly EdmsTabSpec[] = [
   {
     id: "dmi",
@@ -190,13 +199,14 @@ export const EdmsWorkspaceShell: React.FC<EdmsWorkspaceShellProps> = ({
         </>
       }
       onBack={onBackHome ?? (() => {})}
-      navTitle={tr("زیرماژول‌های اسناد و دانش (EDMS/KMS)", "EDMS & KMS Submodules")}
+      navTitle={tr("مدیریت اسناد و دانش سازمانی (EDMS/KMS)", "Document & Knowledge Management (EDMS/KMS)")}
       navItems={EDMS_TABS.map((item) => {
         const allowed = effectivePerms.has(item.viewPerm);
         return {
           id: item.id,
           label: fa ? item.fa : item.en,
           icon: item.icon,
+          group: fa ? EDMS_NAV_GROUPS[item.id]?.fa : EDMS_NAV_GROUPS[item.id]?.en,
           disabled: !allowed,
           disabledHint: tr(
             `مجوز موردنیاز: ${item.viewPerm}`,

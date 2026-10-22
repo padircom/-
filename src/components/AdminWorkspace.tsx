@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useSystem, type SystemSettings } from "../context/SystemContext";
 import SqlConnectionPanel from "./SqlConnectionPanel";
 import { pmisApiClient } from "../services/pmisApiClient";
@@ -25,11 +25,13 @@ type Props = {
   subId?: string;
   onBack?: () => void;
   onOpenFlowNet?: () => void;
+  /** سایدبار دامنه‌ای (لایهٔ ۳) کنار میز کار مدیریت سامانه. */
+  aside?: ReactNode;
 };
 
 type TabKey = "clusters" | "projects" | "metadata" | "typography" | "ai" | "access" | "sync" | "operations" | "deployment";
 
-export default function AdminWorkspace({ lang, subId, onBack, onOpenFlowNet }: Props) {
+export default function AdminWorkspace({ lang, subId, onBack, onOpenFlowNet, aside }: Props) {
   const rtl = lang === "fa";
   const {
     clusters,
@@ -267,7 +269,8 @@ export default function AdminWorkspace({ lang, subId, onBack, onOpenFlowNet }: P
   const currentClusterProjects = projectsByCluster[selectedClusterForProjects] ?? [];
 
   return (
-    <div className="glass flex h-full min-h-0 flex-col rounded-2xl p-4" dir={rtl ? "rtl" : "ltr"}>
+    <div className="flex h-full min-h-0 gap-3" dir={rtl ? "rtl" : "ltr"}>
+    <div className="glass flex min-h-0 min-w-0 flex-1 flex-col rounded-2xl p-4">
       {/* ── Top Bar ── */}
       <header className="b-line-soft mb-3 flex flex-wrap items-center justify-between gap-3 border-b pb-3">
         <div className="flex items-center gap-2.5">
@@ -1123,6 +1126,8 @@ export default function AdminWorkspace({ lang, subId, onBack, onOpenFlowNet }: P
         {/* ═════════ TAB 9: PRODUCTION DEPLOYMENT ═════════ */}
         {activeTab === "deployment" && <ProductionDeploymentPanel lang={lang} />}
       </div>
+    </div>
+    {aside}
     </div>
   );
 }

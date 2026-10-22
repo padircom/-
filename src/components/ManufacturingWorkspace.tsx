@@ -91,21 +91,33 @@ export interface ManufacturingWorkspaceProps {
   onExit?: () => void;
 }
 
+/** دسته‌های سایدبار داخلی MES — همان الگوی CMMS: خط جداکننده + عنوان دسته. */
+const MES_NAV_GROUPS = {
+  overview: { fa: "نمای کلی و ساختار محصول", en: "Overview & Product Structure" },
+  planning: { fa: "برنامه‌ریزی و زمان‌بندی تولید", en: "Production Planning & Scheduling" },
+  execution: { fa: "اجرای تولید و مدیریت مواد", en: "Shop-Floor Execution & Materials" },
+  cost: { fa: "هزینه و ارزیابی", en: "Cost & Evaluation" },
+} as const;
+type MesNavGroupId = keyof typeof MES_NAV_GROUPS;
+
 const TABS: Array<{
   id: MfgTab;
   fa: string;
   en: string;
   defaultUser: string;
   permission: string;
+  /** آیکن و دستهٔ نمایش در سایدبار داخلی (هم‌رنگِ آیکن‌های سایدبار اصلی). */
+  icon: string;
+  group: MesNavGroupId;
 }> = [
-  { id: "overview", fa: "داشبورد، OEE و هشدارها", en: "Overview, OEE & Alerts", defaultUser: "u-mfg-manager", permission: "mfg.dashboard.view" },
-  { id: "engineering", fa: "مهندسی ساخت (قطعه/BOM/مسیر/مرکز کاری)", en: "Engineering Master", defaultUser: "u-mfg-eng", permission: "mfg.part.view" },
-  { id: "planning", fa: "برنامه‌ریزی پیشرفته (MPS، لات، ATP، تقسیم)", en: "Advanced Planning (MPS, Lot Sizing, ATP, Splitting)", defaultUser: "u-mfg-plan", permission: "mfg.mps.view" },
-  { id: "orders", fa: "سفارش‌های تولید", en: "Production Orders", defaultUser: "u-mfg-plan", permission: "mfg.order.view" },
-  { id: "scheduling", fa: "زمان‌بندی ظرفیت، گانت و گلوگاه", en: "Scheduling, Gantt & Capacity", defaultUser: "u-mfg-plan", permission: "mfg.schedule.view" },
-  { id: "execution", fa: "اجرای کارگاهی، توقف و ضایعات", en: "Shop-Floor Execution", defaultUser: "u-mfg-supervisor", permission: "mfg.execution.view" },
-  { id: "mrp", fa: "برنامه‌ریزی مواد، کمبود و مصرف", en: "Materials & MRP", defaultUser: "u-mfg-material", permission: "mfg.material.view" },
-  { id: "cost", fa: "رول‌آپ هزینه و تطبیق مالی", en: "Cost Roll-up & Reconcile", defaultUser: "u-mfg-cost", permission: "mfg.cost.view" },
+  { id: "overview", fa: "داشبورد، OEE و هشدارها", en: "Overview, OEE & Alerts", defaultUser: "u-mfg-manager", permission: "mfg.dashboard.view", icon: "📊", group: "overview" },
+  { id: "engineering", fa: "مهندسی ساخت", en: "Engineering Master", defaultUser: "u-mfg-eng", permission: "mfg.part.view", icon: "🔩", group: "overview" },
+  { id: "planning", fa: "برنامه‌ریزی پیشرفته", en: "Advanced Planning", defaultUser: "u-mfg-plan", permission: "mfg.mps.view", icon: "🗓️", group: "planning" },
+  { id: "orders", fa: "سفارش‌های تولید", en: "Production Orders", defaultUser: "u-mfg-plan", permission: "mfg.order.view", icon: "📋", group: "planning" },
+  { id: "scheduling", fa: "زمان‌بندی ظرفیت، گانت و گلوگاه", en: "Scheduling, Gantt & Capacity", defaultUser: "u-mfg-plan", permission: "mfg.schedule.view", icon: "📅", group: "planning" },
+  { id: "execution", fa: "اجرای کارگاهی، توقف و ضایعات", en: "Shop-Floor Execution", defaultUser: "u-mfg-supervisor", permission: "mfg.execution.view", icon: "⚙️", group: "execution" },
+  { id: "mrp", fa: "برنامه‌ریزی مواد، کمبود و مصرف", en: "Materials & MRP", defaultUser: "u-mfg-material", permission: "mfg.material.view", icon: "📦", group: "execution" },
+  { id: "cost", fa: "رول‌آپ هزینه و تطبیق مالی", en: "Cost Roll-up & Reconcile", defaultUser: "u-mfg-cost", permission: "mfg.cost.view", icon: "💰", group: "cost" },
 ];
 
 /** رنگ تأکیدی MES (نارنجی گرم). */
@@ -1789,11 +1801,14 @@ export default function ManufacturingWorkspace({
           )}
         </>
       }
-      navTitle={tr("ماژول‌های MES", "MES Modules")}
+      /* سربرگ سایدبار فرعی: آیکن ماژول + نام سرگروه (بدون واژهٔ «زیرماژول»). */
+      navTitle={tr("برنامه‌ریزی و تولید MES", "Planning & Production MES")}
       navIcon="🏭"
       navItems={TABS.map((tItem) => ({
         id: tItem.id,
         label: fa ? tItem.fa : tItem.en,
+        icon: tItem.icon,
+        group: fa ? MES_NAV_GROUPS[tItem.group].fa : MES_NAV_GROUPS[tItem.group].en,
       }))}
       activeId={tab}
       onSelect={(nextTab) => {

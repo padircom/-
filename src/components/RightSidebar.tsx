@@ -3,11 +3,13 @@ import type { ReactNode } from "react";
 import {
   domains,
   sidebarGroups,
+  performanceDomainsInGroup,
   ui,
   t,
   type Bi,
   type Domain,
   type Lang,
+  type PerformanceDomain,
   type Process,
 } from "../data/framework";
 import { useSystem } from "../context/SystemContext";
@@ -125,6 +127,12 @@ const quickActions: QuickAction[] = [
 const selectClass =
   "w-full rounded-lg border b-line-soft bg-[var(--row)] px-2 py-1.5 text-[10.5px] font-light tx1 outline-none transition focus:border-[var(--accent)]";
 
+/* گروه‌هایی که در فاز نمایشی، لایهٔ ۲ (حوزهٔ عملکردی) در سایدبار اصلی دارند:
+ * «آغازین» (حاکمیت)، «برنامه‌ریزی» (زمان‌بندی/محدوده)، «اجرا»
+ * (مالی/منابع/افزونه‌های صنعتی)، «پایش و کنترل» (مالی/ریسک/افزونه‌های صنعتی)،
+ * «اختتامیه» (محدوده) و «پشتیبان» (ذی‌نفعان/افزونه‌های صنعتی). */
+const PERF_NAV_GROUPS = new Set(["pg1", "pg2", "pg3", "pg4", "pg5", "support"]);
+
 export default function RightSidebar({
   lang,
   quickAction,
@@ -146,6 +154,8 @@ export default function RightSidebar({
     supportOpen: false,
   });
   const [query, setQuery] = useState("");
+  /* لایهٔ ۲: کدام حوزهٔ عملکردی (زیر گروه فرایندی) باز است — فاز نمایشی روی «آغازین». */
+  const [openPerf, setOpenPerf] = useState<string | null>(null);
   const [taxonomyOverrides, setTaxonomyOverrides] = useState<Record<string, Process[]>>({});
   const [sectionsOpen, setSectionsOpen] = useState<{
     pmis: boolean;
@@ -239,26 +249,19 @@ export default function RightSidebar({
     .filter((d) => d.id !== "d7" || can("system.manage"))
     .map((d) => taxonomyOverrides[d.id] ? { ...d, processes: taxonomyOverrides[d.id] } : d);
 
-  const faDigits = (n: number) => n.toLocaleString("fa-IR", { useGrouping: false });
-
-
   const q = query.trim().toLowerCase();
   const matchesQuery = (d: Domain) => {
     if (!q) return true;
     const hay = [
       d.id,
       d.title.fa, d.title.en,
+      ...(d.nav ? [d.nav.fa, d.nav.en] : []),
       ...d.processes.flatMap((p) => [p.id, p.title.fa, p.title.en, ...p.subs.flatMap((s) => [s.id, s.title.fa, s.title.en])]),
     ].join(" ").toLowerCase();
     return q.split(/\s+/).every((part) => hay.includes(part));
   };
   const searching = q.length > 0;
   const searchHits = searching ? visibleDomains.filter(matchesQuery) : [];
-
-  const groupCounts = (ids: Domain[]) => ({
-    dc: ids.length,
-    pc: ids.reduce((n, d) => n + d.processes.length, 0),
-  });
 
   /* سطر دامنه عمداً کارت نیست: فهرست فشرده با جداکنندهٔ مویی.
    * حالت باز فقط با ته‌مایهٔ رنگ دامنه مشخص می‌شود. */
@@ -275,8 +278,12 @@ export default function RightSidebar({
           aria-expanded={d.id === "d7" ? undefined : domainOpen}
         >
           <span className="grid h-6 w-6 shrink-0 place-items-center text-[15px]">{d.icon}</span>
-          <h3 className="min-w-0 flex-1 truncate text-[11px] font-normal leading-4" style={{ color: d.accent }}>
-            {t(d.title, lang)}
+          <h3
+            className="min-w-0 flex-1 truncate text-[11px] font-normal leading-4"
+            style={{ color: d.accent }}
+            title={t(d.title, lang)}
+          >
+            {t(d.nav ?? d.title, lang)}
           </h3>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"
                className={`h-3 w-3 shrink-0 tx4 transition-transform ${domainOpen ? "rotate-180" : ""}`}>
@@ -361,6 +368,100 @@ export default function RightSidebar({
                 <span className="text-[8.5px] font-extralight tx3">{rtl ? "محل ذخیره‌سازی:" : "Storage:"}</span>
                 <span className="truncate text-[8.5px] font-light ok-dim-t" dir="ltr">SQL Server (.\SQL2008EXPRESS)</span>
               </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  /* ── لایهٔ ۲ — حوزهٔ عملکردی (زیر گروه فرایندی) ──
+   * ماژول‌های این حوزه (لایهٔ ۳) در سایدبار فرعیِ صفحهٔ ماژول
+   * فهرست می‌شوند؛ اینجا فقط انتخابِ ورود انجام می‌شود. */
+  const renderPerfDomain = (pd: PerformanceDomain & { modules: Domain[] }) => {
+    const isOpen = openPerf === pd.id;
+    const first = pd.modules[0];
+    const pdNoData = selCluster ? (moduleDataGaps[first.id] ?? []).includes(selCluster) : false;
+    const canEnter = Boolean(selCluster && selProject && !pdNoData);
+    return (
+      <div key={pd.id} className="border-b b-line-soft pb-1 last:border-b-0 last:pb-0">
+        <button
+          type="button"
+          onClick={() => { setOpenPerf(isOpen ? null : pd.id); onSelectSystemView?.({ system: "pmis" }); }}
+          aria-expanded={isOpen}
+          className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-start transition hover:bg-[var(--row-hover)]"
+          style={isOpen ? { background: `${pd.color}14` } : undefined}
+        >
+          <span className="shrink-0 text-[12px] leading-none">{pd.icon}</span>
+          <span className="min-w-0 flex-1 truncate text-[10.5px] font-medium" style={{ color: pd.color }}>
+            {t(pd.title, lang)}
+          </span>
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className={`h-3 w-3 shrink-0 tx4 transition-transform ${isOpen ? "rotate-180" : ""}`}
+          >
+            <path d="m6 9 6 6 6-6" />
+          </svg>
+        </button>
+
+        {isOpen && (
+          <div className="fade-rise mt-1 space-y-1">
+            <div className="glass rounded-xl p-3" style={{ borderColor: `${pd.color}55` }}>
+              <div className="mb-2 flex items-center gap-1.5">
+                <i className="h-1.5 w-1.5 rounded-full" style={{ background: pd.color }} />
+                <span className="text-[9.5px] font-normal tx2">
+                  {rtl ? "ورود به ماژول‌های این حوزه" : "Enter the modules of this domain"}
+                </span>
+              </div>
+
+              <label className="mb-2 block">
+                <span className="mb-1 block text-[9px] font-extralight tx3">
+                  {rtl ? "۱) انتخاب صنعت" : "1) Industry"}
+                </span>
+                <select value={selCluster} onChange={(e) => { setSelCluster(e.target.value); setSelProject(""); }} className={selectClass} style={{ colorScheme: "dark" }}>
+                  <option value="">{rtl ? "— انتخاب کنید —" : "— choose —"}</option>
+                  {clusters.map((c) => (<option key={c.id} value={c.id}>{t(c.title, lang)}</option>))}
+                </select>
+              </label>
+
+              {pdNoData && (
+                <div className="fade-rise mb-2 flex items-start gap-2 rounded-lg border border-amber-400/40 bg-amber-400/10 px-2.5 py-2">
+                  <span className="text-[12px] leading-none">⚠️</span>
+                  <span className="text-[9.5px] font-light leading-4 text-amber-400">
+                    {rtl ? "این صنعت برای این حوزه اطلاعاتی ثبت‌شده ندارد." : "No data registered for this industry in this domain."}
+                  </span>
+                </div>
+              )}
+
+              <label className="mb-2.5 block">
+                <span className="mb-1 block text-[9px] font-extralight tx3">
+                  {rtl ? "۲) انتخاب پروژه" : "2) Project"}
+                </span>
+                <select value={selProject} onChange={(e) => setSelProject(e.target.value)} disabled={!selCluster || pdNoData}
+                        className={`${selectClass} disabled:cursor-not-allowed disabled:opacity-40`} style={{ colorScheme: "dark" }}>
+                  <option value="">
+                    {!selCluster ? (rtl ? "ابتدا صنعت را انتخاب کنید" : "Pick an industry first")
+                      : pdNoData ? (rtl ? "اطلاعاتی موجود نیست" : "No data available")
+                        : (rtl ? "— انتخاب کنید —" : "— choose —")}
+                  </option>
+                  {clusterProjects.map((p) => (<option key={p.id} value={p.id}>{p.code} · {t(p.name, lang)}</option>))}
+                </select>
+              </label>
+
+              <button
+                type="button"
+                disabled={!canEnter}
+                onClick={() => canEnter && onNavigate({ moduleId: first.id, clusterId: selCluster, projectId: selProject })}
+                className="w-full rounded-lg px-3 py-2 text-[10.5px] font-normal transition disabled:cursor-not-allowed disabled:opacity-35"
+                style={{ background: canEnter ? `${pd.color}22` : "var(--row)", border: `1px solid ${canEnter ? pd.color : "var(--line-soft)"}`, color: canEnter ? pd.color : "var(--ink4)" }}
+              >
+                {rtl ? "ورود به صفحهٔ ماژول ←" : "Enter module page →"}
+              </button>
             </div>
           </div>
         )}
@@ -455,7 +556,6 @@ export default function RightSidebar({
                     const members = visibleDomains.filter((d) => d.group === g.id);
                     if (!members.length) return null;
                     const isOpen = g.pinned ? supportOpen : openGroup === g.id;
-                    const { dc, pc } = groupCounts(members);
                     return (
                       <div key={g.id} className="border-b b-line-soft pb-1 last:border-b-0 last:pb-0">
                         <button
@@ -465,12 +565,9 @@ export default function RightSidebar({
                           className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-start transition hover:bg-[var(--row-hover)]"
                           style={isOpen ? { background: `${g.color}14` } : undefined}
                         >
-                          <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: g.color }} />
+                          <span className="shrink-0 text-[12px] leading-none">{g.icon}</span>
                           <span className="min-w-0 flex-1 truncate text-[10.5px] font-medium" style={{ color: g.color }}>
                             {t(g.title, lang)}
-                          </span>
-                          <span className="shrink-0 text-[8.5px] font-extralight tabular-nums tx4">
-                            {rtl ? `${faDigits(dc)} حوزه · ${faDigits(pc)} فرآیند` : `${dc} · ${pc}`}
                           </span>
                           <svg
                             viewBox="0 0 24 24"
@@ -487,7 +584,19 @@ export default function RightSidebar({
 
                         {isOpen && (
                           <div className="fade-rise mt-1 border-s-2 ps-2" style={{ borderColor: `${g.color}33` }}>
-                            {members.map(renderDomain)}
+                            {/* لایهٔ ۲ (حوزهٔ عملکردی) زیر گروه‌های فاز نمایشی */}
+                            {PERF_NAV_GROUPS.has(g.id)
+                              ? performanceDomainsInGroup(g.id)
+                                /* ماژول‌هایی که کاربر حق دیدنشان را ندارد
+                                 * (مثل d7 که فقط مدیر سامانه می‌بیند) از شمارش و
+                                 * ورودِ حوزه کنار گذاشته می‌شوند. */
+                                .map((pd) => ({
+                                  ...pd,
+                                  modules: pd.modules.filter((m) => visibleDomains.some((v) => v.id === m.id)),
+                                }))
+                                .filter((pd) => pd.modules.length > 0)
+                                .map(renderPerfDomain)
+                              : members.map(renderDomain)}
                           </div>
                         )}
                       </div>
@@ -743,7 +852,7 @@ export default function RightSidebar({
               >
                 <span className="text-[12px]">👥</span>
                 <span className="min-w-0 flex-1 truncate text-[11px] font-semibold">
-                  {rtl ? "مدیریت منابع انسانی و کارکرد (HRM)" : "Human Resource Management (HRM)"}
+                  {rtl ? "مدیریت منابع انسانی و کارکرد" : "Human Resource Management"}
                 </span>
                 <svg
                   viewBox="0 0 24 24"
@@ -800,7 +909,7 @@ export default function RightSidebar({
               >
                 <span className="text-[12px]">🗂️</span>
                 <span className="min-w-0 flex-1 truncate text-[11px] font-semibold">
-                  {rtl ? "مدیریت اسناد و دانش سازمانی (EDMS/KMS)" : "Document & Knowledge Management (EDMS/KMS)"}
+                  {rtl ? "مدیریت اسناد و دانش سازمانی" : "Document & Knowledge Management"}
                 </span>
                 <svg
                   viewBox="0 0 24 24"

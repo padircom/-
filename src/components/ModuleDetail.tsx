@@ -1,5 +1,14 @@
 import { useEffect, useState } from "react";
-import { domains, t, type Bi, type Lang, type Process } from "../data/framework";
+import {
+  performanceDomainModules,
+  performanceDomainOf,
+  domains,
+  t,
+  type Bi,
+  type Domain,
+  type Lang,
+  type Process,
+} from "../data/framework";
 import { useSystem } from "../context/SystemContext";
 import { roleLabel, useAuth } from "../context/AuthContext";
 import type { ModuleNavTarget } from "./RightSidebar";
@@ -7,6 +16,7 @@ import CapabilityDetail from "./CapabilityDetail";
 import AdminWorkspace from "./AdminWorkspace";
 import DocumentWorkspace, { type EdmsTab } from "./DocumentWorkspace";
 import PlanningWorkspace, { type PexTab } from "./PlanningWorkspace";
+import ControlWorkflowMap from "./ControlWorkflowMap";
 import PmaWorkspace, { type PmaTab } from "./PmaWorkspace";
 import RiskClaimsWorkspace, { type D4Tab } from "./RiskClaimsWorkspace";
 import GovernanceWorkspace, { type GovTab } from "./GovernanceWorkspace";
@@ -449,6 +459,13 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
     if (destination) onNavigate?.({ ...target, moduleId: "d16", processId: "d16-p7", subId: destination });
   }, [target, onNavigate]);
 
+  /* جابه‌جایی بین ماژول‌ها (مثلاً از نقشهٔ گردش‌کار کنترل در d6 به ماژول
+     پایش و کنترل) باید زیرفرآیند انتخاب‌شده را با مقصد هم‌ریتم کند؛ وگرنه
+     تب مقصد از انتخابِ ماژول قبلی پر می‌شود. */
+  useEffect(() => {
+    setSelected(target.processId && target.subId ? { pId: target.processId, sId: target.subId } : null);
+  }, [target.moduleId, target.processId, target.subId]);
+
   if (!dom) return null;
 
   const hasAccess = dom.id === "d7" ? can("system.manage") : can("project.view", target.projectId);
@@ -484,7 +501,25 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
 
   // Direct render for System Administration if reached
   if (dom.id === "d7" && !selected) {
-    return <AdminWorkspace lang={lang} onBack={onBack} onOpenFlowNet={onOpenFlowNet} />;
+    return (
+      <AdminWorkspace
+        lang={lang}
+        onBack={onBack}
+        onOpenFlowNet={onOpenFlowNet}
+        aside={
+          <DomainAside
+            lang={lang}
+            dom={dom}
+            activeProcesses={activeProcesses}
+            onSelectSub={(pId, sId) => {
+              audit("OPEN_SUBPROCESS", { projectId: target.projectId, entity: dom.id, entityId: sId });
+              setSelected({ pId, sId });
+            }}
+            onOpenModuleSub={(moduleId, pId, sId) => onNavigate?.({ ...target, moduleId, processId: pId, subId: sId })}
+          />
+        }
+      />
+    );
   }
 
   const d1Tab = ((): EdmsTab => {
@@ -538,49 +573,18 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
           <div dir={rtl ? "rtl" : "ltr"} className="glass flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl p-3">
             <DocumentWorkspace lang={lang} projectId={target.projectId} initialTab={d1Tab} hideTabs />
           </div>
-          <aside dir={rtl ? "rtl" : "ltr"} className="glass-dark flex w-[300px] shrink-0 flex-col overflow-hidden rounded-2xl">
-            <div className="b-line border-b px-3 py-2.5">
-              <div className="flex items-center gap-2">
-                <span className="grid h-6 w-6 place-items-center rounded-md text-[12px]"
-                      style={{ background: `${dom.accent}1a`, border: `1px solid ${dom.accent}55`, color: dom.accent }}>
-                  {dom.icon}
-                </span>
-                <div className="text-[10.5px] font-normal tx1">{t(dom.title, lang)}</div>
-              </div>
-            </div>
-            <div className="thin-scroll flex-1 overflow-y-auto p-2 space-y-2">
-              {dom.processes.map((p, i) => (
-                <div key={p.id} className="rounded-xl border b-line-soft bg-black/10 p-1.5">
-                  <div className="flex items-center gap-1.5 px-1 py-1">
-                    <span className="text-[8px] font-light tabular-nums tx4">
-                      {(i + 1).toLocaleString(rtl ? "fa-IR" : "en-US")}
-                    </span>
-                    <span className="text-[10.5px] font-normal" style={{ color: dom.accent }}>{t(p.title, lang)}</span>
-                  </div>
-                  <div className="mt-1 space-y-1">
-                    {[
-                      ...p.subs.map((s) => ({ id: s.id, title: s.title, sql: s.sql })),
-                      ...(D1_PAGE_SUBS[p.id] ?? []),
-                    ].map((s) => (
-                      <button
-                        key={s.id}
-                        onClick={() => {
-                          audit("OPEN_SUBPROCESS", { projectId: target.projectId, entity: dom.id, entityId: s.id });
-                          setSelected({ pId: p.id, sId: s.id });
-                        }}
-                        className={`group flex w-full items-start gap-2 rounded-lg px-2 py-2 text-start transition hover:-translate-y-px glass-row ${selected?.sId === s.id ? "row-on" : ""}`}
-                      >
-                        <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: dom.accent }} />
-                        <div className="min-w-0 flex-1">
-                          <div className="truncate text-[10px] font-light tx1">{t(s.title, lang)}</div>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </aside>
+          <DomainAside
+            lang={lang}
+            dom={dom}
+            activeProcesses={activeProcesses}
+            selectedSubId={selected?.sId}
+            extraSubs={D1_PAGE_SUBS}
+            onSelectSub={(pId, sId) => {
+              audit("OPEN_SUBPROCESS", { projectId: target.projectId, entity: dom.id, entityId: sId });
+              setSelected({ pId, sId });
+            }}
+            onOpenModuleSub={(moduleId, pId, sId) => onNavigate?.({ ...target, moduleId, processId: pId, subId: sId })}
+          />
         </div>
       </div>
     );
@@ -636,49 +640,18 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
           <div dir={rtl ? "rtl" : "ltr"} className="glass flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl p-3">
             <PlanningWorkspace lang={lang} clusterId={target.clusterId} projectId={target.projectId} initialTab={d2Tab} hideTabs />
           </div>
-          <aside dir={rtl ? "rtl" : "ltr"} className="glass-dark flex w-[300px] shrink-0 flex-col overflow-hidden rounded-2xl">
-            <div className="b-line border-b px-3 py-2.5">
-              <div className="flex items-center gap-2">
-                <span className="grid h-6 w-6 place-items-center rounded-md text-[12px]"
-                      style={{ background: `${dom.accent}1a`, border: `1px solid ${dom.accent}55`, color: dom.accent }}>
-                  {dom.icon}
-                </span>
-                <div className="text-[10.5px] font-normal tx1">{t(dom.title, lang)}</div>
-              </div>
-            </div>
-            <div className="thin-scroll flex-1 overflow-y-auto p-1.5 space-y-1">
-              {dom.processes.map((p, i) => (
-                <div key={p.id} className="rounded-xl border b-line-soft bg-black/10 p-1">
-                  <div className="flex items-center gap-1.5 px-1 py-0.5">
-                    <span className="text-[8px] font-light tabular-nums tx4">
-                      {(i + 1).toLocaleString(rtl ? "fa-IR" : "en-US")}
-                    </span>
-                    <span className="text-[10.5px] font-normal" style={{ color: dom.accent }}>{t(p.title, lang)}</span>
-                  </div>
-                  <div className="mt-0.5 space-y-0.5">
-                    {[
-                      ...p.subs.map((s) => ({ id: s.id, title: s.title, sql: s.sql })),
-                      ...(D2_PAGE_SUBS[p.id] ?? []),
-                    ].map((s) => (
-                      <button
-                        key={s.id}
-                        onClick={() => {
-                          audit("OPEN_SUBPROCESS", { projectId: target.projectId, entity: dom.id, entityId: s.id });
-                          setSelected({ pId: p.id, sId: s.id });
-                        }}
-                        className={`group flex w-full items-start gap-2 rounded-lg px-2 py-1 text-start transition hover:-translate-y-px glass-row ${selected?.sId === s.id ? "row-on" : ""}`}
-                      >
-                        <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: dom.accent }} />
-                        <div className="min-w-0 flex-1">
-                          <div className="truncate text-[10px] font-light tx1">{t(s.title, lang)}</div>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </aside>
+          <DomainAside
+              lang={lang}
+              dom={dom}
+              activeProcesses={activeProcesses}
+              selectedSubId={selected?.sId}
+              extraSubs={D2_PAGE_SUBS}
+              onSelectSub={(pId, sId) => {
+                audit("OPEN_SUBPROCESS", { projectId: target.projectId, entity: dom.id, entityId: sId });
+                setSelected({ pId, sId })
+              }}
+              onOpenModuleSub={(moduleId, pId, sId) => onNavigate?.({ ...target, moduleId, processId: pId, subId: sId })}
+            />
         </div>
       </div>
     );
@@ -734,49 +707,18 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
           <div dir={rtl ? "rtl" : "ltr"} className="glass flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl p-3">
             <PmaWorkspace projectId={target.projectId} lang={lang} initialTab={d3Tab} hideTabs />
           </div>
-          <aside dir={rtl ? "rtl" : "ltr"} className="glass-dark flex w-[300px] shrink-0 flex-col overflow-hidden rounded-2xl">
-            <div className="b-line border-b px-3 py-2.5">
-              <div className="flex items-center gap-2">
-                <span className="grid h-6 w-6 place-items-center rounded-md text-[12px]"
-                      style={{ background: `${dom.accent}1a`, border: `1px solid ${dom.accent}55`, color: dom.accent }}>
-                  {dom.icon}
-                </span>
-                <div className="text-[10.5px] font-normal tx1">{t(dom.title, lang)}</div>
-              </div>
-            </div>
-            <div className="thin-scroll flex-1 overflow-y-auto p-2 space-y-2">
-              {dom.processes.map((p, i) => (
-                <div key={p.id} className="rounded-xl border b-line-soft bg-black/10 p-1.5">
-                  <div className="flex items-center gap-1.5 px-1 py-1">
-                    <span className="text-[8px] font-light tabular-nums tx4">
-                      {(i + 1).toLocaleString(rtl ? "fa-IR" : "en-US")}
-                    </span>
-                    <span className="text-[10.5px] font-normal" style={{ color: dom.accent }}>{t(p.title, lang)}</span>
-                  </div>
-                  <div className="mt-1 space-y-1">
-                    {[
-                      ...p.subs.map((s) => ({ id: s.id, title: s.title, sql: s.sql })),
-                      ...(D3_PAGE_SUBS[p.id] ?? []),
-                    ].map((s) => (
-                      <button
-                        key={s.id}
-                        onClick={() => {
-                          audit("OPEN_SUBPROCESS", { projectId: target.projectId, entity: dom.id, entityId: s.id });
-                          setSelected({ pId: p.id, sId: s.id });
-                        }}
-                        className={`group flex w-full items-start gap-2 rounded-lg px-2 py-2 text-start transition hover:-translate-y-px glass-row ${selected?.sId === s.id ? "row-on" : ""}`}
-                      >
-                        <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: dom.accent }} />
-                        <div className="min-w-0 flex-1">
-                          <div className="truncate text-[10px] font-light tx1">{t(s.title, lang)}</div>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </aside>
+          <DomainAside
+            lang={lang}
+            dom={dom}
+            activeProcesses={activeProcesses}
+            selectedSubId={selected?.sId}
+            extraSubs={D3_PAGE_SUBS}
+            onSelectSub={(pId, sId) => {
+              audit("OPEN_SUBPROCESS", { projectId: target.projectId, entity: dom.id, entityId: sId });
+              setSelected({ pId, sId });
+            }}
+            onOpenModuleSub={(moduleId, pId, sId) => onNavigate?.({ ...target, moduleId, processId: pId, subId: sId })}
+          />
         </div>
       </div>
     );
@@ -832,49 +774,18 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
           <div dir={rtl ? "rtl" : "ltr"} className="glass flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl p-3">
             <RiskClaimsWorkspace projectId={target.projectId} lang={lang} initialTab={d4Tab} hideTabs />
           </div>
-          <aside dir={rtl ? "rtl" : "ltr"} className="glass-dark flex w-[300px] shrink-0 flex-col overflow-hidden rounded-2xl">
-            <div className="b-line border-b px-3 py-2.5">
-              <div className="flex items-center gap-2">
-                <span className="grid h-6 w-6 place-items-center rounded-md text-[12px]"
-                      style={{ background: `${dom.accent}1a`, border: `1px solid ${dom.accent}55`, color: dom.accent }}>
-                  {dom.icon}
-                </span>
-                <div className="text-[10.5px] font-normal tx1">{t(dom.title, lang)}</div>
-              </div>
-            </div>
-            <div className="thin-scroll flex-1 overflow-y-auto p-2 space-y-2">
-              {dom.processes.map((p, i) => (
-                <div key={p.id} className="rounded-xl border b-line-soft bg-black/10 p-1.5">
-                  <div className="flex items-center gap-1.5 px-1 py-1">
-                    <span className="text-[8px] font-light tabular-nums tx4">
-                      {(i + 1).toLocaleString(rtl ? "fa-IR" : "en-US")}
-                    </span>
-                    <span className="text-[10.5px] font-normal" style={{ color: dom.accent }}>{t(p.title, lang)}</span>
-                  </div>
-                  <div className="mt-1 space-y-1">
-                    {[
-                      ...p.subs.map((s) => ({ id: s.id, title: s.title, sql: s.sql })),
-                      ...(D4_PAGE_SUBS[p.id] ?? []),
-                    ].filter((s, i, arr) => arr.findIndex((x) => x.id === s.id) === i).map((s) => (
-                      <button
-                        key={s.id}
-                        onClick={() => {
-                          audit("OPEN_SUBPROCESS", { projectId: target.projectId, entity: dom.id, entityId: s.id });
-                          setSelected({ pId: p.id, sId: s.id });
-                        }}
-                        className={`group flex w-full items-start gap-2 rounded-lg px-2 py-2 text-start transition hover:-translate-y-px glass-row ${selected?.sId === s.id ? "row-on" : ""}`}
-                      >
-                        <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: dom.accent }} />
-                        <div className="min-w-0 flex-1">
-                          <div className="truncate text-[10px] font-light tx1">{t(s.title, lang)}</div>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </aside>
+          <DomainAside
+            lang={lang}
+            dom={dom}
+            activeProcesses={activeProcesses}
+            selectedSubId={selected?.sId}
+            extraSubs={D4_PAGE_SUBS}
+            onSelectSub={(pId, sId) => {
+              audit("OPEN_SUBPROCESS", { projectId: target.projectId, entity: dom.id, entityId: sId });
+              setSelected({ pId, sId });
+            }}
+            onOpenModuleSub={(moduleId, pId, sId) => onNavigate?.({ ...target, moduleId, processId: pId, subId: sId })}
+          />
         </div>
       </div>
     );
@@ -888,7 +799,7 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
 
   /* P8: میز کار دفتر پروژه (PMO-1..3) کنار میز حاکمیت d6؛ نوار کنار و
      حوزه‌های اصلی دست‌نخورده می‌مانند و فقط نمای درون d6 عوض می‌شود. */
-  const [d6View, setD6View] = useState<"gov" | "pmo">("gov");
+  const [d6View, setD6View] = useState<"gov" | "pmo" | "ctl">("gov");
 
   const [d14View, setD14View] = useState<"contract" | "ipc" | "rating" | "risk">(
     target.subId === "d14-p1-risk" ? "risk" : target.processId === "d14-p8" ? "rating" : "contract",
@@ -954,49 +865,18 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
           <div dir={rtl ? "rtl" : "ltr"} className="glass flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl p-3">
             <QualityWorkspace lang={lang} initialTab={d8Tab} hideTabs />
           </div>
-          <aside dir={rtl ? "rtl" : "ltr"} className="glass-dark flex w-[300px] shrink-0 flex-col overflow-hidden rounded-2xl">
-            <div className="b-line border-b px-3 py-2.5">
-              <div className="flex items-center gap-2">
-                <span className="grid h-6 w-6 place-items-center rounded-md text-[12px]"
-                      style={{ background: `${dom.accent}1a`, border: `1px solid ${dom.accent}55`, color: dom.accent }}>
-                  {dom.icon}
-                </span>
-                <div className="text-[10.5px] font-normal tx1">{t(dom.title, lang)}</div>
-              </div>
-            </div>
-            <div className="thin-scroll flex-1 overflow-y-auto p-2 space-y-2">
-              {dom.processes.map((p, i) => (
-                <div key={p.id} className="rounded-xl border b-line-soft bg-black/10 p-1.5">
-                  <div className="flex items-center gap-1.5 px-1 py-1">
-                    <span className="text-[8px] font-light tabular-nums tx4">
-                      {(i + 1).toLocaleString(rtl ? "fa-IR" : "en-US")}
-                    </span>
-                    <span className="text-[10.5px] font-normal" style={{ color: dom.accent }}>{t(p.title, lang)}</span>
-                  </div>
-                  <div className="mt-1 space-y-1">
-                    {[
-                      ...p.subs.map((s) => ({ id: s.id, title: s.title, sql: s.sql })),
-                      ...(D8_PAGE_SUBS[p.id] ?? []),
-                    ].map((s) => (
-                      <button
-                        key={s.id}
-                        onClick={() => {
-                          audit("OPEN_SUBPROCESS", { projectId: target.projectId, entity: dom.id, entityId: s.id });
-                          setSelected({ pId: p.id, sId: s.id });
-                        }}
-                        className={`group flex w-full items-start gap-2 rounded-lg px-2 py-2 text-start transition hover:-translate-y-px glass-row ${selected?.sId === s.id ? "row-on" : ""}`}
-                      >
-                        <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: dom.accent }} />
-                        <div className="min-w-0 flex-1">
-                          <div className="truncate text-[10px] font-light tx1">{t(s.title, lang)}</div>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </aside>
+          <DomainAside
+            lang={lang}
+            dom={dom}
+            activeProcesses={activeProcesses}
+            selectedSubId={selected?.sId}
+            extraSubs={D8_PAGE_SUBS}
+            onSelectSub={(pId, sId) => {
+              audit("OPEN_SUBPROCESS", { projectId: target.projectId, entity: dom.id, entityId: sId });
+              setSelected({ pId, sId });
+            }}
+            onOpenModuleSub={(moduleId, pId, sId) => onNavigate?.({ ...target, moduleId, processId: pId, subId: sId })}
+          />
         </div>
       </div>
     );
@@ -1019,12 +899,37 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
     return <EngineeringWorkspace lang={lang} onBack={onBack} />;
   }
 
-  /* ماژول ایمنی، بهداشت و محیط‌زیست — شش تب برابر شش فرایند d16-p1..p6،
-   * پس نگاشت روی سطح فرایند است نه زیرمرحله. */
+  /* ماژول ایمنی، بهداشت و محیط‌زیست — هفت تب برابر هفت فرایند d16-p1..p7،
+   * پس نگاشت روی سطح فرایند است نه زیرمرحله.
+   *
+   * نوار تب افقی حذف شد: انتخاب تب از سایدبار دامنه‌ای (لایهٔ ۳) انجام
+   * می‌شود — همان ریتم سایر ماژول‌های گروه «اجرا» — و از این راه
+   * ماژول‌های هم‌حوزه (مثل ثبت سریع میدانی HSE) هم در دسترس می‌مانند. */
   if (dom.id === "d16") {
     const sid = selected?.sId ?? target.subId ?? "";
     const pid = sid.split("-").slice(0, 2).join("-");
-    return <HSEWorkspace lang={lang} onBack={onBack} initialTab={D16_TAB_BY_PROCESS[pid]} initialFieldTab={FIELD_HSE_TAB_BY_SUB[sid]} />;
+    return (
+      <HSEWorkspace
+        lang={lang}
+        onBack={onBack}
+        hideTabs
+        initialTab={D16_TAB_BY_PROCESS[pid]}
+        initialFieldTab={FIELD_HSE_TAB_BY_SUB[sid]}
+        aside={
+          <DomainAside
+            lang={lang}
+            dom={dom}
+            activeProcesses={activeProcesses}
+            selectedSubId={selected?.sId}
+            onSelectSub={(pId, sId) => {
+              audit("OPEN_SUBPROCESS", { projectId: target.projectId, entity: dom.id, entityId: sId });
+              setSelected({ pId, sId });
+            }}
+            onOpenModuleSub={(moduleId, pId, sId) => onNavigate?.({ ...target, moduleId, processId: pId, subId: sId })}
+          />
+        }
+      />
+    );
   }
 
   /* مدیریت پیمان و صورت‌وضعیت (d14).
@@ -1095,18 +1000,31 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
             </button>
           ))}
         </div>
-        <div className="glass flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl p-3">
-          <div className="thin-scroll min-h-0 flex-1 overflow-y-auto">
-            {d14View === "risk" ? (
-              <ContractRiskWorkspace lang={lang} projectId={target.projectId} />
-            ) : d14View === "rating" ? (
-              <VendorRatingPanel lang={lang} />
-            ) : d14View === "ipc" ? (
-              <CntIpcPanel lang={lang} />
-            ) : (
-              <ContractsPanel lang={lang} />
-            )}
+        <div className="workspace-columns flex min-h-0 flex-1 gap-3 overflow-hidden">
+          <div className="glass flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl p-3">
+            <div className="thin-scroll min-h-0 flex-1 overflow-y-auto">
+              {d14View === "risk" ? (
+                <ContractRiskWorkspace lang={lang} projectId={target.projectId} />
+              ) : d14View === "rating" ? (
+                <VendorRatingPanel lang={lang} />
+              ) : d14View === "ipc" ? (
+                <CntIpcPanel lang={lang} />
+              ) : (
+                <ContractsPanel lang={lang} />
+              )}
+            </div>
           </div>
+          <DomainAside
+            lang={lang}
+            dom={dom}
+            activeProcesses={activeProcesses}
+            selectedSubId={selected?.sId}
+            onSelectSub={(pId, sId) => {
+              audit("OPEN_SUBPROCESS", { projectId: target.projectId, entity: dom.id, entityId: sId });
+              setSelected({ pId, sId });
+            }}
+            onOpenModuleSub={(moduleId, pId, sId) => onNavigate?.({ ...target, moduleId, processId: pId, subId: sId })}
+          />
         </div>
       </div>
     );
@@ -1177,46 +1095,17 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
               <MachineryWorkspace projectId={target.projectId} lang={lang} initialTab={d9Tab} hideTabs />
             )}
           </div>
-          <aside dir={rtl ? "rtl" : "ltr"} className="glass-dark flex w-[300px] shrink-0 flex-col overflow-hidden rounded-2xl">
-            <div className="b-line border-b px-3 py-2.5">
-              <div className="flex items-center gap-2">
-                <span className="grid h-6 w-6 place-items-center rounded-md text-[12px]"
-                      style={{ background: `${dom.accent}1a`, border: `1px solid ${dom.accent}55`, color: dom.accent }}>
-                  {dom.icon}
-                </span>
-                <div className="text-[10.5px] font-normal tx1">{t(dom.title, lang)}</div>
-              </div>
-            </div>
-            <div className="thin-scroll flex-1 overflow-y-auto p-2 space-y-2">
-              {dom.processes.map((p, i) => (
-                <div key={p.id} className="rounded-xl border b-line-soft bg-black/10 p-1.5">
-                  <div className="flex items-center gap-1.5 px-1 py-1">
-                    <span className="text-[8px] font-light tabular-nums tx4">
-                      {(i + 1).toLocaleString(rtl ? "fa-IR" : "en-US")}
-                    </span>
-                    <span className="text-[10.5px] font-normal" style={{ color: dom.accent }}>{t(p.title, lang)}</span>
-                  </div>
-                  <div className="mt-1 space-y-1">
-                    {p.subs.map((s) => (
-                      <button
-                        key={s.id}
-                        onClick={() => {
-                          audit("OPEN_SUBPROCESS", { projectId: target.projectId, entity: dom.id, entityId: s.id });
-                          setSelected({ pId: p.id, sId: s.id });
-                        }}
-                        className={`group flex w-full items-start gap-2 rounded-lg px-2 py-2 text-start transition hover:-translate-y-px glass-row ${selected?.sId === s.id ? "row-on" : ""}`}
-                      >
-                        <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: dom.accent }} />
-                        <div className="min-w-0 flex-1">
-                          <div className="truncate text-[10px] font-light tx1">{t(s.title, lang)}</div>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </aside>
+          <DomainAside
+              lang={lang}
+              dom={dom}
+              activeProcesses={activeProcesses}
+              selectedSubId={selected?.sId}
+              onSelectSub={(pId, sId) => {
+                audit("OPEN_SUBPROCESS", { projectId: target.projectId, entity: dom.id, entityId: sId });
+                setSelected({ pId, sId })
+              }}
+              onOpenModuleSub={(moduleId, pId, sId) => onNavigate?.({ ...target, moduleId, processId: pId, subId: sId })}
+            />
         </div>
       </div>
     );
@@ -1266,49 +1155,17 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
           <div dir={rtl ? "rtl" : "ltr"} className="glass flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl p-3">
             <WorkforceWorkspace lang={lang} initialTab={d10Tab} hideTabs />
           </div>
-          <aside dir={rtl ? "rtl" : "ltr"} className="glass-dark flex w-[300px] shrink-0 flex-col overflow-hidden rounded-2xl">
-            <div className="b-line border-b px-3 py-2.5">
-              <div className="flex items-center gap-2">
-                <span className="grid h-6 w-6 place-items-center rounded-md text-[12px]"
-                      style={{ background: `${dom.accent}1a`, border: `1px solid ${dom.accent}55`, color: dom.accent }}>
-                  {dom.icon}
-                </span>
-                <div className="text-[10.5px] font-normal tx1">{t(dom.title, lang)}</div>
-              </div>
-            </div>
-            <div className="thin-scroll flex-1 overflow-y-auto p-2 space-y-2">
-              {dom.processes.map((p, i) => (
-                <div key={p.id} className="rounded-xl border b-line-soft bg-black/10 p-1.5">
-                  <div className="flex items-center gap-1.5 px-1 py-1">
-                    <span className="text-[8px] font-light tabular-nums tx4">
-                      {(i + 1).toLocaleString(rtl ? "fa-IR" : "en-US")}
-                    </span>
-                    <span className="text-[10.5px] font-normal" style={{ color: dom.accent }}>{t(p.title, lang)}</span>
-                  </div>
-                  <div className="mt-1 space-y-1">
-                    {[
-                      ...p.subs.map((s) => ({ id: s.id, title: s.title, sql: s.sql })),
-                      
-                    ].map((s) => (
-                      <button
-                        key={s.id}
-                        onClick={() => {
-                          audit("OPEN_SUBPROCESS", { projectId: target.projectId, entity: dom.id, entityId: s.id });
-                          setSelected({ pId: p.id, sId: s.id });
-                        }}
-                        className={`group flex w-full items-start gap-2 rounded-lg px-2 py-2 text-start transition hover:-translate-y-px glass-row ${selected?.sId === s.id ? "row-on" : ""}`}
-                      >
-                        <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: dom.accent }} />
-                        <div className="min-w-0 flex-1">
-                          <div className="truncate text-[10px] font-light tx1">{t(s.title, lang)}</div>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </aside>
+          <DomainAside
+              lang={lang}
+              dom={dom}
+              activeProcesses={activeProcesses}
+              selectedSubId={selected?.sId}
+              onSelectSub={(pId, sId) => {
+                audit("OPEN_SUBPROCESS", { projectId: target.projectId, entity: dom.id, entityId: sId });
+                setSelected({ pId, sId })
+              }}
+              onOpenModuleSub={(moduleId, pId, sId) => onNavigate?.({ ...target, moduleId, processId: pId, subId: sId })}
+            />
         </div>
       </div>
     );
@@ -1364,49 +1221,17 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
           <div dir={rtl ? "rtl" : "ltr"} className="glass flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl p-3">
             <CommunicationWorkspace lang={lang} initialTab={d11Tab} hideTabs />
           </div>
-          <aside dir={rtl ? "rtl" : "ltr"} className="glass-dark flex w-[300px] shrink-0 flex-col overflow-hidden rounded-2xl">
-            <div className="b-line border-b px-3 py-2.5">
-              <div className="flex items-center gap-2">
-                <span className="grid h-6 w-6 place-items-center rounded-md text-[12px]"
-                      style={{ background: `${dom.accent}1a`, border: `1px solid ${dom.accent}55`, color: dom.accent }}>
-                  {dom.icon}
-                </span>
-                <div className="text-[10.5px] font-normal tx1">{t(dom.title, lang)}</div>
-              </div>
-            </div>
-            <div className="thin-scroll flex-1 overflow-y-auto p-2 space-y-2">
-              {dom.processes.map((p, i) => (
-                <div key={p.id} className="rounded-xl border b-line-soft bg-black/10 p-1.5">
-                  <div className="flex items-center gap-1.5 px-1 py-1">
-                    <span className="text-[8px] font-light tabular-nums tx4">
-                      {(i + 1).toLocaleString(rtl ? "fa-IR" : "en-US")}
-                    </span>
-                    <span className="text-[10.5px] font-normal" style={{ color: dom.accent }}>{t(p.title, lang)}</span>
-                  </div>
-                  <div className="mt-1 space-y-1">
-                    {[
-                      ...p.subs.map((s) => ({ id: s.id, title: s.title, sql: s.sql })),
-                      
-                    ].map((s) => (
-                      <button
-                        key={s.id}
-                        onClick={() => {
-                          audit("OPEN_SUBPROCESS", { projectId: target.projectId, entity: dom.id, entityId: s.id });
-                          setSelected({ pId: p.id, sId: s.id });
-                        }}
-                        className={`group flex w-full items-start gap-2 rounded-lg px-2 py-2 text-start transition hover:-translate-y-px glass-row ${selected?.sId === s.id ? "row-on" : ""}`}
-                      >
-                        <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: dom.accent }} />
-                        <div className="min-w-0 flex-1">
-                          <div className="truncate text-[10px] font-light tx1">{t(s.title, lang)}</div>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </aside>
+          <DomainAside
+            lang={lang}
+            dom={dom}
+            activeProcesses={activeProcesses}
+            selectedSubId={selected?.sId}
+            onSelectSub={(pId, sId) => {
+              audit("OPEN_SUBPROCESS", { projectId: target.projectId, entity: dom.id, entityId: sId });
+              setSelected({ pId, sId });
+            }}
+            onOpenModuleSub={(moduleId, pId, sId) => onNavigate?.({ ...target, moduleId, processId: pId, subId: sId })}
+          />
         </div>
       </div>
     );
@@ -1462,46 +1287,17 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
           <div dir={rtl ? "rtl" : "ltr"} className="glass flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl p-3">
             <CommissioningWorkspace projectId={target.projectId} lang={lang} initialTab={d15Tab} hideTabs />
           </div>
-          <aside dir={rtl ? "rtl" : "ltr"} className="glass-dark flex w-[300px] shrink-0 flex-col overflow-hidden rounded-2xl">
-            <div className="b-line border-b px-3 py-2.5">
-              <div className="flex items-center gap-2">
-                <span className="grid h-6 w-6 place-items-center rounded-md text-[12px]"
-                      style={{ background: `${dom.accent}1a`, border: `1px solid ${dom.accent}55`, color: dom.accent }}>
-                  {dom.icon}
-                </span>
-                <div className="text-[10.5px] font-normal tx1">{t(dom.title, lang)}</div>
-              </div>
-            </div>
-            <div className="thin-scroll flex-1 overflow-y-auto p-2 space-y-2">
-              {dom.processes.map((p, i) => (
-                <div key={p.id} className="rounded-xl border b-line-soft bg-black/10 p-1.5">
-                  <div className="flex items-center gap-1.5 px-1 py-1">
-                    <span className="text-[8px] font-light tabular-nums tx4">
-                      {(i + 1).toLocaleString(rtl ? "fa-IR" : "en-US")}
-                    </span>
-                    <span className="text-[10.5px] font-normal" style={{ color: dom.accent }}>{t(p.title, lang)}</span>
-                  </div>
-                  <div className="mt-1 space-y-1">
-                    {p.subs.map((s) => (
-                      <button
-                        key={s.id}
-                        onClick={() => {
-                          audit("OPEN_SUBPROCESS", { projectId: target.projectId, entity: dom.id, entityId: s.id });
-                          setSelected({ pId: p.id, sId: s.id });
-                        }}
-                        className={`group flex w-full items-start gap-2 rounded-lg px-2 py-2 text-start transition hover:-translate-y-px glass-row ${selected?.sId === s.id ? "row-on" : ""}`}
-                      >
-                        <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: dom.accent }} />
-                        <div className="min-w-0 flex-1">
-                          <div className="truncate text-[10px] font-light tx1">{t(s.title, lang)}</div>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </aside>
+          <DomainAside
+            lang={lang}
+            dom={dom}
+            activeProcesses={activeProcesses}
+            selectedSubId={selected?.sId}
+            onSelectSub={(pId, sId) => {
+              audit("OPEN_SUBPROCESS", { projectId: target.projectId, entity: dom.id, entityId: sId });
+              setSelected({ pId, sId });
+            }}
+            onOpenModuleSub={(moduleId, pId, sId) => onNavigate?.({ ...target, moduleId, processId: pId, subId: sId })}
+          />
         </div>
       </div>
     );
@@ -1551,49 +1347,18 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
           <div dir={rtl ? "rtl" : "ltr"} className="glass flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl p-3">
             <CostSupplyWorkspace lang={lang} initialTab={d5Tab} hideTabs />
           </div>
-          <aside dir={rtl ? "rtl" : "ltr"} className="glass-dark flex w-[300px] shrink-0 flex-col overflow-hidden rounded-2xl">
-            <div className="b-line border-b px-3 py-2.5">
-              <div className="flex items-center gap-2">
-                <span className="grid h-6 w-6 place-items-center rounded-md text-[12px]"
-                      style={{ background: `${dom.accent}1a`, border: `1px solid ${dom.accent}55`, color: dom.accent }}>
-                  {dom.icon}
-                </span>
-                <div className="text-[10.5px] font-normal tx1">{t(dom.title, lang)}</div>
-              </div>
-            </div>
-            <div className="thin-scroll flex-1 overflow-y-auto p-2 space-y-2">
-              {dom.processes.map((p, i) => (
-                <div key={p.id} className="rounded-xl border b-line-soft bg-black/10 p-1.5">
-                  <div className="flex items-center gap-1.5 px-1 py-1">
-                    <span className="text-[8px] font-light tabular-nums tx4">
-                      {(i + 1).toLocaleString(rtl ? "fa-IR" : "en-US")}
-                    </span>
-                    <span className="text-[10.5px] font-normal" style={{ color: dom.accent }}>{t(p.title, lang)}</span>
-                  </div>
-                  <div className="mt-1 space-y-1">
-                    {[
-                      ...p.subs.map((s) => ({ id: s.id, title: s.title, sql: s.sql })),
-                      ...(D5_PAGE_SUBS[p.id] ?? []),
-                    ].map((s) => (
-                      <button
-                        key={s.id}
-                        onClick={() => {
-                          audit("OPEN_SUBPROCESS", { projectId: target.projectId, entity: dom.id, entityId: s.id });
-                          setSelected({ pId: p.id, sId: s.id });
-                        }}
-                        className={`group flex w-full items-start gap-2 rounded-lg px-2 py-2 text-start transition hover:-translate-y-px glass-row ${selected?.sId === s.id ? "row-on" : ""}`}
-                      >
-                        <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: dom.accent }} />
-                        <div className="min-w-0 flex-1">
-                          <div className="truncate text-[10px] font-light tx1">{t(s.title, lang)}</div>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </aside>
+          <DomainAside
+            lang={lang}
+            dom={dom}
+            activeProcesses={activeProcesses}
+            selectedSubId={selected?.sId}
+            extraSubs={D5_PAGE_SUBS}
+            onSelectSub={(pId, sId) => {
+              audit("OPEN_SUBPROCESS", { projectId: target.projectId, entity: dom.id, entityId: sId });
+              setSelected({ pId, sId });
+            }}
+            onOpenModuleSub={(moduleId, pId, sId) => onNavigate?.({ ...target, moduleId, processId: pId, subId: sId })}
+          />
         </div>
       </div>
     );
@@ -1652,11 +1417,12 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
           {([
             ["gov", rtl ? "حاکمیت و فرآیندها (GOV)" : "Governance (GOV)"],
             ["pmo", rtl ? "دفتر پروژه (PMO)" : "PMO desk"],
+            ["ctl", rtl ? "گردش‌کار کنترل پروژه (CTL)" : "Control workflow (CTL)"],
           ] as const).map(([k, label]) => (
             <button
               key={k}
               type="button"
-              onClick={() => { setD6View(k); setD6Guide(false); }}
+              onClick={() => { setD6View(k); setD6Guide(false); if (k === "ctl") setSelected(null); }}
               className={`rounded-lg px-2.5 py-1 text-[10px] font-light transition ${
                 d6View === k ? "toggle-on tx1" : "tx3 hover:tx2"
               }`}
@@ -1667,7 +1433,25 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
         </div>
         <div className="workspace-columns flex min-h-0 flex-1 gap-3 overflow-hidden">
           <div dir={rtl ? "rtl" : "ltr"} className="glass flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl p-3">
-            {d6Guide || (d6View === "gov" && !selected) ? (
+            {d6View === "ctl" ? (
+              /* نقشهٔ گردش‌کار پایش و کنترل پروژه — همان جلوهٔ بصری نقشهٔ
+                 گردش‌کار برنامه‌ریزی (d2). کلیک روی هر گره به ماژول
+                 مقصد (پایش، هزینه، کیفیت، ریسک) می‌رود. */
+              <div className="fade-rise flex min-h-full items-center justify-center py-2">
+                <div className="w-full max-w-[1060px]">
+                  <ControlWorkflowMap
+                    rtl={rtl}
+                    onOpenModule={(moduleId, processId, subId) => {
+                      setSelected(null);
+                      onNavigate?.({ ...target, moduleId, processId, subId });
+                    }}
+                  />
+                  <p className="mt-2 text-center text-[10px] tx3">
+                    {rtl ? "برای شروع، روی هر گره از نقشه کلیک کنید تا به ماژول مربوط بروید." : "Start by clicking any node on the map to open its module."}
+                  </p>
+                </div>
+              </div>
+            ) : d6Guide || (d6View === "gov" && !selected) ? (
               <InitiatingGuide lang={lang} processes={activeProcesses} projectName={project ? t(project.name, lang) : target.projectId} currentRole={user?.role} canEditStructure={canEditTaxonomy} guide={d6Guide} onSelect={(pId, sId) => { setSelected({ pId, sId }); setD6Guide(false); setD6View("gov"); audit("OPEN_SUBPROCESS", { projectId: target.projectId, entity: dom.id, entityId: sId }); }} />
             ) : d6View === "pmo" ? (
               <PmoWorkspace lang={lang} />
@@ -1675,47 +1459,18 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
               <GovernanceWorkspace lang={lang} initialTab={d6Tab} hideTabs />
             )}
           </div>
-          <aside dir={rtl ? "rtl" : "ltr"} className="glass-dark flex w-[300px] shrink-0 flex-col overflow-hidden rounded-2xl">
-            <div className="b-line border-b px-3 py-2.5">
-              <div className="flex items-center gap-2">
-                <span className="grid h-6 w-6 place-items-center rounded-md text-[12px]"
-                      style={{ background: `${dom.accent}1a`, border: `1px solid ${dom.accent}55`, color: dom.accent }}>
-                  {dom.icon}
-                </span>
-                <div className="text-[10.5px] font-normal tx1">{t(dom.title, lang)}</div>
-              </div>
-            </div>
-            <div className="thin-scroll flex-1 overflow-y-auto p-1.5 space-y-1">
-              {activeProcesses.map((p, i) => (
-                <div key={p.id} className="rounded-xl border b-line-soft bg-black/10 p-1">
-                  <div className="flex items-center gap-1.5 px-1 py-0.5">
-                    <span className="text-[8px] font-light tabular-nums tx4">
-                      {(i + 1).toLocaleString(rtl ? "fa-IR" : "en-US")}
-                    </span>
-                    <span className="text-[10.5px] font-normal" style={{ color: dom.accent }}>{t(p.title, lang)}</span>
-                  </div>
-                  <div className="mt-0.5 space-y-0.5">
-                    {p.subs.map((s) => (
-                      <button
-                        key={s.id}
-                        onClick={() => {
-                          audit("OPEN_SUBPROCESS", { projectId: target.projectId, entity: dom.id, entityId: s.id });
-                          setSelected({ pId: p.id, sId: s.id });
-                          setD6Guide(false);
-                        }}
-                        className={`group flex w-full items-start gap-2 rounded-lg px-2 py-1.5 text-start transition hover:-translate-y-px glass-row ${selected?.sId === s.id ? "row-on" : ""}`}
-                      >
-                        <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: dom.accent }} />
-                        <div className="min-w-0 flex-1">
-                          <div className="truncate text-[10px] font-light tx1">{t(s.title, lang)}</div>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </aside>
+          <DomainAside
+              lang={lang}
+              dom={dom}
+              activeProcesses={activeProcesses}
+              selectedSubId={selected?.sId}
+              onSelectSub={(pId, sId) => {
+                audit("OPEN_SUBPROCESS", { projectId: target.projectId, entity: dom.id, entityId: sId });
+                setSelected({ pId, sId });
+                setD6Guide(false);
+              }}
+              onOpenModuleSub={(moduleId, pId, sId) => onNavigate?.({ ...target, moduleId, processId: pId, subId: sId })}
+            />
         </div>
         {taxonomyEditorOpen && (
           <TaxonomyEditor
@@ -1791,45 +1546,17 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
               <StrategyDashboard projectId={target.projectId} lang={lang} processes={activeProcesses} onOpenWorkspace={() => setStrategyWorkspaceOpen(true)} onOpenProcess={(id) => { const process = activeProcesses.find(p => p.subs.some(s => s.id === id)); if (process) { setSelected({ pId: process.id, sId: id }); audit("OPEN_SUBPROCESS", { projectId: target.projectId, entity: dom.id, entityId: id }); } }} />
             )}
           </div>
-          <aside dir={rtl ? "rtl" : "ltr"} className="glass-dark flex w-[300px] shrink-0 flex-col overflow-hidden rounded-2xl">
-            <div className="b-line border-b px-3 py-2.5">
-              <div className="flex items-center gap-2">
-                <span className="grid h-6 w-6 place-items-center rounded-md text-[12px]" style={{ background: `${dom.accent}1a`, border: `1px solid ${dom.accent}55`, color: dom.accent }}>
-                  {dom.icon}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div className="text-[10.5px] font-normal tx1">{rtl ? "فرایندها و زیرفرایندها" : "Processes & sub-processes"}</div>
-                  <div className="text-[8.5px] tx4">{activeProcesses.length.toLocaleString(rtl ? "fa-IR" : "en-US")} · {activeProcesses.reduce((n, p) => n + p.subs.length, 0).toLocaleString(rtl ? "fa-IR" : "en-US")}</div>
-                </div>
-              </div>
-            </div>
-            <div className="thin-scroll flex-1 overflow-y-auto p-2 space-y-2">
-              {activeProcesses.map((p, i) => (
-                <div key={p.id} className="rounded-xl border b-line-soft bg-black/10 p-1.5">
-                  <div className="flex items-center gap-1.5 px-1 py-1">
-                    <span className="text-[8px] font-light tabular-nums tx4">{(i + 1).toLocaleString(rtl ? "fa-IR" : "en-US")}</span>
-                    <span className="text-[10.5px] font-normal" style={{ color: dom.accent }}>{t(p.title, lang)}</span>
-                  </div>
-                  <div className="mt-1 space-y-1">
-                    {p.subs.map((s) => (
-                      <button
-                        key={s.id}
-                        type="button"
-                        onClick={() => {
-                          audit("OPEN_SUBPROCESS", { projectId: target.projectId, entity: dom.id, entityId: s.id });
-                          setSelected({ pId: p.id, sId: s.id });
-                        }}
-                        className={`group flex w-full items-start gap-2 rounded-lg px-2 py-2 text-start transition hover:-translate-y-px glass-row ${selected?.sId === s.id ? "row-on" : ""}`}
-                      >
-                        <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: dom.accent }} />
-                        <span className="min-w-0 flex-1 truncate text-[10px] font-light tx1">{t(s.title, lang)}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </aside>
+          <DomainAside
+              lang={lang}
+              dom={dom}
+              activeProcesses={activeProcesses}
+              selectedSubId={selected?.sId}
+              onSelectSub={(pId, sId) => {
+                audit("OPEN_SUBPROCESS", { projectId: target.projectId, entity: dom.id, entityId: sId });
+                setSelected({ pId, sId })
+              }}
+              onOpenModuleSub={(moduleId, pId, sId) => onNavigate?.({ ...target, moduleId, processId: pId, subId: sId })}
+            />
         </div>
         {taxonomyEditorOpen && (
           <TaxonomyEditor
@@ -1882,19 +1609,32 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
             <div className="text-[11px] font-light tx1">{rtl ? "بدون وابستگی به سرویس نقشه" : "no map-tile dependency"}</div>
           </div>
         </div>
-        <div className="glass flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl p-3">
-          {selected ? null : <GeoProjectsPanel lang={lang} />}
-          {selected && (
-            <CapabilityDetail
-              lang={lang}
-              domainId={dom.id}
-              clusterId={target.clusterId}
-              projectId={target.projectId}
-              processId={selected.pId}
-              subId={selected.sId}
-              onBack={() => setSelected(null)}
-            />
-          )}
+        <div className="workspace-columns flex min-h-0 flex-1 gap-3 overflow-hidden">
+          <div className="glass flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl p-3">
+            {selected ? null : <GeoProjectsPanel lang={lang} />}
+            {selected && (
+              <CapabilityDetail
+                lang={lang}
+                domainId={dom.id}
+                clusterId={target.clusterId}
+                projectId={target.projectId}
+                processId={selected.pId}
+                subId={selected.sId}
+                onBack={() => setSelected(null)}
+              />
+            )}
+          </div>
+          <DomainAside
+            lang={lang}
+            dom={dom}
+            activeProcesses={activeProcesses}
+            selectedSubId={selected?.sId}
+            onSelectSub={(pId, sId) => {
+              audit("OPEN_SUBPROCESS", { projectId: target.projectId, entity: dom.id, entityId: sId });
+              setSelected({ pId, sId });
+            }}
+            onOpenModuleSub={(moduleId, pId, sId) => onNavigate?.({ ...target, moduleId, processId: pId, subId: sId })}
+          />
         </div>
       </div>
     );
@@ -1926,19 +1666,32 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
             <div className="text-[11px] font-light tx1">{rtl ? "خودارزیابی قابل ویرایش" : "editable self-assessment"}</div>
           </div>
         </div>
-        <div className="glass flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl p-3">
-          {selected ? null : <EfqmPanel projectId={target.projectId} lang={lang} />}
-          {selected && (
-            <CapabilityDetail
-              lang={lang}
-              domainId={dom.id}
-              clusterId={target.clusterId}
-              projectId={target.projectId}
-              processId={selected.pId}
-              subId={selected.sId}
-              onBack={() => setSelected(null)}
-            />
-          )}
+        <div className="workspace-columns flex min-h-0 flex-1 gap-3 overflow-hidden">
+          <div className="glass flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl p-3">
+            {selected ? null : <EfqmPanel projectId={target.projectId} lang={lang} />}
+            {selected && (
+              <CapabilityDetail
+                lang={lang}
+                domainId={dom.id}
+                clusterId={target.clusterId}
+                projectId={target.projectId}
+                processId={selected.pId}
+                subId={selected.sId}
+                onBack={() => setSelected(null)}
+              />
+            )}
+          </div>
+          <DomainAside
+            lang={lang}
+            dom={dom}
+            activeProcesses={activeProcesses}
+            selectedSubId={selected?.sId}
+            onSelectSub={(pId, sId) => {
+              audit("OPEN_SUBPROCESS", { projectId: target.projectId, entity: dom.id, entityId: sId });
+              setSelected({ pId, sId });
+            }}
+            onOpenModuleSub={(moduleId, pId, sId) => onNavigate?.({ ...target, moduleId, processId: pId, subId: sId })}
+          />
         </div>
       </div>
     );
@@ -1988,51 +1741,18 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
           <div className="glass flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl p-3">
             <HseWorkspace lang={lang} initialTab={d17Tab} hideTabs />
           </div>
-          <aside className="glass-dark flex w-[300px] shrink-0 flex-col overflow-hidden rounded-2xl">
-            <div className="b-line border-b px-3 py-2.5">
-              <div className="flex items-center gap-2">
-                <span className="grid h-6 w-6 place-items-center rounded-md text-[12px]"
-                      style={{ background: `${dom.accent}1a`, border: `1px solid ${dom.accent}55`, color: dom.accent }}>
-                  {dom.icon}
-                </span>
-                <div className="text-[10.5px] font-normal tx1">{t(dom.title, lang)}</div>
-              </div>
-            </div>
-            <div className="thin-scroll flex-1 overflow-y-auto p-2 space-y-2">
-              {dom.processes.map((p, i) => (
-                <div key={p.id} className="rounded-xl border b-line-soft bg-black/10 p-1.5">
-                  <div className="flex items-center gap-1.5 px-1 py-1">
-                    <span className="text-[8px] font-light tabular-nums tx4">
-                      {(i + 1).toLocaleString(rtl ? "fa-IR" : "en-US")}
-                    </span>
-                    <span className="text-[10.5px] font-normal" style={{ color: dom.accent }}>{t(p.title, lang)}</span>
-                  </div>
-                  <div className="mt-1 space-y-1">
-                    {p.subs.map((sub) => (
-                      <button
-                        key={sub.id}
-                        onClick={() => {
-                          audit("OPEN_SUBPROCESS", { projectId: target.projectId, entity: dom.id, entityId: sub.id });
-                          setSelected({ pId: p.id, sId: sub.id });
-                        }}
-                        className={`group flex w-full items-start gap-2 rounded-lg px-2 py-2 text-start transition hover:-translate-y-px glass-row ${selected?.sId === sub.id ? "row-on" : ""}`}
-                      >
-                        <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: dom.accent }} />
-                        <div className="min-w-0 flex-1">
-                          <div className="truncate text-[10px] font-light tx1">{t(sub.title, lang)}</div>
-                          <div className="mt-0.5 flex flex-wrap gap-1">
-                            {sub.sql.map((tbl) => (
-                              <span key={tbl} className="rounded bg-sky-400/10 px-1 py-[1px] text-[7.5px] font-light text-sky-300" dir="ltr">🗄 {tbl}</span>
-                            ))}
-                          </div>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </aside>
+          <DomainAside
+              lang={lang}
+              dom={dom}
+              activeProcesses={activeProcesses}
+              selectedSubId={selected?.sId}
+              showSql
+              onSelectSub={(pId, sId) => {
+                audit("OPEN_SUBPROCESS", { projectId: target.projectId, entity: dom.id, entityId: sId });
+                setSelected({ pId, sId })
+              }}
+              onOpenModuleSub={(moduleId, pId, sId) => onNavigate?.({ ...target, moduleId, processId: pId, subId: sId })}
+            />
         </div>
       </div>
     );
@@ -2118,50 +1838,16 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
         </div>
 
         {/* Right in-page sidebar: processes → subs */}
-        <aside dir={rtl ? "rtl" : "ltr"} className="glass-dark flex w-[300px] shrink-0 flex-col overflow-hidden rounded-2xl">
-          <div className="b-line border-b px-3 py-2.5">
-            <div className="flex items-center gap-2">
-              <span className="grid h-6 w-6 place-items-center rounded-md text-[12px]"
-                    style={{ background: `${dom.accent}1a`, border: `1px solid ${dom.accent}55`, color: dom.accent }}>
-                {dom.icon}
-              </span>
-              <div className="text-[10.5px] font-normal tx1">{t(dom.title, lang)}</div>
-            </div>
-          </div>
-          <div className="thin-scroll flex-1 overflow-y-auto p-2 space-y-2">
-            {dom.processes.map((p, i) => (
-              <div key={p.id} className="rounded-xl border b-line-soft bg-black/10 p-1.5">
-                <div className="flex items-center gap-1.5 px-1 py-1">
-                  <span className="text-[8px] font-light tabular-nums tx4">
-                    {(i + 1).toLocaleString(rtl ? "fa-IR" : "en-US")}
-                  </span>
-                  <span className="text-[10.5px] font-normal" style={{ color: dom.accent }}>{t(p.title, lang)}</span>
-                </div>
-                <div className="mt-1 space-y-1">
-                  {p.subs.map((s) => (
-                    <button
-                      key={s.id}
-                      onClick={() => {
-                        audit("OPEN_SUBPROCESS", { projectId: target.projectId, entity: dom.id, entityId: s.id });
-                        setSelected({ pId: p.id, sId: s.id });
-                      }}
-                      className="group flex w-full items-start gap-2 rounded-lg px-2 py-2 text-start transition hover:-translate-y-px glass-row"
-                    >
-                      <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: dom.accent }} />
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate text-[10px] font-light tx1">{t(s.title, lang)}</div>
-                      </div>
-                      <span className="text-[10px] tx4 transition group-hover:accent-t">{rtl ? "←" : "→"}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-          <div className="b-line-soft mt-auto border-t px-3 py-2 text-[8.5px] font-extralight tx3" dir="ltr">
-            Storage: SQL Server (.\SQL2008EXPRESS)
-          </div>
-        </aside>
+        <DomainAside
+            lang={lang}
+            dom={dom}
+            activeProcesses={activeProcesses}
+            onSelectSub={(pId, sId) => {
+              audit("OPEN_SUBPROCESS", { projectId: target.projectId, entity: dom.id, entityId: sId });
+              setSelected({ pId, sId });
+            }}
+            onOpenModuleSub={(moduleId, pId, sId) => onNavigate?.({ ...target, moduleId, processId: pId, subId: sId })}
+          />
       </div>
     </div>
   );
@@ -2172,6 +1858,179 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
  * برای بقیهٔ حوزه‌ها اضافه می‌کند؛ داده از همان API پروژه‌ای می‌آید و مجوز
  * `gov.process.edit` سمت سرور کنترل می‌شود (بدون مجوز، دکمه نمایش داده نمی‌شود).
  */
+/* ── لایهٔ ۳ — ماژول‌های هم‌حوزه در سایدبار فرعی ──
+ * ساختار سه‌لایه: گروه فرایندی (لایهٔ ۱) ← حوزهٔ عملکردی (لایهٔ ۲،
+ * سایدبار اصلی) ← ماژول (لایهٔ ۳، همین‌جا در سایدبار فرعی صفحهٔ ماژول). */
+function DomainNavGroups({
+  lang,
+  dom,
+  activeProcesses,
+  selectedSubId,
+  extraSubs,
+  showSql,
+  onSelectSub,
+  onOpenModuleSub,
+}: {
+  lang: Lang;
+  dom: Domain;
+  activeProcesses: Process[];
+  selectedSubId?: string;
+  /** زیرفرآیندهای افزودهٔ همان ماژول (مثل d2). */
+  extraSubs?: Record<string, { id: string; title: Bi }[]>;
+  /** نمایش برچسب جدول‌های SQL زیر هر زیرفرآیند (مثل d17). */
+  showSql?: boolean;
+  onSelectSub: (processId: string, subId: string) => void;
+  onOpenModuleSub: (moduleId: string, processId: string, subId: string) => void;
+}) {
+  const rtl = lang === "fa";
+  const { can } = useAuth();
+  const pd = performanceDomainOf(dom.id);
+  if (!pd) return null;
+  /* ماژول «مدیریت سامانه و پیکربندی پایه» (d7) فقط مدیر سامانه می‌بیند؛
+   * همان قاعده‌ای که در سایدبار اصلی اعمال می‌شود. */
+  /* ماژول‌های هم‌حوزه، اما فقط از همین گروه فرایندی. یعنی ماژولی که
+   * خانگی‌اش «اجرا» است در سایدبار «پایش و کنترل» دیده نمی‌شود و برعکس.
+   *  نمونه: حوزهٔ «مالی» = d14 (اجرا) + d5 (پایش و کنترل) ⇒ در صفحهٔ d14
+   *  فقط d14 و در صفحهٔ d5 فقط d5 فهرست می‌شود. */
+  const mods = performanceDomainModules(pd.id)
+    .filter((m) => m.group === dom.group)
+    .filter((m) => m.id !== "d7" || can("system.manage"));
+  if (!mods.length) return null;
+  return (
+    <>
+      {/* عنوان حوزهٔ عملکردی در سربرگ سایدبار آمده است؛ اینجا سرِ دستهٔ هر ماژول می‌آید. */}
+      {mods.map((m) => {
+        const isCurrent = m.id === dom.id;
+        const procs = isCurrent
+          ? activeProcesses
+          : (domains.find((x) => x.id === m.id)?.processes ?? []);
+        return (
+          <div key={m.id}>
+            {/* سرِ دستهٔ ماژول (فعال = رنگ ماژول) — ریتم سایدبار «برنامه‌ریزی و تولید» */}
+            <div
+              className="flex items-center gap-1.5 px-2 pb-0.5 pt-3 text-[9px] font-semibold tracking-wide"
+              style={{ color: isCurrent ? m.accent : undefined }}
+              role="presentation"
+            >
+              <span className="h-px flex-1" style={{ background: "var(--line-soft)" }} aria-hidden="true" />
+              <span className="inline-flex items-center gap-1">
+                <span aria-hidden="true">{m.icon}</span>
+                <span>{t(m.nav ?? m.title, lang)}</span>
+              </span>
+              <span className="h-px flex-1" style={{ background: "var(--line-soft)" }} aria-hidden="true" />
+            </div>
+
+            {procs.map((p, i) => (
+              <div key={p.id}>
+                {/* فرآیند — سطر تخت و بدون قاب کارت؛ فقط شماره + نشانگر مربعی +
+                    عنوان پررنگ‌تر تا سلسله‌مراتب با زیرفرآیندها (نقطهٔ گرد) روشن بماند. */}
+                <div className="group flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-start transition hover:bg-[var(--row-hover)]">
+                  <span className="text-[8px] font-light tabular-nums tx4">
+                    {(i + 1).toLocaleString(rtl ? "fa-IR" : "en-US")}
+                  </span>
+                  <span className="shrink-0 text-[11px] leading-none" style={{ color: m.accent }} aria-hidden="true">▪</span>
+                  <span className="min-w-0 flex-1 truncate text-[10px] font-normal tx1">{t(p.title, lang)}</span>
+                </div>
+                {/* زیرفرآیندها — تودرتو، با حالت انتخاب‌شده */}
+                {[...p.subs, ...(extraSubs?.[p.id] ?? [])]
+                  .filter((s, i, arr) => arr.findIndex((x) => x.id === s.id) === i)
+                  .map((s) => {
+                  const sqlTables = (s as { sql?: string[] }).sql ?? [];
+                  return (
+                    <button
+                      key={s.id}
+                      type="button"
+                      onClick={() => (isCurrent
+                        ? onSelectSub(p.id, s.id)
+                        : onOpenModuleSub(m.id, p.id, s.id))}
+                      className={`group flex w-full items-center gap-2 rounded-lg py-1.5 pe-2 ps-7 text-start transition hover:bg-[var(--row-hover)] ${
+                        isCurrent && selectedSubId === s.id ? "row-on" : ""
+                      }`}
+                    >
+                      <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: m.accent }} />
+                      <span className="min-w-0 flex-1 truncate text-[10px] font-light tx1">{t(s.title, lang)}</span>
+                      {showSql && sqlTables.length > 0 && (
+                        <span className="flex shrink-0 flex-wrap gap-1">
+                          {sqlTables.map((tbl) => (
+                            <span key={tbl} className="rounded bg-sky-400/10 px-1 py-[1px] text-[7.5px] font-light text-sky-300" dir="ltr">🗄 {tbl}</span>
+                          ))}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        );
+      })}
+    </>
+  );
+}
+
+/** سربرگ سایدبار فرعی = حوزهٔ عملکردیِ ماژول (وگرنه نام ماژول). */
+function perfDomainIcon(domainId: string, fallback: string): string {
+  return performanceDomainOf(domainId)?.icon ?? fallback;
+}
+
+function perfDomainTitle(domainId: string, lang: Lang, fallback: string): string {
+  const pd = performanceDomainOf(domainId);
+  if (!pd) return fallback;
+  return lang === "fa"
+    ? `حوزهٔ عملکردی: ${t(pd.title, lang)}`
+    : `Performance domain: ${t(pd.title, lang)}`;
+}
+
+/** سایدبار فرعی ماژول: حوزهٔ عملکردی + ماژول‌های هم‌حوزه و فرآیندهایشان. */
+function DomainAside({
+  lang,
+  dom,
+  activeProcesses,
+  selectedSubId,
+  extraSubs,
+  showSql,
+  onSelectSub,
+  onOpenModuleSub,
+}: {
+  lang: Lang;
+  dom: Domain;
+  activeProcesses: Process[];
+  selectedSubId?: string;
+  extraSubs?: Record<string, { id: string; title: Bi }[]>;
+  showSql?: boolean;
+  onSelectSub: (processId: string, subId: string) => void;
+  onOpenModuleSub: (moduleId: string, processId: string, subId: string) => void;
+}) {
+  const rtl = lang === "fa";
+  return (
+    <aside dir={rtl ? "rtl" : "ltr"} className="glass-dark flex w-[300px] shrink-0 flex-col overflow-hidden rounded-2xl">
+      <div className="b-line border-b px-3 py-2.5">
+        <div className="flex items-center gap-2">
+          <span className="grid h-6 w-6 place-items-center rounded-md text-[12px]"
+                style={{ background: `${dom.accent}1a`, border: `1px solid ${dom.accent}55`, color: dom.accent }}>
+            {perfDomainIcon(dom.id, dom.icon)}
+          </span>
+          <div className="truncate text-[10.5px] font-normal tx1">
+            {perfDomainTitle(dom.id, lang, t(dom.title, lang))}
+          </div>
+        </div>
+      </div>
+      <div className="thin-scroll flex-1 overflow-y-auto p-2 space-y-1">
+        <DomainNavGroups
+          lang={lang}
+          dom={dom}
+          activeProcesses={activeProcesses}
+          selectedSubId={selectedSubId}
+          extraSubs={extraSubs}
+          showSql={showSql}
+          onSelectSub={onSelectSub}
+          onOpenModuleSub={onOpenModuleSub}
+        />
+      </div>
+    </aside>
+  );
+}
+
 export default function ModuleDetail(props: Props) {
   const { lang, target } = props;
   const rtl = lang === "fa";

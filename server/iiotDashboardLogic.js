@@ -67,6 +67,32 @@ var PERMISSION_CATALOG = [
   P("rcc.delay.edit", "d4", "\u062B\u0628\u062A \u0648 \u0648\u06CC\u0631\u0627\u06CC\u0634 \u0631\u0648\u06CC\u062F\u0627\u062F \u062A\u0623\u062E\u06CC\u0631", "Record and edit delay events", "restricted", true),
   P("rcc.delay.calculate", "d4", "\u0645\u062D\u0627\u0633\u0628\u0647 \u062A\u0623\u062E\u06CC\u0631 \u0648 \u0628\u062E\u0634\u0646\u0627\u0645\u0647\u200C\u0647\u0627\u06CC \u06F1\u06F3\u06F0\u06F0 \u0648 \u06F5\u06F0\u06F9\u06F0", "Calculate delay, Circular 1300 and 5090", "restricted", true),
   P("rcc.delay.approve", "d4", "\u062A\u0623\u06CC\u06CC\u062F \u0645\u062D\u0627\u0633\u0628\u0647 \u0648 \u062A\u0645\u062F\u06CC\u062F \u0645\u062F\u062A", "Approve delay calculation and EOT", "restricted", true),
+  /* PMO-FORENSIC-SCHEDULE-ENGINE-V1.0: پروندهٔ کارشناسی بازسازی زمان‌بندی
+   * را کارشناس می‌سازد و تکمیل مأموریت را تأییدکنندهٔ مستقل (≠ سازنده)
+   * می‌بندد — همان الگوی تفکیک تحلیل تأخیر. خروجی موتور زمان‌بندی
+   * بازسازی‌شده است و هرگز مبلغ یا مدت تمدید تولید نمی‌کند. */
+  P("sched.recon.view", "d4", "\u0645\u0634\u0627\u0647\u062F\u0647\u0654 \u067E\u0631\u0648\u0646\u062F\u0647\u0654 \u0628\u0627\u0632\u0633\u0627\u0632\u06CC \u0648 \u062A\u062D\u0644\u06CC\u0644 \u0632\u0645\u0627\u0646\u200C\u0628\u0646\u062F\u06CC \u0627\u062F\u0639\u0627", "View forensic schedule reconstruction records", "confidential"),
+  P("sched.recon.edit", "d4", "\u062B\u0628\u062A \u0648 \u0648\u06CC\u0631\u0627\u06CC\u0634 \u0645\u0623\u0645\u0648\u0631\u06CC\u062A \u0648 \u0633\u0648\u0627\u0628\u0642 \u0628\u0627\u0632\u0633\u0627\u0632\u06CC \u0632\u0645\u0627\u0646\u200C\u0628\u0646\u062F\u06CC", "Edit forensic schedule reconstruction records", "restricted", true),
+  P("sched.recon.approve", "d4", "\u062A\u0623\u06CC\u06CC\u062F \u062A\u06A9\u0645\u06CC\u0644 \u0645\u0623\u0645\u0648\u0631\u06CC\u062A \u0628\u0627\u0632\u0633\u0627\u0632\u06CC \u0648 \u0628\u0633\u062A\u0646 \u067E\u0631\u0648\u0646\u062F\u0647", "Approve forensic reconstruction mission completion", "restricted", true),
+  /* PMO-CONSTRUCTION-DISPUTE-EXPERT-ENGINE-V1.0: پروندهٔ دعوا را کارشناس/مدیر
+   * ادعا می‌سازد و روایت می‌کند؛ گذرهای آماده تحویل/تحویل/مختومه/بایگانی
+   * دروازهٔ تأیید و SoD دارند (تأییدکننده ≠ ثبت‌کنندهٔ اقدام قبلی).
+   * خروجی این ماژول صدور رأی داوری نیست — گزارش کارشناسی پیش‌نویس است و
+   * تا تأیید ارسال نمی‌شود. */
+  P("dispute.view", "d4", "\u0645\u0634\u0627\u0647\u062F\u0647\u0654 \u067E\u0631\u0648\u0646\u062F\u0647\u0654 \u0627\u062E\u062A\u0644\u0627\u0641 \u0648 \u0633\u0648\u0627\u0628\u0642 \u062F\u0639\u0627\u0648\u06CC", "View dispute case records", "confidential"),
+  P("dispute.edit", "d4", "\u062A\u0634\u06A9\u06CC\u0644 \u0648 \u0648\u06CC\u0631\u0627\u06CC\u0634 \u067E\u0631\u0648\u0646\u062F\u0647/\u0627\u062F\u0639\u0627/\u0645\u062F\u0631\u06A9/\u062A\u062D\u0644\u06CC\u0644/\u062C\u0644\u0633\u0647", "Edit dispute case records", "restricted", true),
+  P("dispute.review", "d4", "\u062B\u0628\u062A \u0628\u0627\u0632\u0628\u06CC\u0646\u06CC \u06AF\u0632\u0627\u0631\u0634/\u0646\u0638\u0631\u06CC\u0647/\u062A\u062D\u0644\u06CC\u0644 \u0648 \u062A\u062E\u0635\u06CC\u0635 \u0645\u0628\u0627\u0644\u063A \u0644\u0627\u06CC\u0647\u200C\u0647\u0627\u06CC \u0628\u0631\u0631\u0633\u06CC/\u062A\u0623\u06CC\u06CC\u062F", "Review dispute analyses and set reviewed/approved amounts", "restricted", true),
+  P("dispute.approve", "d4", "\u06AF\u0630\u0631 \u0628\u0647 \u0622\u0645\u0627\u062F\u0647 \u062A\u062D\u0648\u06CC\u0644/\u062A\u062D\u0648\u06CC\u0644/\u0645\u062E\u062A\u0648\u0645\u0647/\u0628\u0627\u06CC\u06AF\u0627\u0646\u06CC \u0648 \u0635\u062F\u0648\u0631 \u06AF\u0632\u0627\u0631\u0634 \u0646\u0647\u0627\u06CC\u06CC", "Approve dispute finalization transitions and report issue", "restricted", true),
+  /* PMO-INTEGRATED-CHANGE-MANAGEMENT-V1.0: چرخهٔ تغییر — ثبت با مدیر ادعا،
+   * تحلیل‌ها با کارشناسها، بررسی قراردادی/غربال با بازرس، تصمیم با مرجع مجاز
+   * (SoD: تأییدکننده ≠ آماده‌کنندهٔ درخواست برای تصمیم)، اجرا با دستان اجرا.
+   * هیچ تغییر تأییدنشده‌ای خودکار در مبنا اعمال نمی‌شود. */
+  P("change.view", "d4", "\u0645\u0634\u0627\u0647\u062F\u0647\u0654 \u062F\u0631\u062E\u0648\u0627\u0633\u062A\u200C\u0647\u0627 \u0648 \u0633\u0648\u0627\u0628\u0642 \u062A\u063A\u06CC\u06CC\u0631", "View change requests", "confidential"),
+  P("change.edit", "d4", "\u062B\u0628\u062A \u0648 \u0648\u06CC\u0631\u0627\u06CC\u0634 \u062F\u0631\u062E\u0648\u0627\u0633\u062A \u062A\u063A\u06CC\u06CC\u0631 \u0648 \u0631\u06A9\u0648\u0631\u062F\u0647\u0627\u06CC \u0641\u0631\u0632\u0646\u062F", "Edit change requests and child records", "restricted", true),
+  P("change.analyze", "d4", "\u062B\u0628\u062A \u0628\u0631\u0631\u0633\u06CC \u0641\u0646\u06CC/\u062A\u062D\u0644\u06CC\u0644 \u0627\u062B\u0631 \u0632\u0645\u0627\u0646\u06CC/\u0647\u0632\u06CC\u0646\u0647", "Record technical/time/cost impact analyses", "restricted", true),
+  P("change.review", "d4", "\u0628\u0631\u0631\u0633\u06CC \u0642\u0631\u0627\u0631\u062F\u0627\u062F\u06CC\u060C \u063A\u0631\u0628\u0627\u0644 \u0627\u062E\u062A\u0644\u0627\u0641\u0627\u062A\u060C \u062A\u062C\u0645\u06CC\u0639 \u0648 \u0628\u0627\u0632\u0628\u06CC\u0646\u06CC \u0644\u0627\u06CC\u0647\u200C\u0647\u0627\u06CC \u0645\u0628\u0644\u063A", "Contract review, dispute screening, consolidation", "restricted", true),
+  P("change.approve", "d4", "\u062A\u0635\u0645\u06CC\u0645 \u0646\u0647\u0627\u06CC\u06CC (\u062A\u0623\u06CC\u06CC\u062F/\u062A\u0623\u06CC\u06CC\u062F \u0645\u0634\u0631\u0648\u0637/\u0631\u062F) \u0648 \u0628\u0633\u062A\u0646 \u062F\u0631\u062E\u0648\u0627\u0633\u062A", "Approve or reject change (decision gate)", "restricted", true),
+  P("change.implement", "d4", "\u0627\u0628\u0644\u0627\u063A\u060C \u0627\u062C\u0631\u0627\u060C \u0628\u0647\u200C\u0631\u0648\u0632\u0631\u0633\u0627\u0646\u06CC \u0645\u0628\u0646\u0627 \u0648 \u06A9\u0646\u062A\u0631\u0644 \u0646\u062A\u0627\u06CC\u062C", "Notify, implement, update baselines, monitor", "restricted", true),
   /* ── d12 مهندسی و طراحی ──
    * تفکیک بر پایهٔ اقتدار واقعی: ثبت مدرک، صدور ریویژن، پاسخ به نظر و
    * تأیید کارفرما چهار اقتدار جدا هستند. کد بررسی ۱ تا ۴ را فقط کارفرما و
@@ -91,6 +117,9 @@ var PERMISSION_CATALOG = [
    * جداگانه است تا در ممیزی مشخص باشد چه کسی آن را باز کرده. */
   P("cnt.contract.view", "d14", "\u0645\u0634\u0627\u0647\u062F\u0647 \u0634\u0646\u0627\u0633\u0646\u0627\u0645\u0647 \u067E\u06CC\u0645\u0627\u0646", "View contract master", "confidential"),
   P("cnt.contract.edit", "d14", "\u062B\u0628\u062A \u0648 \u0648\u06CC\u0631\u0627\u06CC\u0634 \u067E\u06CC\u0645\u0627\u0646 \u0648 \u0627\u0644\u062D\u0627\u0642\u06CC\u0647", "Edit contract and amendments", "restricted", true),
+  P("cnt.risk.view", "d14", "\u0645\u0634\u0627\u0647\u062F\u0647\u0654 \u0631\u06CC\u0633\u06A9\u200C\u0647\u0627\u06CC \u0642\u0631\u0627\u0631\u062F\u0627\u062F\u06CC \u0648 \u0628\u0647\u0628\u0648\u062F \u0642\u0631\u0627\u0631\u062F\u0627\u062F", "View contract risks & improvement", "confidential"),
+  P("cnt.risk.edit", "d14", "\u062B\u0628\u062A \u0648 \u0648\u06CC\u0631\u0627\u06CC\u0634 \u0631\u06CC\u0633\u06A9\u060C \u062A\u0639\u0647\u062F\u060C \u0627\u0642\u062F\u0627\u0645 \u0648 \u067E\u06CC\u0634\u0646\u0647\u0627\u062F \u0627\u0635\u0644\u0627\u062D \u0642\u0631\u0627\u0631\u062F\u0627\u062F", "Edit contract risks, obligations, actions & improvements", "restricted", true),
+  P("cnt.risk.approve", "d14", "\u062A\u0623\u06CC\u06CC\u062F \u0642\u0627\u0639\u062F\u0647\u0654 \u0627\u0645\u062A\u06CC\u0627\u0632\u062F\u0647\u06CC \u0648 \u067E\u06CC\u0634\u0646\u0647\u0627\u062F \u0627\u0635\u0644\u0627\u062D \u0642\u0631\u0627\u0631\u062F\u0627\u062F", "Approve scoring rules & clause improvements", "restricted", true),
   P("cnt.boq.edit", "d14", "\u0648\u06CC\u0631\u0627\u06CC\u0634 \u0641\u0647\u0631\u0633\u062A \u0628\u0647\u0627 \u0648 \u0646\u0631\u062E \u0631\u062F\u06CC\u0641", "Edit BOQ and unit rates", "restricted", true),
   /* ریزمتره فقط مقدار فیزیکی است و هیچ نرخی نشان نمی‌دهد، پس طبقه‌بندی
    * «داخلی» کافی است — وگرنه سرپرست کارگاه که کار را متره می‌کند نمی‌توانست
@@ -867,6 +896,16 @@ var ROLE_CATALOG = [
       "cpm.dpr.view",
       "cpm.discipline.view",
       "cpm.inspection.view",
+      /* بازسازی کارشناسی زمان‌بندی (FSR) کار خودِ برنامه‌ریز است: ثبت
+       * سوابق و دیکشنری با اوست؛ بستن مأموریت با تأییدکنندهٔ مستقل. */
+      "sched.recon.view",
+      "sched.recon.edit",
+      /* پروندهٔ دعوا از نظر برنامه‌ریز فقط‌خواندنی است: دست‌کاری پرونده
+       * کار مدیر پیمان و تحلیل‌گر کارشناسی است. */
+      "dispute.view",
+      /* تغییر: تحلیل اثر زمانی/فنی کار خودِ برنامه‌ریز است؛ تصمیم نهایی با مرجع مجاز. */
+      "change.view",
+      "change.analyze",
       "pmo.charter.view",
       "pmo.form.view",
       "pmo.health.view",
@@ -1096,6 +1135,26 @@ var ROLE_CATALOG = [
       "cnt.contract.edit",
       "cnt.boq.edit",
       "cnt.ipc.prepare",
+      /* PMO-CONTRACT-RISK-ENGINE-V1.0: ریسک قراردادی را مدیر پیمان ثبت و
+       * پایش می‌کند؛ تأیید قاعدهٔ امتیازدهی و پیشنهاد اصلاح با او نیست. */
+      "cnt.risk.view",
+      "cnt.risk.edit",
+      /* PMO-FORENSIC-SCHEDULE-ENGINE-V1.0: پروندهٔ ادعا را مدیر پیمان می‌سازد؛
+       * بستن مأموریت بازسازی با تأییدکنندهٔ مستقل است. */
+      "sched.recon.view",
+      "sched.recon.edit",
+      /* PMO-CONSTRUCTION-DISPUTE-EXPERT-ENGINE-V1.0: تشکیل پروندهٔ دعوا، ثبت
+       * ادعا/مدرک/تحلیل/جلسه و بازبینی گزارش‌ها کار مدیر ادعا/پیمان است؛
+       * گذر نهایی (تحویل/مختومه/بایگانی) عمداً از او گرفته شده — SoD با PM. */
+      "dispute.view",
+      "dispute.edit",
+      "dispute.review",
+      /* تغییر: ثبت/ویرایش درخواست + تحلیل‌های کارشناسی + بررسی قراردادی و غربال
+       * با مدیر ادعا/پیمان است؛ تصمیم نهایی عمداً از او گرفته شده — SoD با مرجع تصویب. */
+      "change.view",
+      "change.edit",
+      "change.analyze",
+      "change.review",
       "cnt.retainage.manage",
       "com.certificate.view",
       /* ثبت و تمدید ضمانت‌نامه کار روزمرهٔ مدیر پیمان است، ولی
@@ -1176,6 +1235,23 @@ var ROLE_CATALOG = [
       "rcc.delay.edit",
       "rcc.delay.calculate",
       "rcc.delay.approve",
+      /* تصویب پیشنهاد اصلاح بند و قاعدهٔ امتیازدهی ریسک قراردادی با مدیر پروژه است، نه تهیه‌کننده. */
+      "cnt.risk.view",
+      "cnt.risk.approve",
+      /* تکمیل مأموریت بازسازی زمان‌بندی را مدیر پروژه تأیید می‌کند؛
+       * ثبت سوابق کارشناسی با تهیه‌کنندهٔ پرونده است (SoD زمان اجرا). */
+      "sched.recon.view",
+      "sched.recon.approve",
+      /* گذرهای نهایی پروندهٔ دعوا (آماده تحویل/تحویل/مختومه/بایگانی) با
+       * تأیید PM و SoD (≠ تأییدکنندهٔ مرحلهٔ قبل) قفل است؛ محتوا را
+       * تهیه‌کنندهٔ پرونده می‌نویسد. */
+      "dispute.view",
+      "dispute.approve",
+      /* تغییر: تصمیم نهایی (تأیید/رد) و بستن با PM مرجع مجاز و SoD
+       * (تأییدکننده ≠ آماده‌کنندهٔ درخواست برای تصمیم)؛ اجرا/ابلاغ هم با او. */
+      "change.view",
+      "change.approve",
+      "change.implement",
       "fin.cost.view",
       "fin.rate.view",
       "fin.ipc.approve",
@@ -1561,6 +1637,7 @@ var ROLE_CATALOG = [
       "cnt.progress.view",
       "cnt.kpi.view",
       "cnt.report.view",
+      "cnt.risk.view",
       "com.punch.record",
       "com.certificate.view",
       "ckm.letter.view",
@@ -1592,6 +1669,9 @@ var ROLE_CATALOG = [
       "cnt.progress.view",
       "cnt.kpi.view",
       "cnt.report.view",
+      /* تصمیم نهایی اصلاح بند قرارداد با کارفرماست؛ پیشنهاد به‌تنهایی متن پیمان را عوض نمی‌کند. */
+      "cnt.risk.view",
+      "cnt.risk.approve",
       "com.certificate.view",
       "com.certificate.issue",
       "pex.evm.view",

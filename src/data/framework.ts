@@ -45,6 +45,10 @@ export type Domain = {
   icon: string;
   accent: string;
   title: Bi;
+  /** نام کوتاهِ سایدبار — برای ماژول‌هایی که نام کاملشان در عرض سایدبار
+   * بریده می‌شد («...»)، این مقدار نمایش داده می‌شود و نام کامل در
+   * `title` (سرصفحهٔ صفحه و tooltip) باقی می‌ماند. */
+  nav?: Bi;
   /** گروه چرخهٔ حیات PMBOK در سایدبار؛ `field` یعنی میان‌بر اقدام سریع (بدون گروه). */
   group: SidebarGroupId;
   processes: Process[];
@@ -60,18 +64,132 @@ export type SidebarGroup = {
   title: Bi;
   short: string;
   color: string;
+  /** آیکن گروه فرایندی — همان آیکن‌های بنر استاندارد PMBOK
+   * (موشک/کلیپ‌بورد/چرخ‌دنده/ذره‌بین/پرچم) تا سایدبار و بنر یکی باشند. */
+  icon: string;
   /** گروه سنجاق‌شدهٔ انتهای سایدبار (مستقل از آکاردئون فازها). */
   pinned?: boolean;
 };
 
 export const sidebarGroups: SidebarGroup[] = [
-  { id: "pg1", title: { fa: "آغازین", en: "Initiating" }, short: "IN", color: "#7FB2FF" },
-  { id: "pg2", title: { fa: "برنامه‌ریزی", en: "Planning" }, short: "PL", color: "#8FE3C8" },
-  { id: "pg3", title: { fa: "اجرا", en: "Executing" }, short: "EX", color: "#FFD48A" },
-  { id: "pg4", title: { fa: "پایش و کنترل", en: "Monitoring & Controlling" }, short: "MC", color: "#FF9F9F" },
-  { id: "pg5", title: { fa: "اختتامیه", en: "Closing" }, short: "CL", color: "#C9A7FF" },
-  { id: "support", title: { fa: "پشتیبان", en: "Supporting" }, short: "SP", color: "#94A3B8", pinned: true },
+  { id: "pg1", title: { fa: "آغازین", en: "Initiating" }, short: "IN", color: "#7FB2FF", icon: "🚀" },
+  { id: "pg2", title: { fa: "برنامه‌ریزی", en: "Planning" }, short: "PL", color: "#8FE3C8", icon: "📋" },
+  { id: "pg3", title: { fa: "اجرا", en: "Executing" }, short: "EX", color: "#FFD48A", icon: "⚙️" },
+  { id: "pg4", title: { fa: "پایش و کنترل", en: "Monitoring & Controlling" }, short: "MC", color: "#FF9F9F", icon: "🔍" },
+  { id: "pg5", title: { fa: "اختتامیه", en: "Closing" }, short: "CL", color: "#C9A7FF", icon: "🏁" },
+  { id: "support", title: { fa: "پشتیبان", en: "Supporting" }, short: "SP", color: "#94A3B8", icon: "🧰", pinned: true },
 ];
+
+/* ============================================================
+   حوزه‌های عملکردی PMBOK — لایهٔ ۲ ناوبری
+   ------------------------------------------------------------
+   ساختار سه‌لایه: گروه فرایندی (لایهٔ ۱) ← حوزهٔ عملکردی
+   (لایهٔ ۲) ← ماژول (لایهٔ ۳، در سایدبار فرعی صفحهٔ ماژول).
+   ماژول‌هایی که معادل مستقیمی در PMBOK ندارند (کیفیت، HSE،
+   GIS، سامانه، تعالی سازمانی) در «افزونه‌های صنعتی» می‌نشینند.
+   ============================================================ */
+export type PerformanceDomainId =
+  | "governance"
+  | "scope"
+  | "schedule"
+  | "finance"
+  | "stakeholders"
+  | "resources"
+  | "risk"
+  | "extension";
+
+export type PerformanceDomain = {
+  id: PerformanceDomainId;
+  title: Bi;
+  icon: string;
+  color: string;
+};
+
+export const performanceDomains: PerformanceDomain[] = [
+  { id: "governance", title: { fa: "حاکمیت", en: "Governance" }, icon: "🏛", color: "#4C7FD1" },
+  { id: "scope", title: { fa: "محدوده", en: "Scope" }, icon: "🎯", color: "#0FA08C" },
+  { id: "schedule", title: { fa: "زمان‌بندی", en: "Schedule" }, icon: "📅", color: "#2E9E4F" },
+  { id: "finance", title: { fa: "مالی", en: "Finance" }, icon: "💰", color: "#D08A16" },
+  { id: "stakeholders", title: { fa: "ذی‌نفعان", en: "Stakeholders" }, icon: "👥", color: "#E2711D" },
+  { id: "resources", title: { fa: "منابع", en: "Resources" }, icon: "🔧", color: "#7A4BB8" },
+  { id: "risk", title: { fa: "ریسک", en: "Risk" }, icon: "⚠️", color: "#D64A4A" },
+  { id: "extension", title: { fa: "افزونه‌های صنعتی", en: "Industry Extensions" }, icon: "🧩", color: "#94A3B8" },
+];
+
+/** نگاشت ماژول (دامنه) ← حوزهٔ عملکردی PMBOK. */
+export const domainPerformance: Record<string, PerformanceDomainId> = {
+  d6: "governance",
+  d20: "governance",
+  d12: "scope",
+  d15: "scope",
+  d2: "schedule",
+  d5: "finance",
+  d14: "finance",
+  d11: "stakeholders",
+  d1: "stakeholders",
+  d10: "resources",
+  d9: "resources",
+  d4: "risk",
+  d3: "risk",
+  d8: "extension",
+  d7: "extension",
+  d16: "extension",
+  d17: "extension",
+  d18: "extension",
+  d19: "extension",
+};
+
+/** حوزهٔ عملکردیِ یک ماژول (برای برچسب سایدبار فرعی). */
+export function performanceDomainOf(domainId: string): PerformanceDomain | undefined {
+  const pid = domainPerformance[domainId];
+  return pid ? performanceDomains.find((p) => p.id === pid) : undefined;
+}
+
+/** ماژول‌های یک حوزهٔ عملکردی (لایهٔ ۳ در سایدبار فرعی). */
+export function performanceDomainModules(pdId: PerformanceDomainId): Domain[] {
+  return domains.filter((d) => domainPerformance[d.id] === pdId);
+}
+
+/** ترتیب حوزه‌های عملکردی هر گروه فرایندی (نقشهٔ فرایندی).
+ *  مثلاً «پایش و کنترل»: مالی ← ریسک ← افزونه‌های صنعتی. */
+export const performanceDomainOrder: Record<string, PerformanceDomainId[]> = {
+  pg1: ["governance"],
+  pg2: ["schedule", "scope"],
+  pg3: ["finance", "resources", "extension"],
+  pg4: ["finance", "risk", "extension"],
+  pg5: ["scope"],
+  support: ["stakeholders", "extension"],
+};
+
+/** حوزه‌های عملکردی موجود در یک گروه فرایندی، با ماژول‌های هر حوزه.
+ *  ترتیب حوزه‌ها = ترتیب ظهور ماژول‌های آن گروه (همان نقشهٔ فرایندی). */
+export function performanceDomainsInGroup(groupId: string): Array<PerformanceDomain & { modules: Domain[] }> {
+  const members = domains.filter((d) => d.group === groupId);
+  const out: Array<PerformanceDomain & { modules: Domain[] }> = [];
+  for (const m of members) {
+    const pid = domainPerformance[m.id];
+    if (!pid) continue;
+    let bucket = out.find((x) => x.id === pid);
+    if (!bucket) {
+      const pd = performanceDomains.find((p) => p.id === pid);
+      if (!pd) continue;
+      bucket = { ...pd, modules: [] };
+      out.push(bucket);
+    }
+    bucket.modules.push(m);
+  }
+  /* ترتیب نقشهٔ فرایندی حاکم است؛ اگر گروهی در نقشه نبود، ترتیب
+   * ظهور ماژول‌ها همان ترتیب قبلی می‌ماند. */
+  const order = performanceDomainOrder[groupId];
+  if (order) {
+    const rank = (id: string) => {
+      const i = order.indexOf(id as PerformanceDomainId);
+      return i === -1 ? order.length : i;
+    };
+    out.sort((a, b) => rank(a.id) - rank(b.id));
+  }
+  return out;
+}
 
 export const domains: Domain[] = [
   {
@@ -80,6 +198,7 @@ export const domains: Domain[] = [
     icon: "🏛",
     accent: "#B8D4FF",
     title: { fa: "مدیریت حاکمیت و فرآیندهای PMBOK", en: "Governance & PMBOK Processes" },
+    nav: { fa: "مدیریت حاکمیت پروژه (PMBOK)", en: "Governance & PMBOK" },
     processes: [
       {
         id: "d6-p1",
@@ -262,6 +381,7 @@ export const domains: Domain[] = [
     icon: "🧭",
     accent: "#8FE3C8",
     title: { fa: "مدیریت برنامه‌ریزی و اجرای عملیات پروژه", en: "Planning & Execution" },
+    nav: { fa: "مدیریت برنامه‌ریزی و اجرا", en: "Planning & Execution" },
     processes: [
       {
         id: "d2-p2",
@@ -429,6 +549,7 @@ export const domains: Domain[] = [
 
 
     title: { fa: "مدیریت هزینه، تأمین و لجستیک پروژه", en: "Cost, Procurement & Logistics" },
+    nav: { fa: "مدیریت هزینه، تأمین و لجستیک", en: "Cost, Supply & Logistics" },
     processes: [
 
 
@@ -648,6 +769,7 @@ export const domains: Domain[] = [
     icon: "👷",
     accent: "#F59E0B",
     title: { fa: "مدیریت منابع انسانی و بهره‌وری نیروی کار", en: "Human Resources & Workforce Productivity" },
+    nav: { fa: "مدیریت منابع انسانی و کارکرد", en: "HR & Workforce Productivity" },
     processes: [
       {
         id: "d10-p1",
@@ -824,6 +946,7 @@ export const domains: Domain[] = [
     icon: "🦺",
     accent: "#DC2626",
     title: { fa: "مدیریت ایمنی، بهداشت و محیط‌زیست", en: "Health, Safety & Environment" },
+    nav: { fa: "مدیریت ایمنی و بهداشت", en: "Health & Safety" },
     processes: [
       {
         id: "d16-p1",
@@ -899,6 +1022,7 @@ export const domains: Domain[] = [
     icon: "📈",
     accent: "#FFD48A",
     title: { fa: "مدیریت پایش و کنترل عملکرد پروژه", en: "Performance Monitoring & Control" },
+    nav: { fa: "مدیریت عملکرد پروژه", en: "Project Performance" },
     processes: [
       {
         id: "d3-p1",
@@ -1352,6 +1476,7 @@ export const domains: Domain[] = [
     icon: "🏁",
     accent: "#F97316",
     title: { fa: "مدیریت راه‌اندازی، تحویل و اختتام نهایی", en: "Commissioning, Handover & Project Closure" },
+    nav: { fa: "مدیریت راه‌اندازی و تحویل", en: "Handover & Closeout" },
     processes: [
       {
         id: "d15-p1",
@@ -1525,6 +1650,7 @@ export const domains: Domain[] = [
     icon: "🛰",
     accent: "#22D3EE",
     title: { fa: "مدیریت موقعیت مکانی پروژه‌ها (GIS)", en: "Project Geo-Location (GIS)" },
+    nav: { fa: "مدیریت موقعیت مکانی (GIS)", en: "Geospatial (GIS)" },
     processes: [
       {
         id: "d18-p1",

@@ -39,6 +39,15 @@ interface HrmTabSpec {
   descEn: string;
 }
 
+/** دسته‌های سایدبار داخلی — همان الگوی CMMS/MES: خط جداکننده + عنوان دسته. */
+const HRM_NAV_GROUPS: Record<string, { fa: string; en: string }> = {
+  personnel: { fa: "سازمان و نیروی کار", en: "Organization & Workforce" },
+  attendance: { fa: "سازمان و نیروی کار", en: "Organization & Workforce" },
+  payroll: { fa: "جبران خدمات و توسعه", en: "Compensation & Development" },
+  training: { fa: "جبران خدمات و توسعه", en: "Compensation & Development" },
+  performance: { fa: "ارزیابی عملکرد", en: "Performance Evaluation" },
+};
+
 export const HRM_TABS: readonly HrmTabSpec[] = [
   {
     id: "personnel",
@@ -189,13 +198,14 @@ export const HrmWorkspaceShell: React.FC<HrmWorkspaceShellProps> = ({
         </>
       }
       onBack={onBackHome ?? (() => {})}
-      navTitle={tr("زیرماژول‌های منابع انسانی (HRM)", "HRM Submodules")}
+      navTitle={tr("مدیریت منابع انسانی و کارکرد (HRM)", "Human Resource Management (HRM)")}
       navItems={HRM_TABS.map((item) => {
         const allowed = effectivePerms.has(item.viewPerm);
         return {
           id: item.id,
           label: fa ? item.fa : item.en,
           icon: item.icon,
+          group: fa ? HRM_NAV_GROUPS[item.id]?.fa : HRM_NAV_GROUPS[item.id]?.en,
           disabled: !allowed,
           disabledHint: tr(
             `مجوز موردنیاز: ${item.viewPerm}`,

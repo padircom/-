@@ -34,7 +34,16 @@ const TABS: { id: HseTab; fa: string; en: string; icon: string }[] = [
 
 const ACCENT = "#DC2626";
 
-type Props = { lang: Lang; onBack: () => void; initialTab?: HseTab; initialFieldTab?: FieldTab };
+type Props = {
+  lang: Lang;
+  onBack: () => void;
+  initialTab?: HseTab;
+  initialFieldTab?: FieldTab;
+  /** نوار تب افقی پنهان می‌شود وقتی سایدبار دامنه‌ای (لایهٔ ۳) هست. */
+  hideTabs?: boolean;
+  /** سایدبار دامنه‌ای کنار محتوا (همان لایهٔ ۳ سایدبار اصلی). */
+  aside?: ReactNode;
+};
 type Json = Record<string, any>;
 
 /* ═════════════════════ ارتباط با سرور ═════════════════════ */
@@ -206,7 +215,7 @@ const num = (n: unknown, d = 2): string =>
 
 /* ═════════════════════ کامپوننت اصلی ═════════════════════ */
 
-export default function HSEWorkspace({ lang, onBack, initialTab, initialFieldTab }: Props) {
+export default function HSEWorkspace({ lang, onBack, initialTab, initialFieldTab, hideTabs, aside }: Props) {
   /* شناسهٔ پروژه از «پروژهٔ جاری» می‌آید (SystemContext) — نه ثابتِ ماژول. */
   const projectId = useCurrentProjectId();
 
@@ -336,6 +345,8 @@ export default function HSEWorkspace({ lang, onBack, initialTab, initialFieldTab
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-3 overflow-hidden" dir={rtl ? "rtl" : "ltr"}>
+      <div className="workspace-columns flex min-h-0 flex-1 gap-3 overflow-hidden">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-hidden">
       {/* نوار بالا */}
       <div className="glass flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl px-3 py-2.5">
         <button
@@ -386,21 +397,24 @@ export default function HSEWorkspace({ lang, onBack, initialTab, initialFieldTab
         </div>
       )}
 
-      {/* تب‌ها */}
-      <div className="glass flex flex-wrap gap-1 rounded-2xl p-1.5">
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            onClick={() => setTab(t.id)}
-            className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-[10.5px] font-light transition ${
-              tab === t.id ? "glass-row tx1" : "tx3 hover:tx2"
-            }`}
-          >
-            <span>{t.icon}</span>
-            <span>{rtl ? t.fa : t.en}</span>
-          </button>
-        ))}
-      </div>
+      {/* تب‌ها — وقتی سایدبار دامنه‌ای هست، انتخاب تب از همان سایدبار می‌شود
+          و نوار افقی فقط تکرار همان گزینه‌ها بود. */}
+      {!hideTabs && (
+        <div className="glass flex flex-wrap gap-1 rounded-2xl p-1.5">
+          {TABS.map((t) => (
+            <button
+              key={t.id}
+              onClick={() => setTab(t.id)}
+              className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-[10.5px] font-light transition ${
+                tab === t.id ? "glass-row tx1" : "tx3 hover:tx2"
+              }`}
+            >
+              <span>{t.icon}</span>
+              <span>{rtl ? t.fa : t.en}</span>
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* محتوا */}
       <div className="min-h-0 flex-1 overflow-y-auto pe-1">
@@ -415,6 +429,9 @@ export default function HSEWorkspace({ lang, onBack, initialTab, initialFieldTab
         {tab === "dashboard" && (
           <DashboardTab incidents={incidents} violations={violations} permits={permits} rtl={rtl} userId={userId} />
         )}
+      </div>
+      </div>
+      {aside}
       </div>
     </div>
   );
