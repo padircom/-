@@ -109,8 +109,8 @@ export default function ControlWorkflowMap({
           onMouseLeave={(e) => { e.currentTarget.style.borderColor = `${C_HUB}66`; }}
         >
           <span aria-hidden="true" className="absolute end-0 top-2 bottom-2 w-[3px] rounded-full" style={{ background: C_HUB, opacity: 0.9 }} />
-          <span className="text-[10.5px] font-medium leading-[15px] tx1">{rtl ? "لایهٔ یکپارچهٔ دادهٔ کنترل" : "Project control database"}</span>
-          <span className="mt-px text-[7.5px] font-light leading-[10px] tx3">
+          <span className="text-[9.5px] font-medium leading-[13px] tx1">{rtl ? "لایهٔ یکپارچهٔ دادهٔ کنترل" : "Project control database"}</span>
+          <span className="mt-px text-[7px] font-light leading-[9px] tx3">
             {rtl ? "اتصال ماژول‌های پایش، هزینه، کیفیت و ریسک با API · اعتبارسنجی داده · قواعد پیشرفت (ROC) · قفل دوره‌های بسته" : "Validated control data hub"}
           </span>
         </button>

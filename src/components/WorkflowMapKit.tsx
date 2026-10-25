@@ -135,7 +135,7 @@ export function WorkflowColumnHead({
 }) {
   return (
     <div
-      className={`flex items-center justify-center gap-1.5 rounded-xl px-2 font-medium text-white ${compact ? "py-0.5 text-[9.5px]" : "py-1.5 text-[10.5px]"}`}
+      className={`flex items-center justify-center gap-1.5 rounded-xl px-2 font-medium text-white ${compact ? "py-0.5 text-[9px]" : "py-1.5 text-[10.5px]"}`}
       style={{ background: `linear-gradient(180deg, ${color}, ${color}cc)`, boxShadow: `0 6px 16px -8px ${color}` }}
     >
       <span aria-hidden="true" className="inline-flex">{WF_ICONS[icon]}</span>
