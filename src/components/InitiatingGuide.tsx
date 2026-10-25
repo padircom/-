@@ -81,7 +81,7 @@ export default function InitiatingGuide({ lang, processes, projectName, currentR
             <h3 className="text-sm font-medium tx1">{fa ? "از کجا شروع کنم؟" : "Where do I start?"}</h3>
             <ol className="mt-2 list-inside list-decimal space-y-2 text-[11px] leading-6 tx2">
               <li>{fa ? "در نقشهٔ اصلی یا فهرست سمت راست، فرایند و سپس زیرفرایند را انتخاب کنید." : "Choose a process and sub-process on the map or in the right-hand list."}</li>
-              <li>{fa ? "برای کار با پرونده‌ها، دکمهٔ «دفتر پروژه (PMO)» را بزنید و بخش منشور، فرم‌ها یا سلامت پروژه را باز کنید." : "Use the PMO tab for charters, forms and project health records."}</li>
+              <li>{fa ? "برای کار با پرونده‌ها، از سایدبار «دفتر مدیریت پروژه» را انتخاب کنید و بخش منشور، فرم‌ها یا سلامت پروژه را باز کنید." : "Select Project Management Office in the sidebar for charters, forms and project health records."}</li>
               <li>{fa ? "پس از ورود، فقط در صورت نمایش فرم ثبت یا دکمهٔ ویرایش و داشتن مجوز، داده وارد کنید؛ نتیجه را در همان میز کار بازبینی کنید." : "Enter data only where a form or edit control is available and you have permission; review it in the same workspace."}</li>
             </ol>
           </section>

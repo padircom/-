@@ -1406,7 +1406,7 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
             <span className="inline-block rotate-180 rtl:rotate-0">→</span>
             {rtl ? "بازگشت به داشبورد" : "Back to dashboard"}
           </button>
-          <button type="button" onClick={() => { if (d6Guide) { setSelected(null); setD6View("gov"); } setD6Guide(v => !v); }} aria-pressed={d6Guide} className="glass-row shrink-0 rounded-lg px-3 py-2 text-[10.5px] tx1">
+          <button type="button" onClick={() => { if (d6Guide || d6View === "pmo") { setSelected(null); setD6View("gov"); } setD6Guide(v => !v); }} aria-pressed={d6Guide} className="glass-row shrink-0 rounded-lg px-3 py-2 text-[10.5px] tx1">
             {d6Guide ? (rtl ? "نقشهٔ فرایند" : "Process map") : (rtl ? "راهنمای ماژول" : "Module guide")}
           </button>
           <div className="min-w-0 flex-1">
@@ -1435,15 +1435,14 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
             </button>
           )}
           <div className="shrink-0 text-end text-[11px] font-light tx1">
-            {t(dom.nav ?? dom.title, lang)}
+            {d6View === "pmo" && !d6Guide ? (rtl ? "دفتر مدیریت پروژه" : "Project Management Office") : t(dom.nav ?? dom.title, lang)}
           </div>
         </div>
-        <div className="flex shrink-0 flex-wrap items-center gap-2">
+        {d6View !== "pmo" && <div className="flex shrink-0 flex-wrap items-center gap-2">
           {selected && <button type="button" onClick={() => { setSelected(null); setD6View("gov"); setD6Guide(false); }} className="glass-row rounded-lg px-2.5 py-1 text-[10px] tx1">{rtl ? "← بازگشت به نقشه" : "← Back to map"}</button>}
-          <nav aria-label={rtl ? "نماهای مدیریت حاکمیت پروژه" : "Project governance views"} className="glass-dark grid w-full max-w-[640px] grid-cols-3 gap-1 rounded-xl border b-line-soft p-1">
+          <nav aria-label={rtl ? "نماهای مدیریت حاکمیت پروژه" : "Project governance views"} className="glass-dark grid w-full max-w-[640px] grid-cols-2 gap-1 rounded-xl border b-line-soft p-1">
             {([
               ["gov", rtl ? "حاکمیت و فرایندها" : "Governance & processes"],
-              ["pmo", rtl ? "دفتر پروژه" : "Project office"],
               ["ctl", rtl ? "نقشهٔ فرایندی" : "Process map"],
             ] as const).map(([k, label]) => (
               <button
@@ -1460,7 +1459,7 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
               </button>
             ))}
           </nav>
-        </div>
+        </div>}
         <div className="workspace-columns flex min-h-0 flex-1 gap-3 overflow-hidden">
           <div dir={rtl ? "rtl" : "ltr"} className="glass flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl p-3">
             {d6View === "ctl" ? (
@@ -1490,6 +1489,8 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
             )}
           </div>
           <DomainAside
+              onOpenPmo={() => { setSelected(null); setD6Guide(false); setD6View("pmo"); }}
+              pmoActive={d6View === "pmo" && !d6Guide}
               lang={lang}
               dom={dom}
               activeProcesses={activeProcesses}
@@ -1498,8 +1499,9 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
                 audit("OPEN_SUBPROCESS", { projectId: target.projectId, entity: dom.id, entityId: sId });
                 setSelected({ pId, sId });
                 setD6Guide(false);
+                setD6View("gov");
               }}
-              onOpenModuleSub={(moduleId, pId, sId) => onNavigate?.({ ...target, moduleId, processId: pId, subId: sId })}
+              onOpenModuleSub={(moduleId, pId, sId) => onNavigate?.({ ...target, moduleId, processId: pId, subId: sId, initialView: undefined })}
             />
         </div>
         {taxonomyEditorOpen && (
@@ -1585,6 +1587,7 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
             )}
           </div>
           <DomainAside
+              onOpenPmo={() => onNavigate?.({ ...target, moduleId: "d6", processId: undefined, subId: undefined, initialView: "pmo" })}
               lang={lang}
               dom={dom}
               activeProcesses={activeProcesses}
@@ -1593,7 +1596,7 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
                 audit("OPEN_SUBPROCESS", { projectId: target.projectId, entity: dom.id, entityId: sId });
                 setSelected({ pId, sId })
               }}
-              onOpenModuleSub={(moduleId, pId, sId) => onNavigate?.({ ...target, moduleId, processId: pId, subId: sId })}
+              onOpenModuleSub={(moduleId, pId, sId) => onNavigate?.({ ...target, moduleId, processId: pId, subId: sId, initialView: undefined })}
             />
         </div>
         {taxonomyEditorOpen && (
@@ -1906,6 +1909,8 @@ function DomainNavGroups({
   selectedSubId,
   extraSubs,
   showSql,
+  onOpenPmo,
+  pmoActive,
   onSelectSub,
   onOpenModuleSub,
 }: {
@@ -1917,6 +1922,8 @@ function DomainNavGroups({
   extraSubs?: Record<string, { id: string; title: Bi }[]>;
   /** نمایش برچسب جدول‌های SQL زیر هر زیرفرآیند (مثل d17). */
   showSql?: boolean;
+  onOpenPmo?: () => void;
+  pmoActive?: boolean;
   onSelectSub: (processId: string, subId: string) => void;
   onOpenModuleSub: (moduleId: string, processId: string, subId: string) => void;
 }) {
@@ -2039,6 +2046,14 @@ function DomainNavGroups({
                 })}
               </div>
             ))}
+            {m.id === "d6" && onOpenPmo && (
+              <button type="button" onClick={onOpenPmo} aria-pressed={Boolean(pmoActive)}
+                className={`mt-3 flex w-full items-center gap-1.5 rounded-lg px-2 py-2 text-start text-[10px] font-semibold transition hover:bg-[var(--row-hover)] ${pmoActive ? "row-on tx1" : "tx2"}`}>
+                <span className="h-px flex-1 bg-[var(--line-soft)]" aria-hidden="true" />
+                {rtl ? "دفتر مدیریت پروژه" : "Project Management Office"}
+                <span className="h-px flex-1 bg-[var(--line-soft)]" aria-hidden="true" />
+              </button>
+            )}
           </div>
         );
       })}
@@ -2067,6 +2082,8 @@ function DomainAside({
   selectedSubId,
   extraSubs,
   showSql,
+  onOpenPmo,
+  pmoActive,
   onSelectSub,
   onOpenModuleSub,
 }: {
@@ -2076,6 +2093,8 @@ function DomainAside({
   selectedSubId?: string;
   extraSubs?: Record<string, { id: string; title: Bi }[]>;
   showSql?: boolean;
+  onOpenPmo?: () => void;
+  pmoActive?: boolean;
   onSelectSub: (processId: string, subId: string) => void;
   onOpenModuleSub: (moduleId: string, processId: string, subId: string) => void;
 }) {
@@ -2101,6 +2120,8 @@ function DomainAside({
           selectedSubId={selectedSubId}
           extraSubs={extraSubs}
           showSql={showSql}
+          onOpenPmo={onOpenPmo}
+          pmoActive={pmoActive}
           onSelectSub={onSelectSub}
           onOpenModuleSub={onOpenModuleSub}
         />
