@@ -223,7 +223,7 @@ export const domains: Domain[] = [
       },
       {
         id: "d6-p4",
-        title: { fa: "ممیزی (Audit)", en: "Audit" },
+        title: { fa: "ممیزی", en: "Audit" },
         subs: [
           { id: "d6-p4-s1", title: { fa: "کنترل انطباق", en: "Compliance Control" }, activity: { fa: "کنترل انطباق", en: "Compliance check" }, source: "EDMS, Process Data", sql: ["Audit_Register"], output: "Audit Report", connectsTo: "PMO", ai: "AI Compliance Check" },
         ],
