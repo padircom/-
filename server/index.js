@@ -1,3 +1,4 @@
+import { registerContractVariationRoutes, VARIATION_DEDICATED_ROUTES } from "./contractVariationApi.js";
 import { registerContractAmendmentRoutes, AMENDMENT_DEDICATED_ROUTES } from "./contractAmendmentApi.js";
 import { registerStrategyExcellenceRoutes } from "./strategyExcellenceWorkspaceApi.js";
 import { registerCpmWorkspaceRoutes, CPM_DEDICATED_ROUTES } from "./cpmWorkspaceApi.js";
@@ -688,6 +689,7 @@ const DEDICATED_TABLE_ROUTES = {
   ...PMO_DEDICATED_ROUTES,
   ...CNT_IPC_DEDICATED_ROUTES,
   ...AMENDMENT_DEDICATED_ROUTES,
+  ...VARIATION_DEDICATED_ROUTES,
   /* P9/RPT-1 — قالب گزارش سفارشی؛ P9/ITG — دفتر اجرای اتصال‌دهنده‌های خروجی. */
   ...RPT_DEDICATED_ROUTES,
   ...ITG_OUTBOUND_DEDICATED_ROUTES,
@@ -1046,6 +1048,7 @@ registerPmoWorkspaceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: r
 /* P8/CNT: قالب‌پذیری صورت‌وضعیت — محاسبهٔ سرور و SOD-11. */
 registerCntIpcRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
 registerContractAmendmentRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
+registerContractVariationRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
 /* P9/RPT-1: گزارش‌ساز سفارشی — مجموعه‌دادهٔ مجاز + انتشار با SOD-31. */
 registerReportBuilderRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
 /* P9/ITG-1..3: خروجی XER/XML/ICS و نوشتن در سامانهٔ بیرونی با دفتر اجرا. */
@@ -6673,7 +6676,32 @@ app.post("/api/cnt/boq", cntRequire("cnt.boq.edit"), async (req, res, next) => {
       });
     }
 
-    const up = await r.upsert("ContractBOQ_Item", { ContractId: contractId, ItemNo: itemNo }, draft, userId);
+    // ردیفی که از گردش مصوب آمده است با فرم قدیمی قابل بازنویسی مالی نیست.
+    // نگاشت WBS/CBS و شرح همچنان قابل تکمیل‌اند. همان تراکنش جلوی مسابقه با تصویب را می‌گیرد.
+    const written = await r.transaction(async (tx) => {
+      const current = await tx.findOne("ContractBOQ_Item", [
+        { column: "ContractId", op: "eq", value: contractId }, { column: "ItemNo", op: "eq", value: itemNo },
+      ]);
+      if (current && !b.allowUpdate) return { duplicate: true };
+      if (current) {
+        const scope = [{ column: "ProjectId", op: "eq", value: projectId }, { column: "ContractId", op: "eq", value: contractId }, { column: "BoqItemId", op: "eq", value: current.Id }];
+        const managed = await tx.findOne("BOQ_QuantityChange", [...scope, { column: "Status", op: "eq", value: "approved" }])
+          || await tx.findOne("ExtraWorkItem", [...scope, { column: "Status", op: "eq", value: "agreed" }]);
+        const numericChanged = ["ContractQty", "UnitRate", "LumpSumAmount", "LineAmount"].some(k => Number(current[k] ?? 0) !== Number(draft[k] ?? 0));
+        const modeChanged = ["PricingBasis", "RateStatus", "Status", "ParentItemNo"].some(k => (current[k] ?? null) !== (draft[k] ?? null)) || Boolean(current.IsStarred) !== Boolean(draft.IsStarred);
+        if (managed && (numericChanged || modeChanged)) return { blocked: true };
+      }
+      if (current) {
+        const changed = await tx.patch("ContractBOQ_Item", current.Id, draft, userId, current.RowVersion);
+        if (!changed?.ok) return { versionConflict: true };
+        return { up: { action: "update", row: changed } };
+      }
+      return { up: await tx.upsert("ContractBOQ_Item", { ContractId: contractId, ItemNo: itemNo }, draft, userId) };
+    });
+    if (written.duplicate) return cntBad(req, res, "E-CNT-DUP-ITEM", "ردیف در این پیمان از قبل ثبت شده است", 409);
+    if (written.blocked) return cntBad(req, res, "E-CNT-BOQ-MANAGED", "ردیف مصوب از مسیر تغییر مقدار یا کار جدید مدیریت می‌شود؛ بازنویسی مالی با فرم عمومی مجاز نیست", 409);
+    if (written.versionConflict) return cntBad(req, res, "E-CNT-BOQ-VERSION", "ردیف هم‌زمان تغییر کرده است؛ بازخوانی کنید", 409);
+    const up = written.up;
 
     /* جمع فهرست بها بعد از هر ثبت اعلام می‌شود: کاربر باید همان لحظه ببیند
      * که جمع ردیف‌ها از مبلغ پیمان فاصله گرفته، نه سه ماه بعد سر صورت‌وضعیت. */

@@ -1,3 +1,4 @@
+import ContractVariationsPanel from "./ContractVariationsPanel";
 import ContractAmendmentsPanel from "./ContractAmendmentsPanel";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "../context/AuthContext";
@@ -2703,11 +2704,7 @@ export default function ContractsPanel({ lang, activeSubId, navigationRequest }:
       </div>
 
       {/* ── فهرست پیمان‌ها ── */}
-      {activeSubId === "d14-p3-s1" && (
-        <div data-contract-section="variation" role="status" className="glass-row rounded-xl p-3 text-[11px] tx2">
-          {rtl ? "رابط اختصاصی تغییر مقادیر و کار جدید هنوز در این میز کار پیاده‌سازی نشده است." : "Quantity changes and extra work do not yet have a dedicated interface in this workspace."}
-        </div>
-      )}
+
       <Panel title="سبد پیمان‌ها" note="سقف مجاز بر مبنای مبلغ اولیه سنجیده می‌شود، نه مبلغ جاری">
         {contracts.length === 0 ? (
           <div className="py-4 text-center text-[9.5px] tx3">هنوز پیمانی ثبت نشده است</div>
@@ -2947,6 +2944,11 @@ export default function ContractsPanel({ lang, activeSubId, navigationRequest }:
 
       {/* الحاقیه ذیل همان پیمان؛ شناسهٔ پروژه و پیمان از انتخاب واقعی می‌آیند. */}
       {selectedId && <ContractAmendmentsPanel key={`${projectId}:${selectedId}:${userId}`} lang={lang} projectId={projectId} contractId={selectedId} onDone={() => { void refreshAll(); }} />}
+
+      <div data-contract-section="variation">
+        {selectedId ? <ContractVariationsPanel key={`${projectId}:${selectedId}:${userId}`} lang={lang} projectId={projectId} contractId={selectedId} onDone={() => { void refreshAll(); }} />
+          : activeSubId === "d14-p3-s1" && <p role="status" className="text-[10px] tx3">{rtl ? "برای ثبت تغییر مقدار یا کار جدید، ابتدا یک پیمان ثبت یا انتخاب کنید." : "Register or select a contract to manage variations."}</p>}
+      </div>
 
       {/* ── فرم ۲: ثبت ردیف فهرست بها (دوحالته) ── */}
       <Panel title="ثبت ردیف فهرست بها" note="ابتدا مبنای ارزش‌گذاری را انتخاب کنید؛ میدان‌های بی‌ربط نمایش داده نمی‌شوند">

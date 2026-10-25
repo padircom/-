@@ -40,3 +40,9 @@ sqlcmd -S localhost\SQL2008EXPRESS -d PMO_Dashboard_DB -i seed__hse_og2401.sql
 از اسکیما عمومی، ستون‌های مرجع سند و گردش تأیید را اضافه می‌کند؛ این جدول توسط
 V001 تا V003 ساخته نمی‌شود. پیش از اجرای V004 باید اسکیما عمومی پیمان نصب شده باشد.
 جزئیات و فرمان‌های ساخت موتور: `docs/CNT_Amendment_Workflow.md`.
+
+### تغییر مقادیر و کار جدید (افزایشی)
+
+`V005__contract_variation_workflow.sql` ستون‌های snapshot مبنا، سند و تصمیم را
+به جدول‌های موجود `dbo.BOQ_QuantityChange` و `dbo.ExtraWorkItem` اضافه می‌کند؛
+پیش‌نیاز آن نصب اسکیما عمومی پیمان است. جزئیات: `docs/CNT_Variation_Workflow.md`.

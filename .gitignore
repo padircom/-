@@ -106,3 +106,6 @@ server/contractRiskDocLogic.js
 
 # Generated contract-amendment workflow (npm run build:cntamend)
 server/contractAmendmentLogic.js
+
+# Generated contract-variation workflow (npm run build:cntvariation)
+server/contractVariationLogic.js

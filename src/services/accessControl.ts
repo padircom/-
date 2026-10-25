@@ -172,6 +172,7 @@ export const PERMISSION_CATALOG: PermissionDef[] = [
    * می‌توانست مبلغ صورت‌وضعیت را بالا ببرد. دور زدن دروازهٔ کیفی مجوز
    * جداگانه است تا در ممیزی مشخص باشد چه کسی آن را باز کرده. */
   P("cnt.contract.view", "d14", "مشاهده شناسنامه پیمان", "View contract master", "confidential"),
+  P("cnt.variation.approve", "d14", "تصویب تغییر مقدار و نرخ کار جدید", "Approve quantity changes and extra work", "restricted", true),
   P("cnt.amendment.approve", "d14", "تصمیم نهایی الحاقیه پیمان", "Approve contract amendments", "restricted", true),
   P("cnt.contract.edit", "d14", "ثبت و ویرایش پیمان و الحاقیه", "Edit contract and amendments", "restricted", true),
   P("cnt.risk.view", "d14", "مشاهدهٔ ریسک‌های قراردادی و بهبود قرارداد", "View contract risks & improvement", "confidential"),
@@ -1128,7 +1129,7 @@ export const ROLE_CATALOG: RoleDef[] = [
     inherits: ["viewer"],
     clearance: "restricted",
     party: "contractor",
-    grants: ["cnt.amendment.approve", "spm.plan.view", "oex.assessment.view", "eqm.workspace.view", "eqm.dispatch.approve",
+    grants: ["cnt.variation.approve", "cnt.amendment.approve", "spm.plan.view", "oex.assessment.view", "eqm.workspace.view", "eqm.dispatch.approve",
       /* P7/CPMS: مدیر پروژه گزارش پیمانکار و دیسیپلینی را تأیید می‌کند،
        * ولی آزادسازی QC سمت خودش نیست. */
       "cpm.workarea.view", "cpm.dpr.view", "cpm.dpr.approve",
@@ -1373,7 +1374,7 @@ export const ROLE_CATALOG: RoleDef[] = [
     // جداسازی دادهٔ پیمانکار از کارفرما محور جداگانه‌ای است (party) نه سطح دسترسی.
     clearance: "restricted",
     party: "client",
-    grants: ["cnt.amendment.approve", "fin.cost.view", "fin.ipc.approve", "cnt.contract.view", "cnt.ipc.approve",
+    grants: ["cnt.variation.approve", "cnt.amendment.approve", "fin.cost.view", "fin.ipc.approve", "cnt.contract.view", "cnt.ipc.approve",
       /* آزادسازی و ضبط وثیقه تصمیم کارفرماست: پول از جیب او رفته و
        * برگشتنش هم به تشخیص او. */
       "cnt.guarantee.view", "cnt.guarantee.release", "cnt.progress.view", "cnt.kpi.view",
