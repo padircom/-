@@ -414,7 +414,7 @@ export default function PlanningWorkspace({
             کلیک روی هر گره به زیربخش/ماژول مربوط می‌رود و دکمهٔ بازگشت
             در هدر ماژول دوباره به همین نقشه برمی‌گردد. */}
         {tab === "workflow" && (
-          <div className="fade-rise flex min-h-full items-center justify-center py-3">
+          <div className="fade-rise flex items-start justify-center py-1">
             <div className="w-full max-w-[1060px]">
               <PlanningWorkflowMap rtl={rtl} onNavigate={(next) => setTab(next)} />
               <p className="mt-2 text-center text-[10px] tx3">
