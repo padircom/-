@@ -1438,12 +1438,8 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
               ✎ {rtl ? "ویرایش فرایندها" : "Edit processes"}
             </button>
           )}
-          <div className="shrink-0 text-end">
-            <SystemBadge domainId={dom.id} lang={lang} className="mb-1 justify-end" />
-            <div className="text-[9px] font-extralight tx3">{t(dom.title, lang)}</div>
-            <div className="text-[11px] font-light tx1">
-              {rtl ? "GOV — حاکمیت؛ ارجاع بدون بازنویسی" : "GOV — governance; reference, no rewrite"}
-            </div>
+          <div className="shrink-0 text-end text-[11px] font-light tx1">
+            {t(dom.nav ?? dom.title, lang)}
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
