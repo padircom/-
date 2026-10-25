@@ -1436,24 +1436,28 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
             {t(dom.nav ?? dom.title, lang)}
           </div>
         </div>
-        <div className="flex shrink-0 items-center gap-1.5">
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
           {selected && <button type="button" onClick={() => { setSelected(null); setD6View("gov"); setD6Guide(false); }} className="glass-row rounded-lg px-2.5 py-1 text-[10px] tx1">{rtl ? "← بازگشت به نقشه" : "← Back to map"}</button>}
-          {([
-            ["gov", rtl ? "حاکمیت و فرآیندها (GOV)" : "Governance (GOV)"],
-            ["pmo", rtl ? "دفتر پروژه (PMO)" : "PMO desk"],
-            ["ctl", rtl ? "نقشهٔ فرایندی مدیریت و کنترل پروژه" : "Project management & control process map"],
-          ] as const).map(([k, label]) => (
-            <button
-              key={k}
-              type="button"
-              onClick={() => { setD6View(k); setD6Guide(false); if (k === "ctl") setSelected(null); }}
-              className={`rounded-lg px-2.5 py-1 text-[10px] font-light transition ${
-                d6View === k ? "toggle-on tx1" : "tx3 hover:tx2"
-              }`}
-            >
-              {label}
-            </button>
-          ))}
+          <nav aria-label={rtl ? "نماهای مدیریت حاکمیت پروژه" : "Project governance views"} className="glass-dark grid w-full max-w-[640px] grid-cols-3 gap-1 rounded-xl border b-line-soft p-1">
+            {([
+              ["gov", rtl ? "حاکمیت و فرایندها" : "Governance & processes"],
+              ["pmo", rtl ? "دفتر پروژه" : "Project office"],
+              ["ctl", rtl ? "نقشهٔ فرایندی" : "Process map"],
+            ] as const).map(([k, label]) => (
+              <button
+                key={k}
+                type="button"
+                aria-pressed={d6View === k && !d6Guide}
+                title={k === "ctl" ? (rtl ? "نقشهٔ فرایندی مدیریت و کنترل پروژه" : "Project management & control process map") : label}
+                onClick={() => { setD6View(k); setD6Guide(false); if (k === "ctl") setSelected(null); }}
+                className={`flex min-h-10 min-w-0 items-center justify-center rounded-lg border px-2 py-2 text-center text-[10px] leading-4 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 ${
+                  d6View === k && !d6Guide ? "toggle-on border-sky-400/50 font-medium tx1" : "border-transparent font-normal tx3 hover:bg-[var(--row-hover)] hover:tx1"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </nav>
         </div>
         <div className="workspace-columns flex min-h-0 flex-1 gap-3 overflow-hidden">
           <div dir={rtl ? "rtl" : "ltr"} className="glass flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl p-3">
