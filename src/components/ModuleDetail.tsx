@@ -1401,13 +1401,16 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
   if (dom.id === "d6") {
     return (
       <div className="flex h-full min-h-0 flex-col gap-3 overflow-hidden" dir={rtl ? "rtl" : "ltr"}>
-        <div className="glass grid shrink-0 grid-cols-[140px_minmax(0,1fr)] items-center gap-x-4 gap-y-2 rounded-2xl px-3 py-2.5 lg:min-h-[76px] lg:grid-cols-[140px_minmax(0,1fr)_220px]">
+        <div className="glass flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl px-3 py-2.5">
           <button onClick={onBack} className="glass-row flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-[10.5px] font-light tx2 transition hover:tx1">
             <span className="inline-block rotate-180 rtl:rotate-0">→</span>
             {rtl ? "بازگشت به داشبورد" : "Back to dashboard"}
           </button>
+          <button type="button" onClick={() => { if (d6Guide) { setSelected(null); setD6View("gov"); } setD6Guide(v => !v); }} aria-pressed={d6Guide} className="glass-row shrink-0 rounded-lg px-3 py-2 text-[10.5px] tx1">
+            {d6Guide ? (rtl ? "نقشهٔ فرایند" : "Process map") : (rtl ? "راهنمای ماژول" : "Module guide")}
+          </button>
           <div className="min-w-0 flex-1">
-            <div className="flex min-w-0 items-baseline gap-x-2.5">
+            <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
               {cluster && (
                 <h1 className="truncate text-[20px] font-semibold leading-tight" style={{ color: cluster.color }}>
                   {t(cluster.title, lang)}
@@ -1424,18 +1427,17 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
               </p>
             )}
           </div>
-          <div className="col-span-2 flex items-center justify-end gap-2 lg:col-span-1">
-            {canEditTaxonomy && (
-              <button type="button" onClick={() => setTaxonomyEditorOpen(true)} className="rounded-lg border border-sky-400/45 bg-sky-400/10 px-3 py-2 text-[10px] text-sky-200 hover:bg-sky-400/20">
-                ✎ {rtl ? "ویرایش فرایندها" : "Edit processes"}
-              </button>
-            )}
-            <div className="min-w-0 truncate text-end text-[11px] font-light tx1" title={t(dom.nav ?? dom.title, lang)}>
-              {t(dom.nav ?? dom.title, lang)}
-            </div>
+          {canEditTaxonomy && (
+            <button type="button" onClick={() => setTaxonomyEditorOpen(true)} className="rounded-lg border border-sky-400/45 bg-sky-400/10 px-3 py-2 text-[10px] text-sky-200 hover:bg-sky-400/20">
+              ✎ {rtl ? "ویرایش فرایندها" : "Edit processes"}
+            </button>
+          )}
+          <div className="shrink-0 text-end text-[11px] font-light tx1">
+            {t(dom.nav ?? dom.title, lang)}
           </div>
         </div>
-        <div className="grid h-[92px] shrink-0 grid-cols-1 items-center gap-2 lg:h-[52px] lg:grid-cols-[minmax(0,1fr)_240px]">
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          {selected && <button type="button" onClick={() => { setSelected(null); setD6View("gov"); setD6Guide(false); }} className="glass-row rounded-lg px-2.5 py-1 text-[10px] tx1">{rtl ? "← بازگشت به نقشه" : "← Back to map"}</button>}
           <nav aria-label={rtl ? "نماهای مدیریت حاکمیت پروژه" : "Project governance views"} className="glass-dark grid w-full max-w-[640px] grid-cols-3 gap-1 rounded-xl border b-line-soft p-1">
             {([
               ["gov", rtl ? "حاکمیت و فرایندها" : "Governance & processes"],
@@ -1456,12 +1458,6 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
               </button>
             ))}
           </nav>
-          <div className="flex h-10 items-center justify-end gap-2">
-            <button type="button" onClick={() => { if (d6Guide) { setSelected(null); setD6View("gov"); } setD6Guide(v => !v); }} aria-pressed={d6Guide} className="glass-row shrink-0 rounded-lg px-3 py-2 text-[10.5px] tx1">
-            {d6Guide ? (rtl ? "نقشهٔ فرایند" : "Process map") : (rtl ? "راهنمای ماژول" : "Module guide")}
-          </button>
-          <button disabled={!selected} type="button" onClick={() => { setSelected(null); setD6View("gov"); setD6Guide(false); }} className={`glass-row rounded-lg px-2.5 py-1 text-[10px] tx1 ${selected ? "" : "invisible"}`}>{rtl ? "← بازگشت به نقشه" : "← Back to map"}</button>
-          </div>
         </div>
         <div className="workspace-columns flex min-h-0 flex-1 gap-3 overflow-hidden">
           <div dir={rtl ? "rtl" : "ltr"} className="glass flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl p-3">
@@ -1531,13 +1527,14 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
   if (dom.id === "d20") {
     return (
       <div className="flex h-full min-h-0 flex-col gap-3 overflow-hidden" dir={rtl ? "rtl" : "ltr"}>
-        <div className="glass grid shrink-0 grid-cols-[140px_minmax(0,1fr)] items-center gap-x-4 gap-y-2 rounded-2xl px-3 py-2.5 lg:min-h-[76px] lg:grid-cols-[140px_minmax(0,1fr)_220px]">
+        <div className="glass flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl px-3 py-2.5">
           <button onClick={onBack} className="glass-row flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-[10.5px] font-light tx2 transition hover:tx1">
             <span className="inline-block rotate-180 rtl:rotate-0">→</span>
             {rtl ? "بازگشت به داشبورد" : "Back to dashboard"}
           </button>
+          {(selected || strategyWorkspaceOpen) && <button type="button" onClick={() => { setSelected(null); setStrategyWorkspaceOpen(false); }} className="glass-row rounded-lg px-3 py-2 text-[10.5px] tx1">{rtl ? "بازگشت به داشبورد استراتژی" : "Back to strategy dashboard"}</button>}
           <div className="min-w-0 flex-1">
-            <div className="flex min-w-0 items-baseline gap-x-2.5">
+            <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
               {cluster && (
                 <h1 className="truncate text-[20px] font-semibold leading-tight" style={{ color: cluster.color }}>
                   {t(cluster.title, lang)}
@@ -1554,23 +1551,13 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
               </p>
             )}
           </div>
-          <div className="col-span-2 flex items-center justify-end gap-2 lg:col-span-1">
-            {canEditTaxonomy && (
-              <button type="button" onClick={() => setTaxonomyEditorOpen(true)} className="rounded-lg border border-sky-400/45 bg-sky-400/10 px-3 py-2 text-[10px] text-sky-200 hover:bg-sky-400/20">
-                ✎ {rtl ? "ویرایش فرایندها" : "Edit processes"}
-              </button>
-            )}
-            <div className="min-w-0 truncate text-end text-[11px] font-light tx1" title={t(dom.nav ?? dom.title, lang)}>
-              {t(dom.nav ?? dom.title, lang)}
-            </div>
-          </div>
-        </div>
-        <div className="grid h-[92px] shrink-0 grid-cols-1 items-center gap-2 lg:h-[52px] lg:grid-cols-[minmax(0,1fr)_240px]">
-          <div className="min-w-0 truncate px-2 text-[11px] tx2">
-            {selected ? t(activeProcesses.find(p => p.id === selected.pId)?.subs.find(sub => sub.id === selected.sId)?.title ?? dom.title, lang) : (rtl ? "داشبورد استراتژی" : "Strategy dashboard")}
-          </div>
-          <div className="flex h-10 items-center justify-end">
-          <button disabled={!selected && !strategyWorkspaceOpen} type="button" onClick={() => { setSelected(null); setStrategyWorkspaceOpen(false); }} className={`glass-row rounded-lg px-3 py-2 text-[10.5px] tx1 ${selected || strategyWorkspaceOpen ? "" : "invisible"}`}>{rtl ? "بازگشت به داشبورد استراتژی" : "Back to strategy dashboard"}</button>
+          {canEditTaxonomy && (
+            <button type="button" onClick={() => setTaxonomyEditorOpen(true)} className="rounded-lg border border-sky-400/45 bg-sky-400/10 px-3 py-2 text-[10px] text-sky-200 hover:bg-sky-400/20">
+              ✎ {rtl ? "ویرایش فرایندها" : "Edit processes"}
+            </button>
+          )}
+          <div className="shrink-0 text-end text-[11px] font-light tx1">
+            {t(dom.nav ?? dom.title, lang)}
           </div>
         </div>
         <div className="workspace-columns flex min-h-0 flex-1 gap-3 overflow-hidden">
