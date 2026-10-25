@@ -381,18 +381,6 @@ export default function PlanningWorkspace({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden" dir={rtl ? "rtl" : "ltr"}>
-      <section className="glass-dark shrink-0 rounded-2xl p-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="grid h-8 w-8 place-items-center rounded-lg border border-emerald-400/40 bg-emerald-400/10 text-[16px]">🧭</span>
-          <div className="min-w-0 flex-1">
-            <h3 className="text-[13px] font-semibold tx1">
-              {rtl ? "برنامه‌ریزی و اجرای عملیات" : "Planning & Execution"}
-            </h3>
-          </div>
-          <span className="rounded-lg border b-line-soft px-2 py-1 text-[10px] tx3" dir="ltr">{m.project.code} · DataDate {dataDate}</span>
-        </div>
-      </section>
-
       {!hideTabs && (
         <nav className="flex shrink-0 flex-wrap items-center gap-1 rounded-xl bg-black/15 p-1">
           {TABS.map((item) => (
@@ -410,6 +398,9 @@ export default function PlanningWorkspace({
       )}
 
       <div className="thin-scroll min-h-0 flex-1 overflow-y-auto pe-1">
+        <p className="mb-2 text-[9px] tx3">
+          {rtl ? "تاریخ داده:" : "Data date:"} <span dir="ltr" className="inline-block">{dataDate}</span>
+        </p>
         {/* در حالت بدون نوار تب (ورود از مسیر پروژه)، بعد از پرش از روی نقشه
             به یک زیربخش، راه برگشت فقط همین دکمه است. */}
         {hideTabs && tab !== "workflow" && (
