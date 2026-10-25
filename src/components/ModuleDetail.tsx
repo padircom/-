@@ -420,6 +420,15 @@ type Props = {
   onNavigate?: (target: ModuleNavTarget) => void;
 };
 
+function BackToMapButton({ rtl, onClick }: { rtl: boolean; onClick: () => void }) {
+  return (
+    <button onClick={onClick} className="glass-row flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-[10.5px] font-light tx2 transition hover:tx1">
+      <span className="inline-block rotate-180 rtl:rotate-0">→</span>
+      {rtl ? "بازگشت به نقشهٔ فرایندی" : "Back to process map"}
+    </button>
+  );
+}
+
 function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: Props) {
   const rtl = lang === "fa";
   const { clusters, projectsByCluster } = useSystem();
@@ -671,6 +680,9 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
             <span className="inline-block rotate-180 rtl:rotate-0">→</span>
             {rtl ? "بازگشت به داشبورد" : "Back to dashboard"}
           </button>
+          {target.fromMap && (
+            <BackToMapButton rtl={rtl} onClick={() => onNavigate?.({ ...target, moduleId: "d6", processId: undefined, subId: undefined, fromMap: undefined, initialView: "ctl" })} />
+          )}
           {cluster && (
             <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl text-[20px]"
                   style={{ background: `${cluster.color}1f`, border: `1px solid ${cluster.color}55` }}>
@@ -738,6 +750,9 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
             <span className="inline-block rotate-180 rtl:rotate-0">→</span>
             {rtl ? "بازگشت به داشبورد" : "Back to dashboard"}
           </button>
+          {target.fromMap && (
+            <BackToMapButton rtl={rtl} onClick={() => onNavigate?.({ ...target, moduleId: "d6", processId: undefined, subId: undefined, fromMap: undefined, initialView: "ctl" })} />
+          )}
           {cluster && (
             <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl text-[20px]"
                   style={{ background: `${cluster.color}1f`, border: `1px solid ${cluster.color}55` }}>
@@ -799,7 +814,7 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
 
   /* P8: میز کار دفتر پروژه (PMO-1..3) کنار میز حاکمیت d6؛ نوار کنار و
      حوزه‌های اصلی دست‌نخورده می‌مانند و فقط نمای درون d6 عوض می‌شود. */
-  const [d6View, setD6View] = useState<"gov" | "pmo" | "ctl">("gov");
+  const [d6View, setD6View] = useState<"gov" | "pmo" | "ctl">(target.initialView ?? "gov");
 
   const [d14View, setD14View] = useState<"contract" | "ipc" | "rating" | "risk">(
     target.subId === "d14-p1-risk" ? "risk" : target.processId === "d14-p8" ? "rating" : "contract",
@@ -829,6 +844,9 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
             <span className="inline-block rotate-180 rtl:rotate-0">→</span>
             {rtl ? "بازگشت به داشبورد" : "Back to dashboard"}
           </button>
+          {target.fromMap && (
+            <BackToMapButton rtl={rtl} onClick={() => onNavigate?.({ ...target, moduleId: "d6", processId: undefined, subId: undefined, fromMap: undefined, initialView: "ctl" })} />
+          )}
           {cluster && (
             <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl text-[20px]"
                   style={{ background: `${cluster.color}1f`, border: `1px solid ${cluster.color}55` }}>
@@ -1311,6 +1329,9 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
             <span className="inline-block rotate-180 rtl:rotate-0">→</span>
             {rtl ? "بازگشت به داشبورد" : "Back to dashboard"}
           </button>
+          {target.fromMap && (
+            <BackToMapButton rtl={rtl} onClick={() => onNavigate?.({ ...target, moduleId: "d6", processId: undefined, subId: undefined, fromMap: undefined, initialView: "ctl" })} />
+          )}
           {cluster && (
             <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl text-[20px]"
                   style={{ background: `${cluster.color}1f`, border: `1px solid ${cluster.color}55` }}>
@@ -1443,7 +1464,7 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
                     rtl={rtl}
                     onOpenModule={(moduleId, processId, subId) => {
                       setSelected(null);
-                      onNavigate?.({ ...target, moduleId, processId, subId });
+                      onNavigate?.({ ...target, moduleId, processId, subId, fromMap: true });
                     }}
                   />
                   <p className="mt-2 text-center text-[10px] tx3">

@@ -28,6 +28,10 @@ export type ModuleNavTarget = {
   projectId: string;
   processId?: string;
   subId?: string;
+  /** پرش از نقشهٔ فرایندی (CTL) — نشانگر دکمهٔ بازگشت به نقشه. */
+  fromMap?: boolean;
+  /** نمای اولیهٔ ماژول d6 هنگام بازگشت از نقشه. */
+  initialView?: "gov" | "pmo" | "ctl";
 };
 
 export type EnterpriseSystemView =
