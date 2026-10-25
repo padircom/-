@@ -85,6 +85,8 @@ export default function PlanningWorkspace({
   lang,
   initialTab = "dashboard",
   hideTabs = false,
+  activeTab,
+  onTabChange,
   clusterId,
   projectId,
 }: {
@@ -93,6 +95,8 @@ export default function PlanningWorkspace({
   projectId?: string;
   initialTab?: PexTab;
   hideTabs?: boolean;
+  activeTab?: PexTab;
+  onTabChange?: (tab: PexTab) => void;
 }) {
   const rtl = lang === "fa";
   const { can } = useAuth();
@@ -102,7 +106,12 @@ export default function PlanningWorkspace({
     (clusterId && projectId ? projectsByCluster[clusterId]?.find((pj) => pj.id === projectId)?.code : undefined) ??
     projectId ?? "";
   const dprCanEdit = can("report.daily.edit", projectId);
-  const [tab, setTab] = useState<PexTab>(initialTab);
+  const [localTab, setLocalTab] = useState<PexTab>(initialTab);
+  const tab = activeTab ?? localTab;
+  const setTab = (next: PexTab) => {
+    setLocalTab(next);
+    onTabChange?.(next);
+  };
   const [weightMode, setWeightMode] = useState<WeightMode>("Cost");
   const [alpha, setAlpha] = useState(0.6);
   const [ack, setAck] = useState<Record<string, boolean>>({});
@@ -110,7 +119,7 @@ export default function PlanningWorkspace({
   const [alertFilter, setAlertFilter] = useState<string>("all");
 
   useEffect(() => {
-    setTab(initialTab);
+    setLocalTab(initialTab);
   }, [initialTab]);
 
   /* نشان «زنده/محلی» حذف شد؛ خواندن از سرور برای گرم‌شدن مسیر API می‌ماند
@@ -401,27 +410,9 @@ export default function PlanningWorkspace({
         <p className="mb-2 text-[9px] tx3">
           {rtl ? "تاریخ داده:" : "Data date:"} <span dir="ltr" className="inline-block">{dataDate}</span>
         </p>
-        {/* در حالت بدون نوار تب (ورود از مسیر پروژه)، بعد از پرش از روی نقشه
-            به یک زیربخش، راه برگشت فقط همین دکمه است. */}
-        {hideTabs && tab !== "workflow" && (
-          <div className="fade-rise mb-2 flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setTab("workflow")}
-              className="glass-row flex items-center gap-1.5 rounded-lg px-3 py-2 text-[10.5px] font-light tx2 transition hover:tx1"
-            >
-              <span aria-hidden="true">{rtl ? "→" : "←"}</span>
-              {rtl ? "بازگشت به نقشهٔ گردش‌کار" : "Back to workflow map"}
-            </button>
-            <span className="text-[10px] tx3">
-              {rtl ? "برای دیدن دوبارهٔ نقشهٔ فرایند و انتخاب گرهٔ دیگر" : "To see the process map again and pick another node"}
-            </span>
-          </div>
-        )}
-
         {/* نقشهٔ گردش‌کار: صفحهٔ مرکزی و مستقل ماژول؛ نقطهٔ ورود پیش‌فرض.
             کلیک روی هر گره به زیربخش/ماژول مربوط می‌رود و دکمهٔ بازگشت
-            بالای زیربخش‌ها دوباره به همین نقشه برمی‌گردد. */}
+            در هدر ماژول دوباره به همین نقشه برمی‌گردد. */}
         {tab === "workflow" && (
           <div className="fade-rise flex min-h-full items-center justify-center py-3">
             <div className="w-full max-w-[1060px]">

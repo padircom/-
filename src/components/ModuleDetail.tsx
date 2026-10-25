@@ -432,11 +432,11 @@ type Props = {
   onNavigate?: (target: ModuleNavTarget) => void;
 };
 
-function BackToMapButton({ rtl, onClick }: { rtl: boolean; onClick: () => void }) {
+function BackToMapButton({ rtl, onClick, label }: { rtl: boolean; onClick: () => void; label?: string }) {
   return (
     <button onClick={onClick} className="glass-row flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-[10.5px] font-light tx2 transition hover:tx1">
       <span className="inline-block rotate-180 rtl:rotate-0">→</span>
-      {rtl ? "بازگشت به نقشهٔ فرایندی" : "Back to process map"}
+      {label ?? (rtl ? "بازگشت به نقشهٔ فرایندی" : "Back to process map")}
     </button>
   );
 }
@@ -619,6 +619,8 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
     return "workflow";
   })();
 
+  const [planningTab, setPlanningTab] = useState<PexTab>(d2Tab);
+
   if (dom.id === "d2") {
     return (
       <div className="flex h-full min-h-0 flex-col gap-3 overflow-hidden" dir={rtl ? "rtl" : "ltr"}>
@@ -627,8 +629,14 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
             <span className="inline-block rotate-180 rtl:rotate-0">→</span>
             {rtl ? "بازگشت به داشبورد" : "Back to dashboard"}
           </button>
+          {planningTab !== "workflow" && (
+            <button type="button" onClick={() => { setSelected(null); setPlanningTab("workflow"); }}
+              className="glass-row shrink-0 rounded-lg px-3 py-2 text-[10.5px] font-light tx2 transition hover:tx1">
+              {rtl ? "بازگشت به نقشهٔ برنامه‌ریزی" : "Back to planning map"}
+            </button>
+          )}
           {target.fromMap && (
-            <BackToMapButton rtl={rtl} onClick={() => onNavigate?.({ ...target, moduleId: "d6", processId: undefined, subId: undefined, fromMap: undefined, initialView: "ctl" })} />
+            <BackToMapButton rtl={rtl} label={rtl ? "بازگشت به نقشهٔ کنترل پروژه" : "Back to project control map"} onClick={() => onNavigate?.({ ...target, moduleId: "d6", processId: undefined, subId: undefined, fromMap: undefined, initialView: "ctl" })} />
           )}
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
@@ -657,7 +665,7 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
 
         <div className="workspace-columns flex min-h-0 flex-1 gap-3 overflow-hidden">
           <div dir={rtl ? "rtl" : "ltr"} className="glass flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl p-3">
-            <PlanningWorkspace lang={lang} clusterId={target.clusterId} projectId={target.projectId} initialTab={d2Tab} hideTabs />
+            <PlanningWorkspace lang={lang} clusterId={target.clusterId} projectId={target.projectId} initialTab={d2Tab} activeTab={planningTab} onTabChange={setPlanningTab} hideTabs />
           </div>
           <DomainAside
               lang={lang}
@@ -667,7 +675,8 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
               extraSubs={D2_PAGE_SUBS}
               onSelectSub={(pId, sId) => {
                 audit("OPEN_SUBPROCESS", { projectId: target.projectId, entity: dom.id, entityId: sId });
-                setSelected({ pId, sId })
+                setSelected({ pId, sId });
+                setPlanningTab(D2_TAB_BY_SUB[sId] ?? "workflow");
               }}
               onOpenModuleSub={(moduleId, pId, sId) => onNavigate?.({ ...target, moduleId, processId: pId, subId: sId })}
             />
