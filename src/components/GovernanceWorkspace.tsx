@@ -194,11 +194,6 @@ export default function GovernanceWorkspace({
           <span className="grid h-8 w-8 place-items-center rounded-lg border border-indigo-400/40 bg-indigo-400/10 text-[15px]">🏛</span>
           <div className="min-w-0 flex-1">
             <h3 className="text-[12px] font-semibold tx1">{rtl ? "مدیریت حاکمیت و فرآیندهای PMBOK" : "Governance & PMBOK Process Management"}</h3>
-            <p className="text-[8.5px] font-extralight tx3">
-              {rtl
-                ? "ارجاع بدون بازنویسی · Baseline مقدس · هر تصمیم = شاهد + اختیار · ثبت فقط افزودنی"
-                : "Reference not rewrite · Baseline sacred · every decision = evidence + authority · append-only trail"}
-            </p>
           </div>
           <span className="rounded-lg px-2 py-1 text-[10px] font-semibold tabular-nums" style={{ background: `${color}22`, color }}>
             {rtl ? "انطباق" : "Compliance"} {score}%
@@ -215,7 +210,6 @@ export default function GovernanceWorkspace({
           >
             {source === "api" ? (rtl ? "داده زنده" : "Live data") : rtl ? "داده نمونه" : "Sample data"}
           </span>
-          <span className="font-mono text-[9px] text-indigo-300" dir="ltr">dbo.Process_Master · dbo.Audit_Register</span>
         </div>
       </section>
 
