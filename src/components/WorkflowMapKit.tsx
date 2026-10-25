@@ -79,9 +79,9 @@ export function WorkflowNodeBox({
         className={`absolute end-0 ${compact ? "top-1 bottom-1" : "top-2 bottom-2"} w-[3px] rounded-full`}
         style={{ background: isCross ? WF_COLOR.cross : accent, opacity: isCross ? 0.75 : 0.9 }}
       />
-      <span className={`block ${compact ? "text-[9px] leading-[12px]" : "text-[11px] leading-4"} font-medium text-start tx1`}>{title}</span>
-      {sub && <span className={`block font-light text-start tx3 ${compact ? "mt-px text-[7.5px] leading-[10px]" : "mt-1 text-[9.5px] leading-4"}`}>{sub}</span>}
-      {isCross && (
+      <span className={`block ${compact ? "text-[8px] leading-[11px]" : "text-[11px] leading-4"} font-medium text-start tx1`}>{title}</span>
+      {sub && !compact && <span className="mt-1 block text-[9.5px] font-light leading-4 text-start tx3">{sub}</span>}
+      {isCross && !compact && (
         <span
           className={`block w-fit rounded-full font-medium ${compact ? "mt-0.5 px-1 py-px text-[7px]" : "mt-1.5 px-2 py-px text-[8px]"}`}
           style={{ background: `${WF_COLOR.cross}22`, color: "var(--ink)" }}
