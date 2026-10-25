@@ -64,8 +64,8 @@ export default function ControlWorkflowMap({
   rtl: boolean;
   onOpenModule: (moduleId: string, processId?: string, subId?: string) => void;
 }) {
-  const arrow = "flex items-center justify-center text-[12px] leading-none tx4";
-  const gridCols = "grid-cols-[1.25fr_20px_1.05fr_20px_1.25fr_20px_1.1fr]";
+  const arrow = "flex items-center justify-center text-[11px] leading-none tx4";
+  const gridCols = "grid-cols-[1.25fr_16px_1.05fr_16px_1.25fr_16px_1.1fr]";
   const open = (node: ControlNode) =>
     node.moduleId ? () => onOpenModule(node.moduleId!, node.processId, node.subId) : undefined;
 
@@ -75,21 +75,21 @@ export default function ControlWorkflowMap({
       hint={rtl ? "با کلیک روی هر گره، به ماژول مربوط بروید" : "Click a node to open its module"}
     >
       {/* سرستون‌ها — نوار رنگی هر ستون */}
-      <div className={`mt-3 grid ${gridCols}`}>
-        <WorkflowColumnHead fa="ورودی‌ها" en="Inputs" rtl={rtl} color={C_INPUT} icon="inputs" />
+      <div className={`mt-2 grid ${gridCols}`}>
+        <WorkflowColumnHead fa="ورودی‌ها" en="Inputs" rtl={rtl} color={C_INPUT} icon="inputs" compact />
         <div />
-        <WorkflowColumnHead fa="هاب داده" en="Data hub" rtl={rtl} color={C_HUB} icon="hub" />
+        <WorkflowColumnHead fa="هاب داده" en="Data hub" rtl={rtl} color={C_HUB} icon="hub" compact />
         <div />
-        <WorkflowColumnHead fa="چرخهٔ کنترل" en="Control cycle" rtl={rtl} color={C_CYCLE} icon="cycle" />
+        <WorkflowColumnHead fa="چرخهٔ کنترل" en="Control cycle" rtl={rtl} color={C_CYCLE} icon="cycle" compact />
         <div />
-        <WorkflowColumnHead fa="خروجی‌ها" en="Outputs" rtl={rtl} color={C_OUTPUT} icon="outputs" />
+        <WorkflowColumnHead fa="خروجی‌ها" en="Outputs" rtl={rtl} color={C_OUTPUT} icon="outputs" compact />
       </div>
 
-      <div className={`mt-2 grid ${gridCols} items-stretch`}>
+      <div className={`mt-1.5 grid ${gridCols} items-stretch`}>
         {/* ورودی‌ها */}
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-1.5">
           {INPUTS.map((node) => (
-            <WorkflowNodeBox key={node.titleEn} node={node} rtl={rtl} accent={C_INPUT} onNavigate={open(node)} />
+            <WorkflowNodeBox key={node.titleEn} node={node} rtl={rtl} accent={C_INPUT} onNavigate={open(node)} compact />
           ))}
         </div>
         <div className="flex flex-col">
@@ -103,14 +103,14 @@ export default function ControlWorkflowMap({
           type="button"
           onClick={() => onOpenModule("d3", "d3-p1", "d3-p1-s1")}
           title={rtl ? "رفتن به «پایش و کنترل عملکرد پروژه»" : "Go to performance monitoring"}
-          className="relative flex flex-col items-center justify-center overflow-hidden rounded-xl border px-3 py-3 text-center transition hover:-translate-y-px focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/70"
+          className="relative flex flex-col items-center justify-center overflow-hidden rounded-xl border px-2.5 py-2 text-center transition hover:-translate-y-px focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/70"
           style={{ background: `${C_HUB}18`, borderColor: `${C_HUB}66` }}
           onMouseEnter={(e) => { e.currentTarget.style.borderColor = `${C_HUB}aa`; }}
           onMouseLeave={(e) => { e.currentTarget.style.borderColor = `${C_HUB}66`; }}
         >
           <span aria-hidden="true" className="absolute end-0 top-2 bottom-2 w-[3px] rounded-full" style={{ background: C_HUB, opacity: 0.9 }} />
-          <span className="text-[12.5px] font-medium leading-5 tx1">{rtl ? "لایهٔ یکپارچهٔ دادهٔ کنترل" : "Project control database"}</span>
-          <span className="mt-1 text-[9.5px] font-light leading-4 tx3">
+          <span className="text-[11.5px] font-medium leading-[18px] tx1">{rtl ? "لایهٔ یکپارچهٔ دادهٔ کنترل" : "Project control database"}</span>
+          <span className="mt-0.5 text-[8.5px] font-light leading-[13px] tx3">
             {rtl ? "اتصال ماژول‌های پایش، هزینه، کیفیت و ریسک با API · اعتبارسنجی داده · قواعد پیشرفت (ROC) · قفل دوره‌های بسته" : "Validated control data hub"}
           </span>
         </button>
@@ -121,11 +121,11 @@ export default function ControlWorkflowMap({
         </div>
 
         {/* چرخهٔ کنترل */}
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-1.5">
           {CYCLE.map((node, i) => (
-            <div key={node.titleEn} className="flex flex-1 flex-col gap-2">
-              <WorkflowNodeBox node={node} rtl={rtl} accent={C_CYCLE} onNavigate={open(node)} />
-              {i < CYCLE.length - 1 && <div className="text-center text-[12px] leading-3 tx4">↓</div>}
+            <div key={node.titleEn} className="flex flex-1 flex-col gap-1.5">
+              <WorkflowNodeBox node={node} rtl={rtl} accent={C_CYCLE} onNavigate={open(node)} compact />
+              {i < CYCLE.length - 1 && <div className="text-center text-[11px] leading-3 tx4">↓</div>}
             </div>
           ))}
         </div>
@@ -136,29 +136,31 @@ export default function ControlWorkflowMap({
         </div>
 
         {/* خروجی‌ها */}
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-1.5">
           {OUTPUTS.map((node) => (
-            <WorkflowNodeBox key={node.titleEn} node={node} rtl={rtl} accent={C_OUTPUT} onNavigate={open(node)} />
+            <WorkflowNodeBox key={node.titleEn} node={node} rtl={rtl} accent={C_OUTPUT} onNavigate={open(node)} compact />
           ))}
         </div>
       </div>
 
       {/* حلقهٔ حاکمیت و کنترل */}
-      <div className="relative mt-5 rounded-2xl border border-dashed b-line px-3 pb-3 pt-4">
+      <div className="relative mt-3.5 rounded-2xl border border-dashed b-line px-2.5 pb-2.5 pt-3">
         <span className="absolute -top-2 start-5 rounded-full border b-line bg-[var(--bg-b)] px-2 text-[9.5px] tx3">
           {rtl ? "حلقهٔ حاکمیت و کنترل" : "Governance and control loop"}
         </span>
-        <div className="grid grid-cols-[1fr_20px_1fr_20px_1fr_20px_1fr] items-stretch">
+        <div className="grid grid-cols-[1fr_16px_1fr_16px_1fr_16px_1fr] items-stretch">
           <WorkflowNodeBox
             node={{ titleFa: "اجرای سایت و بازگشت به داده", titleEn: "Site execution & data feed-back", subFa: "نتیجهٔ اقدام به چرخهٔ پایش برمی‌گردد", subEn: "Results feed the monitoring cycle", kind: "cross" }}
             rtl={rtl}
             accent={C_OUTPUT}
+            compact
           />
           <div className={arrow}>←</div>
           <WorkflowNodeBox
             node={{ titleFa: "اقدام اصلاحی و پیگیری", titleEn: "Corrective action tracking", subFa: "مالک اقدام و موعد انجام", subEn: "Owner and due date", kind: "proc" }}
             rtl={rtl}
             accent={C_CYCLE}
+            compact
             onNavigate={() => onOpenModule("d3", "d3-p5", "d3-p5-s1")}
           />
           <div className={arrow}>←</div>
@@ -166,6 +168,7 @@ export default function ControlWorkflowMap({
             node={{ titleFa: "تصمیم مدیریتی", titleEn: "Management decision", subFa: "بازبینی ماهانه و گیت تصمیم", subEn: "Monthly review, decision gate", kind: "proc" }}
             rtl={rtl}
             accent={C_CYCLE}
+            compact
             onNavigate={() => onOpenModule("d3", "d3-p4", "d3-p4-s1")}
           />
           <div className={arrow}>→</div>
@@ -173,10 +176,11 @@ export default function ControlWorkflowMap({
             node={{ titleFa: "بازبینی عملکرد و کارفرما", titleEn: "Performance review & client", subFa: "تأیید وضعیت دوره", subEn: "Period status approval", kind: "io" }}
             rtl={rtl}
             accent={C_OUTPUT}
+            compact
             onNavigate={() => onOpenModule("d3", "d3-p6", "d3-p6-s1")}
           />
         </div>
-        <p className="mt-2 text-center text-[9px] font-light tx4">
+        <p className="mt-1.5 text-center text-[8.5px] font-light tx4">
           {rtl ? "↺ نتیجهٔ اقدام‌های اصلاحی دوباره به‌عنوان ورودی چرخهٔ پایش و گزارش‌های دوره‌ای ثبت می‌شود." : "↺ Corrective-action results are recorded as input to the next monitoring cycle and period report."}
         </p>
       </div>

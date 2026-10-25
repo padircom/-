@@ -7,6 +7,10 @@
  * روی دیگری هم دیده شود.
  */
 import type { ReactElement, ReactNode } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
+
+/** عرض طراحی نقشه — مقیاس‌خودکار (fit-to-frame) بر مبنای همین عرض انجام می‌شود. */
+export const WF_DESIGN_WIDTH = 1060;
 
 /** نوع گره: ورودی/خروجی، پردازش (کنترل) یا ورودی بین‌ماژولی. */
 export type WorkflowNodeKind = "io" | "proc" | "cross";
@@ -61,11 +65,13 @@ export function WorkflowNodeBox({
   rtl,
   accent,
   onNavigate,
+  compact,
 }: {
   node: WorkflowMapNode;
   rtl: boolean;
   accent: string;
   onNavigate?: () => void;
+  compact?: boolean;
 }) {
   const title = rtl ? node.titleFa : node.titleEn;
   const sub = rtl ? node.subFa : node.subEn;
@@ -74,14 +80,14 @@ export function WorkflowNodeBox({
     <>
       <span
         aria-hidden="true"
-        className="absolute end-0 top-2 bottom-2 w-[3px] rounded-full"
+        className={`absolute end-0 ${compact ? "top-1.5 bottom-1.5" : "top-2 bottom-2"} w-[3px] rounded-full`}
         style={{ background: isCross ? WF_COLOR.cross : accent, opacity: isCross ? 0.75 : 0.9 }}
       />
-      <span className="block text-[11px] font-medium leading-4 text-start tx1">{title}</span>
-      {sub && <span className="mt-1 block text-[9.5px] font-light leading-4 text-start tx3">{sub}</span>}
+      <span className={`block ${compact ? "text-[10px] leading-[13px]" : "text-[11px] leading-4"} font-medium text-start tx1`}>{title}</span>
+      {sub && <span className={`block font-light text-start tx3 ${compact ? "mt-px text-[8.5px] leading-[12px]" : "mt-1 text-[9.5px] leading-4"}`}>{sub}</span>}
       {isCross && (
         <span
-          className="mt-1.5 block w-fit rounded-full px-2 py-px text-[8px] font-medium"
+          className={`block w-fit rounded-full font-medium ${compact ? "mt-1 px-1.5 py-px text-[7.5px]" : "mt-1.5 px-2 py-px text-[8px]"}`}
           style={{ background: `${WF_COLOR.cross}22`, color: "var(--ink)" }}
         >
           {rtl ? "بین‌ماژولی" : "cross-module"}
@@ -89,7 +95,7 @@ export function WorkflowNodeBox({
       )}
     </>
   );
-  const cls = `relative flex w-full flex-1 flex-col justify-center overflow-hidden rounded-xl border px-3 py-2 text-start transition ${
+  const cls = `relative flex w-full flex-1 flex-col justify-center overflow-hidden rounded-xl border ${compact ? "px-2.5 py-1.5" : "px-3 py-2"} text-start transition ${
     isCross ? "border-dashed" : "border-solid"
   }`;
   const style = {
@@ -122,16 +128,18 @@ export function WorkflowColumnHead({
   rtl,
   color,
   icon,
+  compact,
 }: {
   fa: string;
   en: string;
   rtl: boolean;
   color: string;
   icon: string;
+  compact?: boolean;
 }) {
   return (
     <div
-      className="flex items-center justify-center gap-1.5 rounded-xl px-2 py-1.5 text-[10.5px] font-medium text-white"
+      className={`flex items-center justify-center gap-1.5 rounded-xl px-2 font-medium text-white ${compact ? "py-1 text-[10px]" : "py-1.5 text-[10.5px]"}`}
       style={{ background: `linear-gradient(180deg, ${color}, ${color}cc)`, boxShadow: `0 6px 16px -8px ${color}` }}
     >
       <span aria-hidden="true" className="inline-flex">{WF_ICONS[icon]}</span>
@@ -160,7 +168,10 @@ export function WorkflowLegend({ rtl }: { rtl: boolean }) {
   );
 }
 
-/** پوستهٔ نقشه: عنوان، راهنما و کادر اصلی — مشترک بین همهٔ نقشه‌ها. */
+/** پوستهٔ نقشه: عنوان، راهنما و کادر اصلی — مشترک بین همهٔ نقشه‌ها.
+ *  مقیاس‌خودکار (fit-to-frame): کل نقشه مثل یک پوستر در قابش جا می‌شود؛
+ *  اگر ارتفاع قاب مشخص (flex) باشد، طول هم در نظر گرفته می‌شود و دیگر
+ *  هیچ‌چیز از کادر بیرون نمی‌زند. در قاب‌های ارتفاع-آزاد فقط عرض مبناست. */
 export function WorkflowMapFrame({
   title,
   hint,
@@ -170,17 +181,57 @@ export function WorkflowMapFrame({
   hint: string;
   children: ReactNode;
 }) {
+  const boxRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const fitRef = useRef(1);
+  const [fit, setFit] = useState<{ k: number; h: number }>({ k: 1, h: 0 });
+
+  useLayoutEffect(() => {
+    const box = boxRef.current;
+    const content = contentRef.current;
+    if (!box || !content) return;
+    const update = () => {
+      const natH = content.offsetHeight || content.scrollHeight;
+      const availW = box.clientWidth;
+      const availH = box.clientHeight;
+      let k = availW > 0 ? Math.min(1, (availW - 2) / WF_DESIGN_WIDTH) : 1;
+      // ارتفاع فقط وقتی مبناست که قاب از محتوا کوتاه‌تر باشد (قاب ارتفاع-آزاد
+      // همیشه هم‌اندازهٔ محتواست و نباید مقیاس را کوچک کند).
+      if (availH > 0 && natH * fitRef.current > availH + 4) {
+        k = Math.min(k, (availH - 2) / natH);
+      }
+      k = Math.max(0.12, k);
+      fitRef.current = k;
+      setFit({ k, h: natH });
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(box);
+    ro.observe(content);
+    return () => ro.disconnect();
+  }, []);
+
   return (
-    <section
-      dir="ltr"
-      aria-label={title}
-      className="rounded-2xl border b-line bg-[var(--row)] p-3"
-    >
-      <div className="flex flex-wrap items-baseline justify-between gap-2 px-1">
-        <h3 className="text-[13px] font-medium tx1">{title}</h3>
-        <span className="text-[9.5px] font-light tx3">{hint}</span>
+    <div ref={boxRef} className="flex h-full w-full items-center justify-center overflow-hidden">
+      <div
+        dir="ltr"
+        className="shrink-0"
+        style={{ width: WF_DESIGN_WIDTH * fit.k, height: fit.h * fit.k }}
+      >
+        <section
+          ref={contentRef}
+          dir="ltr"
+          aria-label={title}
+          className="rounded-2xl border b-line bg-[var(--row)] p-3"
+          style={{ width: WF_DESIGN_WIDTH, transform: `scale(${fit.k})`, transformOrigin: "top left" }}
+        >
+          <div className="flex flex-wrap items-baseline justify-between gap-2 px-1">
+            <h3 className="text-[13px] font-medium tx1">{title}</h3>
+            <span className="text-[9.5px] font-light tx3">{hint}</span>
+          </div>
+          {children}
+        </section>
       </div>
-      {children}
-    </section>
+    </div>
   );
 }
