@@ -5,7 +5,7 @@
  * با زبان بصری «نقشهٔ فرایندی ماژول‌ها»: سرستون رنگیِ هر ستون، کارت‌های
  * تیره با نوار رنگی در لبه، گره‌های بین‌ماژولی خط‌چین و حلقهٔ حاکمیت در پایین.
  * گره‌های داخل ماژول کلیک‌پذیرند و به زیربخش مربوط می‌روند؛ گره‌های
- * بین‌ماژولی (تأمین، کیفیت) کلیک ندارند.
+ * بین‌ماژولی تأمین و کیفیت، میز کار موجود همان حوزه را باز می‌کنند.
  *
  * اجزای مشترک بصری در `WorkflowMapKit.tsx` است تا نقشهٔ گردش‌کار کنترل
  * پروژه (d6) دقیقاً همین جلوه را داشته باشد.
@@ -22,15 +22,16 @@ import {
 
 interface MapNode extends WorkflowMapNode {
   tab?: PexTab;
+  destination?: { moduleId: string; processId: string; subId: string };
 }
 
 const INPUTS: MapNode[] = [
   { titleFa: "برنامهٔ پایه", titleEn: "Baseline plan", subFa: "برنامه‌های سطوح ۱ تا ۴ (MSP/P6)", subEn: "L1–L4 schedules", tab: "baseline", kind: "io" },
   { titleFa: "پیمانکاران", titleEn: "Subcontractors", subFa: "برنامهٔ پایه و گزارش روزانهٔ پیمانکار", subEn: "Baseline schedules & live DPR", tab: "dpr", kind: "io" },
   { titleFa: "گزارش‌های سایت", titleEn: "Site reports", subFa: "پیشرفت روزانه و تاریخ‌های واقعی", subEn: "Daily progress", tab: "dpr", kind: "io" },
-  { titleFa: "تأمین و خرید", titleEn: "Procurement", subFa: "وضعیت پیگیری و ارسال — از ماژول تأمین", subEn: "Expediting status — cross-module", kind: "cross" },
+  { titleFa: "تأمین و خرید", titleEn: "Procurement", subFa: "وضعیت پیگیری و ارسال — از ماژول تأمین", subEn: "Expediting status — cross-module", destination: { moduleId: "d5", processId: "d5-p5", subId: "d5-p5-s1" }, kind: "cross" },
   { titleFa: "مهندسی", titleEn: "Engineering", subFa: "وضعیت مدارک و خروجی‌های مهندسی", subEn: "Deliverables status", tab: "weekly", kind: "io" },
-  { titleFa: "کنترل کیفیت ساخت", titleEn: "Construction QC", subFa: "ITP و بازرسی‌ها — از ماژول کیفیت", subEn: "ITP / inspections — cross-module", kind: "cross" },
+  { titleFa: "کنترل کیفیت ساخت", titleEn: "Construction QC", subFa: "ITP و بازرسی‌ها — از ماژول کیفیت", subEn: "ITP / inspections — cross-module", destination: { moduleId: "d8", processId: "d8-p2", subId: "d8-p2-s1" }, kind: "cross" },
   { titleFa: "ایمنی و نیروی انسانی", titleEn: "HSE and manpower", subFa: "هیستوگرام نیروی انسانی و شاخص‌ها", subEn: "Histogram, KPIs", tab: "weekly", kind: "io" },
 ];
 
@@ -61,9 +62,11 @@ const C_OUTPUT = WF_COLOR.output;
 export default function PlanningWorkflowMap({
   rtl,
   onNavigate,
+  onOpenModule,
 }: {
   rtl: boolean;
   onNavigate: (tab: PexTab) => void;
+  onOpenModule?: (moduleId: string, processId: string, subId: string) => void;
 }) {
   const arrow = "flex items-center justify-center text-[12px] leading-none tx4";
   const gridCols = "grid-cols-[1.25fr_20px_1.05fr_20px_1.25fr_20px_1.1fr]";
@@ -93,7 +96,7 @@ export default function PlanningWorkflowMap({
               rtl={rtl}
               accent={C_INPUT}
               grow={node.kind === "cross" ? 1.5 : 0.8}
-              onNavigate={node.tab ? () => onNavigate(node.tab!) : undefined}
+              onNavigate={node.destination && onOpenModule ? () => onOpenModule(node.destination!.moduleId, node.destination!.processId, node.destination!.subId) : node.tab ? () => onNavigate(node.tab!) : undefined}
             />
           ))}
         </div>

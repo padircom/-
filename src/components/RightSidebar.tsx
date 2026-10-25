@@ -30,6 +30,8 @@ export type ModuleNavTarget = {
   subId?: string;
   /** پرش از نقشهٔ فرایندی (CTL) — نشانگر دکمهٔ بازگشت به نقشه. */
   fromMap?: boolean;
+  /** بازگشت از ورودی‌های بین‌ماژولی به نقشهٔ برنامه‌ریزی. */
+  fromPlanningMap?: boolean;
   /** نمای اولیهٔ ماژول d6 هنگام بازگشت از نقشه. */
   initialView?: "gov" | "pmo" | "ctl";
   pmoTab?: "charter" | "forms" | "health";

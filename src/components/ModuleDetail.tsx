@@ -665,7 +665,7 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
 
         <div className="workspace-columns flex min-h-0 flex-1 gap-3 overflow-hidden">
           <div dir={rtl ? "rtl" : "ltr"} className="glass flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl p-3">
-            <PlanningWorkspace lang={lang} clusterId={target.clusterId} projectId={target.projectId} initialTab={d2Tab} activeTab={planningTab} onTabChange={setPlanningTab} hideTabs />
+            <PlanningWorkspace lang={lang} clusterId={target.clusterId} projectId={target.projectId} initialTab={d2Tab} activeTab={planningTab} onTabChange={setPlanningTab} onOpenModule={(moduleId, processId, subId) => onNavigate?.({ ...target, moduleId, processId, subId, initialView: undefined, fromPlanningMap: true })} hideTabs />
           </div>
           <DomainAside
               lang={lang}
@@ -864,6 +864,10 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
             <span className="inline-block rotate-180 rtl:rotate-0">→</span>
             {rtl ? "بازگشت به داشبورد" : "Back to dashboard"}
           </button>
+          {target.fromPlanningMap && (
+            <BackToMapButton rtl={rtl} label={rtl ? "بازگشت به نقشهٔ برنامه‌ریزی" : "Back to planning map"}
+              onClick={() => onNavigate?.({ ...target, moduleId: "d2", processId: undefined, subId: undefined, initialView: undefined, fromPlanningMap: undefined })} />
+          )}
           {target.fromMap && (
             <BackToMapButton rtl={rtl} onClick={() => onNavigate?.({ ...target, moduleId: "d6", processId: undefined, subId: undefined, fromMap: undefined, initialView: "ctl" })} />
           )}
@@ -1353,6 +1357,10 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
             <span className="inline-block rotate-180 rtl:rotate-0">→</span>
             {rtl ? "بازگشت به داشبورد" : "Back to dashboard"}
           </button>
+          {target.fromPlanningMap && (
+            <BackToMapButton rtl={rtl} label={rtl ? "بازگشت به نقشهٔ برنامه‌ریزی" : "Back to planning map"}
+              onClick={() => onNavigate?.({ ...target, moduleId: "d2", processId: undefined, subId: undefined, initialView: undefined, fromPlanningMap: undefined })} />
+          )}
           {target.fromMap && (
             <BackToMapButton rtl={rtl} onClick={() => onNavigate?.({ ...target, moduleId: "d6", processId: undefined, subId: undefined, fromMap: undefined, initialView: "ctl" })} />
           )}

@@ -87,6 +87,7 @@ export default function PlanningWorkspace({
   hideTabs = false,
   activeTab,
   onTabChange,
+  onOpenModule,
   clusterId,
   projectId,
 }: {
@@ -97,6 +98,7 @@ export default function PlanningWorkspace({
   hideTabs?: boolean;
   activeTab?: PexTab;
   onTabChange?: (tab: PexTab) => void;
+  onOpenModule?: (moduleId: string, processId: string, subId: string) => void;
 }) {
   const rtl = lang === "fa";
   const { can } = useAuth();
@@ -416,7 +418,7 @@ export default function PlanningWorkspace({
         {tab === "workflow" && (
           <div className="fade-rise flex items-start justify-center py-1">
             <div className="w-full max-w-[1060px]">
-              <PlanningWorkflowMap rtl={rtl} onNavigate={(next) => setTab(next)} />
+              <PlanningWorkflowMap rtl={rtl} onNavigate={(next) => setTab(next)} onOpenModule={onOpenModule} />
               <p className="mt-2 text-center text-[10px] tx3">
                 {rtl ? "برای شروع، روی هر گره از نقشه کلیک کنید تا به بخش مربوط بروید." : "Start by clicking any node on the map to open its section."}
               </p>
