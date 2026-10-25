@@ -1932,6 +1932,17 @@ function DomainNavGroups({
   if (!mods.length) return null;
   const sections = mods.flatMap((m) => {
     const processes = m.id === dom.id ? activeProcesses : m.processes;
+    if (m.id === "d5") {
+      return [
+        { key: "cost", title: { fa: "مدیریت هزینه", en: "Cost Management" }, processIds: ["d5-p1", "d5-p2", "d5-p3", "d5-p7", "d5-p9"] },
+        { key: "procurement", title: { fa: "مدیریت تأمین", en: "Procurement Management" }, processIds: ["d5-p4", "d5-p5"] },
+        { key: "logistics", title: { fa: "مدیریت لجستیک", en: "Logistics Management" }, processIds: ["d5-p6", "d5-p8"] },
+      ].map(({ processIds, ...section }) => ({
+        ...section,
+        module: m,
+        processes: processes.filter((p) => processIds.includes(p.id)),
+      }));
+    }
     if (m.id !== "d14") return [{ module: m, key: m.id, title: m.nav ?? m.title, processes }];
     return [
       { key: "contract", title: { fa: "مدیریت پیمان", en: "Contract Management" } },
@@ -1967,7 +1978,7 @@ function DomainNavGroups({
               <span className="h-px flex-1" style={{ background: "var(--line-soft)" }} aria-hidden="true" />
               <span className="inline-flex items-center gap-1">
                 <span aria-hidden="true">{m.icon}</span>
-                {m.id === "d14" ? (
+                {m.id === "d14" || m.id === "d5" ? (
                   <button type="button" onClick={openSection} className="text-start hover:underline">
                     {t(title, lang)}
                   </button>
