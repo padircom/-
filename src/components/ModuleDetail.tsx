@@ -1054,7 +1054,6 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
           {([
-            ["contract", rtl ? "مدیریت پیمان" : "Contract Management"],
             ["ipc", rtl ? "قالب‌پذیری صورت‌وضعیت" : "Configurable IPC"],
             ["rating", rtl ? "ارزیابی پیمانکاران و تأمین‌کنندگان" : "Contractor & Supplier Rating"],
             ["risk", rtl ? "مدیریت ریسک قراردادها و بهبود قرارداد" : "Contract Risk & Improvement"],
