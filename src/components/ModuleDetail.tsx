@@ -2053,10 +2053,14 @@ function DomainNavGroups({
             {m.id === "d6" && onOpenPmo && (
               <div>
               <button type="button" onClick={() => onOpenPmo()} aria-pressed={Boolean(pmoActive)}
-                className={`mt-3 flex w-full items-center gap-1.5 rounded-lg px-2 py-2 text-start text-[10px] font-semibold transition hover:bg-[var(--row-hover)] ${pmoActive ? "row-on tx1" : "tx2"}`}>
-                <span className="h-px flex-1 bg-[var(--line-soft)]" aria-hidden="true" />
-                {rtl ? "دفتر مدیریت پروژه" : "Project Management Office"}
-                <span className="h-px flex-1 bg-[var(--line-soft)]" aria-hidden="true" />
+                className="flex w-full items-center gap-1.5 px-2 pb-0.5 pt-3 text-start text-[9px] font-semibold tracking-wide transition hover:tx1"
+                style={{ color: pmoActive ? m.accent : undefined }}>
+                <span className="h-px flex-1" style={{ background: "var(--line-soft)" }} aria-hidden="true" />
+                <span className="inline-flex items-center gap-1">
+                  <span aria-hidden="true">🏢</span>
+                  <span>{rtl ? "دفتر مدیریت پروژه" : "Project Management Office"}</span>
+                </span>
+                <span className="h-px flex-1" style={{ background: "var(--line-soft)" }} aria-hidden="true" />
               </button>
               {([
                 ["charter", { fa: "منشور پروژه", en: "Project charter" }],
