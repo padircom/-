@@ -1407,7 +1407,7 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
             <span className="inline-block rotate-180 rtl:rotate-0">→</span>
             {rtl ? "بازگشت به داشبورد" : "Back to dashboard"}
           </button>
-          <button type="button" onClick={() => { if (d6Guide || d6View === "pmo") { setSelected(null); setD6View("gov"); } setD6Guide(v => !v); }} aria-pressed={d6Guide} className="glass-row shrink-0 rounded-lg px-3 py-2 text-[10.5px] tx1">
+          <button type="button" onClick={() => { if (d6Guide || d6View === "pmo") setSelected(null); setD6View("gov"); setD6Guide(v => !v); }} aria-pressed={d6Guide} className="glass-row shrink-0 rounded-lg px-3 py-2 text-[10.5px] tx1">
             {d6Guide ? (rtl ? "نقشهٔ فرایند" : "Process map") : (rtl ? "راهنمای ماژول" : "Module guide")}
           </button>
           <div className="min-w-0 flex-1">
@@ -1441,25 +1441,13 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
         </div>
         {d6View !== "pmo" && <div className="flex shrink-0 flex-wrap items-center gap-2">
           {selected && <button type="button" onClick={() => { setSelected(null); setD6View("gov"); setD6Guide(false); }} className="glass-row rounded-lg px-2.5 py-1 text-[10px] tx1">{rtl ? "← بازگشت به نقشه" : "← Back to map"}</button>}
-          <nav aria-label={rtl ? "نماهای مدیریت حاکمیت پروژه" : "Project governance views"} className="glass-dark grid w-full max-w-[640px] grid-cols-2 gap-1 rounded-xl border b-line-soft p-1">
-            {([
-              ["gov", rtl ? "حاکمیت و فرایندها" : "Governance & processes"],
-              ["ctl", rtl ? "نقشهٔ فرایندی" : "Process map"],
-            ] as const).map(([k, label]) => (
-              <button
-                key={k}
-                type="button"
-                aria-pressed={d6View === k && !d6Guide}
-                title={k === "ctl" ? (rtl ? "نقشهٔ فرایندی مدیریت و کنترل پروژه" : "Project management & control process map") : label}
-                onClick={() => { setD6View(k); setD6Guide(false); if (k === "ctl") setSelected(null); }}
-                className={`flex min-h-10 min-w-0 items-center justify-center rounded-lg border px-2 py-2 text-center text-[10px] leading-4 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 ${
-                  d6View === k && !d6Guide ? "toggle-on border-sky-400/50 font-medium tx1" : "border-transparent font-normal tx3 hover:bg-[var(--row-hover)] hover:tx1"
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </nav>
+          <button type="button"
+            aria-pressed={d6View === "ctl" && !d6Guide}
+            title={rtl ? "نقشهٔ فرایندی مدیریت و کنترل پروژه" : "Project management & control process map"}
+            onClick={() => { setD6View("ctl"); setD6Guide(false); setSelected(null); }}
+            className={`rounded-lg border px-3 py-2 text-[10px] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 ${d6View === "ctl" ? "toggle-on border-sky-400/50 font-medium tx1" : "b-line-soft font-normal tx3 hover:tx1"}`}>
+            {rtl ? "نقشهٔ فرایندی" : "Process map"}
+          </button>
         </div>}
         <div className="workspace-columns flex min-h-0 flex-1 gap-3 overflow-hidden">
           <div dir={rtl ? "rtl" : "ltr"} className="glass flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl p-3">
