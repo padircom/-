@@ -76,14 +76,14 @@ export function WorkflowNodeBox({
     <>
       <span
         aria-hidden="true"
-        className={`absolute end-0 ${compact ? "top-1.5 bottom-1.5" : "top-2 bottom-2"} w-[3px] rounded-full`}
+        className={`absolute end-0 ${compact ? "top-1 bottom-1" : "top-2 bottom-2"} w-[3px] rounded-full`}
         style={{ background: isCross ? WF_COLOR.cross : accent, opacity: isCross ? 0.75 : 0.9 }}
       />
-      <span className={`block ${compact ? "text-[10px] leading-[13px]" : "text-[11px] leading-4"} font-medium text-start tx1`}>{title}</span>
-      {sub && <span className={`block font-light text-start tx3 ${compact ? "mt-px text-[8.5px] leading-[12px]" : "mt-1 text-[9.5px] leading-4"}`}>{sub}</span>}
+      <span className={`block ${compact ? "text-[9px] leading-[12px]" : "text-[11px] leading-4"} font-medium text-start tx1`}>{title}</span>
+      {sub && <span className={`block font-light text-start tx3 ${compact ? "mt-px text-[7.5px] leading-[10px]" : "mt-1 text-[9.5px] leading-4"}`}>{sub}</span>}
       {isCross && (
         <span
-          className={`block w-fit rounded-full font-medium ${compact ? "mt-1 px-1.5 py-px text-[7.5px]" : "mt-1.5 px-2 py-px text-[8px]"}`}
+          className={`block w-fit rounded-full font-medium ${compact ? "mt-0.5 px-1 py-px text-[7px]" : "mt-1.5 px-2 py-px text-[8px]"}`}
           style={{ background: `${WF_COLOR.cross}22`, color: "var(--ink)" }}
         >
           {rtl ? "بین‌ماژولی" : "cross-module"}
@@ -91,7 +91,7 @@ export function WorkflowNodeBox({
       )}
     </>
   );
-  const cls = `relative flex w-full flex-1 flex-col justify-center overflow-hidden rounded-xl border ${compact ? "px-2.5 py-1.5" : "px-3 py-2"} text-start transition ${
+  const cls = `relative flex w-full flex-1 flex-col justify-center overflow-hidden rounded-xl border ${compact ? "px-2 py-1" : "px-3 py-2"} text-start transition ${
     isCross ? "border-dashed" : "border-solid"
   }`;
   const style = {
@@ -135,7 +135,7 @@ export function WorkflowColumnHead({
 }) {
   return (
     <div
-      className={`flex items-center justify-center gap-1.5 rounded-xl px-2 font-medium text-white ${compact ? "py-1 text-[10px]" : "py-1.5 text-[10.5px]"}`}
+      className={`flex items-center justify-center gap-1.5 rounded-xl px-2 font-medium text-white ${compact ? "py-0.5 text-[9.5px]" : "py-1.5 text-[10.5px]"}`}
       style={{ background: `linear-gradient(180deg, ${color}, ${color}cc)`, boxShadow: `0 6px 16px -8px ${color}` }}
     >
       <span aria-hidden="true" className="inline-flex">{WF_ICONS[icon]}</span>

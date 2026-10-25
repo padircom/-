@@ -103,14 +103,14 @@ export default function ControlWorkflowMap({
           type="button"
           onClick={() => onOpenModule("d3", "d3-p1", "d3-p1-s1")}
           title={rtl ? "رفتن به «پایش و کنترل عملکرد پروژه»" : "Go to performance monitoring"}
-          className="relative flex flex-col items-center justify-center overflow-hidden rounded-xl border px-2.5 py-2 text-center transition hover:-translate-y-px focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/70"
+          className="relative flex flex-col items-center justify-center overflow-hidden rounded-xl border px-2 py-1.5 text-center transition hover:-translate-y-px focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/70"
           style={{ background: `${C_HUB}18`, borderColor: `${C_HUB}66` }}
           onMouseEnter={(e) => { e.currentTarget.style.borderColor = `${C_HUB}aa`; }}
           onMouseLeave={(e) => { e.currentTarget.style.borderColor = `${C_HUB}66`; }}
         >
           <span aria-hidden="true" className="absolute end-0 top-2 bottom-2 w-[3px] rounded-full" style={{ background: C_HUB, opacity: 0.9 }} />
-          <span className="text-[11.5px] font-medium leading-[18px] tx1">{rtl ? "لایهٔ یکپارچهٔ دادهٔ کنترل" : "Project control database"}</span>
-          <span className="mt-0.5 text-[8.5px] font-light leading-[13px] tx3">
+          <span className="text-[10.5px] font-medium leading-[15px] tx1">{rtl ? "لایهٔ یکپارچهٔ دادهٔ کنترل" : "Project control database"}</span>
+          <span className="mt-px text-[7.5px] font-light leading-[10px] tx3">
             {rtl ? "اتصال ماژول‌های پایش، هزینه، کیفیت و ریسک با API · اعتبارسنجی داده · قواعد پیشرفت (ROC) · قفل دوره‌های بسته" : "Validated control data hub"}
           </span>
         </button>
