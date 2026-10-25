@@ -1459,7 +1459,7 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
               /* نقشهٔ گردش‌کار پایش و کنترل پروژه — همان جلوهٔ بصری نقشهٔ
                  گردش‌کار برنامه‌ریزی (d2). کلیک روی هر گره به ماژول
                  مقصد (پایش، هزینه، کیفیت، ریسک) می‌رود. */
-              <div className="fade-rise flex min-h-full items-center justify-center py-2">
+              <div className="fade-rise flex min-h-full items-start justify-center pt-3 pb-2 md:pt-4">
                 <div className="w-full max-w-[1060px]">
                   <ControlWorkflowMap
                     rtl={rtl}
