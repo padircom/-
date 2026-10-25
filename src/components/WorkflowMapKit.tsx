@@ -87,7 +87,7 @@ export function WorkflowNodeBox({
       {isCross && !compact && (
         <span
           className={`block w-fit rounded-full font-medium ${compact ? "mt-0.5 px-1 py-px text-[7px]" : dense ? "mt-0.5 px-1 py-px text-[8px] leading-[11px]" : "mt-1.5 px-2 py-px text-[8px]"}`}
-          style={{ background: `${WF_COLOR.cross}22`, color: "var(--ink)" }}
+          style={{ background: `${WF_COLOR.cross}22`, color: "var(--ink)", ...(dense ? { fontSize: "calc(var(--workspace-text-size, 0.75rem) * 0.7)" } : {}) }}
         >
           {rtl ? "بین‌ماژولی" : "cross-module"}
         </span>
