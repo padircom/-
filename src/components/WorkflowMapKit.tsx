@@ -63,6 +63,7 @@ export function WorkflowNodeBox({
   onNavigate,
   compact,
   dense,
+  grow,
 }: {
   node: WorkflowMapNode;
   rtl: boolean;
@@ -71,6 +72,7 @@ export function WorkflowNodeBox({
   compact?: boolean;
   /** فشرده‌سازی نقشهٔ برنامه‌ریزی، با حفظ توضیح گره‌ها. */
   dense?: boolean;
+  grow?: number;
 }) {
   const title = rtl ? node.titleFa : node.titleEn;
   const sub = rtl ? node.subFa : node.subEn;
@@ -98,6 +100,7 @@ export function WorkflowNodeBox({
     isCross ? "border-dashed" : "border-solid"
   }`;
   const style = {
+    flexGrow: grow,
     background: isCross ? `${WF_COLOR.cross}12` : node.kind === "proc" ? `${accent}1a` : "var(--row)",
     borderColor: isCross ? `${WF_COLOR.cross}55` : node.kind === "proc" ? `${accent}55` : "var(--line-soft)",
   };

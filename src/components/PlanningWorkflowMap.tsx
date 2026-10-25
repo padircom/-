@@ -92,13 +92,14 @@ export default function PlanningWorkflowMap({
               node={node}
               rtl={rtl}
               accent={C_INPUT}
+              grow={node.kind === "cross" ? 1.5 : 0.8}
               onNavigate={node.tab ? () => onNavigate(node.tab!) : undefined}
             />
           ))}
         </div>
         <div className="flex flex-col">
           {INPUTS.map((node) => (
-            <div key={node.titleEn} className={`${arrow} flex-1`}>→</div>
+            <div key={node.titleEn} className={`${arrow} flex-1`} style={{ flexGrow: node.kind === "cross" ? 1.5 : 0.8 }}>→</div>
           ))}
         </div>
 
