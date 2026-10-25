@@ -1056,7 +1056,6 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
           {([
             ["ipc", rtl ? "قالب‌پذیری صورت‌وضعیت" : "Configurable IPC"],
             ["rating", rtl ? "ارزیابی پیمانکاران و تأمین‌کنندگان" : "Contractor & Supplier Rating"],
-            ["risk", rtl ? "مدیریت ریسک قراردادها و بهبود قرارداد" : "Contract Risk & Improvement"],
           ] as const).map(([k, label]) => (
             <button
               key={k}
