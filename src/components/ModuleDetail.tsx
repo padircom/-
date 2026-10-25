@@ -1081,7 +1081,7 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
               ) : d14View === "ipc" ? (
                 <CntIpcPanel lang={lang} />
               ) : (
-                <ContractsPanel lang={lang} />
+                <ContractsPanel lang={lang} activeSubId={selected?.sId ?? target.subId} navigationRequest={selected} />
               )}
             </div>
           </div>

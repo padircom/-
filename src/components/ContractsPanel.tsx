@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useCurrentProjectId } from "../context/SystemContext";
 import { logAudit } from "../services/auditLogger";
@@ -2602,7 +2602,12 @@ function ProgressSection({
   );
 }
 
-export default function ContractsPanel({ lang }: { lang: Lang }) {
+export default function ContractsPanel({ lang, activeSubId, navigationRequest }: {
+  lang: Lang;
+  activeSubId?: string;
+  navigationRequest?: object | null;
+}) {
+  const rootRef = useRef<HTMLDivElement>(null);
   /* شناسهٔ پروژه از «پروژهٔ جاری» می‌آید (SystemContext) — نه ثابتِ ماژول. */
   const projectId = useCurrentProjectId();
 
@@ -2648,6 +2653,24 @@ export default function ContractsPanel({ lang }: { lang: Lang }) {
     await loadDetail(selectedId);
   }, [reload, loadDetail, selectedId]);
 
+  // پیمایش فقط در قاب داخلی؛ کلیک مجدد نیز بخش مقصد را در دید قرار می‌دهد.
+  useEffect(() => {
+    if (loading || !activeSubId) return;
+    const section = ({
+      "d14-p1-s1": "master",
+      "d14-p1-s2": "boq",
+      "d14-p3-s1": "variation",
+      "d14-p6-s1": "guarantees",
+      "d14-p7-s1": "kpi",
+    } as Record<string, string>)[activeSubId];
+    if (!section) return;
+    const node = rootRef.current?.querySelector<HTMLElement>(`[data-contract-section="${section}"]`);
+    const scroller = rootRef.current?.closest<HTMLElement>(".overflow-y-auto");
+    if (node && scroller) {
+      scroller.scrollTo({ top: scroller.scrollTop + node.getBoundingClientRect().top - scroller.getBoundingClientRect().top, behavior: "instant" });
+    }
+  }, [activeSubId, navigationRequest, loading, detail, selectedId]);
+
   if (loading && !list) {
     return <Panel title={rtl ? "پیمان و فهرست بها" : "Contracts & BOQ"}><div className="py-6 text-center text-[10px] tx3">در حال بارگذاری…</div></Panel>;
   }
@@ -2663,7 +2686,7 @@ export default function ContractsPanel({ lang }: { lang: Lang }) {
   const noAuth = userId ? undefined : "برای ثبت باید وارد شوید";
 
   return (
-    <div className="space-y-3">
+    <div ref={rootRef} className="space-y-3">
       {/* ── شاخص‌های سبد پیمان ── */}
       <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
         <Metric label="تعداد پیمان" value={fmt(contracts.length)} />
@@ -2679,6 +2702,11 @@ export default function ContractsPanel({ lang }: { lang: Lang }) {
       </div>
 
       {/* ── فهرست پیمان‌ها ── */}
+      {activeSubId === "d14-p3-s1" && (
+        <div data-contract-section="variation" role="status" className="glass-row rounded-xl p-3 text-[11px] tx2">
+          {rtl ? "رابط اختصاصی تغییر مقادیر و کار جدید هنوز در این میز کار پیاده‌سازی نشده است." : "Quantity changes and extra work do not yet have a dedicated interface in this workspace."}
+        </div>
+      )}
       <Panel title="سبد پیمان‌ها" note="سقف مجاز بر مبنای مبلغ اولیه سنجیده می‌شود، نه مبلغ جاری">
         {contracts.length === 0 ? (
           <div className="py-4 text-center text-[9.5px] tx3">هنوز پیمانی ثبت نشده است</div>
@@ -2725,6 +2753,7 @@ export default function ContractsPanel({ lang }: { lang: Lang }) {
         )}
       </Panel>
 
+      {activeSubId === "d14-p1-s2" && !detail && <div data-contract-section="boq" role="status" className="text-[10px] tx3">{rtl ? "برای مشاهدهٔ فهرست بها و مراحل مقطوع، ابتدا یک پیمان ثبت یا انتخاب کنید." : "Register or select a contract to view its BOQ and milestones."}</div>}
       {/* ── شناسنامهٔ پیمان انتخاب‌شده ── */}
       {detail && summary && (
         <>
@@ -2757,6 +2786,7 @@ export default function ContractsPanel({ lang }: { lang: Lang }) {
             )}
           </Panel>
 
+          <div data-contract-section="boq" />
           {/* ── فهرست بها با تفکیک دو حالت ── */}
           <Panel
             title="فهرست بها"
@@ -2853,6 +2883,10 @@ export default function ContractsPanel({ lang }: { lang: Lang }) {
         </>
       )}
 
+      <div data-contract-section="master" />
+      {activeSubId === "d14-p1-s1" && (
+        <p role="status" className="text-[10px] tx3">{rtl ? "ثبت شناسنامه در همین صفحه موجود است؛ فرم مدیریت الحاقیه‌ها هنوز پیاده‌سازی نشده است." : "Contract registration is available on this page; amendment management is not yet implemented."}</p>
+      )}
       {/* ── فرم ۱: ثبت پیمان ── */}
       <EntryForm
         titleFa="ثبت شناسنامهٔ پیمان"
@@ -3021,6 +3055,7 @@ export default function ContractsPanel({ lang }: { lang: Lang }) {
       {/* دفتر وثیقه ذیل همان پیمان انتخاب‌شده می‌آید: ضمانت‌نامه بدون
           پیمانش معنا ندارد و صفحهٔ جدا، کاربر را وادار به انتخاب دوباره
           می‌کرد. */}
+      <div data-contract-section="guarantees">
       {selectedId && (
         <GuaranteeSection
           contractId={selectedId}
@@ -3028,6 +3063,8 @@ export default function ContractsPanel({ lang }: { lang: Lang }) {
           onDone={() => { void refreshAll(); }}
         />
       )}
+        {!selectedId && <p role="status" className="text-[10px] tx3">{rtl ? "برای نمایش این بخش، ابتدا یک پیمان ثبت یا انتخاب کنید." : "Register or select a contract to view this section."}</p>}
+      </div>
 
       {/* صورت‌وضعیت جزء هم ذیل همان پیمان: بدون دیدن ضمانت‌نامه و
           پیش‌پرداختِ بالای صفحه، عدد خالص پرداختنی به جزء گمراه‌کننده
@@ -3054,6 +3091,7 @@ export default function ContractsPanel({ lang }: { lang: Lang }) {
 
       {/* تابلوی سلامت آخرین بخش است چون خلاصهٔ همهٔ بالاست: خواندنش
           پیش از دیدن جزئیات، نمره را بی‌معنا می‌کند. */}
+      <div data-contract-section="kpi">
       {selectedId && (
         <KpiSection
           contractId={selectedId}
@@ -3061,6 +3099,8 @@ export default function ContractsPanel({ lang }: { lang: Lang }) {
           onDone={() => { void refreshAll(); }}
         />
       )}
+        {!selectedId && <p role="status" className="text-[10px] tx3">{rtl ? "برای نمایش این بخش، ابتدا یک پیمان ثبت یا انتخاب کنید." : "Register or select a contract to view this section."}</p>}
+      </div>
 
       {selectedId && (
         <SubIpcSection
