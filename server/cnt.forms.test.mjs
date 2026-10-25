@@ -16,7 +16,7 @@ import path from "node:path";
 
 const PORT = 4713;
 const BASE = `http://localhost:${PORT}`;
-const PROJECT = "p1";
+const PROJECT = "c1-p1";
 
 /* مدیر پیمان پیمان و فهرست بها را می‌زند، سرپرست کارگاه ریزمتره، و مدیر
  * پروژه تنها کسی است که کلید دور زدن دروازهٔ کیفی را دارد. */

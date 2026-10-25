@@ -1775,15 +1775,15 @@ function sCurve(input) {
   if (!plannedBy.size && actualBy.size) {
     warningsFa.push("\u0628\u0631\u0646\u0627\u0645\u0647\u0654 \u0632\u0645\u0627\u0646\u06CC \u062B\u0628\u062A \u0646\u0634\u062F\u0647\u061B \u0627\u0646\u062D\u0631\u0627\u0641 \u0642\u0627\u0628\u0644 \u0633\u0646\u062C\u0634 \u0646\u06CC\u0633\u062A");
   }
-  if (worst && worst.variancePct < 0) {
+  if (plannedBy.size && worst && worst.variancePct < 0) {
     warningsFa.push(`\u0628\u06CC\u0634\u062A\u0631\u06CC\u0646 \u0639\u0642\u0628\u200C\u0645\u0627\u0646\u062F\u06AF\u06CC ${Math.abs(worst.variancePct)}\u066A \u062F\u0631 \u062F\u0648\u0631\u0647\u0654 ${worst.periodCode}`);
   }
   return {
     points,
     latest: realPoints.length ? realPoints[realPoints.length - 1] : null,
     dataThroughPeriod: lastActualPeriod,
-    maxLagPct: worst && worst.variancePct < 0 ? round(Math.abs(worst.variancePct)) : 0,
-    worstPeriod: worst && worst.variancePct < 0 ? worst.periodCode : null,
+    maxLagPct: plannedBy.size && worst && worst.variancePct < 0 ? round(Math.abs(worst.variancePct)) : 0,
+    worstPeriod: plannedBy.size && worst && worst.variancePct < 0 ? worst.periodCode : null,
     warningsFa
   };
 }
@@ -1909,7 +1909,8 @@ function progressSnapshot(input) {
       coverage < 100 ? `\u0641\u0647\u0631\u0633\u062A\u200C\u0628\u0647\u0627 \u062A\u0646\u0647\u0627 ${coverage}\u066A \u0645\u0628\u0644\u063A \u067E\u06CC\u0645\u0627\u0646 \u0631\u0627 \u067E\u0648\u0634\u0634 \u0645\u06CC\u200C\u062F\u0647\u062F\u061B \u0641\u0627\u0635\u0644\u0647\u0654 \u0641\u06CC\u0632\u06CC\u06A9\u06CC \u0648 \u0645\u0627\u0644\u06CC \u062A\u0627 \u062A\u06A9\u0645\u06CC\u0644 \u0622\u0646 \u06AF\u0645\u0631\u0627\u0647\u200C\u06A9\u0646\u0646\u062F\u0647 \u0627\u0633\u062A` : `\u062C\u0645\u0639 \u0641\u0647\u0631\u0633\u062A\u200C\u0628\u0647\u0627 ${coverage}\u066A \u0645\u0628\u0644\u063A \u067E\u06CC\u0645\u0627\u0646 \u0627\u0633\u062A\u061B \u0645\u0628\u0644\u063A \u067E\u06CC\u0645\u0627\u0646 \u06CC\u0627 \u0641\u0647\u0631\u0633\u062A\u200C\u0628\u0647\u0627 \u0628\u0627\u0632\u0628\u06CC\u0646\u06CC \u0634\u0648\u062F`
     );
   }
-  if (gap.isMaterial) warningsFa.unshift(gap.messageFa);
+  const isGapReliable = input.contractAmount > 0 && (useBoq ? coverage != null && Math.abs(coverage - 100) <= 5 : !!milestones && Math.abs(milestones.totalWeightPct - 100) <= 0.01);
+  if (gap.isMaterial && isGapReliable) warningsFa.unshift(gap.messageFa);
   return {
     periodCode: input.periodCode ?? null,
     physicalPct,
@@ -1917,7 +1918,7 @@ function progressSnapshot(input) {
     /** درصد پوشش فهرست‌بها از مبلغ پیمان؛ `null` یعنی قابل سنجش نیست. */
     boqCoveragePct: coverage,
     /** آیا فاصله بر دو مخرج ناهمخوان سنجیده شده. */
-    isGapReliable: coverage == null || Math.abs(coverage - 100) <= 5,
+    isGapReliable,
     gap,
     physical,
     financial,
@@ -2377,6 +2378,7 @@ function kpiTrend(input) {
     extra_work_ratio_pct: "ExtraWorkRatioPct",
     avg_ipc_cycle_days: "AvgIpcCycleDays",
     open_guarantee_count: "OpenGuaranteeCount",
+    expiring_guarantee_count: "ExpiringGuaranteeCount",
     retainage_balance: "RetainageBalance"
   };
   const sorted = [...input.snapshots ?? []].filter((s) => String(s.PeriodCode ?? "").trim()).sort((a, b) => String(a.PeriodCode).localeCompare(String(b.PeriodCode)));
@@ -2397,8 +2399,8 @@ function kpiTrend(input) {
   for (const spec of CONTRACT_KPI_CATALOG) {
     const col = COLUMN_BY_KPI[spec.code];
     if (!col) continue;
-    const c = cur[col];
-    const p = prev[col];
+    const c = spec.code === "progress_gap_pct" && cur.IsGapReliable === false ? null : cur[col];
+    const p = spec.code === "progress_gap_pct" && prev.IsGapReliable === false ? null : prev[col];
     const current = c == null || !Number.isFinite(Number(c)) ? null : round(Number(c));
     const previous = p == null || !Number.isFinite(Number(p)) ? null : round(Number(p));
     if (current == null || previous == null) {
@@ -2436,9 +2438,14 @@ function kpiTrend(input) {
   const worsening = trends.filter((t) => t.direction === "worsening");
   const improving = trends.filter((t) => t.direction === "improving");
   const emergingFa = [];
-  for (const rule of input.rules ?? DEFAULT_ALERT_RULES) {
+  for (const baseRule of input.rules ?? DEFAULT_ALERT_RULES) {
+    const ov = (input.overrides ?? []).find((o) => String(o.RuleCode ?? "").trim() === baseRule.code);
+    if (ov && (ov.IsEnabled === false || ov.IsEnabled === 0 || ov.IsEnabled === "0")) continue;
+    const threshold = ov?.ThresholdValue == null ? baseRule.threshold : Number(ov.ThresholdValue);
+    const rule = { ...baseRule, threshold: Number.isFinite(threshold) ? threshold : baseRule.threshold };
     const t = trends.find((x) => x.code === rule.kpi);
-    if (!t || t.current == null || t.delta == null || t.direction !== "worsening") continue;
+    if (!t || t.current == null || t.delta == null || !t.isSignificant) continue;
+    if (rule.op === "gt" ? t.delta <= 0 : t.delta >= 0) continue;
     const alreadyFired = rule.op === "gt" ? t.current > rule.threshold : t.current < rule.threshold;
     if (alreadyFired) continue;
     const next = round(t.current + t.delta);
@@ -2455,7 +2462,7 @@ function kpiTrend(input) {
 function contractScorecard(input) {
   const alerts = evaluateAlerts({ kpis: input.kpis, rules: input.rules, overrides: input.overrides });
   const health = contractHealth({ kpis: input.kpis });
-  const trend = kpiTrend({ snapshots: input.snapshots ?? [], rules: input.rules });
+  const trend = kpiTrend({ snapshots: input.snapshots ?? [], rules: input.rules, overrides: input.overrides });
   const headlineFa = alerts.criticalCount > 0 ? `${alerts.criticalCount} \u0647\u0634\u062F\u0627\u0631 \u0628\u062D\u0631\u0627\u0646\u06CC: ${alerts.fired[0].titleFa}` : trend.emergingFa.length > 0 ? trend.emergingFa[0] : alerts.warningCount > 0 ? `${alerts.warningCount} \u0647\u0634\u062F\u0627\u0631 \u0641\u0639\u0627\u0644: ${alerts.fired[0].titleFa}` : health.score == null ? health.messageFa : `\u0646\u0645\u0631\u0647\u0654 \u0633\u0644\u0627\u0645\u062A ${health.score} \u2014 ${health.bandFa}`;
   return {
     contractId: input.contractId ?? null,
@@ -2960,17 +2967,18 @@ function buildProgressSheet(inp) {
       kind: "kpi",
       title: { fa: "\u067E\u06CC\u0634\u0631\u0641\u062A", en: "Progress" },
       cells: [
-        { label: { fa: "\u0641\u06CC\u0632\u06CC\u06A9\u06CC", en: "Physical" }, value: pct(p.physicalPct) },
-        { label: { fa: "\u0645\u0627\u0644\u06CC", en: "Financial" }, value: pct(p.financialPct) },
+        { label: { fa: "\u0641\u06CC\u0632\u06CC\u06A9\u06CC", en: "Physical" }, value: p.physicalSource === "none" ? "\u2014" : pct(p.physicalPct) },
+        { label: { fa: "\u0645\u0627\u0644\u06CC", en: "Financial" }, value: Number(p.financial?.contractAmount) <= 0 ? "\u2014" : pct(p.financialPct) },
         {
           label: { fa: "\u0641\u0627\u0635\u0644\u0647", en: "Gap" },
-          value: pct(p.gapPct),
-          tone: num(p.gapPct) > 5 ? "bad" : num(p.gapPct) < -5 ? "warn" : "good"
+          value: p.isGapReliable === false ? "\u2014" : pct(p.gap?.gapPct ?? p.gapPct),
+          tone: p.isGapReliable === false ? void 0 : num(p.gap?.gapPct ?? p.gapPct) > 5 ? "bad" : num(p.gap?.gapPct ?? p.gapPct) < -5 ? "warn" : "good"
         },
-        { label: { fa: "\u0645\u0635\u0631\u0641 \u0633\u0642\u0641", en: "Ceiling used" }, value: pct(p.ceilingUsedPct) }
+        { label: { fa: "\u0645\u0635\u0631\u0641 \u0633\u0642\u0641", en: "Ceiling used" }, value: pct(p.financial?.ceilingUsedPct ?? p.ceilingUsedPct) }
       ]
     }
   ];
+  if (curve.length && curve.every((row) => row.plannedPct == null)) sections.push({ kind: "text", title: { fa: "\u0645\u062D\u062F\u0648\u062F\u06CC\u062A \u0645\u0646\u062D\u0646\u06CC", en: "Curve limitation" }, body: { fa: "\u0627\u06CC\u0646 \u0645\u0646\u062D\u0646\u06CC \u0641\u0642\u0637 \u06A9\u0627\u0631\u06A9\u0631\u062F \u0645\u0627\u0644\u06CC \u062A\u0623\u06CC\u06CC\u062F\u0634\u062F\u0647 \u0631\u0627 \u0646\u0634\u0627\u0646 \u0645\u06CC\u200C\u062F\u0647\u062F\u061B \u0628\u0631\u0646\u0627\u0645\u0647\u0654 \u0645\u0628\u0646\u0627\u06CC \u067E\u06CC\u0645\u0627\u0646 \u0645\u062A\u0635\u0644 \u0646\u06CC\u0633\u062A \u0648 \u0627\u0646\u062D\u0631\u0627\u0641 \u0628\u0631\u0646\u0627\u0645\u0647 \u0642\u0627\u0628\u0644 \u0645\u062D\u0627\u0633\u0628\u0647 \u0646\u06CC\u0633\u062A", en: "Approved financial actuals only; no linked contract baseline, so schedule variance is unavailable." } });
   if (p.isGapReliable === false) {
     sections.push({
       kind: "text",
@@ -2991,14 +2999,14 @@ function buildProgressSheet(inp) {
       },
       columns: [
         { key: "period", title: { fa: "\u062F\u0648\u0631\u0647", en: "Period" }, weight: 2 },
-        { key: "physical", title: { fa: "\u0641\u06CC\u0632\u06CC\u06A9\u06CC \u066A", en: "Physical %" }, format: "percent", align: "end", weight: 1 },
+        { key: "physical", title: { fa: "\u0628\u0631\u0646\u0627\u0645\u0647 \u066A", en: "Planned %" }, format: "percent", align: "end", weight: 1 },
         { key: "financial", title: { fa: "\u0645\u0627\u0644\u06CC \u066A", en: "Financial %" }, format: "percent", align: "end", weight: 1 },
         { key: "kind", title: { fa: "\u0646\u0648\u0639", en: "Type" }, align: "center", weight: 1 }
       ],
       rows: curve.map((s) => ({
         period: cell(s.periodCode),
-        physical: pct(s.physicalPct),
-        financial: pct(s.financialPct),
+        physical: s.plannedPct == null ? "\u2014" : pct(s.plannedPct),
+        financial: pct(s.actualPct ?? s.financialPct),
         kind: s.isForecast ? "\u067E\u06CC\u0634\u200C\u0628\u06CC\u0646\u06CC" : "\u0648\u0627\u0642\u0639\u06CC"
       }))
     });
@@ -3213,8 +3221,8 @@ function buildExecSheet(inp) {
           value: health.score == null ? "\u2014" : String(health.score),
           tone: health.band === "good" ? "good" : health.band === "watch" ? "warn" : "bad"
         },
-        { label: { fa: "\u067E\u06CC\u0634\u0631\u0641\u062A \u0641\u06CC\u0632\u06CC\u06A9\u06CC", en: "Physical" }, value: pct(p.physicalPct) },
-        { label: { fa: "\u067E\u06CC\u0634\u0631\u0641\u062A \u0645\u0627\u0644\u06CC", en: "Financial" }, value: pct(p.financialPct) },
+        { label: { fa: "\u067E\u06CC\u0634\u0631\u0641\u062A \u0641\u06CC\u0632\u06CC\u06A9\u06CC", en: "Physical" }, value: p.physicalSource === "none" ? "\u2014" : pct(p.physicalPct) },
+        { label: { fa: "\u067E\u06CC\u0634\u0631\u0641\u062A \u0645\u0627\u0644\u06CC", en: "Financial" }, value: Number(p.financial?.contractAmount) <= 0 ? "\u2014" : pct(p.financialPct) },
         {
           label: { fa: "\u0647\u0634\u062F\u0627\u0631 \u0628\u062D\u0631\u0627\u0646\u06CC", en: "Critical alerts" },
           value: String(cell(alerts.criticalCount)),
@@ -3294,6 +3302,23 @@ function buildCntReport(code, inp) {
     asOf: inp.asOf ?? null
   };
 }
+function currentMetricPeriod(now = /* @__PURE__ */ new Date()) {
+  return now.toISOString().slice(0, 7);
+}
+function validMetricPeriod(period, now = /* @__PURE__ */ new Date()) {
+  return typeof period === "string" && /^\d{4}-(0[1-9]|1[0-2])$/.test(period) && period === currentMetricPeriod(now);
+}
+function contractActualCurve(contractAmount, ipcs) {
+  const approved = ipcs.filter((x) => ["approved", "paid"].includes(String(x.WorkflowState)) && x.Status !== "cancelled" && String(x.PeriodCode ?? "").trim());
+  const periods = [...new Set(approved.map((x) => String(x.PeriodCode)))].sort();
+  const actual = periods.map((periodCode) => {
+    const f = financialProgress({ contractAmount, ipcs: approved.filter((x) => String(x.PeriodCode) <= periodCode) });
+    return { periodCode, cumPct: f.financialPct, cumAmount: f.approvedGross };
+  });
+  const curve = sCurve({ planned: [], actual });
+  const points = curve.points.map((p) => ({ ...p, plannedPct: null, plannedAmount: null, variancePct: null }));
+  return { ...curve, hasPlan: false, latest: points.length ? points[points.length - 1] : null, maxLagPct: null, points, warningsFa: [...curve.warningsFa, ...approved.length < ipcs.filter((x) => ["approved", "paid"].includes(String(x.WorkflowState)) && x.Status !== "cancelled").length ? ["\u0635\u0648\u0631\u062A\u200C\u0648\u0636\u0639\u06CC\u062A \u0628\u062F\u0648\u0646 \u06A9\u062F \u062F\u0648\u0631\u0647\u0654 \u0645\u0631\u062A\u0628\u200C\u0634\u062F\u0646\u06CC \u062F\u0631 \u0645\u0646\u062D\u0646\u06CC \u0648\u0627\u0631\u062F \u0646\u0634\u062F\u0647 \u0627\u0633\u062A"] : []] };
+}
 export {
   ADVANCE_CUSTOMARY_CAP_PCT,
   ADVANCE_DEFAULT_RECOVERY_PCT,
@@ -3355,6 +3380,7 @@ export {
   computeDeductions,
   computeIpc,
   computeIpcLines,
+  contractActualCurve,
   contractCeiling,
   contractFinSummary,
   contractHealth,
@@ -3362,6 +3388,7 @@ export {
   contractScorecard,
   contractSummary,
   cumulativeAdjustment,
+  currentMetricPeriod,
   evaluateAlerts,
   extraWorkBillable,
   extraWorkRatio,
@@ -3404,6 +3431,7 @@ export {
   subIpcLines,
   subIpcRegister,
   subIpcTotals,
+  validMetricPeriod,
   validateAdvanceInput,
   validateBackToBack,
   validateBoq,

@@ -13,7 +13,8 @@ import path from "node:path";
 
 const PORT = 4728;
 const BASE = `http://localhost:${PORT}`;
-const PROJECT = "p1";
+const PROJECT = "c1-p1";
+const CURRENT_PERIOD = new Date().toISOString().slice(0, 7);
 
 const CONTRACTS = "u-contracts";
 const PM = "u-pm";
@@ -203,11 +204,11 @@ test("مشاور تابلو را می‌بیند ولی تاریخچه‌اش ر
   const seen = await get(`/api/cnt/kpi${q}`, CONSULTANT);
   assert.equal(seen.status, 200, "مشاور باید تابلو را ببیند");
 
-  const wrote = await post(`/api/cnt/kpi/snapshot${q}`, { periodCode: "1404-05" }, CONSULTANT);
+  const wrote = await post(`/api/cnt/kpi/snapshot${q}`, { periodCode: CURRENT_PERIOD }, CONSULTANT);
   assert.equal(wrote.status, 403, JSON.stringify(wrote.body));
   assert.equal(wrote.body.error.permission, "cnt.kpi.snapshot");
 
-  const mine = await post(`/api/cnt/kpi/snapshot${q}`, { periodCode: "1404-05" }, CONTRACTS);
+  const mine = await post(`/api/cnt/kpi/snapshot${q}`, { periodCode: CURRENT_PERIOD }, CONTRACTS);
   assert.equal(mine.status, 200, "مدیر پیمان باید بتواند ثبت کند");
 });
 
@@ -273,7 +274,7 @@ test("عکس دوره‌ای ثبت و بازخوانی می‌شود", async ()
   const item = await addBoq(c.Id);
   await addIpc(c.Id, [{ boqItemId: item.Id, cumQty: 30 }], { approve: true });
 
-  const s = await post(`/api/cnt/kpi/snapshot${Q(c)}`, { periodCode: "1405-01" }, CONTRACTS);
+  const s = await post(`/api/cnt/kpi/snapshot${Q(c)}`, { periodCode: CURRENT_PERIOD }, CONTRACTS);
   assert.equal(s.status, 200, JSON.stringify(s.body));
   assert.equal(s.body.data.action, "insert");
   assert.equal(s.body.data.item.PhysicalPct, 30);
@@ -286,10 +287,10 @@ test("ثبت دوبارهٔ همان دوره، به‌روزرسانی است �
   const c = await makeContract();
   const item = await addBoq(c.Id);
   await addIpc(c.Id, [{ boqItemId: item.Id, cumQty: 20 }], { approve: true });
-  await post(`/api/cnt/kpi/snapshot${Q(c)}`, { periodCode: "1405-02" }, CONTRACTS);
+  const first = await post(`/api/cnt/kpi/snapshot${Q(c)}`, { periodCode: CURRENT_PERIOD }, CONTRACTS);
 
   await addIpc(c.Id, [{ boqItemId: item.Id, cumQty: 60 }], { approve: true });
-  const again = await post(`/api/cnt/kpi/snapshot${Q(c)}`, { periodCode: "1405-02" }, CONTRACTS);
+  const again = await post(`/api/cnt/kpi/snapshot${Q(c)}`, { periodCode: CURRENT_PERIOD, RowVersion: first.body.data.item.RowVersion }, CONTRACTS);
   assert.equal(again.body.data.action, "update", "دو عکس از یک دوره یعنی دو حقیقت");
   assert.equal(again.body.data.item.PhysicalPct, 60);
 
@@ -304,21 +305,14 @@ test("کد دوره برای عکس الزامی است", async () => {
   assert.equal(r.body.error.code, "E-CNT-KPI-PERIOD");
 });
 
-test("دو دوره روند می‌سازد و جهت را درست می‌فهمد", async () => {
+test("عکس فعلی به دوره گذشته یا آینده نسبت داده نمی‌شود", async () => {
   const c = await makeContract();
-  const item = await addBoq(c.Id, { contractQty: 100, unitRate: 1_000 });
-  await addIpc(c.Id, [{ boqItemId: item.Id, cumQty: 20 }], { approve: true });
-  await post(`/api/cnt/kpi/snapshot${Q(c)}`, { periodCode: "1405-01" }, CONTRACTS);
-
-  await addIpc(c.Id, [{ boqItemId: item.Id, cumQty: 60 }], { approve: true });
-  await post(`/api/cnt/kpi/snapshot${Q(c)}`, { periodCode: "1405-02" }, CONTRACTS);
-
-  const t = await get(`/api/cnt/kpi/trend${Q(c)}`, CONTRACTS);
-  assert.deepEqual(t.body.data.periods, ["1405-01", "1405-02"]);
-  const phys = t.body.data.trends.find((x) => x.code === "physical_pct");
-  assert.equal(phys.previous, 20);
-  assert.equal(phys.current, 60);
-  assert.equal(phys.direction, "improving", "افزایش پیشرفت بهبود است");
+  for (const periodCode of ["1405-01", "2000-01", "2099-01", "2026-99", "invalid"]) {
+    const out = await post(`/api/cnt/kpi/snapshot${Q(c)}`, { periodCode }, CONTRACTS);
+    assert.equal(out.status, 422);
+  }
+  const out = await get(`/api/cnt/kpi/trend${Q(c)}`, CONTRACTS);
+  assert.equal(out.body.data.snapshotCount, 0);
 });
 
 test("روند بدون عکس، خطا نمی‌دهد", async () => {
@@ -332,7 +326,7 @@ test("روند بدون عکس، خطا نمی‌دهد", async () => {
 test("عکس پیمان دیگر در روند نمی‌آید", async () => {
   const a = await makeContract();
   const b = await makeContract();
-  await post(`/api/cnt/kpi/snapshot${Q(a)}`, { periodCode: "1405-01" }, CONTRACTS);
+  await post(`/api/cnt/kpi/snapshot${Q(a)}`, { periodCode: CURRENT_PERIOD }, CONTRACTS);
 
   const t = await get(`/api/cnt/kpi/trend${Q(b)}`, CONTRACTS);
   assert.equal(t.body.data.snapshotCount, 0);
@@ -431,22 +425,22 @@ test("آستانهٔ سفارشی روی تابلو اثر می‌گذارد", a
 
 /* ══════════════ ۶) نشت بین پروژه‌ها ══════════════ */
 
-test("تابلوی پیمان پروژهٔ دیگر، ۴۰۴", async () => {
+test("تابلوی پیمان پروژهٔ دیگر، ۴۰۳", async () => {
   const c = await makeContract();
   for (const p of [
     `/api/cnt/kpi?projectId=p-other&contractId=${c.Id}`,
     `/api/cnt/kpi/trend?projectId=p-other&contractId=${c.Id}`,
   ]) {
-    assert.equal((await get(p, CONTRACTS)).status, 404, p);
+    assert.equal((await get(p, CONTRACTS)).status, 403, p);
   }
 });
 
 test("عکس پیمان پروژهٔ دیگر ثبت نمی‌شود", async () => {
   const c = await makeContract();
   const r = await post(`/api/cnt/kpi/snapshot?projectId=p-other&contractId=${c.Id}`, {
-    periodCode: "1405-01",
+    periodCode: CURRENT_PERIOD,
   }, CONTRACTS);
-  assert.equal(r.status, 404);
+  assert.equal(r.status, 403);
 });
 
 test("سنجهٔ یک پیمان از پیمان دیگر نشت نمی‌کند", async () => {
@@ -458,6 +452,6 @@ test("سنجهٔ یک پیمان از پیمان دیگر نشت نمی‌کند
   const ra = await get(`/api/cnt/kpi${Q(a)}`, CONTRACTS);
   const rb = await get(`/api/cnt/kpi${Q(b)}`, CONTRACTS);
   assert.equal(ra.body.data.kpis.byCode.physical_pct, 100);
-  assert.equal(rb.body.data.kpis.byCode.physical_pct, 0);
+  assert.equal(rb.body.data.kpis.byCode.physical_pct, null);
   assert.equal(rb.body.data.kpis.byCode.avg_ipc_cycle_days, null);
 });

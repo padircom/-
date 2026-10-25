@@ -3333,7 +3333,7 @@ export function sCurve(input: {
   if (!plannedBy.size && actualBy.size) {
     warningsFa.push("برنامهٔ زمانی ثبت نشده؛ انحراف قابل سنجش نیست");
   }
-  if (worst && worst.variancePct < 0) {
+  if (plannedBy.size && worst && worst.variancePct < 0) {
     warningsFa.push(`بیشترین عقب‌ماندگی ${Math.abs(worst.variancePct)}٪ در دورهٔ ${worst.periodCode}`);
   }
 
@@ -3341,8 +3341,8 @@ export function sCurve(input: {
     points,
     latest: realPoints.length ? realPoints[realPoints.length - 1] : null,
     dataThroughPeriod: lastActualPeriod,
-    maxLagPct: worst && worst.variancePct < 0 ? round(Math.abs(worst.variancePct)) : 0,
-    worstPeriod: worst && worst.variancePct < 0 ? worst.periodCode : null,
+    maxLagPct: plannedBy.size && worst && worst.variancePct < 0 ? round(Math.abs(worst.variancePct)) : 0,
+    worstPeriod: plannedBy.size && worst && worst.variancePct < 0 ? worst.periodCode : null,
     warningsFa,
   };
 }
@@ -3591,7 +3591,8 @@ export function progressSnapshot(input: {
         : `جمع فهرست‌بها ${coverage}٪ مبلغ پیمان است؛ مبلغ پیمان یا فهرست‌بها بازبینی شود`,
     );
   }
-  if (gap.isMaterial) warningsFa.unshift(gap.messageFa);
+  const isGapReliable = input.contractAmount > 0 && (useBoq ? coverage != null && Math.abs(coverage - 100) <= 5 : !!milestones && Math.abs(milestones.totalWeightPct - 100) <= 0.01);
+  if (gap.isMaterial && isGapReliable) warningsFa.unshift(gap.messageFa);
 
   return {
     periodCode: input.periodCode ?? null,
@@ -3600,7 +3601,7 @@ export function progressSnapshot(input: {
     /** درصد پوشش فهرست‌بها از مبلغ پیمان؛ `null` یعنی قابل سنجش نیست. */
     boqCoveragePct: coverage,
     /** آیا فاصله بر دو مخرج ناهمخوان سنجیده شده. */
-    isGapReliable: coverage == null || Math.abs(coverage - 100) <= 5,
+    isGapReliable,
     gap,
     physical,
     financial,
@@ -4326,6 +4327,7 @@ const TREND_NOISE: Record<KpiUnit, number> = { pct: 2, days: 3, count: 0.5, amou
 export function kpiTrend(input: {
   snapshots: { PeriodCode?: string | null; [k: string]: unknown }[];
   rules?: AlertRuleSpec[];
+  overrides?: Parameters<typeof evaluateAlerts>[0]["overrides"];
 }): TrendReport {
   const COLUMN_BY_KPI: Record<string, string> = {
     physical_pct: "PhysicalPct",
@@ -4336,6 +4338,7 @@ export function kpiTrend(input: {
     extra_work_ratio_pct: "ExtraWorkRatioPct",
     avg_ipc_cycle_days: "AvgIpcCycleDays",
     open_guarantee_count: "OpenGuaranteeCount",
+    expiring_guarantee_count: "ExpiringGuaranteeCount",
     retainage_balance: "RetainageBalance",
   };
 
@@ -4365,8 +4368,8 @@ export function kpiTrend(input: {
   for (const spec of CONTRACT_KPI_CATALOG) {
     const col = COLUMN_BY_KPI[spec.code];
     if (!col) continue;
-    const c = cur[col];
-    const p = prev[col];
+    const c = spec.code === "progress_gap_pct" && cur.IsGapReliable === false ? null : cur[col];
+    const p = spec.code === "progress_gap_pct" && prev.IsGapReliable === false ? null : prev[col];
     const current = c == null || !Number.isFinite(Number(c)) ? null : round(Number(c));
     const previous = p == null || !Number.isFinite(Number(p)) ? null : round(Number(p));
 
@@ -4401,9 +4404,14 @@ export function kpiTrend(input: {
 
   /* پیش‌بینی خطی یک دوره جلوتر. */
   const emergingFa: string[] = [];
-  for (const rule of input.rules ?? DEFAULT_ALERT_RULES) {
+  for (const baseRule of input.rules ?? DEFAULT_ALERT_RULES) {
+    const ov = (input.overrides ?? []).find(o => String(o.RuleCode ?? "").trim() === baseRule.code);
+    if (ov && (ov.IsEnabled === false || ov.IsEnabled === 0 || ov.IsEnabled === "0")) continue;
+    const threshold = ov?.ThresholdValue == null ? baseRule.threshold : Number(ov.ThresholdValue);
+    const rule = { ...baseRule, threshold: Number.isFinite(threshold) ? threshold : baseRule.threshold };
     const t = trends.find((x) => x.code === rule.kpi);
-    if (!t || t.current == null || t.delta == null || t.direction !== "worsening") continue;
+    if (!t || t.current == null || t.delta == null || !t.isSignificant) continue;
+    if (rule.op === "gt" ? t.delta <= 0 : t.delta >= 0) continue;
 
     const alreadyFired = rule.op === "gt" ? t.current > rule.threshold : t.current < rule.threshold;
     if (alreadyFired) continue;  /* از قبل هشدار داده شده، «نوظهور» نیست */
@@ -4454,7 +4462,7 @@ export function contractScorecard(input: {
 }): ContractScorecard {
   const alerts = evaluateAlerts({ kpis: input.kpis, rules: input.rules, overrides: input.overrides });
   const health = contractHealth({ kpis: input.kpis });
-  const trend = kpiTrend({ snapshots: input.snapshots ?? [], rules: input.rules });
+  const trend = kpiTrend({ snapshots: input.snapshots ?? [], rules: input.rules, overrides: input.overrides });
 
   const headlineFa = alerts.criticalCount > 0
     ? `${alerts.criticalCount} هشدار بحرانی: ${alerts.fired[0].titleFa}`
@@ -5275,17 +5283,19 @@ function buildProgressSheet(inp: CntReportInput): Section[] {
       kind: "kpi",
       title: { fa: "پیشرفت", en: "Progress" },
       cells: [
-        { label: { fa: "فیزیکی", en: "Physical" }, value: pct(p.physicalPct) },
-        { label: { fa: "مالی", en: "Financial" }, value: pct(p.financialPct) },
+        { label: { fa: "فیزیکی", en: "Physical" }, value: p.physicalSource === "none" ? "—" : pct(p.physicalPct) },
+        { label: { fa: "مالی", en: "Financial" }, value: Number((p.financial as Record<string, unknown> | undefined)?.contractAmount) <= 0 ? "—" : pct(p.financialPct) },
         {
           label: { fa: "فاصله", en: "Gap" },
-          value: pct(p.gapPct),
-          tone: num(p.gapPct) > 5 ? "bad" : num(p.gapPct) < -5 ? "warn" : "good",
+          value: p.isGapReliable === false ? "—" : pct((p.gap as Record<string, unknown> | undefined)?.gapPct ?? p.gapPct),
+          tone: p.isGapReliable === false ? undefined : num((p.gap as Record<string, unknown> | undefined)?.gapPct ?? p.gapPct) > 5 ? "bad" : num((p.gap as Record<string, unknown> | undefined)?.gapPct ?? p.gapPct) < -5 ? "warn" : "good",
         },
-        { label: { fa: "مصرف سقف", en: "Ceiling used" }, value: pct(p.ceilingUsedPct) },
+        { label: { fa: "مصرف سقف", en: "Ceiling used" }, value: pct((p.financial as Record<string, unknown> | undefined)?.ceilingUsedPct ?? p.ceilingUsedPct) },
       ],
     },
   ];
+
+  if (curve.length && curve.every(row => row.plannedPct == null)) sections.push({ kind: "text", title: { fa: "محدودیت منحنی", en: "Curve limitation" }, body: { fa: "این منحنی فقط کارکرد مالی تأییدشده را نشان می‌دهد؛ برنامهٔ مبنای پیمان متصل نیست و انحراف برنامه قابل محاسبه نیست", en: "Approved financial actuals only; no linked contract baseline, so schedule variance is unavailable." } });
 
   /* هشدار کیفیت داده پیش از نمودار: منحنی زیبا روی مخرج غلط، بدترین
    * نوع گزارش است. */
@@ -5311,14 +5321,14 @@ function buildProgressSheet(inp: CntReportInput): Section[] {
       },
       columns: [
         { key: "period", title: { fa: "دوره", en: "Period" }, weight: 2 },
-        { key: "physical", title: { fa: "فیزیکی ٪", en: "Physical %" }, format: "percent", align: "end", weight: 1 },
+        { key: "physical", title: { fa: "برنامه ٪", en: "Planned %" }, format: "percent", align: "end", weight: 1 },
         { key: "financial", title: { fa: "مالی ٪", en: "Financial %" }, format: "percent", align: "end", weight: 1 },
         { key: "kind", title: { fa: "نوع", en: "Type" }, align: "center", weight: 1 },
       ],
       rows: curve.map((s) => ({
         period: cell(s.periodCode),
-        physical: pct(s.physicalPct),
-        financial: pct(s.financialPct),
+        physical: s.plannedPct == null ? "—" : pct(s.plannedPct),
+        financial: pct(s.actualPct ?? s.financialPct),
         kind: s.isForecast ? "پیش‌بینی" : "واقعی",
       })),
     });
@@ -5552,8 +5562,8 @@ function buildExecSheet(inp: CntReportInput): Section[] {
           value: health.score == null ? "—" : String(health.score),
           tone: health.band === "good" ? "good" : health.band === "watch" ? "warn" : "bad",
         },
-        { label: { fa: "پیشرفت فیزیکی", en: "Physical" }, value: pct(p.physicalPct) },
-        { label: { fa: "پیشرفت مالی", en: "Financial" }, value: pct(p.financialPct) },
+        { label: { fa: "پیشرفت فیزیکی", en: "Physical" }, value: p.physicalSource === "none" ? "—" : pct(p.physicalPct) },
+        { label: { fa: "پیشرفت مالی", en: "Financial" }, value: Number((p.financial as Record<string, unknown> | undefined)?.contractAmount) <= 0 ? "—" : pct(p.financialPct) },
         {
           label: { fa: "هشدار بحرانی", en: "Critical alerts" },
           value: String(cell(alerts.criticalCount)),
@@ -5649,4 +5659,22 @@ export function buildCntReport(code: string, inp: CntReportInput): Record<string
     periodLabel: inp.periodLabel ?? null,
     asOf: inp.asOf ?? null,
   };
+}
+
+/** عکس، وضعیت فعلی است نه بازسازی تاریخی؛ کد دوره همیشه ماه جاری UTC است. */
+export function currentMetricPeriod(now = new Date()): string { return now.toISOString().slice(0, 7); }
+export function validMetricPeriod(period: unknown, now = new Date()): boolean {
+  return typeof period === "string" && /^\d{4}-(0[1-9]|1[0-2])$/.test(period) && period === currentMetricPeriod(now);
+}
+/** منحنی مالی واقعی؛ عکس پیشرفت فیزیکی هرگز برنامهٔ مبنا نیست. */
+export function contractActualCurve(contractAmount: number, ipcs: (Parameters<typeof financialProgress>[0]["ipcs"][number] & { PeriodCode?: string | null })[]) {
+  const approved = ipcs.filter(x => ["approved", "paid"].includes(String(x.WorkflowState)) && x.Status !== "cancelled" && String(x.PeriodCode ?? "").trim());
+  const periods = [...new Set(approved.map(x => String(x.PeriodCode)))].sort();
+  const actual = periods.map(periodCode => {
+    const f = financialProgress({ contractAmount, ipcs: approved.filter(x => String(x.PeriodCode) <= periodCode) });
+    return { periodCode, cumPct: f.financialPct, cumAmount: f.approvedGross };
+  });
+  const curve = sCurve({ planned: [], actual });
+  const points = curve.points.map(p => ({ ...p, plannedPct: null, plannedAmount: null, variancePct: null }));
+  return { ...curve, hasPlan: false, latest: points.length ? points[points.length - 1] : null, maxLagPct: null, points, warningsFa: [...curve.warningsFa, ...(approved.length < ipcs.filter(x => ["approved", "paid"].includes(String(x.WorkflowState)) && x.Status !== "cancelled").length ? ["صورت‌وضعیت بدون کد دورهٔ مرتب‌شدنی در منحنی وارد نشده است"] : [])] };
 }

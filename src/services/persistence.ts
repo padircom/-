@@ -2957,6 +2957,8 @@ export const SCHEMA: TableDef[] = [
       c("ExtraWorkRatioPct", "decimal", { precision: 9, scale: 4 }),
       c("AvgIpcCycleDays", "decimal", { precision: 9, scale: 2 }),
       c("OpenGuaranteeCount", "int"),
+      c("ExpiringGuaranteeCount", "int"),
+      c("IsGapReliable", "bool"),
       c("RetainageBalance", "decimal", { precision: 18, scale: 2 }),
       req("SnapshotAt", "datetime"),
     ],
@@ -6969,6 +6971,10 @@ export const MIGRATIONS: Migration[] = [
       const t = TABLE_BY_NAME.get(n)!;
       return [tableDdl(t, "mssql"), ...(t.indexes ?? []).map(i => indexDdl(t, i, "mssql"))];
     }),
+  },
+  {
+    version: "0077", name: "contract_snapshot_data_quality",
+    statements: ["ExpiringGuaranteeCount", "IsGapReliable"].map(col => addColumnDdl("ContractMetricsSnapshot", col, "mssql")),
   },
 ];
 

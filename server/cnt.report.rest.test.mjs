@@ -14,7 +14,7 @@ import { join } from "node:path";
 
 const PORT = 4730;
 const BASE = `http://127.0.0.1:${PORT}`;
-const PROJECT = "p1";
+const PROJECT = "c1-p1";
 let child, dir;
 
 async function req(path, { user = "u-pm", method = "GET", body, raw = false } = {}) {
@@ -159,10 +159,10 @@ test("گزارش داخلی با مخاطب رسمی ۴۰۳ می‌دهد", asyn
   assert.equal(r.json.error.code, "E-CNT-RPT-AUDIENCE");
 });
 
-test("پیمان پروژهٔ دیگر ۴۰۴ می‌دهد نه ۴۰۳", async () => {
-  /* ۴۰۳ خودش افشای اطلاعات است: تأیید می‌کند چنین پیمانی هست. */
+test("پیمان پروژهٔ دیگر ۴۰۳ می‌دهد پیش از بررسی وجود پیمان", async () => {
+  /* رد دسترسی پروژه قبل از خواندن پیمان؛ مستقل از وجود یا نبود شناسه. */
   const r = await req(`/api/cnt/reports/RPT-CNT-BOQ?projectId=p2&contractId=${contractId}`);
-  assert.equal(r.status, 404);
+  assert.equal(r.status, 403);
 });
 
 test("فهرست بها درصد اجرا را از صورت‌وضعیت می‌گیرد", async () => {
