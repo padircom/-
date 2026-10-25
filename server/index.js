@@ -1,3 +1,7 @@
+import { currentMetricPeriod, validMetricPeriod, contractActualCurve } from "./cntLogic.js";
+import { registerVendorRatingRoutes, RATING_DEDICATED_ROUTES } from "./vendorRatingApi.js";
+import { registerContractVariationRoutes, VARIATION_DEDICATED_ROUTES } from "./contractVariationApi.js";
+import { registerContractAmendmentRoutes, AMENDMENT_DEDICATED_ROUTES } from "./contractAmendmentApi.js";
 import { registerStrategyExcellenceRoutes } from "./strategyExcellenceWorkspaceApi.js";
 import { registerCpmWorkspaceRoutes, CPM_DEDICATED_ROUTES } from "./cpmWorkspaceApi.js";
 import { registerPmoWorkspaceRoutes, PMO_DEDICATED_ROUTES } from "./pmoWorkspaceApi.js";
@@ -686,6 +690,11 @@ const DEDICATED_TABLE_ROUTES = {
   /* P8/PMO — منشور، فرم‌ساز و کارت سلامت؛ P8/CNT — قالب و سند صورت‌وضعیت. */
   ...PMO_DEDICATED_ROUTES,
   ...CNT_IPC_DEDICATED_ROUTES,
+  ...AMENDMENT_DEDICATED_ROUTES,
+  ...RATING_DEDICATED_ROUTES,
+  ContractMetricsSnapshot: "/api/cnt/kpi/snapshot",
+  ContractAlertRule: "/api/cnt/alert-rule",
+  ...VARIATION_DEDICATED_ROUTES,
   /* P9/RPT-1 — قالب گزارش سفارشی؛ P9/ITG — دفتر اجرای اتصال‌دهنده‌های خروجی. */
   ...RPT_DEDICATED_ROUTES,
   ...ITG_OUTBOUND_DEDICATED_ROUTES,
@@ -1043,6 +1052,9 @@ registerCpmWorkspaceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: r
 registerPmoWorkspaceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
 /* P8/CNT: قالب‌پذیری صورت‌وضعیت — محاسبهٔ سرور و SOD-11. */
 registerCntIpcRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
+registerVendorRatingRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
+registerContractAmendmentRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
+registerContractVariationRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
 /* P9/RPT-1: گزارش‌ساز سفارشی — مجموعه‌دادهٔ مجاز + انتشار با SOD-31. */
 registerReportBuilderRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
 /* P9/ITG-1..3: خروجی XER/XML/ICS و نوشتن در سامانهٔ بیرونی با دفتر اجرا. */
@@ -6343,6 +6355,16 @@ const cntBad = (req, res, code, message, status = 400, detailsFa = null) =>
     },
   });
 
+/** گارد پروژه فقط برای مسیرهای پیشرفت، شاخص و گزارش؛ کاتالوگ بدون داده مستثناست. */
+function cntProjectAccess(permission) {
+  return (req, res, next) => {
+    const projectId = String(req.query.projectId ?? "");
+    if (!projectId) return next();
+    if (!req.cntSubject || !rbacEvaluate(req.cntSubject, permission, { projectId }).allow) return cntBad(req, res, "E-CNT-PROJECT-FORBIDDEN", "دسترسی به این پروژه ندارید", 403);
+    next();
+  };
+}
+
 /** ایرادهای موتور خالص و ایرادهای لایهٔ فرم یک قالب دارند تا UI یک‌جور نشان دهد. */
 function cntInvalid(req, res, issues) {
   return res.status(422).json({
@@ -6670,7 +6692,32 @@ app.post("/api/cnt/boq", cntRequire("cnt.boq.edit"), async (req, res, next) => {
       });
     }
 
-    const up = await r.upsert("ContractBOQ_Item", { ContractId: contractId, ItemNo: itemNo }, draft, userId);
+    // ردیفی که از گردش مصوب آمده است با فرم قدیمی قابل بازنویسی مالی نیست.
+    // نگاشت WBS/CBS و شرح همچنان قابل تکمیل‌اند. همان تراکنش جلوی مسابقه با تصویب را می‌گیرد.
+    const written = await r.transaction(async (tx) => {
+      const current = await tx.findOne("ContractBOQ_Item", [
+        { column: "ContractId", op: "eq", value: contractId }, { column: "ItemNo", op: "eq", value: itemNo },
+      ]);
+      if (current && !b.allowUpdate) return { duplicate: true };
+      if (current) {
+        const scope = [{ column: "ProjectId", op: "eq", value: projectId }, { column: "ContractId", op: "eq", value: contractId }, { column: "BoqItemId", op: "eq", value: current.Id }];
+        const managed = await tx.findOne("BOQ_QuantityChange", [...scope, { column: "Status", op: "eq", value: "approved" }])
+          || await tx.findOne("ExtraWorkItem", [...scope, { column: "Status", op: "eq", value: "agreed" }]);
+        const numericChanged = ["ContractQty", "UnitRate", "LumpSumAmount", "LineAmount"].some(k => Number(current[k] ?? 0) !== Number(draft[k] ?? 0));
+        const modeChanged = ["PricingBasis", "RateStatus", "Status", "ParentItemNo"].some(k => (current[k] ?? null) !== (draft[k] ?? null)) || Boolean(current.IsStarred) !== Boolean(draft.IsStarred);
+        if (managed && (numericChanged || modeChanged)) return { blocked: true };
+      }
+      if (current) {
+        const changed = await tx.patch("ContractBOQ_Item", current.Id, draft, userId, current.RowVersion);
+        if (!changed?.ok) return { versionConflict: true };
+        return { up: { action: "update", row: changed } };
+      }
+      return { up: await tx.upsert("ContractBOQ_Item", { ContractId: contractId, ItemNo: itemNo }, draft, userId) };
+    });
+    if (written.duplicate) return cntBad(req, res, "E-CNT-DUP-ITEM", "ردیف در این پیمان از قبل ثبت شده است", 409);
+    if (written.blocked) return cntBad(req, res, "E-CNT-BOQ-MANAGED", "ردیف مصوب از مسیر تغییر مقدار یا کار جدید مدیریت می‌شود؛ بازنویسی مالی با فرم عمومی مجاز نیست", 409);
+    if (written.versionConflict) return cntBad(req, res, "E-CNT-BOQ-VERSION", "ردیف هم‌زمان تغییر کرده است؛ بازخوانی کنید", 409);
+    const up = written.up;
 
     /* جمع فهرست بها بعد از هر ثبت اعلام می‌شود: کاربر باید همان لحظه ببیند
      * که جمع ردیف‌ها از مبلغ پیمان فاصله گرفته، نه سه ماه بعد سر صورت‌وضعیت. */
@@ -6697,7 +6744,7 @@ app.post("/api/cnt/boq", cntRequire("cnt.boq.edit"), async (req, res, next) => {
 });
 
 /* ── فرم ۳: ثبت مرحلهٔ مقطوع ── */
-app.post("/api/cnt/milestone", cntRequire("cnt.boq.edit"), async (req, res, next) => {
+app.post("/api/cnt/milestone", cntRequire("cnt.boq.edit"), cntProjectAccess("cnt.boq.edit"), async (req, res, next) => {
   try {
     const b = engBody(req);
     const projectId = String(req.query.projectId || b.projectId || "");
@@ -13555,7 +13602,7 @@ async function cntProgressInputs(r, projectId, contractId) {
    * که تأیید شده‌اند: کارِ ادعاشدهٔ تأییدنشده پیشرفت نیست. */
   const approvedIds = new Set(
     ipcs
-      .filter((x) => ["approved", "paid"].includes(String(x.WorkflowState ?? "")))
+      .filter((x) => ["approved", "paid"].includes(String(x.WorkflowState ?? "")) && String(x.Status) !== "cancelled")
       .map((x) => String(x.Id)),
   );
   /* ردیف‌ها با `in` روی شناسهٔ صورت‌وضعیت‌های تأییدشده خوانده می‌شوند،
@@ -13582,7 +13629,7 @@ async function cntProgressInputs(r, projectId, contractId) {
 }
 
 /** تصویر پیشرفت یک پیمان. */
-app.get("/api/cnt/progress", cntRequire("cnt.progress.view"), async (req, res, next) => {
+app.get("/api/cnt/progress", cntRequire("cnt.progress.view"), cntProjectAccess("cnt.progress.view"), async (req, res, next) => {
   try {
     const sc = cntScopeOf(req, res);
     if (!sc) return;
@@ -13612,7 +13659,7 @@ app.get("/api/cnt/progress", cntRequire("cnt.progress.view"), async (req, res, n
 });
 
 /** تفکیک ردیف‌به‌ردیف پیشرفت فیزیکی. */
-app.get("/api/cnt/progress/breakdown", cntRequire("cnt.progress.view"), async (req, res, next) => {
+app.get("/api/cnt/progress/breakdown", cntRequire("cnt.progress.view"), cntProjectAccess("cnt.progress.view"), async (req, res, next) => {
   try {
     const sc = cntScopeOf(req, res);
     if (!sc) return;
@@ -13638,7 +13685,7 @@ app.get("/api/cnt/progress/breakdown", cntRequire("cnt.progress.view"), async (r
  * است نه «برنامه». برنامه اگر ثبت نشده باشد، منحنی فقط خط واقعی را
  * نشان می‌دهد و صریح هشدار می‌دهد که انحراف قابل سنجش نیست.
  */
-app.get("/api/cnt/progress/scurve", cntRequire("cnt.progress.view"), async (req, res, next) => {
+app.get("/api/cnt/progress/scurve", cntRequire("cnt.progress.view"), cntProjectAccess("cnt.progress.view"), async (req, res, next) => {
   try {
     const sc = cntScopeOf(req, res);
     if (!sc) return;
@@ -13648,39 +13695,12 @@ app.get("/api/cnt/progress/scurve", cntRequire("cnt.progress.view"), async (req,
     if (!inp) return cntBad(req, res, "E-CNT-NOT-FOUND", "پیمان یافت نشد", 404);
 
     const amount = cntContractAmount(inp.contract);
-    const approved = inp.ipcs
-      .filter((x) => ["approved", "paid"].includes(String(x.WorkflowState ?? "")))
-      .filter((x) => String(x.Status ?? "open") !== "cancelled");
-
-    const actual = approved
-      .filter((x) => String(x.PeriodCode ?? "").trim())
-      .map((x) => {
-        const cum = num(x.GrossCumulative) || num(x.GrossCurrent);
-        return {
-          periodCode: String(x.PeriodCode),
-          cumAmount: cum,
-          cumPct: amount > 0 ? (cum / amount) * 100 : 0,
-        };
-      });
-
-    /* دوره‌های برنامه از عکس‌های ثبت‌شدهٔ سنجه می‌آید، اگر باشد. */
-    const snaps = await r.list("ContractMetricsSnapshot", {
-      where: [{ column: "ContractId", op: "eq", value: sc.contractId }], limit: 500,
-    });
-    const planned = snaps
-      .filter((x) => String(x.PeriodCode ?? "").trim())
-      .map((x) => ({
-        periodCode: String(x.PeriodCode),
-        cumPct: num(x.PhysicalPct),
-        cumAmount: amount > 0 ? (num(x.PhysicalPct) / 100) * amount : 0,
-      }));
-
-    res.json(cntOk(req, { contractId: sc.contractId, contractAmount: amount, ...sCurve({ planned, actual }) }));
+    res.json(cntOk(req, { contractId: sc.contractId, contractAmount: amount, ...contractActualCurve(amount, inp.ipcs) }));
   } catch (err) { next(err); }
 });
 
 /** نقاط عطف پیمان مقطوع. */
-app.get("/api/cnt/milestone", cntRequire("cnt.progress.view"), async (req, res, next) => {
+app.get("/api/cnt/milestone", cntRequire("cnt.progress.view"), cntProjectAccess("cnt.progress.view"), async (req, res, next) => {
   try {
     const sc = cntScopeOf(req, res);
     if (!sc) return;
@@ -13706,7 +13726,7 @@ app.get("/api/cnt/milestone", cntRequire("cnt.progress.view"), async (req, res, 
  * می‌شود که در محاسبه نیم‌شمرده می‌شود — و همین تفاوت، مرز بین
  * پیشرفت واقعی و پیشرفت کاغذی است.
  */
-app.post("/api/cnt/milestone/:id/achieve", cntRequire("cnt.milestone.manage"), async (req, res, next) => {
+app.post("/api/cnt/milestone/:id/achieve", cntRequire("cnt.milestone.manage"), cntProjectAccess("cnt.milestone.manage"), async (req, res, next) => {
   try {
     const projectId = String(req.query.projectId || "");
     if (!projectId) return cntBad(req, res, "E-CNT-NO-PROJECT", "پارامتر projectId الزامی است");
@@ -13784,17 +13804,17 @@ async function cntKpiInputs(r, projectId, contractId) {
   const [guarantees, advances, changes, deductions] = await Promise.all([
     r.list("ContractGuarantee", {
       where: [{ column: "ContractId", op: "eq", value: contractId }], limit: 1000,
-    }).catch(() => []),
+    }),
     r.list("AdvancePaymentSchedule", {
       where: [{ column: "ContractId", op: "eq", value: contractId }], limit: 1000,
-    }).catch(() => []),
+    }),
     r.list("BOQ_QuantityChange", {
       where: [{ column: "ProjectId", op: "eq", value: projectId }], limit: 5000,
-    }).catch(() => []),
+    }),
     ipcIds.length
       ? r.list("IPC_Deduction", {
         where: [{ column: "IpcId", op: "in", value: ipcIds }], limit: 5000,
-      }).catch(() => [])
+      })
       : Promise.resolve([]),
   ]);
 
@@ -13830,10 +13850,10 @@ function cntComputeKpis(inp, periodCode) {
    * خبر نیست؛ وثیقه‌ای که ۲۹ روز دیگر می‌میرد خبر است. */
   const gState = guaranteeRegister({ rows: inp.guarantees ?? [] });
   const openGuaranteeCount = gState.items.filter(
-    (g) => !["released", "seized", "expired"].includes(String(g.state ?? g.Status ?? "")),
+    (g) => g.state.isLive,
   ).length;
   const expiringGuaranteeCount = gState.items.filter(
-    (g) => Number(g.daysToExpiry) >= 0 && Number(g.daysToExpiry) <= 30,
+    (g) => g.state.isLive && g.state.daysToExpiry != null && g.state.daysToExpiry >= 0 && g.state.daysToExpiry <= 30,
   ).length;
 
   /* پیش‌پرداخت: نسبت بازیافت‌شده به کل. اگر پیش‌پرداختی نباشد، سنجه
@@ -13854,9 +13874,9 @@ function cntComputeKpis(inp, periodCode) {
 
   const kpis = contractKpis({
     periodCode,
-    physicalPct: snapshot.physicalPct,
-    financialPct: snapshot.financialPct,
-    gapPct: snapshot.gap.gapPct,
+    physicalPct: snapshot.physicalSource === "none" ? null : snapshot.physicalPct,
+    financialPct: amount > 0 ? snapshot.financialPct : null,
+    gapPct: snapshot.isGapReliable ? snapshot.gap.gapPct : null,
     ceilingUsedPct: snapshot.financial.ceilingUsedPct,
     advanceRecoveredPct,
     extraWorkRatioPct: extra.isMeasurable ? extra.ratioPct : null,
@@ -13874,7 +13894,7 @@ function cntComputeKpis(inp, periodCode) {
 }
 
 /** تابلوی سلامت یک پیمان: سنجه، نمره، هشدار و روند. */
-app.get("/api/cnt/kpi", cntRequire("cnt.kpi.view"), async (req, res, next) => {
+app.get("/api/cnt/kpi", cntRequire("cnt.kpi.view"), cntProjectAccess("cnt.kpi.view"), async (req, res, next) => {
   try {
     const sc = cntScopeOf(req, res);
     if (!sc) return;
@@ -13893,7 +13913,7 @@ app.get("/api/cnt/kpi", cntRequire("cnt.kpi.view"), async (req, res, next) => {
       }),
       r.list("ContractAlertRule", {
         where: [{ column: "ProjectId", op: "eq", value: sc.projectId }], limit: 200,
-      }).catch(() => []),
+      }),
     ]);
 
     const card = contractScorecard({
@@ -13915,12 +13935,20 @@ app.get("/api/cnt/kpi", cntRequire("cnt.kpi.view"), async (req, res, next) => {
       );
     }
 
+    if (snapshots.some(x => x.IsGapReliable == null)) dataQualityFa.push("بخشی از تاریخچه پیش از کنترل جدید دوره و کیفیت داده ثبت شده است؛ اعتبار دوره‌های قدیمی باید بررسی شود");
+
     res.json(cntOk(req, {
       contractCode: inp.contract.Code,
       contractTitleFa: inp.contract.TitleFa,
       boqCoveragePct: computed.snapshot.boqCoveragePct,
       isGapReliable: computed.snapshot.isGapReliable,
       dataQualityFa,
+      currentPeriod: currentMetricPeriod(),
+      currentSnapshotVersion: snapshots.find(x => x.PeriodCode === currentMetricPeriod())?.RowVersion ?? null,
+      permissions: {
+        snapshot: rbacEvaluate(req.cntSubject, "cnt.kpi.snapshot", { projectId: sc.projectId }).allow,
+        manageRules: rbacEvaluate(req.cntSubject, "cnt.alertrule.manage", { projectId: sc.projectId }).allow,
+      },
       ...card,
     }));
   } catch (err) { next(err); }
@@ -13934,55 +13962,49 @@ app.get("/api/cnt/kpi", cntRequire("cnt.kpi.view"), async (req, res, next) => {
  * `ContractId+PeriodCode` یکتاست، پس ثبت دوباره همان دوره
  * به‌روزرسانی است نه سطر تازه — دو عکس از یک دوره یعنی دو حقیقت.
  */
-app.post("/api/cnt/kpi/snapshot", cntRequire("cnt.kpi.snapshot"), async (req, res, next) => {
+app.post("/api/cnt/kpi/snapshot", cntRequire("cnt.kpi.snapshot"), cntProjectAccess("cnt.kpi.snapshot"), async (req, res, next) => {
   try {
     const sc = cntScopeOf(req, res);
     if (!sc) return;
     const b = engBody(req);
 
     const periodCode = String(b.periodCode ?? "").trim();
-    if (!periodCode) {
-      return cntBad(req, res, "E-CNT-KPI-PERIOD", "کد دوره برای ثبت عکس الزامی است", 422);
-    }
-
+    if (!validMetricPeriod(periodCode)) return cntBad(req, res, "E-CNT-KPI-PERIOD", `عکس فقط برای ماه جاری میلادی ${currentMetricPeriod()} قابل ثبت است؛ بازسازی گذشته از دادهٔ فعلی مجاز نیست`, 422);
+    if (Object.keys(b).some(k => !["periodCode", "RowVersion"].includes(k))) return cntBad(req, res, "E-CNT-KPI-FIELDS", "فیلد غیرمجاز", 422);
     const r = await repo();
-    const inp = await cntKpiInputs(r, sc.projectId, sc.contractId);
-    if (!inp) return cntBad(req, res, "E-CNT-NOT-FOUND", "پیمان یافت نشد", 404);
-
-    const kpis = cntComputeKpis(inp, periodCode).kpis;
-    const subject = engSubject(req);
-
-    const up = await r.upsert("ContractMetricsSnapshot",
-      { ContractId: sc.contractId, PeriodCode: periodCode },
-      {
-        ProjectId: sc.projectId,
-        ContractId: sc.contractId,
-        PeriodCode: periodCode,
-        PhysicalPct: kpis.byCode.physical_pct,
-        FinancialPct: kpis.byCode.financial_pct,
-        VariancePct: kpis.byCode.progress_gap_pct,
-        CeilingUsedPct: kpis.byCode.ceiling_used_pct,
-        AdvanceRecoveredPct: kpis.byCode.advance_recovered_pct,
-        ExtraWorkRatioPct: kpis.byCode.extra_work_ratio_pct,
-        AvgIpcCycleDays: kpis.byCode.avg_ipc_cycle_days,
-        OpenGuaranteeCount: kpis.byCode.open_guarantee_count,
-        RetainageBalance: kpis.byCode.retainage_balance,
-        SnapshotAt: new Date().toISOString(),
-      }, subject?.id, "cms");
-
-    res.json(cntOk(req, {
-      item: up?.row ?? null,
-      action: up?.action ?? "insert",
-      kpis,
-      noteFa: up?.action === "update"
-        ? `عکس دورهٔ ${periodCode} به‌روزرسانی شد`
-        : `عکس دورهٔ ${periodCode} ثبت شد`,
-    }));
-  } catch (err) { next(err); }
+    const outcome = await r.transaction(async tx => {
+      const inp = await cntKpiInputs(tx, sc.projectId, sc.contractId);
+      if (!inp) return { error: "missing" };
+      const computed = cntComputeKpis(inp, periodCode);
+      const kpis = computed.kpis;
+      const existing = await tx.findOne("ContractMetricsSnapshot", [{ column: "ContractId", op: "eq", value: sc.contractId }, { column: "PeriodCode", op: "eq", value: periodCode }]);
+      if ((existing && (!Number.isInteger(b.RowVersion) || existing.RowVersion !== b.RowVersion)) || (!existing && b.RowVersion != null)) return { error: "conflict" };
+      const fields = {
+        ProjectId: sc.projectId, ContractId: sc.contractId, PeriodCode: periodCode,
+        PhysicalPct: kpis.byCode.physical_pct, FinancialPct: kpis.byCode.financial_pct,
+        VariancePct: kpis.byCode.progress_gap_pct, IsGapReliable: computed.snapshot.isGapReliable,
+        CeilingUsedPct: kpis.byCode.ceiling_used_pct, AdvanceRecoveredPct: kpis.byCode.advance_recovered_pct,
+        ExtraWorkRatioPct: kpis.byCode.extra_work_ratio_pct, AvgIpcCycleDays: kpis.byCode.avg_ipc_cycle_days,
+        OpenGuaranteeCount: kpis.byCode.open_guarantee_count, ExpiringGuaranteeCount: kpis.byCode.expiring_guarantee_count,
+        RetainageBalance: kpis.byCode.retainage_balance, SnapshotAt: new Date().toISOString(),
+      };
+      const actor = req.cntSubject.id;
+      const item = existing ? await tx.patch("ContractMetricsSnapshot", existing.Id, fields, actor, b.RowVersion) : await tx.create("ContractMetricsSnapshot", fields, actor);
+      if (existing && !item?.ok) throw Object.assign(new Error("Snapshot concurrency conflict"), { code: "CNT_SNAPSHOT_CONFLICT" });
+      await tx.create("AuditLog", { At: new Date().toISOString(), SubjectId: actor, Action: "CNT_KPI_SNAPSHOT", ProjectCode: sc.projectId, EntityName: "ContractMetricsSnapshot", EntityId: item.Id, Severity: "info", Details: { before: existing, after: item, traceId: req.requestId } }, actor);
+      return { item, action: existing ? "update" : "insert", kpis };
+    });
+    if (outcome.error === "missing") return cntBad(req, res, "E-CNT-NOT-FOUND", "پیمان یافت نشد", 404);
+    if (outcome.error === "conflict") return cntBad(req, res, "E-CNT-KPI-CONFLICT", "نسخهٔ عکس تغییر کرده است؛ بازخوانی کنید", 409);
+    res.json(cntOk(req, { ...outcome, noteFa: `عکس وضعیت فعلی برای دورهٔ ${periodCode} ثبت شد؛ این ثبت، بازسازی تاریخی نیست` }));
+  } catch (err) {
+    if (["CNT_SNAPSHOT_CONFLICT", "UNIQUE_VIOLATION", "DUPLICATE_KEY"].includes(err?.code) || [2601, 2627, 1205].includes(err?.number ?? err?.originalError?.info?.number)) return cntBad(req, res, "E-CNT-KPI-CONFLICT", "تداخل هم‌زمان؛ بازخوانی کنید", 409);
+    next(err);
+  }
 });
 
 /** روند سنجه‌ها بین دوره‌های ثبت‌شده. */
-app.get("/api/cnt/kpi/trend", cntRequire("cnt.kpi.view"), async (req, res, next) => {
+app.get("/api/cnt/kpi/trend", cntRequire("cnt.kpi.view"), cntProjectAccess("cnt.kpi.view"), async (req, res, next) => {
   try {
     const sc = cntScopeOf(req, res);
     if (!sc) return;
@@ -14001,13 +14023,13 @@ app.get("/api/cnt/kpi/trend", cntRequire("cnt.kpi.view"), async (req, res, next)
     res.json(cntOk(req, {
       contractId: sc.contractId,
       snapshotCount: snapshots.length,
-      ...kpiTrend({ snapshots }),
+      ...kpiTrend({ snapshots, overrides: await r.list("ContractAlertRule", { where: [{ column: "ProjectId", op: "eq", value: sc.projectId }], limit: 200 }) }),
     }));
   } catch (err) { next(err); }
 });
 
 /** قواعد هشدار و آستانه‌های سفارشی پروژه. */
-app.get("/api/cnt/alert-rule", cntRequire("cnt.kpi.view"), async (req, res, next) => {
+app.get("/api/cnt/alert-rule", cntRequire("cnt.kpi.view"), cntProjectAccess("cnt.kpi.view"), async (req, res, next) => {
   try {
     const projectId = String(req.query.projectId || "");
     if (!projectId) return cntBad(req, res, "E-CNT-NO-PROJECT", "پارامتر projectId الزامی است");
@@ -14048,7 +14070,7 @@ app.get("/api/cnt/alert-rule", cntRequire("cnt.kpi.view"), async (req, res, next
  * خاموش کردن قاعده ممکن است ولی بی‌سروصدا نیست: پاسخ صریح می‌گوید
  * که این هشدار دیگر سنجیده نمی‌شود، و مسیر ممیزی‌شده است.
  */
-app.post("/api/cnt/alert-rule", cntRequire("cnt.alertrule.manage"), async (req, res, next) => {
+app.post("/api/cnt/alert-rule", cntRequire("cnt.alertrule.manage"), cntProjectAccess("cnt.alertrule.manage"), async (req, res, next) => {
   try {
     const projectId = String(req.query.projectId || "");
     if (!projectId) return cntBad(req, res, "E-CNT-NO-PROJECT", "پارامتر projectId الزامی است");
@@ -14061,15 +14083,15 @@ app.post("/api/cnt/alert-rule", cntRequire("cnt.alertrule.manage"), async (req, 
         `قاعدهٔ «${ruleCode}» در فهرست قواعد نیست`, 404);
     }
 
-    const severity = b.severity == null ? rule.severity : String(b.severity);
-    if (!["info", "warning", "critical"].includes(severity)) {
+    const severity = b.severity == null ? undefined : String(b.severity);
+    if (severity != null && !["info", "warning", "critical"].includes(severity)) {
       return cntBad(req, res, "E-CNT-RULE-SEVERITY", `شدت «${severity}» شناخته نمی‌شود`, 422);
     }
 
     /* `num()` هر چیز نامعتبری را صفر می‌کند، پس `Number.isFinite`
      * روی خروجی‌اش هرگز false نمی‌شود و اعتبارسنجی بی‌اثر می‌ماند.
      * آستانهٔ صفرِ ناخواسته یعنی هشداری که همیشه روشن است. */
-    let threshold = rule.threshold;
+    let threshold;
     if (b.thresholdValue != null) {
       const raw = Number(b.thresholdValue);
       if (!Number.isFinite(raw)) {
@@ -14081,7 +14103,8 @@ app.post("/api/cnt/alert-rule", cntRequire("cnt.alertrule.manage"), async (req, 
     /* ستون `IsEnabled` از نوع bool است و اعتبارسنج ماندگاری مقدار
      * بولی واقعی می‌خواهد؛ رشتهٔ "0"/"1" فقط در `default` اسکیما
      * مجاز است و اینجا ۴۲۲ می‌گیرد. */
-    const enabled = b.isEnabled !== false;
+    if (b.isEnabled != null && typeof b.isEnabled !== "boolean") return cntBad(req, res, "E-CNT-RULE-ENABLED", "وضعیت فعال باید بولی باشد", 422);
+    const enabled = b.isEnabled;
     const subject = engSubject(req);
 
     const up = await r_upsertAlertRule(await repo(), {
@@ -14091,27 +14114,22 @@ app.post("/api/cnt/alert-rule", cntRequire("cnt.alertrule.manage"), async (req, 
     res.json(cntOk(req, {
       item: up.row,
       action: up.action,
-      noteFa: !enabled
+      noteFa: up.row.IsEnabled === false
         ? `قاعدهٔ «${rule.titleFa}» خاموش شد و دیگر سنجیده نمی‌شود`
-        : `آستانهٔ «${rule.titleFa}» روی ${threshold} تنظیم شد`,
+        : `آستانهٔ «${rule.titleFa}» روی ${up.row.ThresholdValue} تنظیم شد`,
     }));
   } catch (err) { next(err); }
 });
 
 /** درج یا به‌روزرسانی سطر قاعده — جدا شده تا مسیر خوانا بماند. */
 async function r_upsertAlertRule(r, o) {
-  const up = await r.upsert("ContractAlertRule",
-    { ProjectId: o.projectId, RuleCode: o.ruleCode },
-    {
-      ProjectId: o.projectId,
-      RuleCode: o.ruleCode,
-      TitleFa: o.rule.titleFa,
-      Severity: o.severity,
-      ThresholdValue: o.threshold,
-      IsEnabled: o.enabled,
-      Status: "active",
-    }, o.userId, "car");
-  return { row: up?.row ?? null, action: up?.action ?? "insert" };
+  return r.transaction(async tx => {
+    const key = { ProjectId: o.projectId, RuleCode: o.ruleCode };
+    const before = await tx.findOne("ContractAlertRule", Object.entries(key).map(([column, value]) => ({ column, op: "eq", value })));
+    const up = await tx.upsert("ContractAlertRule", key, { ...key, TitleFa: o.rule.titleFa, Severity: o.severity ?? before?.Severity ?? o.rule.severity, ThresholdValue: o.threshold ?? before?.ThresholdValue ?? o.rule.threshold, IsEnabled: o.enabled ?? before?.IsEnabled ?? true, Status: "active" }, o.userId, "car");
+    await tx.create("AuditLog", { At: new Date().toISOString(), SubjectId: o.userId, Action: "CNT_ALERT_RULE_SET", ProjectCode: o.projectId, EntityName: "ContractAlertRule", EntityId: up.row.Id, Severity: "info", Details: { before, after: up.row } }, o.userId);
+    return { row: up.row, action: up.action };
+  });
 }
 
 /** واژگان نمایشی D10. */
@@ -14489,8 +14507,8 @@ const CNT_RENDER_FORMATS = new Set(["json", "html", "pdf", "word", "excel", "csv
 function cntLetterhead(q = {}, contract = {}, code = "RPT-CNT", seq = 1) {
   const dash = "—";
   return {
-    projectName: String(q.projectName || contract.TitleFa || dash),
-    projectCode: String(q.projectCode || dash),
+    projectName: String(q.projectName || (q.audience === "official" ? "" : dash)),
+    projectCode: String(q.projectCode || (q.audience === "official" ? "" : dash)),
     contractNo: String(contract.Code || dash),
     contractor: {
       name: String(q.contractorName || contract.ContractorName || dash),
@@ -14515,7 +14533,7 @@ function cntLetterhead(q = {}, contract = {}, code = "RPT-CNT", seq = 1) {
       ? String(q.classification) : "internal",
     distribution: String(q.distribution || "").split(",").map((x) => x.trim()).filter(Boolean),
     preparedBy: String(q.preparedBy || dash),
-    approvedBy: String(q.approvedBy || dash),
+    approvedBy: String(q.approvedBy || ""),
   };
 }
 
@@ -14543,7 +14561,7 @@ async function cntReportInputs(r, projectId, contractId, contract) {
 }
 
 /** کاتالوگ گزارش‌ها با پالایش بر اساس مخاطب. */
-app.get("/api/cnt/reports", cntRequire("cnt.report.view"), (req, res) => {
+app.get("/api/cnt/reports", cntRequire("cnt.report.view"), cntProjectAccess("cnt.report.view"), (req, res) => {
   const audience = String(req.query.audience || "");
   const items = audience
     ? CNT_REPORT_CATALOG.filter((r) => r.audiences.includes(audience))
@@ -14557,7 +14575,7 @@ app.get("/api/cnt/reports", cntRequire("cnt.report.view"), (req, res) => {
  * جدا از `/render` نگه داشته شده تا UI بتواند پیش‌نمایش بدهد بدون
  * اینکه سند رسمی صادر شود.
  */
-app.get("/api/cnt/reports/:code", cntRequire("cnt.report.view"), async (req, res, next) => {
+app.get("/api/cnt/reports/:code", cntRequire("cnt.report.view"), cntProjectAccess("cnt.report.view"), async (req, res, next) => {
   try {
     const code = String(req.params.code || "").toUpperCase();
     const def = getCntReport(code);
@@ -14607,8 +14625,11 @@ async function cntReportPayload(r, sc, contract, code, q = {}) {
 
   if (code === "RPT-CNT-PRG" || code === "RPT-CNT-EXEC") {
     const pin = await cntProgressInputs(r, sc.projectId, sc.contractId);
-    base.progress = progressSnapshot(pin);
-    if (code === "RPT-CNT-PRG") base.sCurve = sCurve(pin)?.points ?? [];
+    base.progress = progressSnapshot({ ...pin, contractAmount: cntContractAmount(pin.contract), contractType: pin.contract.ContractType, ceilingPct: pin.contract.CeilingPct });
+    if (code === "RPT-CNT-PRG") {
+      const curve = contractActualCurve(cntContractAmount(pin.contract), pin.ipcs);
+      base.sCurve = curve.points;
+    }
   }
 
   if (code === "RPT-CNT-EXEC") {
@@ -14656,6 +14677,9 @@ app.get("/api/cnt/reports/:code/render", async (req, res, next) => {
     let passed = false;
     cntRequire(need)(req, res, () => { passed = true; });
     if (!passed) return;
+    let scoped = false;
+    cntProjectAccess(need)(req, res, () => { scoped = true; });
+    if (!scoped) return;
 
     const sc = cntScopeOf(req, res);
     if (!sc) return;

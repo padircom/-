@@ -13,7 +13,7 @@ import path from "node:path";
 
 const PORT = 4727;
 const BASE = `http://localhost:${PORT}`;
-const PROJECT = "p1";
+const PROJECT = "c1-p1";
 
 const CONTRACTS = "u-contracts";
 const PM = "u-pm";
@@ -346,13 +346,13 @@ test("وضعیت ناشناخته رد می‌شود", async () => {
   assert.equal(r.body.error.code, "E-CNT-MS-STATUS");
 });
 
-test("نقطهٔ عطف پروژهٔ دیگر، ۴۰۴", async () => {
+test("نقطهٔ عطف پروژهٔ دیگر، ۴۰۳", async () => {
   const c = await makeContract({ contractType: "lump_sum" });
   const { milestone } = await makeMilestone(c.Id);
   const r = await post(`/api/cnt/milestone/${milestone.Id}/achieve?projectId=p-other`, {
     status: "achieved",
   }, CONTRACTS);
-  assert.equal(r.status, 404);
+  assert.equal(r.status, 403);
 });
 
 test("دفتر نقاط عطف تجمیع‌شده است", async () => {
@@ -410,7 +410,7 @@ test("پیمان پروژهٔ دیگر دیده نمی‌شود", async () => {
     `/api/cnt/progress/breakdown?projectId=p-other&contractId=${c.Id}`,
     `/api/cnt/progress/scurve?projectId=p-other&contractId=${c.Id}`,
   ]) {
-    assert.equal((await get(p, CONTRACTS)).status, 404, p);
+    assert.equal((await get(p, CONTRACTS)).status, 403, p);
   }
 });
 

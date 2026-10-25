@@ -196,13 +196,14 @@ export function validateLetterhead(lh: Letterhead, audience: Audience): Issue[] 
   if (!lh.projectCode?.trim()) out.push({ code: "E-RPT-102", severity: "error", message: "کد پروژه الزامی است" });
 
   if (audience === "official") {
+    if (lh.projectName?.trim() === "—" || lh.projectCode?.trim() === "—" || lh.approvedBy?.trim() === "—") out.push({ code: "E-RPT-108", severity: "error", message: "سربرگ رسمی نباید مقدار جایگزین داشته باشد" });
     const parties: [string, Party][] = [
       ["پیمانکار", lh.contractor],
       ["کارفرما", lh.client],
       ["مشاور", lh.consultant],
     ];
     for (const [label, p] of parties) {
-      if (!p?.name?.trim() || !p?.logoText?.trim()) {
+      if (!p?.name?.trim() || p.name.trim() === "—" || !p?.logoText?.trim()) {
         out.push({ code: "E-RPT-103", severity: "error", message: `لوگو و نام ${label} برای گزارش رسمی الزامی است` });
       }
     }

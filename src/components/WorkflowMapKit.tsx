@@ -61,11 +61,18 @@ export function WorkflowNodeBox({
   rtl,
   accent,
   onNavigate,
+  compact,
+  dense,
+  grow,
 }: {
   node: WorkflowMapNode;
   rtl: boolean;
   accent: string;
   onNavigate?: () => void;
+  compact?: boolean;
+  /** فشرده‌سازی نقشهٔ برنامه‌ریزی، با حفظ توضیح گره‌ها. */
+  dense?: boolean;
+  grow?: number;
 }) {
   const title = rtl ? node.titleFa : node.titleEn;
   const sub = rtl ? node.subFa : node.subEn;
@@ -74,25 +81,26 @@ export function WorkflowNodeBox({
     <>
       <span
         aria-hidden="true"
-        className="absolute end-0 top-2 bottom-2 w-[3px] rounded-full"
+        className={`absolute end-0 ${compact ? "top-1 bottom-1" : "top-2 bottom-2"} w-[3px] rounded-full`}
         style={{ background: isCross ? WF_COLOR.cross : accent, opacity: isCross ? 0.75 : 0.9 }}
       />
-      <span className="block text-[11px] font-medium leading-4 text-start tx1">{title}</span>
-      {sub && <span className="mt-1 block text-[9.5px] font-light leading-4 text-start tx3">{sub}</span>}
-      {isCross && (
+      <span className={`block ${compact ? "text-[9px] leading-[13px]" : dense ? "text-[11px] leading-[13px]" : "text-[11px] leading-4"} font-medium text-start tx1`} style={compact ? { fontSize: "calc(var(--workspace-text-size, 0.75rem) * 1.1)", lineHeight: 1.1 } : undefined}>{title}</span>
+      {sub && !compact && <span className={`${dense ? "mt-0.5 leading-[12px]" : "mt-1 leading-4"} block text-[9.5px] font-light text-start tx3`} style={dense ? { fontSize: "calc(var(--workspace-text-size, 0.75rem) * 0.85)" } : undefined}>{sub}</span>}
+      {isCross && !compact && (
         <span
-          className="mt-1.5 block w-fit rounded-full px-2 py-px text-[8px] font-medium"
-          style={{ background: `${WF_COLOR.cross}22`, color: "var(--ink)" }}
+          className={`block w-fit rounded-full font-medium ${compact ? "mt-0.5 px-1 py-px text-[7px]" : dense ? "mt-0.5 px-1 py-px text-[8px] leading-[11px]" : "mt-1.5 px-2 py-px text-[8px]"}`}
+          style={{ background: `${WF_COLOR.cross}22`, color: "var(--ink)", ...(dense ? { fontSize: "calc(var(--workspace-text-size, 0.75rem) * 0.7)" } : {}) }}
         >
           {rtl ? "بین‌ماژولی" : "cross-module"}
         </span>
       )}
     </>
   );
-  const cls = `relative flex w-full flex-1 flex-col justify-center overflow-hidden rounded-xl border px-3 py-2 text-start transition ${
+  const cls = `relative flex w-full flex-1 flex-col justify-center overflow-hidden rounded-xl border ${compact ? "px-2 py-1.5" : dense ? "px-2 py-[3px]" : "px-3 py-2"} text-start transition ${
     isCross ? "border-dashed" : "border-solid"
   }`;
   const style = {
+    flexGrow: grow,
     background: isCross ? `${WF_COLOR.cross}12` : node.kind === "proc" ? `${accent}1a` : "var(--row)",
     borderColor: isCross ? `${WF_COLOR.cross}55` : node.kind === "proc" ? `${accent}55` : "var(--line-soft)",
   };
@@ -122,17 +130,19 @@ export function WorkflowColumnHead({
   rtl,
   color,
   icon,
+  compact,
 }: {
   fa: string;
   en: string;
   rtl: boolean;
   color: string;
   icon: string;
+  compact?: boolean;
 }) {
   return (
     <div
-      className="flex items-center justify-center gap-1.5 rounded-xl px-2 py-1.5 text-[10.5px] font-medium text-white"
-      style={{ background: `linear-gradient(180deg, ${color}, ${color}cc)`, boxShadow: `0 6px 16px -8px ${color}` }}
+      className={`flex items-center justify-center gap-1.5 rounded-xl px-2 font-medium text-white ${compact ? "py-1 text-[10px]" : "py-1.5 text-[10.5px]"}`}
+      style={{ background: `linear-gradient(180deg, ${color}, ${color}cc)`, boxShadow: `0 6px 16px -8px ${color}`, ...(compact ? { fontSize: "calc(var(--workspace-text-size, 0.75rem) * 1.1)" } : {}) }}
     >
       <span aria-hidden="true" className="inline-flex">{WF_ICONS[icon]}</span>
       <span>{rtl ? fa : en}</span>

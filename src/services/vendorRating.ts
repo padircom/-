@@ -103,16 +103,3 @@ export function portfolioSummary(results: RatingResult[]): PortfolioSummary {
     valueAtRisk: active.filter((r) => r.grade === "C" || r.grade === "D").reduce((s, r) => s + r.contractValue, 0),
   };
 }
-
-/* ══════════════════════════════════════════════════════════════════════
-   ظرفِ داده — تا اتصال جداول Vendor / Contractor_Performance
-   ══════════════════════════════════════════════════════════════════════ */
-
-export const PARTY_SEED: Party[] = [
-  { id: "v1", name: { fa: "پیمانکار ابنیه البرز", en: "Alborz Civil Contractor" }, kind: "contractor", scores: { hse: 88, quality: 82, time: 74, price: 70, docs: 78, coop: 85 }, previousScore: 79, contractValue: 1_250_000_000_000, active: true },
-  { id: "v2", name: { fa: "پیمانکار نصب مکانیک پیشگام", en: "Pishgam Mechanical Erection" }, kind: "contractor", scores: { hse: 92, quality: 88, time: 80, price: 66, docs: 84, coop: 78 }, previousScore: 81, contractValue: 980_000_000_000, active: true },
-  { id: "v3", name: { fa: "تأمین‌کننده لوله کربن‌استیل", en: "CS Pipe Supplier" }, kind: "supplier", scores: { hse: 74, quality: 70, time: 58, price: 82, docs: 64, coop: 72 }, previousScore: 71, contractValue: 430_000_000_000, active: true },
-  { id: "v4", name: { fa: "تأمین‌کننده کابل و تجهیز برق", en: "Cable & Electrical Supplier" }, kind: "supplier", scores: { hse: 80, quality: 86, time: 76, price: 62, docs: 80, coop: 68 }, previousScore: 74, contractValue: 275_000_000_000, active: true },
-  { id: "v5", name: { fa: "پیمانکار رنگ و عایق صنعتی", en: "Industrial Painting & Insulation" }, kind: "contractor", scores: { hse: 58, quality: 60, time: 52, price: 74, docs: 55, coop: 60 }, previousScore: 63, contractValue: 190_000_000_000, active: true },
-  { id: "v6", name: { fa: "تأمین‌کننده قطعات یدکی ماشین‌آلات", en: "Machinery Spare Parts Supplier" }, kind: "supplier", scores: { hse: 70, quality: 64, time: 66, price: 78, docs: 60, coop: 74 }, previousScore: 68, contractValue: 95_000_000_000, active: false },
-];

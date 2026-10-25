@@ -103,3 +103,12 @@ server/storage/change/
 server/contractRiskLogic.js
 server/contractClauseLogic.js
 server/contractRiskDocLogic.js
+
+# Generated contract-amendment workflow (npm run build:cntamend)
+server/contractAmendmentLogic.js
+
+# Generated contract-variation workflow (npm run build:cntvariation)
+server/contractVariationLogic.js
+
+# Generated periodic party evaluation engine (npm run build:vendorrating)
+server/vendorEvaluationLogic.js

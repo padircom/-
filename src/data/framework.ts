@@ -198,11 +198,11 @@ export const domains: Domain[] = [
     icon: "🏛",
     accent: "#B8D4FF",
     title: { fa: "مدیریت حاکمیت و فرآیندهای PMBOK", en: "Governance & PMBOK Processes" },
-    nav: { fa: "مدیریت حاکمیت پروژه (PMBOK)", en: "Governance & PMBOK" },
+    nav: { fa: "مدیریت حاکمیت پروژه", en: "Governance & PMBOK" },
     processes: [
       {
         id: "d6-p1",
-        title: { fa: "حاکمیت (Governance)", en: "Governance" },
+        title: { fa: "حاکمیت", en: "Governance" },
         subs: [
           { id: "d6-p1-s1", title: { fa: "گردش فرآیند", en: "Process Workflow" }, activity: { fa: "گردش فرآیند سازمانی", en: "Org workflow" }, source: "PMBOK, سازمان / Org", sql: ["Process_Master", "Workflow_Instance"], output: "Process Report", connectsTo: "PMO", ai: "AI Process Advisor" },
         ],
@@ -223,7 +223,7 @@ export const domains: Domain[] = [
       },
       {
         id: "d6-p4",
-        title: { fa: "ممیزی (Audit)", en: "Audit" },
+        title: { fa: "ممیزی", en: "Audit" },
         subs: [
           { id: "d6-p4-s1", title: { fa: "کنترل انطباق", en: "Compliance Control" }, activity: { fa: "کنترل انطباق", en: "Compliance check" }, source: "EDMS, Process Data", sql: ["Audit_Register"], output: "Audit Report", connectsTo: "PMO", ai: "AI Compliance Check" },
         ],
@@ -313,8 +313,8 @@ export const domains: Domain[] = [
         id: "d14-p8",
         title: { fa: "ارزیابی پیمانکاران و تأمین‌کنندگان", en: "Contractor & Supplier Rating" },
         subs: [
-          { id: "d14-p8-s1", title: { fa: "امتیازدهی وزنی", en: "Weighted Scoring" }, activity: { fa: "امتیازِ شش‌محوره (ایمنی، کیفیت، زمان، قیمت، مستندات، همکاری) با وزن‌های متمرکز و رتبهٔ A تا D", en: "Six-axis scoring (HSE, quality, schedule, price, documentation, cooperation) with central weights and A–D grading" }, source: "Inspection, Site Reports, Procurement", sql: ["Contractor_Performance", "Vendor_Score"], output: "Rating Card", connectsTo: "Procurement, Quality, HSE", ai: "AI Performance Predictor" },
-          { id: "d14-p8-s2", title: { fa: "روند، پایش و فهرستِ بهبود", en: "Trend, Watchlist & Improvement" }, activity: { fa: "مقایسه با دورهٔ قبل، نشان‌دار کردنِ رتبه‌های C و D و تعیین ضعیف‌ترین محور به‌عنوان هدفِ بهبود", en: "Compare with previous period, flag C/D grades and pick the weakest axis as improvement target" }, source: "Rating History", sql: ["Vendor_Score_History"], output: "Watchlist & Improvement Plan", connectsTo: "Governance, Procurement", ai: "AI Improvement Coach" },
+          { id: "d14-p8-s1", title: { fa: "امتیازدهی وزنی", en: "Weighted Scoring" }, activity: { fa: "امتیازِ شش‌محوره (ایمنی، کیفیت، زمان، قیمت، مستندات، همکاری) با وزن‌های متمرکز و رتبهٔ A تا D", en: "Six-axis scoring (HSE, quality, schedule, price, documentation, cooperation) with central weights and A–D grading" }, source: "Inspection, Site Reports, Procurement", sql: ["VendorEvaluation"], output: "Rating Card", connectsTo: "Procurement, Quality, HSE", ai: "AI Performance Predictor" },
+          { id: "d14-p8-s2", title: { fa: "روند، پایش و فهرستِ بهبود", en: "Trend, Watchlist & Improvement" }, activity: { fa: "مقایسه با دورهٔ قبل، نشان‌دار کردنِ رتبه‌های C و D و تعیین ضعیف‌ترین محور به‌عنوان هدفِ بهبود", en: "Compare with previous period, flag C/D grades and pick the weakest axis as improvement target" }, source: "Rating History", sql: ["VendorEvaluation", "VendorImprovement"], output: "Watchlist & Improvement Plan", connectsTo: "Governance, Procurement", ai: "AI Improvement Coach" },
         ],
       },
     ],

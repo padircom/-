@@ -26,13 +26,13 @@ interface ControlNode extends WorkflowMapNode {
 }
 
 const INPUTS: ControlNode[] = [
-  { titleFa: "برنامهٔ پایه و پیشرفت واقعی", titleEn: "Baseline & actual progress", subFa: "از ماژول برنامه‌ریزی", subEn: "From planning module", kind: "cross" },
-  { titleFa: "گزارش روزانه و هفتگی سایت", titleEn: "Site reports", subFa: "ثبت پیشرفت و تاریخ‌های واقعی", subEn: "Progress and actual dates", kind: "cross" },
+  { titleFa: "برنامهٔ پایه و پیشرفت واقعی", titleEn: "Baseline & actual progress", subFa: "از ماژول برنامه‌ریزی", subEn: "From planning module", moduleId: "d2", processId: "d2-p2", subId: "d2-p2-s1", kind: "cross" },
+  { titleFa: "گزارش روزانه و هفتگی سایت", titleEn: "Site reports", subFa: "ثبت پیشرفت و تاریخ‌های واقعی", subEn: "Progress and actual dates", moduleId: "d2", processId: "d2-p4", subId: "d2-p4-s1", kind: "cross" },
   { titleFa: "هزینهٔ واقعی و تعهدات پیمان", titleEn: "Actual cost & commitments", subFa: "هزینهٔ واقعی در برابر بودجه", subEn: "Actual cost vs budget", moduleId: "d5", processId: "d5-p2", subId: "d5-p2-s1", kind: "io" },
   { titleFa: "پیشرفت فیزیکی و برداشت احجام", titleEn: "Physical progress & measurement", subFa: "مقادیر اجراشده در دوره", subEn: "Measured quantities", moduleId: "d5", processId: "d5-p7", subId: "d5-p7-s2", kind: "io" },
   { titleFa: "نتایج بازرسی و عدم‌انطباق", titleEn: "Inspection & NCR results", subFa: "NCR و اقدام اصلاحی", subEn: "NCR and corrective action", moduleId: "d8", processId: "d8-p3", subId: "d8-p3-s1", kind: "io" },
   { titleFa: "ریسک‌ها، تغییرات و ادعاها", titleEn: "Risks, changes & claims", subFa: "ثبت و تحلیل ریسک", subEn: "Risk register", moduleId: "d4", processId: "d4-p1", subId: "d4-p1-s1", kind: "io" },
-  { titleFa: "قراردادها و تضمین‌ها", titleEn: "Contracts & guarantees", subFa: "تعهدات پیمان — از ماژول پیمان", subEn: "Contractual commitments", kind: "cross" },
+  { titleFa: "قراردادها و تضمین‌ها", titleEn: "Contracts & guarantees", subFa: "تعهدات پیمان — از ماژول پیمان", subEn: "Contractual commitments", moduleId: "d14", processId: "d14-p6", subId: "d14-p6-s1", kind: "cross" },
 ];
 
 const CYCLE: ControlNode[] = [
@@ -76,20 +76,20 @@ export default function ControlWorkflowMap({
     >
       {/* سرستون‌ها — نوار رنگی هر ستون */}
       <div className={`mt-3 grid ${gridCols}`}>
-        <WorkflowColumnHead fa="ورودی‌ها" en="Inputs" rtl={rtl} color={C_INPUT} icon="inputs" />
+        <WorkflowColumnHead fa="ورودی‌ها" en="Inputs" rtl={rtl} color={C_INPUT} icon="inputs" compact />
         <div />
-        <WorkflowColumnHead fa="هاب داده" en="Data hub" rtl={rtl} color={C_HUB} icon="hub" />
+        <WorkflowColumnHead fa="هاب داده" en="Data hub" rtl={rtl} color={C_HUB} icon="hub" compact />
         <div />
-        <WorkflowColumnHead fa="چرخهٔ کنترل" en="Control cycle" rtl={rtl} color={C_CYCLE} icon="cycle" />
+        <WorkflowColumnHead fa="چرخهٔ کنترل" en="Control cycle" rtl={rtl} color={C_CYCLE} icon="cycle" compact />
         <div />
-        <WorkflowColumnHead fa="خروجی‌ها" en="Outputs" rtl={rtl} color={C_OUTPUT} icon="outputs" />
+        <WorkflowColumnHead fa="خروجی‌ها" en="Outputs" rtl={rtl} color={C_OUTPUT} icon="outputs" compact />
       </div>
 
       <div className={`mt-2 grid ${gridCols} items-stretch`}>
         {/* ورودی‌ها */}
         <div className="flex flex-col gap-2">
           {INPUTS.map((node) => (
-            <WorkflowNodeBox key={node.titleEn} node={node} rtl={rtl} accent={C_INPUT} onNavigate={open(node)} />
+            <WorkflowNodeBox key={node.titleEn} node={node} rtl={rtl} accent={C_INPUT} onNavigate={open(node)} compact />
           ))}
         </div>
         <div className="flex flex-col">
@@ -103,16 +103,13 @@ export default function ControlWorkflowMap({
           type="button"
           onClick={() => onOpenModule("d3", "d3-p1", "d3-p1-s1")}
           title={rtl ? "رفتن به «پایش و کنترل عملکرد پروژه»" : "Go to performance monitoring"}
-          className="relative flex flex-col items-center justify-center overflow-hidden rounded-xl border px-3 py-3 text-center transition hover:-translate-y-px focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/70"
+          className="relative flex flex-col items-center justify-center overflow-hidden rounded-xl border px-2 py-1.5 text-center transition hover:-translate-y-px focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/70"
           style={{ background: `${C_HUB}18`, borderColor: `${C_HUB}66` }}
           onMouseEnter={(e) => { e.currentTarget.style.borderColor = `${C_HUB}aa`; }}
           onMouseLeave={(e) => { e.currentTarget.style.borderColor = `${C_HUB}66`; }}
         >
           <span aria-hidden="true" className="absolute end-0 top-2 bottom-2 w-[3px] rounded-full" style={{ background: C_HUB, opacity: 0.9 }} />
-          <span className="text-[12.5px] font-medium leading-5 tx1">{rtl ? "لایهٔ یکپارچهٔ دادهٔ کنترل" : "Project control database"}</span>
-          <span className="mt-1 text-[9.5px] font-light leading-4 tx3">
-            {rtl ? "اتصال ماژول‌های پایش، هزینه، کیفیت و ریسک با API · اعتبارسنجی داده · قواعد پیشرفت (ROC) · قفل دوره‌های بسته" : "Validated control data hub"}
-          </span>
+          <span className="text-[10.5px] font-medium leading-[15px] tx1" style={{ fontSize: "calc(var(--workspace-text-size, 0.75rem) * 1.1)", lineHeight: 1.2 }}>{rtl ? "لایهٔ یکپارچهٔ دادهٔ کنترل" : "Project control database"}</span>
         </button>
         <div className="flex flex-col">
           {CYCLE.map((node) => (
@@ -124,7 +121,7 @@ export default function ControlWorkflowMap({
         <div className="flex flex-col gap-2">
           {CYCLE.map((node, i) => (
             <div key={node.titleEn} className="flex flex-1 flex-col gap-2">
-              <WorkflowNodeBox node={node} rtl={rtl} accent={C_CYCLE} onNavigate={open(node)} />
+              <WorkflowNodeBox node={node} rtl={rtl} accent={C_CYCLE} onNavigate={open(node)} compact />
               {i < CYCLE.length - 1 && <div className="text-center text-[12px] leading-3 tx4">↓</div>}
             </div>
           ))}
@@ -138,7 +135,7 @@ export default function ControlWorkflowMap({
         {/* خروجی‌ها */}
         <div className="flex flex-col gap-2">
           {OUTPUTS.map((node) => (
-            <WorkflowNodeBox key={node.titleEn} node={node} rtl={rtl} accent={C_OUTPUT} onNavigate={open(node)} />
+            <WorkflowNodeBox key={node.titleEn} node={node} rtl={rtl} accent={C_OUTPUT} onNavigate={open(node)} compact />
           ))}
         </div>
       </div>
@@ -153,12 +150,14 @@ export default function ControlWorkflowMap({
             node={{ titleFa: "اجرای سایت و بازگشت به داده", titleEn: "Site execution & data feed-back", subFa: "نتیجهٔ اقدام به چرخهٔ پایش برمی‌گردد", subEn: "Results feed the monitoring cycle", kind: "cross" }}
             rtl={rtl}
             accent={C_OUTPUT}
+            compact
           />
           <div className={arrow}>←</div>
           <WorkflowNodeBox
             node={{ titleFa: "اقدام اصلاحی و پیگیری", titleEn: "Corrective action tracking", subFa: "مالک اقدام و موعد انجام", subEn: "Owner and due date", kind: "proc" }}
             rtl={rtl}
             accent={C_CYCLE}
+            compact
             onNavigate={() => onOpenModule("d3", "d3-p5", "d3-p5-s1")}
           />
           <div className={arrow}>←</div>
@@ -166,6 +165,7 @@ export default function ControlWorkflowMap({
             node={{ titleFa: "تصمیم مدیریتی", titleEn: "Management decision", subFa: "بازبینی ماهانه و گیت تصمیم", subEn: "Monthly review, decision gate", kind: "proc" }}
             rtl={rtl}
             accent={C_CYCLE}
+            compact
             onNavigate={() => onOpenModule("d3", "d3-p4", "d3-p4-s1")}
           />
           <div className={arrow}>→</div>
@@ -173,6 +173,7 @@ export default function ControlWorkflowMap({
             node={{ titleFa: "بازبینی عملکرد و کارفرما", titleEn: "Performance review & client", subFa: "تأیید وضعیت دوره", subEn: "Period status approval", kind: "io" }}
             rtl={rtl}
             accent={C_OUTPUT}
+            compact
             onNavigate={() => onOpenModule("d3", "d3-p6", "d3-p6-s1")}
           />
         </div>

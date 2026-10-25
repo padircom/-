@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   performanceDomainModules,
   performanceDomainOf,
@@ -20,7 +20,7 @@ import ControlWorkflowMap from "./ControlWorkflowMap";
 import PmaWorkspace, { type PmaTab } from "./PmaWorkspace";
 import RiskClaimsWorkspace, { type D4Tab } from "./RiskClaimsWorkspace";
 import GovernanceWorkspace, { type GovTab } from "./GovernanceWorkspace";
-import PmoWorkspace from "./PmoWorkspace";
+import PmoWorkspace, { type PmoTab } from "./PmoWorkspace";
 import HseWorkspace, { type HseTab as HseFieldTab } from "./HseFieldWorkspace";
 import ContractsPanel from "./ContractsPanel";
 import ContractRiskWorkspace from "./ContractRiskWorkspace";
@@ -350,7 +350,7 @@ const D5_PAGE_SUBS: Record<string, { id: string; title: Bi; tab: FinTab; sql: st
     { id: "d5-p3-ipc", title: { fa: "صورت‌وضعیت و کسورات", en: "Progress invoice" }, tab: "cash", sql: ["fin_progress_invoice"] },
   ],
   "d5-p4": [
-    { id: "d5-p4-mrp", title: { fa: "اجرای MRP و تاریخ نیاز کالا", en: "MRP & material need date" }, tab: "pr", sql: ["fin_mrp_run"] },
+    { id: "d5-p4-mrp", title: { fa: "پیشنهاد تجدید سفارش و تاریخ نیاز کالا", en: "Reorder suggestions & material need date" }, tab: "pr", sql: ["fin_mrp_run"] },
     { id: "d5-p4-bud", title: { fa: "کنترل بودجه و مسیر تأیید", en: "Budget check & approval route" }, tab: "pr", sql: ["fin_pr_line"] },
   ],
   "d5-p5": [
@@ -411,6 +411,21 @@ const D1_TAB_BY_SUB: Record<string, EdmsTab> = {
   "d1-p5-s1": "lessons",
 };
 
+const D14_IPC_TEMPLATES_SUB_ID = "d14-p2-templates";
+
+/** تفکیک دسترسی‌های d14 در سایدبار؛ شناسه‌ها و مالکیت داده‌ها ثابت می‌مانند. */
+function isIpcProcess(processId: string, subId?: string): boolean {
+  return ["d14-p2", "d14-p4", "d14-p5"].includes(processId)
+    || subId === "d14-p6-s2" || subId === "d14-p7-s2";
+}
+
+function contractView(processId?: string, subId?: string): "contract" | "ipc" | "rating" | "risk" {
+  if (subId === "d14-p1-risk") return "risk";
+  if (processId === "d14-p8") return "rating";
+  if (["d14-p2-s1", "d14-p5-s2", "d14-p6-s2", "d14-p7-s2"].includes(subId ?? "")) return "contract";
+  return processId && isIpcProcess(processId, subId) ? "ipc" : "contract";
+}
+
 type Props = {
   lang: Lang;
   target: ModuleNavTarget;
@@ -419,6 +434,15 @@ type Props = {
   /** پرش به دامنه/زیرفرآیند دیگر (برای پیوندهای میان‌دامنه‌ای). */
   onNavigate?: (target: ModuleNavTarget) => void;
 };
+
+function BackToMapButton({ rtl, onClick, label }: { rtl: boolean; onClick: () => void; label?: string }) {
+  return (
+    <button onClick={onClick} className="glass-row flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-[10.5px] font-light tx2 transition hover:tx1">
+      <span className="inline-block rotate-180 rtl:rotate-0">→</span>
+      {label ?? (rtl ? "بازگشت به نقشهٔ فرایندی" : "Back to process map")}
+    </button>
+  );
+}
 
 function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: Props) {
   const rtl = lang === "fa";
@@ -598,6 +622,8 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
     return "workflow";
   })();
 
+  const [planningTab, setPlanningTab] = useState<PexTab>(d2Tab);
+
   if (dom.id === "d2") {
     return (
       <div className="flex h-full min-h-0 flex-col gap-3 overflow-hidden" dir={rtl ? "rtl" : "ltr"}>
@@ -606,11 +632,14 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
             <span className="inline-block rotate-180 rtl:rotate-0">→</span>
             {rtl ? "بازگشت به داشبورد" : "Back to dashboard"}
           </button>
-          {cluster && (
-            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl text-[20px]"
-                  style={{ background: `${cluster.color}1f`, border: `1px solid ${cluster.color}55` }}>
-              {cluster.icon}
-            </span>
+          {planningTab !== "workflow" && (
+            <button type="button" onClick={() => { setSelected(null); setPlanningTab("workflow"); }}
+              className="glass-row shrink-0 rounded-lg px-3 py-2 text-[10.5px] font-light tx2 transition hover:tx1">
+              {rtl ? "بازگشت به نقشهٔ برنامه‌ریزی" : "Back to planning map"}
+            </button>
+          )}
+          {target.fromMap && (
+            <BackToMapButton rtl={rtl} label={rtl ? "بازگشت به نقشهٔ کنترل پروژه" : "Back to project control map"} onClick={() => onNavigate?.({ ...target, moduleId: "d6", processId: undefined, subId: undefined, fromMap: undefined, initialView: "ctl" })} />
           )}
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
@@ -621,24 +650,25 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
               )}
               <span className="text-[16px] font-light tx4">/</span>
               {project && (
-                <h2 className="truncate text-[19px] font-semibold leading-tight tx1">{t(project.name, lang)}</h2>
+                <h2 className="truncate text-[19px] font-semibold leading-tight tx1">
+                  {t(project.name, lang)} <span dir="ltr" className="inline-block text-[10px] font-light tx3">({project.code})</span>
+                </h2>
               )}
             </div>
             {project && (
               <p className="mt-1 truncate text-[10px] font-extralight tx3">
-                <span dir="ltr">{project.code}</span> · {t(project.client, lang)} · {t(project.location, lang)}
+                {t(project.client, lang)} · {t(project.location, lang)}
               </p>
             )}
           </div>
-          <div className="shrink-0 text-end">
-            <SystemBadge domainId={dom.id} lang={lang} className="mb-1 justify-end" />
-            <div className="text-[9px] font-extralight tx3">{t(dom.title, lang)}</div>
+          <div className="shrink-0 text-end text-[11px] font-light tx1">
+            {t(dom.nav ?? dom.title, lang)}
           </div>
         </div>
 
         <div className="workspace-columns flex min-h-0 flex-1 gap-3 overflow-hidden">
           <div dir={rtl ? "rtl" : "ltr"} className="glass flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl p-3">
-            <PlanningWorkspace lang={lang} clusterId={target.clusterId} projectId={target.projectId} initialTab={d2Tab} hideTabs />
+            <PlanningWorkspace lang={lang} clusterId={target.clusterId} projectId={target.projectId} initialTab={d2Tab} activeTab={planningTab} onTabChange={setPlanningTab} onOpenModule={(moduleId, processId, subId) => onNavigate?.({ ...target, moduleId, processId, subId, initialView: undefined, fromPlanningMap: true })} hideTabs />
           </div>
           <DomainAside
               lang={lang}
@@ -648,7 +678,8 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
               extraSubs={D2_PAGE_SUBS}
               onSelectSub={(pId, sId) => {
                 audit("OPEN_SUBPROCESS", { projectId: target.projectId, entity: dom.id, entityId: sId });
-                setSelected({ pId, sId })
+                setSelected({ pId, sId });
+                setPlanningTab(D2_TAB_BY_SUB[sId] ?? "workflow");
               }}
               onOpenModuleSub={(moduleId, pId, sId) => onNavigate?.({ ...target, moduleId, processId: pId, subId: sId })}
             />
@@ -671,6 +702,9 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
             <span className="inline-block rotate-180 rtl:rotate-0">→</span>
             {rtl ? "بازگشت به داشبورد" : "Back to dashboard"}
           </button>
+          {target.fromMap && (
+            <BackToMapButton rtl={rtl} onClick={() => onNavigate?.({ ...target, moduleId: "d6", processId: undefined, subId: undefined, fromMap: undefined, initialView: "ctl" })} />
+          )}
           {cluster && (
             <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl text-[20px]"
                   style={{ background: `${cluster.color}1f`, border: `1px solid ${cluster.color}55` }}>
@@ -738,6 +772,9 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
             <span className="inline-block rotate-180 rtl:rotate-0">→</span>
             {rtl ? "بازگشت به داشبورد" : "Back to dashboard"}
           </button>
+          {target.fromMap && (
+            <BackToMapButton rtl={rtl} onClick={() => onNavigate?.({ ...target, moduleId: "d6", processId: undefined, subId: undefined, fromMap: undefined, initialView: "ctl" })} />
+          )}
           {cluster && (
             <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl text-[20px]"
                   style={{ background: `${cluster.color}1f`, border: `1px solid ${cluster.color}55` }}>
@@ -799,10 +836,14 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
 
   /* P8: میز کار دفتر پروژه (PMO-1..3) کنار میز حاکمیت d6؛ نوار کنار و
      حوزه‌های اصلی دست‌نخورده می‌مانند و فقط نمای درون d6 عوض می‌شود. */
-  const [d6View, setD6View] = useState<"gov" | "pmo" | "ctl">("gov");
+  const [d6View, setD6View] = useState<"gov" | "pmo" | "ctl">(target.initialView ?? "gov");
+  const [pmoTab, setPmoTab] = useState<PmoTab>(target.pmoTab ?? "charter");
 
+  const [d14ContractSelection, setD14ContractSelection] = useState<{ projectId: string; id: string } | null>(null);
+  const d14ContractId = d14ContractSelection?.projectId === target.projectId ? d14ContractSelection.id : "";
+  const d14ScrollRef = useRef<HTMLDivElement>(null);
   const [d14View, setD14View] = useState<"contract" | "ipc" | "rating" | "risk">(
-    target.subId === "d14-p1-risk" ? "risk" : target.processId === "d14-p8" ? "rating" : "contract",
+    contractView(target.processId, target.subId),
   );
 
   /* MFG/MES: دسترسی به فضای کاری سامانهٔ مستقل تولید کارگاهی (Standalone MES)
@@ -829,6 +870,13 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
             <span className="inline-block rotate-180 rtl:rotate-0">→</span>
             {rtl ? "بازگشت به داشبورد" : "Back to dashboard"}
           </button>
+          {target.fromPlanningMap && (
+            <BackToMapButton rtl={rtl} label={rtl ? "بازگشت به نقشهٔ برنامه‌ریزی" : "Back to planning map"}
+              onClick={() => onNavigate?.({ ...target, moduleId: "d2", processId: undefined, subId: undefined, initialView: undefined, fromPlanningMap: undefined })} />
+          )}
+          {target.fromMap && (
+            <BackToMapButton rtl={rtl} onClick={() => onNavigate?.({ ...target, moduleId: "d6", processId: undefined, subId: undefined, fromMap: undefined, initialView: "ctl" })} />
+          )}
           {cluster && (
             <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl text-[20px]"
                   style={{ background: `${cluster.color}1f`, border: `1px solid ${cluster.color}55` }}>
@@ -896,7 +944,33 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
 
   /* ماژول مهندسی و طراحی — کامپوننت خودش نوار بازگشت و تب‌ها را دارد. */
   if (dom.id === "d12") {
-    return <EngineeringWorkspace lang={lang} onBack={onBack} />;
+    return <EngineeringWorkspace lang={lang} onBack={onBack} headerIdentity={
+      <>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
+            {cluster && (
+              <h1 className="truncate text-[20px] font-semibold leading-tight" style={{ color: cluster.color }}>
+                {t(cluster.title, lang)}
+              </h1>
+            )}
+            <span className="text-[16px] font-light tx4">/</span>
+            {project && (
+              <h2 className="truncate text-[19px] font-semibold leading-tight tx1">
+                {t(project.name, lang)} <span dir="ltr" className="inline-block text-[10px] font-light tx3">({project.code})</span>
+              </h2>
+            )}
+          </div>
+          {project && (
+            <p className="mt-1 truncate text-[10px] font-extralight tx3">
+              {t(project.client, lang)} · {t(project.location, lang)}
+            </p>
+          )}
+        </div>
+        <div className="shrink-0 text-end text-[11px] font-light tx1">
+          {rtl ? "مدیریت مهندسی و طراحی" : "Engineering & Design Management"}
+        </div>
+      </>
+    } />;
   }
 
   /* ماژول ایمنی، بهداشت و محیط‌زیست — هفت تب برابر هفت فرایند d16-p1..p7،
@@ -949,11 +1023,8 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
             <span className="inline-block rotate-180 rtl:rotate-0">→</span>
             {rtl ? "بازگشت به داشبورد" : "Back to dashboard"}
           </button>
-          {cluster && (
-            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl text-[20px]"
-                  style={{ background: `${cluster.color}1f`, border: `1px solid ${cluster.color}55` }}>
-              {cluster.icon}
-            </span>
+          {target.fromMap && (
+            <BackToMapButton rtl={rtl} onClick={() => onNavigate?.({ ...target, moduleId: "d6", processId: undefined, subId: undefined, fromMap: undefined, initialView: "ctl" })} />
           )}
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
@@ -964,53 +1035,32 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
               )}
               <span className="text-[16px] font-light tx4">/</span>
               {project && (
-                <h2 className="truncate text-[19px] font-semibold leading-tight tx1">{t(project.name, lang)}</h2>
+                <h2 className="truncate text-[19px] font-semibold leading-tight tx1">
+                  {t(project.name, lang)} <span dir="ltr" className="inline-block text-[10px] font-light tx3">({project.code})</span>
+                </h2>
               )}
             </div>
             {project && (
               <p className="mt-1 truncate text-[10px] font-extralight tx3">
-                <span dir="ltr">{project.code}</span> · {t(project.client, lang)} · {t(project.location, lang)}
+                {t(project.client, lang)} · {t(project.location, lang)}
               </p>
             )}
           </div>
-          <div className="shrink-0 text-end">
-            <SystemBadge domainId={dom.id} lang={lang} className="mb-1 justify-end" />
-            <div className="text-[9px] font-extralight tx3">{t(dom.title, lang)}</div>
-            <div className="text-[11px] font-light tx1">
-              {rtl ? "CNT — مالک پیمان و صورت‌وضعیت؛ ثبت مالی در FIN" : "CNT — owns contract & IPC; posting lives in FIN"}
-            </div>
+          <div className="shrink-0 text-end text-[11px] font-light tx1">
+            {t(dom.nav ?? dom.title, lang)}
           </div>
-        </div>
-        <div className="flex shrink-0 items-center gap-1.5">
-          {([
-            ["contract", rtl ? "پیمان و صورت‌وضعیت" : "Contract & IPC"],
-            ["ipc", rtl ? "قالب‌پذیری صورت‌وضعیت" : "Configurable IPC"],
-            ["rating", rtl ? "ارزیابی پیمانکاران و تأمین‌کنندگان" : "Contractor & Supplier Rating"],
-            ["risk", rtl ? "مدیریت ریسک قراردادها و بهبود قرارداد" : "Contract Risk & Improvement"],
-          ] as const).map(([k, label]) => (
-            <button
-              key={k}
-              type="button"
-              onClick={() => setD14View(k)}
-              className={`rounded-lg px-2.5 py-1 text-[10px] font-light transition ${
-                d14View === k ? "toggle-on tx1" : "tx3 hover:tx2"
-              }`}
-            >
-              {label}
-            </button>
-          ))}
         </div>
         <div className="workspace-columns flex min-h-0 flex-1 gap-3 overflow-hidden">
           <div className="glass flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl p-3">
-            <div className="thin-scroll min-h-0 flex-1 overflow-y-auto">
+            <div ref={d14ScrollRef} className="thin-scroll min-h-0 flex-1 overflow-y-auto">
               {d14View === "risk" ? (
                 <ContractRiskWorkspace lang={lang} projectId={target.projectId} />
               ) : d14View === "rating" ? (
-                <VendorRatingPanel lang={lang} />
+                <VendorRatingPanel key={`${target.projectId}:${user?.id ?? ""}`} lang={lang} projectId={target.projectId} section={(selected?.sId ?? target.subId) === "d14-p8-s2" ? "monitoring" : "scoring"} />
               ) : d14View === "ipc" ? (
                 <CntIpcPanel lang={lang} />
               ) : (
-                <ContractsPanel lang={lang} />
+                <ContractsPanel key={`${target.projectId}:${user?.id ?? ""}`} lang={lang} sectioned selectedContractId={d14ContractId} onContractChange={(id) => setD14ContractSelection({ projectId: target.projectId, id })} activeSubId={selected?.sId ?? target.subId} navigationRequest={selected} />
               )}
             </div>
           </div>
@@ -1022,6 +1072,11 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
             onSelectSub={(pId, sId) => {
               audit("OPEN_SUBPROCESS", { projectId: target.projectId, entity: dom.id, entityId: sId });
               setSelected({ pId, sId });
+              setD14View(contractView(pId, sId));
+              if (sId === D14_IPC_TEMPLATES_SUB_ID) {
+                d14ScrollRef.current?.scrollTo({ top: 0 });
+                d14ScrollRef.current?.querySelectorAll<HTMLElement>(".overflow-y-auto").forEach((el) => el.scrollTo({ top: 0 }));
+              }
             }}
             onOpenModuleSub={(moduleId, pId, sId) => onNavigate?.({ ...target, moduleId, processId: pId, subId: sId })}
           />
@@ -1311,6 +1366,13 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
             <span className="inline-block rotate-180 rtl:rotate-0">→</span>
             {rtl ? "بازگشت به داشبورد" : "Back to dashboard"}
           </button>
+          {target.fromPlanningMap && (
+            <BackToMapButton rtl={rtl} label={rtl ? "بازگشت به نقشهٔ برنامه‌ریزی" : "Back to planning map"}
+              onClick={() => onNavigate?.({ ...target, moduleId: "d2", processId: undefined, subId: undefined, initialView: undefined, fromPlanningMap: undefined })} />
+          )}
+          {target.fromMap && (
+            <BackToMapButton rtl={rtl} onClick={() => onNavigate?.({ ...target, moduleId: "d6", processId: undefined, subId: undefined, fromMap: undefined, initialView: "ctl" })} />
+          )}
           {cluster && (
             <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl text-[20px]"
                   style={{ background: `${cluster.color}1f`, border: `1px solid ${cluster.color}55` }}>
@@ -1365,6 +1427,7 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
   }
 
   if (dom.id === "d6") {
+    const returnToGovernanceMap = d6View === "ctl" || Boolean(selected) || d6Guide;
     return (
       <div className="flex h-full min-h-0 flex-col gap-3 overflow-hidden" dir={rtl ? "rtl" : "ltr"}>
         <div className="glass flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl px-3 py-2.5">
@@ -1372,15 +1435,9 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
             <span className="inline-block rotate-180 rtl:rotate-0">→</span>
             {rtl ? "بازگشت به داشبورد" : "Back to dashboard"}
           </button>
-          <button type="button" onClick={() => { if (d6Guide) { setSelected(null); setD6View("gov"); } setD6Guide(v => !v); }} aria-pressed={d6Guide} className="glass-row shrink-0 rounded-lg px-3 py-2 text-[10.5px] tx1">
+          <button type="button" onClick={() => { if (d6Guide || d6View === "pmo") setSelected(null); setD6View("gov"); setD6Guide(v => !v); }} aria-pressed={d6Guide} className="glass-row shrink-0 rounded-lg px-3 py-2 text-[10.5px] tx1">
             {d6Guide ? (rtl ? "نقشهٔ فرایند" : "Process map") : (rtl ? "راهنمای ماژول" : "Module guide")}
           </button>
-          {cluster && (
-            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl text-[20px]"
-                  style={{ background: `${cluster.color}1f`, border: `1px solid ${cluster.color}55` }}>
-              {cluster.icon}
-            </span>
-          )}
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
               {cluster && (
@@ -1390,60 +1447,52 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
               )}
               <span className="text-[16px] font-light tx4">/</span>
               {project && (
-                <h2 className="truncate text-[19px] font-semibold leading-tight tx1">{t(project.name, lang)}</h2>
+                <h2 className="truncate text-[19px] font-semibold leading-tight tx1">
+                  {t(project.name, lang)} <span dir="ltr" className="inline-block text-[10px] font-light tx3">({project.code})</span>
+                </h2>
               )}
             </div>
             {project && (
               <p className="mt-1 truncate text-[10px] font-extralight tx3">
-                <span dir="ltr">{project.code}</span> · {t(project.client, lang)} · {t(project.location, lang)}
+                {t(project.client, lang)} · {t(project.location, lang)}
               </p>
             )}
           </div>
+          <div className="flex shrink-0 items-center gap-2">
           {canEditTaxonomy && (
             <button type="button" onClick={() => setTaxonomyEditorOpen(true)} className="rounded-lg border border-sky-400/45 bg-sky-400/10 px-3 py-2 text-[10px] text-sky-200 hover:bg-sky-400/20">
               ✎ {rtl ? "ویرایش فرایندها" : "Edit processes"}
             </button>
           )}
-          <div className="shrink-0 text-end">
-            <SystemBadge domainId={dom.id} lang={lang} className="mb-1 justify-end" />
-            <div className="text-[9px] font-extralight tx3">{t(dom.title, lang)}</div>
-            <div className="text-[11px] font-light tx1">
-              {rtl ? "GOV — حاکمیت؛ ارجاع بدون بازنویسی" : "GOV — governance; reference, no rewrite"}
-            </div>
+          {d6View !== "pmo" && (
+          <button type="button"
+            aria-pressed={d6View === "ctl" && !d6Guide}
+            title={returnToGovernanceMap ? (rtl ? "بازگشت به نقشهٔ حاکمیت" : "Back to governance map") : (rtl ? "نقشهٔ فرایندی مدیریت و کنترل پروژه" : "Project management & control process map")}
+            onClick={() => { setD6View(returnToGovernanceMap ? "gov" : "ctl"); setD6Guide(false); setSelected(null); }}
+            className={`min-w-[170px] rounded-lg border px-3 py-2 text-[10px] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 ${d6View === "ctl" ? "toggle-on border-sky-400/50 font-medium tx1" : "b-line-soft font-normal tx3 hover:tx1"}`}>
+            {returnToGovernanceMap ? (rtl ? "بازگشت به نقشهٔ حاکمیت" : "Back to governance map") : (rtl ? "نقشهٔ کنترل پروژه" : "Project control map")}
+          </button>
+          )}
+          </div>
+          <div className="shrink-0 text-end text-[11px] font-light tx1">
+            {d6View === "pmo" && !d6Guide ? (rtl ? "دفتر مدیریت پروژه" : "Project Management Office") : t(dom.nav ?? dom.title, lang)}
           </div>
         </div>
-        <div className="flex shrink-0 items-center gap-1.5">
-          {selected && <button type="button" onClick={() => { setSelected(null); setD6View("gov"); setD6Guide(false); }} className="glass-row rounded-lg px-2.5 py-1 text-[10px] tx1">{rtl ? "← بازگشت به نقشه" : "← Back to map"}</button>}
-          {([
-            ["gov", rtl ? "حاکمیت و فرآیندها (GOV)" : "Governance (GOV)"],
-            ["pmo", rtl ? "دفتر پروژه (PMO)" : "PMO desk"],
-            ["ctl", rtl ? "گردش‌کار کنترل پروژه (CTL)" : "Control workflow (CTL)"],
-          ] as const).map(([k, label]) => (
-            <button
-              key={k}
-              type="button"
-              onClick={() => { setD6View(k); setD6Guide(false); if (k === "ctl") setSelected(null); }}
-              className={`rounded-lg px-2.5 py-1 text-[10px] font-light transition ${
-                d6View === k ? "toggle-on tx1" : "tx3 hover:tx2"
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+
+
         <div className="workspace-columns flex min-h-0 flex-1 gap-3 overflow-hidden">
           <div dir={rtl ? "rtl" : "ltr"} className="glass flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl p-3">
             {d6View === "ctl" ? (
               /* نقشهٔ گردش‌کار پایش و کنترل پروژه — همان جلوهٔ بصری نقشهٔ
                  گردش‌کار برنامه‌ریزی (d2). کلیک روی هر گره به ماژول
                  مقصد (پایش، هزینه، کیفیت، ریسک) می‌رود. */
-              <div className="fade-rise flex min-h-full items-center justify-center py-2">
+              <div className="fade-rise flex min-h-full items-start justify-center pt-3 pb-2 md:pt-4">
                 <div className="w-full max-w-[1060px]">
                   <ControlWorkflowMap
                     rtl={rtl}
                     onOpenModule={(moduleId, processId, subId) => {
                       setSelected(null);
-                      onNavigate?.({ ...target, moduleId, processId, subId });
+                      onNavigate?.({ ...target, moduleId, processId, subId, fromMap: true });
                     }}
                   />
                   <p className="mt-2 text-center text-[10px] tx3">
@@ -1454,12 +1503,15 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
             ) : d6Guide || (d6View === "gov" && !selected) ? (
               <InitiatingGuide lang={lang} processes={activeProcesses} projectName={project ? t(project.name, lang) : target.projectId} currentRole={user?.role} canEditStructure={canEditTaxonomy} guide={d6Guide} onSelect={(pId, sId) => { setSelected({ pId, sId }); setD6Guide(false); setD6View("gov"); audit("OPEN_SUBPROCESS", { projectId: target.projectId, entity: dom.id, entityId: sId }); }} />
             ) : d6View === "pmo" ? (
-              <PmoWorkspace lang={lang} />
+              <PmoWorkspace lang={lang} initialTab={pmoTab} hideTabs />
             ) : (
               <GovernanceWorkspace lang={lang} initialTab={d6Tab} hideTabs />
             )}
           </div>
           <DomainAside
+              onOpenPmo={(tab = "charter") => { setSelected(null); setD6Guide(false); setPmoTab(tab); setD6View("pmo"); }}
+              pmoActive={d6View === "pmo" && !d6Guide}
+              activePmoTab={pmoTab}
               lang={lang}
               dom={dom}
               activeProcesses={activeProcesses}
@@ -1468,8 +1520,9 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
                 audit("OPEN_SUBPROCESS", { projectId: target.projectId, entity: dom.id, entityId: sId });
                 setSelected({ pId, sId });
                 setD6Guide(false);
+                setD6View("gov");
               }}
-              onOpenModuleSub={(moduleId, pId, sId) => onNavigate?.({ ...target, moduleId, processId: pId, subId: sId })}
+              onOpenModuleSub={(moduleId, pId, sId) => onNavigate?.({ ...target, moduleId, processId: pId, subId: sId, initialView: undefined })}
             />
         </div>
         {taxonomyEditorOpen && (
@@ -1505,32 +1558,40 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
             {rtl ? "بازگشت به داشبورد" : "Back to dashboard"}
           </button>
           {(selected || strategyWorkspaceOpen) && <button type="button" onClick={() => { setSelected(null); setStrategyWorkspaceOpen(false); }} className="glass-row rounded-lg px-3 py-2 text-[10.5px] tx1">{rtl ? "بازگشت به داشبورد استراتژی" : "Back to strategy dashboard"}</button>}
-          <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl text-[20px]"
-                style={{ background: `${dom.accent}1f`, border: `1px solid ${dom.accent}55` }}>
-            {dom.icon}
-          </span>
           <div className="min-w-0 flex-1">
-            <h1 className="truncate text-[20px] font-semibold leading-tight" style={{ color: dom.accent }}>
-              {t(dom.title, lang)}
-            </h1>
-            <p className="mt-1 truncate text-[10px] font-extralight tx3">
-              {rtl ? "BSC — چهار منظر؛ تحقق از شاخص تا کلِ استراتژی بالا می‌رود" : "BSC — four perspectives; attainment rolls up from KPI to strategy"}
-            </p>
+            <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
+              {cluster && (
+                <h1 className="truncate text-[20px] font-semibold leading-tight" style={{ color: cluster.color }}>
+                  {t(cluster.title, lang)}
+                </h1>
+              )}
+              <span className="text-[16px] font-light tx4">/</span>
+              {project && (
+                <h2 className="truncate text-[19px] font-semibold leading-tight tx1">
+                  {t(project.name, lang)} <span dir="ltr" className="inline-block text-[10px] font-light tx3">({project.code})</span>
+                </h2>
+              )}
+            </div>
+            {project && (
+              <p className="mt-1 truncate text-[10px] font-extralight tx3">
+                {t(project.client, lang)} · {t(project.location, lang)}
+              </p>
+            )}
           </div>
           {canEditTaxonomy && (
             <button type="button" onClick={() => setTaxonomyEditorOpen(true)} className="rounded-lg border border-sky-400/45 bg-sky-400/10 px-3 py-2 text-[10px] text-sky-200 hover:bg-sky-400/20">
               ✎ {rtl ? "ویرایش فرایندها" : "Edit processes"}
             </button>
           )}
-          <div className="shrink-0 text-end">
-            <div className="text-[9px] font-extralight tx3">{rtl ? "مالک: دفتر استراتژی" : "Owner: Strategy Office"}</div>
-            <div className="text-[11px] font-light tx1">{rtl ? "هدف ← شاخص ← ابتکار" : "Objective ← KPI ← Initiative"}</div>
+          <div className="shrink-0 text-end text-[11px] font-light tx1">
+            {t(dom.nav ?? dom.title, lang)}
           </div>
         </div>
         <div className="workspace-columns flex min-h-0 flex-1 gap-3 overflow-hidden">
           <div dir={rtl ? "rtl" : "ltr"} className="glass flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl p-3">
             {selected ? (
               <CapabilityDetail
+                hideHeader
                 lang={lang}
                 domainId={dom.id}
                 clusterId={target.clusterId}
@@ -1547,6 +1608,7 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
             )}
           </div>
           <DomainAside
+              onOpenPmo={(tab = "charter") => onNavigate?.({ ...target, moduleId: "d6", processId: undefined, subId: undefined, initialView: "pmo", pmoTab: tab })}
               lang={lang}
               dom={dom}
               activeProcesses={activeProcesses}
@@ -1555,7 +1617,7 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
                 audit("OPEN_SUBPROCESS", { projectId: target.projectId, entity: dom.id, entityId: sId });
                 setSelected({ pId, sId })
               }}
-              onOpenModuleSub={(moduleId, pId, sId) => onNavigate?.({ ...target, moduleId, processId: pId, subId: sId })}
+              onOpenModuleSub={(moduleId, pId, sId) => onNavigate?.({ ...target, moduleId, processId: pId, subId: sId, initialView: undefined })}
             />
         </div>
         {taxonomyEditorOpen && (
@@ -1868,6 +1930,9 @@ function DomainNavGroups({
   selectedSubId,
   extraSubs,
   showSql,
+  onOpenPmo,
+  pmoActive,
+  activePmoTab,
   onSelectSub,
   onOpenModuleSub,
 }: {
@@ -1879,6 +1944,9 @@ function DomainNavGroups({
   extraSubs?: Record<string, { id: string; title: Bi }[]>;
   /** نمایش برچسب جدول‌های SQL زیر هر زیرفرآیند (مثل d17). */
   showSql?: boolean;
+  onOpenPmo?: (tab?: PmoTab) => void;
+  pmoActive?: boolean;
+  activePmoTab?: PmoTab;
   onSelectSub: (processId: string, subId: string) => void;
   onOpenModuleSub: (moduleId: string, processId: string, subId: string) => void;
 }) {
@@ -1896,16 +1964,55 @@ function DomainNavGroups({
     .filter((m) => m.group === dom.group)
     .filter((m) => m.id !== "d7" || can("system.manage"));
   if (!mods.length) return null;
+  const sections = mods.flatMap((m) => {
+    const processes = m.id === dom.id ? activeProcesses : m.processes;
+    if (m.id === "d5") {
+      return [
+        { key: "cost", title: { fa: "مدیریت هزینه", en: "Cost Management" }, processIds: ["d5-p1", "d5-p2", "d5-p3", "d5-p7", "d5-p9"] },
+        { key: "procurement", title: { fa: "مدیریت تأمین", en: "Procurement Management" }, processIds: ["d5-p4", "d5-p5"] },
+        { key: "logistics", title: { fa: "مدیریت لجستیک", en: "Logistics Management" }, processIds: ["d5-p6", "d5-p8"] },
+      ].map(({ processIds, ...section }) => ({
+        ...section,
+        module: m,
+        processes: processes.filter((p) => processIds.includes(p.id)).map((p) => p.id !== "d5-p8" ? p : ({
+          ...p,
+          title: { fa: "گزارش تراز مصالح و انحراف مصرف پروژه", en: "Project material balance & consumption variance report" },
+          subs: p.subs.map((sub) => sub.id !== "d5-p8-s2" ? sub : ({
+            ...sub,
+            title: { fa: "گزارش انحراف مصرف و ضایعات پروژه", en: "Project consumption variance & waste report" },
+          })),
+        })),
+      }));
+    }
+    if (m.id !== "d14") return [{ module: m, key: m.id, title: m.nav ?? m.title, processes }];
+    return [
+      { key: "contract", title: { fa: "مدیریت پیمان", en: "Contract Management" } },
+      { key: "ipc", title: { fa: "مدیریت صورت‌وضعیت", en: "Payment Certificate Management" } },
+    ].map((section) => ({
+      ...section,
+      module: m,
+      processes: processes.map((p) => ({
+        ...p,
+        subs: [...p.subs, ...(p.id === "d14-p7" ? [
+          { id: "d14-p7-progress", title: { fa: "پیشرفت پیمان", en: "Contract progress" } },
+          { id: "d14-p7-reports", title: { fa: "گزارش‌های پیمان", en: "Contract reports" } },
+        ] : [])].filter((sub) => isIpcProcess(p.id, sub.id) === (section.key === "ipc")),
+      })).filter((p) => p.subs.length > 0),
+    }));
+  });
   return (
     <>
       {/* عنوان حوزهٔ عملکردی در سربرگ سایدبار آمده است؛ اینجا سرِ دستهٔ هر ماژول می‌آید. */}
-      {mods.map((m) => {
+      {sections.map(({ module: m, key, title, processes: procs }) => {
         const isCurrent = m.id === dom.id;
-        const procs = isCurrent
-          ? activeProcesses
-          : (domains.find((x) => x.id === m.id)?.processes ?? []);
+        const entry = procs[0];
+        const openSection = () => {
+          if (!entry?.subs[0]) return;
+          if (isCurrent) onSelectSub(entry.id, entry.subs[0].id);
+          else onOpenModuleSub(m.id, entry.id, entry.subs[0].id);
+        };
         return (
-          <div key={m.id}>
+          <div key={key}>
             {/* سرِ دستهٔ ماژول (فعال = رنگ ماژول) — ریتم سایدبار «برنامه‌ریزی و تولید» */}
             <div
               className="flex items-center gap-1.5 px-2 pb-0.5 pt-3 text-[9px] font-semibold tracking-wide"
@@ -1915,10 +2022,27 @@ function DomainNavGroups({
               <span className="h-px flex-1" style={{ background: "var(--line-soft)" }} aria-hidden="true" />
               <span className="inline-flex items-center gap-1">
                 <span aria-hidden="true">{m.icon}</span>
-                <span>{t(m.nav ?? m.title, lang)}</span>
+                {m.id === "d14" || m.id === "d5" ? (
+                  <button type="button" onClick={openSection} className="text-start hover:underline">
+                    {t(title, lang)}
+                  </button>
+                ) : <span>{t(title, lang)}</span>}
               </span>
               <span className="h-px flex-1" style={{ background: "var(--line-soft)" }} aria-hidden="true" />
             </div>
+
+            {m.id === "d14" && key === "ipc" && (
+              <button
+                type="button"
+                onClick={() => isCurrent
+                  ? onSelectSub("d14-p2", D14_IPC_TEMPLATES_SUB_ID)
+                  : onOpenModuleSub(m.id, "d14-p2", D14_IPC_TEMPLATES_SUB_ID)}
+                className={`group flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-start transition hover:bg-[var(--row-hover)] ${isCurrent && selectedSubId === D14_IPC_TEMPLATES_SUB_ID ? "row-on" : ""}`}
+              >
+                <span className="shrink-0 text-[11px] leading-none" style={{ color: m.accent }} aria-hidden="true">▤</span>
+                <span className="min-w-0 flex-1 truncate text-[10px] font-normal tx1">{rtl ? "قالب‌های صورت‌وضعیت" : "IPC templates"}</span>
+              </button>
+            )}
 
             {procs.map((p, i) => (
               <div key={p.id}>
@@ -1961,6 +2085,32 @@ function DomainNavGroups({
                 })}
               </div>
             ))}
+            {m.id === "d6" && onOpenPmo && (
+              <div>
+              <button type="button" onClick={() => onOpenPmo()} aria-pressed={Boolean(pmoActive)}
+                className="flex w-full items-center gap-1.5 px-2 pb-0.5 pt-3 text-start text-[9px] font-semibold tracking-wide transition hover:tx1"
+                style={{ color: pmoActive ? m.accent : undefined }}>
+                <span className="h-px flex-1" style={{ background: "var(--line-soft)" }} aria-hidden="true" />
+                <span className="inline-flex items-center gap-1">
+                  <span aria-hidden="true">🏢</span>
+                  <span>{rtl ? "دفتر مدیریت پروژه" : "Project Management Office"}</span>
+                </span>
+                <span className="h-px flex-1" style={{ background: "var(--line-soft)" }} aria-hidden="true" />
+              </button>
+              {([
+                ["charter", { fa: "منشور پروژه", en: "Project charter" }],
+                ["forms", { fa: "فرم‌ساز مصوب", en: "Approved forms" }],
+                ["health", { fa: "کارت سلامت پروژه", en: "Project health" }],
+              ] as const).map(([tab, label]) => (
+                <button key={tab} type="button" onClick={() => onOpenPmo(tab)}
+                  aria-pressed={Boolean(pmoActive && activePmoTab === tab)}
+                  className={`flex w-full items-center gap-2 rounded-lg py-1.5 pe-2 ps-7 text-start text-[10px] font-light tx1 transition hover:bg-[var(--row-hover)] ${pmoActive && activePmoTab === tab ? "row-on" : ""}`}>
+                  <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: m.accent }} />
+                  {t(label, lang)}
+                </button>
+              ))}
+              </div>
+            )}
           </div>
         );
       })}
@@ -1989,6 +2139,9 @@ function DomainAside({
   selectedSubId,
   extraSubs,
   showSql,
+  onOpenPmo,
+  pmoActive,
+  activePmoTab,
   onSelectSub,
   onOpenModuleSub,
 }: {
@@ -1998,6 +2151,9 @@ function DomainAside({
   selectedSubId?: string;
   extraSubs?: Record<string, { id: string; title: Bi }[]>;
   showSql?: boolean;
+  onOpenPmo?: (tab?: PmoTab) => void;
+  pmoActive?: boolean;
+  activePmoTab?: PmoTab;
   onSelectSub: (processId: string, subId: string) => void;
   onOpenModuleSub: (moduleId: string, processId: string, subId: string) => void;
 }) {
@@ -2023,9 +2179,13 @@ function DomainAside({
           selectedSubId={selectedSubId}
           extraSubs={extraSubs}
           showSql={showSql}
+          onOpenPmo={onOpenPmo}
+          pmoActive={pmoActive}
+          activePmoTab={activePmoTab}
           onSelectSub={onSelectSub}
           onOpenModuleSub={onOpenModuleSub}
         />
+
       </div>
     </aside>
   );

@@ -1,6 +1,8 @@
-import { useCallback, useEffect, useState } from "react";
+import ContractVariationsPanel from "./ContractVariationsPanel";
+import ContractAmendmentsPanel from "./ContractAmendmentsPanel";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "../context/AuthContext";
-import { useCurrentProjectId } from "../context/SystemContext";
+import { useCurrentProjectId, useSystem } from "../context/SystemContext";
 import { logAudit } from "../services/auditLogger";
 import type { Lang } from "../data/framework";
 
@@ -29,7 +31,7 @@ type BasisFilter = "all" | "unit_price" | "lump_sum";
  * از بین ببرد.
  */
 async function getGuarded(path: string, userId: string): Promise<{
-  data: Json | null; denied: boolean; unauth: boolean;
+  data: Json | null; denied: boolean; unauth: boolean; error?: string;
 }> {
   try {
     const res = await fetch(path, {
@@ -38,11 +40,11 @@ async function getGuarded(path: string, userId: string): Promise<{
     if (res.status === 401) return { data: null, denied: true, unauth: true };
     if (res.status === 403) return { data: null, denied: true, unauth: false };
     const ct = res.headers.get("content-type") ?? "";
-    if (!ct.includes("application/json")) return { data: null, denied: false, unauth: false };
+    if (!ct.includes("application/json")) return { data: null, denied: false, unauth: false, error: "دریافت اطلاعات ناموفق بود؛ بازخوانی کنید" };
     const body = await res.json();
-    return { data: body?.ok ? body.data : null, denied: false, unauth: false };
+    return { data: body?.ok ? body.data : null, denied: false, unauth: false, error: body?.ok ? undefined : String(body?.error?.message ?? "دریافت اطلاعات ناموفق بود") };
   } catch {
-    return { data: null, denied: false, unauth: false };
+    return { data: null, denied: false, unauth: false, error: "دریافت اطلاعات ناموفق بود؛ بازخوانی کنید" };
   }
 }
 
@@ -271,8 +273,8 @@ const HEALTH_TONE: Record<string, string> = {
  * سطر، هر دو در جدول ساده نامرئی‌اند.
  */
 function GuaranteeSection({
-  contractId, userId, onDone,
-}: { contractId: string; userId: string; onDone: () => void }) {
+  contractId, userId, onDone, part = "all",
+}: { contractId: string; userId: string; onDone: () => void; part?: "all" | "guarantees" | "advance" }) {
   /* شناسهٔ پروژه از «پروژهٔ جاری» می‌آید (SystemContext) — نه ثابتِ ماژول. */
   const projectId = useCurrentProjectId();
 
@@ -337,6 +339,7 @@ function GuaranteeSection({
 
   return (
     <div className="space-y-3">
+      {part !== "advance" && <>
       {/* ── سلامت وثیقه‌ای ── */}
       <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
         <Metric
@@ -364,6 +367,7 @@ function GuaranteeSection({
         />
       </div>
 
+      </>}
       {msg && (
         <div
           className="glass rounded-2xl px-3 py-2.5"
@@ -385,6 +389,7 @@ function GuaranteeSection({
         </div>
       )}
 
+      {part !== "advance" && <>
       {/* ── خلأ پوشش ── */}
       {(reg?.coverageGapsFa?.length ?? 0) > 0 && (
         <Panel title="خلأ پوشش وثیقه" note="نبودِ یک سطر در جدول دیده نمی‌شود؛ اینجا دیده می‌شود">
@@ -537,6 +542,8 @@ function GuaranteeSection({
         }}
       />
 
+      </>}
+      {part !== "guarantees" && <>
       {/* ── پیش‌پرداخت ── */}
       <Panel
         title="دفتر پیش‌پرداخت"
@@ -626,6 +633,7 @@ function GuaranteeSection({
           }}
         />
       )}
+      </>}
     </div>
   );
 }
@@ -1110,7 +1118,7 @@ function SCurveChart({ points }: { points: Json[] }) {
     <div className="overflow-x-auto" dir="ltr">
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ minWidth: 280 }}>
         <line x1={pad} y1={y(100)} x2={W - pad} y2={y(100)} className="stroke-white/10" strokeWidth="0.5" strokeDasharray="2 2" />
-        <path d={line("plannedPct")} fill="none" className="stroke-white/25" strokeWidth="1.2" strokeDasharray="3 2" />
+        {points.some(p => p.plannedPct != null) && <path d={line("plannedPct")} fill="none" className="stroke-white/25" strokeWidth="1.2" strokeDasharray="3 2" />}
         {realCount > 0 && <path d={realLine} fill="none" className="stroke-sky-400/80" strokeWidth="1.6" />}
         {points.map((p, i) => (
           <circle
@@ -1118,13 +1126,13 @@ function SCurveChart({ points }: { points: Json[] }) {
             cx={x(i)}
             cy={y(p.actualPct ?? 0)}
             r={p.isForecast ? 1 : 1.8}
-            className={p.isForecast ? "fill-white/20" : (p.variancePct ?? 0) < 0 ? "fill-rose-400" : "fill-emerald-400"}
+            className={p.isForecast ? "fill-white/20" : p.variancePct == null ? "fill-sky-400" : p.variancePct < 0 ? "fill-rose-400" : "fill-emerald-400"}
           />
         ))}
       </svg>
       <div className="mt-1 flex flex-wrap gap-2 text-[8px] tx4">
-        <span>▬ واقعی</span>
-        <span className="tx4">╌ برنامه</span>
+        <span>▬ واقعی مالی</span>
+        {points.some(p => p.plannedPct != null) ? <span className="tx4">╌ برنامه</span> : <span>برنامهٔ مبنا ثبت نشده؛ انحراف قابل سنجش نیست</span>}
         <span>نقطهٔ توخالی = دورهٔ آینده (واقعیِ حمل‌شده)</span>
       </div>
     </div>
@@ -1166,6 +1174,8 @@ function ReportsSection({
 }: { contractId: string; userId: string }) {
   /* شناسهٔ پروژه از «پروژهٔ جاری» می‌آید (SystemContext) — نه ثابتِ ماژول. */
   const projectId = useCurrentProjectId();
+  const { projectsByCluster } = useSystem();
+  const project = Object.values(projectsByCluster).flat().find(p => p.id === projectId);
 
   const [catalog, setCatalog] = useState<Json | null>(null);
   const [denied, setDenied] = useState(false);
@@ -1178,19 +1188,21 @@ function ReportsSection({
   /* سربرگ سند رسمی. مقادیر خالی عمداً خالی می‌مانند تا دروازهٔ سرور
      خودش بگوید چه چیزی کم است، نه اینکه با مقدار ساختگی پر شود. */
   const [lh, setLh] = useState({
-    projectName: "", projectCode: "", periodLabel: "",
+    projectName: project?.name.fa ?? "", projectCode: project?.code ?? "", periodLabel: "",
     preparedBy: "", approvedBy: "", distribution: "",
+    contractorName: "", contractorLogo: "", clientName: "", clientLogo: "", consultantName: "", consultantLogo: "", docNo: "", revision: "00",
   });
 
   const load = useCallback(async () => {
-    const r = await getGuarded("/api/cnt/reports", userId);
+    const r = await getGuarded(`/api/cnt/reports?projectId=${projectId}`, userId);
+    if (r.error) setMsg({ kind: "err", text: r.error });
     setCatalog(r.data);
     setDenied(r.denied);
     setUnauth(r.unauth);
-  }, [userId]);
+  }, [userId, projectId]);
 
   useEffect(() => { void load(); }, [load]);
-  useEffect(() => { setPreview(null); setMsg(null); }, [contractId]);
+  useEffect(() => { setPreview(null); setMsg(null); }, [contractId, code, audience, lh]);
 
   const items = ((catalog as Record<string, unknown> | null)?.items as Json[] | undefined) ?? [];
   const visible = items.filter((x) => {
@@ -1217,11 +1229,16 @@ function ReportsSection({
     return p.toString();
   }, [contractId, audience, lh, projectId]);
 
+  const previewContext = `${contractId}:${code}:${audience}:${query()}`;
+  const previewContextRef = useRef(previewContext);
+  previewContextRef.current = previewContext;
   const doPreview = useCallback(async () => {
     if (!code) return;
     setBusy(true);
     setMsg(null);
+    const expected = previewContextRef.current;
     const r = await getGuarded(`/api/cnt/reports/${code}?${query()}`, userId);
+    if (expected !== previewContextRef.current) { setBusy(false); return; }
     setPreview(r.data);
     if (!r.data) {
       setMsg({ kind: "err", text: r.unauth ? "برای دیدن گزارش باید وارد شوید" : r.denied ? "مجوز دیدن این گزارش را ندارید" : "گزارش ساخته نشد" });
@@ -1236,10 +1253,13 @@ function ReportsSection({
     if (!code) return;
     setBusy(true);
     setMsg(null);
+    const printWindow = format === "pdf" ? window.open("about:blank", "_blank") : null;
+    if (printWindow) printWindow.opener = null;
     const url = `/api/cnt/reports/${code}/render?${query()}&format=${format}`;
     try {
       const res = await fetch(url, { headers: { "x-user-id": userId } });
       if (!res.ok) {
+        printWindow?.close();
         const body = await res.json().catch(() => null);
         const err = (body as Record<string, unknown> | null)?.error as Record<string, unknown> | undefined;
         setMsg({
@@ -1256,7 +1276,8 @@ function ReportsSection({
       a.href = href;
       if (format === "pdf") {
         /* چاپ به PDF کار مرورگر است؛ فایل را باز می‌کنیم نه دانلود. */
-        window.open(href, "_blank", "noopener");
+        if (printWindow) printWindow.location.href = href;
+        else { URL.revokeObjectURL(href); setMsg({ kind: "err", text: "مرورگر پنجرهٔ چاپ را مسدود کرد؛ اجازهٔ باز شدن پنجره را بدهید" }); setBusy(false); return; }
       } else {
         const cd = res.headers.get("content-disposition") ?? "";
         const m = /filename="?([^";]+)"?/.exec(cd);
@@ -1267,6 +1288,7 @@ function ReportsSection({
       setMsg({ kind: "ok", text: "خروجی آماده شد" });
       logAudit("CNT_REPORT_RENDER", "Contracts", `${code} · ${format} · ${RPT_AUDIENCE_FA[audience]}`);
     } catch {
+      printWindow?.close();
       setMsg({ kind: "err", text: "ارتباط با سرور برقرار نشد" });
     }
     setBusy(false);
@@ -1295,6 +1317,7 @@ function ReportsSection({
     <section className="rounded-2xl b1 bg-white/[0.02] p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-[13px] font-light tx1">گزارش‌های رسمی (۱۴٫۱۱)</h3>
+        <button className="text-[10px] tx2" disabled={busy} onClick={() => void load()}>بازخوانی</button>
         <div className="flex items-center gap-1 rounded-lg b1 p-0.5">
           {(["internal", "official"] as const).map((a) => (
             <button
@@ -1350,9 +1373,10 @@ function ReportsSection({
         </p>
       )}
 
-      {audience === "official" && (
+      {(
+
         <div className="mt-3 rounded-xl b1 bg-white/[0.02] p-3">
-          <p className="text-[10px] font-light tx2">سربرگ سند رسمی</p>
+          <p className="text-[10px] font-light tx2">سربرگ گزارش — نام و کد واقعی پروژه الزامی است</p>
           <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {([
               ["projectName", "نام پروژه"],
@@ -1361,7 +1385,11 @@ function ReportsSection({
               ["preparedBy", "تهیه‌کننده"],
               ["approvedBy", "تأییدکننده"],
               ["distribution", "فهرست توزیع (با ویرگول)"],
-            ] as const).map(([k, label]) => (
+              ["contractorName", "نام پیمانکار"], ["contractorLogo", "نشان متنی پیمانکار"],
+              ["clientName", "نام کارفرما"], ["clientLogo", "نشان متنی کارفرما"],
+              ["consultantName", "نام مشاور"], ["consultantLogo", "نشان متنی مشاور"],
+              ["docNo", "شمارهٔ سند"], ["revision", "نسخه"],
+            ] as const).filter(([k]) => audience === "official" || ["projectName", "projectCode", "periodLabel", "preparedBy"].includes(k)).map(([k, label]) => (
               <label key={k} className="block">
                 <span className="text-[9px] font-extralight tx4">{label}</span>
                 <input
@@ -1407,7 +1435,7 @@ function ReportsSection({
       {preview && (
         <div className="mt-3 space-y-2">
           <p className="text-[10px] font-light tx3">
-            {String((preview as Record<string, unknown>).title ?? "")} · دوره{" "}
+            {String(((preview as Record<string, unknown>).title as Record<string, string> | undefined)?.fa ?? "")} · دوره{" "}
             {String((preview as Record<string, unknown>).periodLabel ?? "—")}
           </p>
           {sections.map((sec, i) => {
@@ -1925,20 +1953,26 @@ function KpiSection({
   /* شناسهٔ پروژه از «پروژهٔ جاری» می‌آید (SystemContext) — نه ثابتِ ماژول. */
   const projectId = useCurrentProjectId();
 
+  const actionLock = useRef(false);
+  const [acting, setActing] = useState(false);
   const [card, setCard] = useState<Json | null>(null);
   const [rules, setRules] = useState<Json | null>(null);
   const [denied, setDenied] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [unauth, setUnauth] = useState(false);
   const [showRules, setShowRules] = useState(false);
   const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string; details?: string[] } | null>(null);
 
   const load = useCallback(async () => {
     if (!contractId) { setCard(null); return; }
+    setLoading(true); setLoadError("");
     const q = `?projectId=${projectId}&contractId=${encodeURIComponent(contractId)}`;
     const [k, r] = await Promise.all([
       getGuarded(`/api/cnt/kpi${q}`, userId),
       getGuarded(`/api/cnt/alert-rule?projectId=${projectId}`, userId),
     ]);
+    setLoadError(k.error ?? r.error ?? ""); setLoading(false);
     setCard(k.data);
     setRules(r.data);
     setDenied(k.denied);
@@ -1949,6 +1983,9 @@ function KpiSection({
   useEffect(() => { setShowRules(false); setMsg(null); }, [contractId]);
 
   const act = useCallback(async (path: string, body: Json, okFa: string, auditAction: string) => {
+    if (actionLock.current) return { ok: false as const, messageFa: "ثبت قبلی در حال انجام است" };
+    actionLock.current = true; setActing(true);
+    try {
     const r = await postJson(path, body, userId);
     if (r.ok) {
       logAudit(auditAction, "Contracts", okFa);
@@ -1964,6 +2001,7 @@ function KpiSection({
       });
     }
     return r;
+    } finally { actionLock.current = false; setActing(false); }
   }, [load, onDone, userId]);
 
   if (!contractId) return null;
@@ -1981,6 +2019,9 @@ function KpiSection({
       </Panel>
     );
   }
+
+  if (loading) return <Panel title="دریافت اطلاعات"><p className="text-[11px] tx3">در حال دریافت…</p></Panel>;
+  if (loadError) return <Panel title="خطای دریافت اطلاعات"><p role="alert" className="text-[11px] text-rose-300">{loadError}</p><button className="mt-2 text-[11px] tx2" onClick={() => void load()}>بازخوانی</button></Panel>;
 
   const health: Json = card?.health ?? {};
   const alerts: Json = card?.alerts ?? {};
@@ -2094,7 +2135,7 @@ function KpiSection({
                 <th className="px-1.5 py-1 text-start font-extralight">سنجه</th>
                 <th className="px-1.5 py-1 text-end font-extralight">مقدار</th>
                 <th className="px-1.5 py-1 text-end font-extralight">دورهٔ قبل</th>
-                <th className="px-1.5 py-1 text-center font-extralight">روند</th>
+                <th className="px-1.5 py-1 text-center font-extralight">روند دو عکس آخر</th>
                 <th className="px-1.5 py-1 text-start font-extralight">توضیح</th>
               </tr>
             </thead>
@@ -2170,19 +2211,9 @@ function KpiSection({
         title="ثبت عکس دوره‌ای"
         note={`${fmt((trend.periods ?? []).length)} دوره ثبت شده — بدون عکس، روند وجود ندارد`}
       >
-        <EntryForm
-          titleFa="عکس سنجه‌ها"
-          noteFa="ثبت دوبارهٔ همان دوره، به‌روزرسانی است نه سطر تازه"
-          fields={[
-            { name: "periodCode", fa: "کد دوره", kind: "text", required: true, hintFa: "مثلاً 1405-06" },
-          ]}
-          submitFa="ثبت عکس"
-          onSubmit={async (v) => {
-            const q = `?projectId=${projectId}&contractId=${encodeURIComponent(contractId)}`;
-            return act(`/api/cnt/kpi/snapshot${q}`, { periodCode: v.periodCode },
-              "عکس دوره‌ای ثبت شد", "CNT_KPI_SNAPSHOT");
-          }}
-        />
+        <p className="text-[10px] tx3">عکس وضعیت فعلی برای ماه جاری میلادی {card?.currentPeriod ?? "—"} ثبت می‌شود؛ ثبت گذشته یا آینده مجاز نیست. روند از دو عکس دوره‌ای به بعد قابل محاسبه است.</p>
+        {card?.permissions?.snapshot && <button disabled={acting} className="mt-2 rounded-lg border b-line-soft px-2 py-1 text-[11px] tx2 disabled:opacity-40" onClick={() => void act(`/api/cnt/kpi/snapshot?projectId=${projectId}&contractId=${encodeURIComponent(contractId)}`, { periodCode: card?.currentPeriod, ...(card?.currentSnapshotVersion != null ? { RowVersion: card.currentSnapshotVersion } : {}) }, "عکس وضعیت فعلی ثبت شد", "CNT_KPI_SNAPSHOT")}>ثبت عکس دورهٔ جاری</button>}
+
         {(trend.periods ?? []).length > 0 && (
           <div className="mt-1.5 text-[8px] font-extralight tx4" dir="ltr">
             {(trend.periods ?? []).join(" · ")}
@@ -2233,7 +2264,7 @@ function KpiSection({
             </div>
 
             <div className="mt-2">
-              <EntryForm
+              {card?.permissions?.manageRules && <EntryForm
                 titleFa="تنظیم آستانه"
                 noteFa="خاموش کردن قاعده یعنی این ریسک دیگر پایش نمی‌شود"
                 fields={[
@@ -2262,14 +2293,14 @@ function KpiSection({
                   `/api/cnt/alert-rule?projectId=${projectId}`,
                   {
                     ruleCode: v.ruleCode,
-                    thresholdValue: v.thresholdValue === "" ? undefined : Number(v.thresholdValue),
+                    thresholdValue: v.thresholdValue?.trim() ? Number(v.thresholdValue) : undefined,
                     severity: v.severity || undefined,
-                    isEnabled: v.isEnabled === "no" ? false : undefined,
+                    isEnabled: v.isEnabled ? v.isEnabled === "yes" : undefined,
                   },
                   "قاعدهٔ هشدار به‌روزرسانی شد",
                   "CNT_ALERT_RULE_SET",
                 )}
-              />
+              />}
             </div>
           </>
         )}
@@ -2302,6 +2333,8 @@ function ProgressSection({
   const [curve, setCurve] = useState<Json | null>(null);
   const [milestones, setMilestones] = useState<Json | null>(null);
   const [denied, setDenied] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [unauth, setUnauth] = useState(false);
   const [showLines, setShowLines] = useState(false);
   const [breakdown, setBreakdown] = useState<Json | null>(null);
@@ -2309,6 +2342,7 @@ function ProgressSection({
 
   const load = useCallback(async () => {
     if (!contractId) { setSnap(null); return; }
+    setLoading(true); setLoadError("");
     const q = `?projectId=${projectId}&contractId=${encodeURIComponent(contractId)}`;
     /* سه فراخوان موازی: هیچ‌کدام به دیگری وابسته نیست و سریال کردن
        فقط انتظار کاربر را سه برابر می‌کند. */
@@ -2317,6 +2351,7 @@ function ProgressSection({
       getGuarded(`/api/cnt/progress/scurve${q}`, userId),
       getGuarded(`/api/cnt/milestone${q}`, userId),
     ]);
+    setLoadError(s.error ?? c.error ?? m.error ?? ""); setLoading(false);
     setSnap(s.data);
     setCurve(c.data);
     setMilestones(m.data);
@@ -2330,6 +2365,7 @@ function ProgressSection({
   const loadBreakdown = useCallback(async () => {
     const q = `?projectId=${projectId}&contractId=${encodeURIComponent(contractId)}`;
     const r = await getGuarded(`/api/cnt/progress/breakdown${q}`, userId);
+    if (r.error || r.denied) { setMsg({ kind: "err", text: r.error ?? "مجوز مشاهدهٔ ردیف‌ها را ندارید" }); return; }
     setBreakdown(r.data);
     setShowLines(true);
   }, [contractId, userId, projectId]);
@@ -2368,6 +2404,9 @@ function ProgressSection({
     );
   }
 
+  if (loading) return <Panel title="دریافت اطلاعات"><p className="text-[11px] tx3">در حال دریافت…</p></Panel>;
+  if (loadError) return <Panel title="خطای دریافت اطلاعات"><p role="alert" className="text-[11px] text-rose-300">{loadError}</p><button className="mt-2 text-[11px] tx2" onClick={() => void load()}>بازخوانی</button></Panel>;
+
   const gap: Json = snap?.gap ?? {};
   const physical: Json = snap?.physical ?? {};
   const financial: Json = snap?.financial ?? {};
@@ -2386,22 +2425,22 @@ function ProgressSection({
         note={`منبع پیشرفت فیزیکی: ${SOURCE_FA[String(snap?.physicalSource)] ?? "—"}`}
       >
         <div className="space-y-2">
-          <ProgressBar label="پیشرفت فیزیکی — کارِ تأییدشده" pct={snap?.physicalPct ?? 0} tone="tx1" />
-          <ProgressBar label="پیشرفت مالی — پولِ تأییدشده" pct={snap?.financialPct ?? 0} tone="tx1" />
+          {snap?.physicalSource === "none" ? <p className="text-[10px] tx3">پیشرفت فیزیکی: — (منبع اندازه‌گیری ثبت نشده)</p> : <ProgressBar label="پیشرفت فیزیکی — کارِ تأییدشده" pct={snap?.physicalPct ?? 0} tone="tx1" />}
+          {Number(snap?.financial?.contractAmount) > 0 ? <ProgressBar label="پیشرفت مالی — کارکرد ریالی تأییدشده" pct={snap?.financialPct ?? 0} tone="tx1" /> : <p className="text-[10px] tx3">پیشرفت مالی: — (مبلغ مبنا معتبر نیست)</p>}
         </div>
 
         <div className={`mt-2 rounded-xl border px-2.5 py-2 ${
-          gap.verdict === "overpaid" ? "border-rose-400/30 bg-rose-400/5"
-            : gap.verdict === "underpaid" ? "border-amber-400/30 bg-amber-400/5"
+          snap?.isGapReliable && gap.verdict === "overpaid" ? "border-rose-400/30 bg-rose-400/5"
+            : snap?.isGapReliable && gap.verdict === "underpaid" ? "border-amber-400/30 bg-amber-400/5"
               : "b-line-soft bg-black/15"
         }`}>
           <div className="flex flex-wrap items-baseline gap-2">
             <span className={`text-[10px] font-semibold ${GAP_TONE[String(gap.verdict)] ?? "tx2"}`}>
-              {gap.verdictFa}
+              {snap?.isGapReliable ? gap.verdictFa : "فاصله قابل اتکا نیست؛ مبنای پیشرفت را تکمیل کنید"}
             </span>
-            <span className="text-[9px] tabular-nums tx3" dir="ltr">{fmt(gap.gapPct)}٪</span>
+            <span className="text-[9px] tabular-nums tx3" dir="ltr">{snap?.isGapReliable ? `${fmt(gap.gapPct)}٪` : "—"}</span>
           </div>
-          <div className="mt-0.5 text-[8.5px] font-extralight tx3">{gap.messageFa}</div>
+          <div className="mt-0.5 text-[8.5px] font-extralight tx3">{snap?.isGapReliable ? gap.messageFa : "از این فاصله برای قضاوت اضافه‌پرداخت استفاده نکنید"}</div>
         </div>
       </Panel>
 
@@ -2602,7 +2641,15 @@ function ProgressSection({
   );
 }
 
-export default function ContractsPanel({ lang }: { lang: Lang }) {
+export default function ContractsPanel({ lang, activeSubId, navigationRequest, sectioned = false, selectedContractId, onContractChange }: {
+  lang: Lang;
+  activeSubId?: string;
+  navigationRequest?: object | null;
+  sectioned?: boolean;
+  selectedContractId?: string;
+  onContractChange?: (id: string) => void;
+}) {
+  const rootRef = useRef<HTMLDivElement>(null);
   /* شناسهٔ پروژه از «پروژهٔ جاری» می‌آید (SystemContext) — نه ثابتِ ماژول. */
   const projectId = useCurrentProjectId();
 
@@ -2611,8 +2658,23 @@ export default function ContractsPanel({ lang }: { lang: Lang }) {
   const userId = user?.id ?? "";
 
   const [list, setList] = useState<Json | null>(null);
-  const [selectedId, setSelectedId] = useState<string>("");
-  const [detail, setDetail] = useState<Json | null>(null);
+  const [localSelectedId, setLocalSelectedId] = useState("");
+  const selectedId = selectedContractId ?? localSelectedId;
+  const setSelectedId = (id: string) => { setLocalSelectedId(id); onContractChange?.(id); };
+  const selectedIdRef = useRef(selectedId);
+  selectedIdRef.current = selectedId;
+  const [loadedDetail, setDetail] = useState<Json | null>(null);
+  const detail = loadedDetail?.contract?.Id === selectedId ? loadedDetail : null;
+  const section = ({
+    "d14-p1-s1": "master", "d14-p1-s2": "boq", "d14-p3-s1": "variation",
+    "d14-p6-s1": "guarantees", "d14-p5-s2": "advance", "d14-p7-s1": "kpi",
+    "d14-p2-s1": "measurement", "d14-p6-s2": "subipc", "d14-p7-s2": "finance",
+    "d14-p7-progress": "progress", "d14-p7-reports": "reports",
+  } as Record<string, string>)[activeSubId ?? ""] ?? "master";
+  const show = (name: string) => !sectioned || section === name;
+  const sectionTitle = ({ master: "شناسنامه و الحاقیه‌ها", boq: "فهرست بها و مراحل مقطوع", variation: "تغییر مقادیر و کار جدید",
+    guarantees: "ضمانت‌نامه و پایش انقضا", advance: "پیش‌پرداخت و سپرده", kpi: "شاخص‌ها و هشدارهای پیمان", measurement: "برگهٔ ریزمتره",
+    subipc: "صورت‌وضعیت پیمانکار جزء", finance: "انطباق با دفتر مالی", progress: "پیشرفت پیمان", reports: "گزارش‌های پیمان" } as Record<string, string>)[section];
   const [basisFilter, setBasisFilter] = useState<BasisFilter>("all");
   const [loading, setLoading] = useState(true);
   /* حالت ردیف تازه: تعیین می‌کند کدام میدان‌ها اصلاً دیده شوند. */
@@ -2638,7 +2700,8 @@ export default function ContractsPanel({ lang }: { lang: Lang }) {
 
   const loadDetail = useCallback(async (id: string) => {
     if (!id) { setDetail(null); return; }
-    setDetail(await getJson(`/api/cnt/contracts/${encodeURIComponent(id)}?projectId=${projectId}`));
+    const next = await getJson(`/api/cnt/contracts/${encodeURIComponent(id)}?projectId=${projectId}`);
+    if (selectedIdRef.current === id) setDetail(next);
   }, [, projectId]);
 
   useEffect(() => { void loadDetail(selectedId); }, [selectedId, loadDetail]);
@@ -2647,6 +2710,11 @@ export default function ContractsPanel({ lang }: { lang: Lang }) {
     await reload();
     await loadDetail(selectedId);
   }, [reload, loadDetail, selectedId]);
+
+  // با تغییر بخش فقط اسکرول محتوای همان پنل به بالا برمی‌گردد؛ انتخاب پیمان مستقل است.
+  useEffect(() => {
+    if (sectioned) rootRef.current?.querySelector<HTMLElement>("[data-contract-content]")?.scrollTo({ top: 0 });
+  }, [sectioned, activeSubId, navigationRequest]);
 
   if (loading && !list) {
     return <Panel title={rtl ? "پیمان و فهرست بها" : "Contracts & BOQ"}><div className="py-6 text-center text-[10px] tx3">در حال بارگذاری…</div></Panel>;
@@ -2663,7 +2731,20 @@ export default function ContractsPanel({ lang }: { lang: Lang }) {
   const noAuth = userId ? undefined : "برای ثبت باید وارد شوید";
 
   return (
-    <div className="space-y-3">
+    <div ref={rootRef} className={sectioned ? "flex h-full min-h-0 flex-col gap-3" : "space-y-3"}>
+      {sectioned && <div className="glass-row flex shrink-0 flex-wrap items-center gap-2 rounded-xl px-3 py-2">
+        <label className="text-[10px] tx3" htmlFor="contract-section-selector">{rtl ? "پیمان انتخاب‌شده" : "Selected contract"}</label>
+        <select id="contract-section-selector" aria-label={rtl ? "پیمان انتخاب‌شده" : "Selected contract"} value={selectedId} disabled={!contracts.length}
+          onChange={e => setSelectedId(e.target.value)} className="glass-row min-w-0 flex-1 rounded-lg border b-line-soft px-2 py-1.5 text-[10px] tx1">
+          {!contracts.length && <option value="">—</option>}
+          {contracts.map(c => <option key={c.id} value={c.id}>{c.code} — {c.titleFa}</option>)}
+        </select>
+        <span className="text-[11px] font-semibold tx1">{rtl ? sectionTitle : ({ master: "Contract master & amendments", boq: "BOQ & milestones", variation: "Quantity changes & extra work", guarantees: "Guarantees & expiry", advance: "Advance & retention", kpi: "Contract KPIs & alerts", measurement: "Measurement sheet", subipc: "Subcontractor IPC", finance: "Financial reconciliation", progress: "Contract progress", reports: "Contract reports" } as Record<string, string>)[section]}</span>
+      </div>}
+      <div key={sectioned ? `${selectedId}:${section}` : undefined} data-contract-content className={sectioned ? "thin-scroll min-h-0 flex-1 space-y-3 overflow-y-auto" : "space-y-3"}>
+      {sectioned && !selectedId && section !== "master" && <p role="status" className="text-[10px] tx3">{rtl ? "ابتدا یک پیمان ثبت یا انتخاب کنید." : "Register or select a contract first."}</p>}
+      {show("master") && <>
+
       {/* ── شاخص‌های سبد پیمان ── */}
       <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
         <Metric label="تعداد پیمان" value={fmt(contracts.length)} />
@@ -2679,6 +2760,9 @@ export default function ContractsPanel({ lang }: { lang: Lang }) {
       </div>
 
       {/* ── فهرست پیمان‌ها ── */}
+
+      </>}
+      {!sectioned && <>
       <Panel title="سبد پیمان‌ها" note="سقف مجاز بر مبنای مبلغ اولیه سنجیده می‌شود، نه مبلغ جاری">
         {contracts.length === 0 ? (
           <div className="py-4 text-center text-[9.5px] tx3">هنوز پیمانی ثبت نشده است</div>
@@ -2725,10 +2809,12 @@ export default function ContractsPanel({ lang }: { lang: Lang }) {
         )}
       </Panel>
 
+      </>}
+      {activeSubId === "d14-p1-s2" && !detail && <div data-contract-section="boq" role="status" className="text-[10px] tx3">{rtl ? "برای مشاهدهٔ فهرست بها و مراحل مقطوع، ابتدا یک پیمان ثبت یا انتخاب کنید." : "Register or select a contract to view its BOQ and milestones."}</div>}
       {/* ── شناسنامهٔ پیمان انتخاب‌شده ── */}
       {detail && summary && (
         <>
-          <Panel
+          {show("master") && <Panel
             title={`شناسنامهٔ پیمان ${detail.contract.Code}`}
             note={`${detail.contract.contractTypeFa} · ${detail.contract.ContractorName ?? "—"}`}
           >
@@ -2755,8 +2841,10 @@ export default function ContractsPanel({ lang }: { lang: Lang }) {
             {detail.mapping.noteFa && (
               <div className="mt-1 text-[8.5px] tx4">{detail.mapping.noteFa}</div>
             )}
-          </Panel>
+          </Panel>}
 
+          {show("boq") && <>
+          <div data-contract-section="boq" />
           {/* ── فهرست بها با تفکیک دو حالت ── */}
           <Panel
             title="فهرست بها"
@@ -2850,9 +2938,15 @@ export default function ContractsPanel({ lang }: { lang: Lang }) {
               </div>
             </Panel>
           )}
+          </>}
         </>
       )}
 
+      {show("master") && <>
+      <div data-contract-section="master" />
+      {activeSubId === "d14-p1-s1" && (
+        <p role="status" className="text-[10px] tx3">{rtl ? "ثبت شناسنامه و مدیریت الحاقیه‌های پیمان انتخاب‌شده در همین بخش قرار دارد." : "Contract registration and amendments for the selected contract are available in this section."}</p>
+      )}
       {/* ── فرم ۱: ثبت پیمان ── */}
       <EntryForm
         titleFa="ثبت شناسنامهٔ پیمان"
@@ -2910,6 +3004,16 @@ export default function ContractsPanel({ lang }: { lang: Lang }) {
         }}
       />
 
+      {/* الحاقیه ذیل همان پیمان؛ شناسهٔ پروژه و پیمان از انتخاب واقعی می‌آیند. */}
+      {selectedId && <ContractAmendmentsPanel key={`${projectId}:${selectedId}:${userId}`} lang={lang} projectId={projectId} contractId={selectedId} onDone={() => { void refreshAll(); }} />}
+
+      </>}
+      {show("variation") && <div data-contract-section="variation">
+        {selectedId ? <ContractVariationsPanel key={`${projectId}:${selectedId}:${userId}`} lang={lang} projectId={projectId} contractId={selectedId} onDone={() => { void refreshAll(); }} />
+          : activeSubId === "d14-p3-s1" && <p role="status" className="text-[10px] tx3">{rtl ? "برای ثبت تغییر مقدار یا کار جدید، ابتدا یک پیمان ثبت یا انتخاب کنید." : "Register or select a contract to manage variations."}</p>}
+      </div>}
+
+      {show("boq") && <>
       {/* ── فرم ۲: ثبت ردیف فهرست بها (دوحالته) ── */}
       <Panel title="ثبت ردیف فهرست بها" note="ابتدا مبنای ارزش‌گذاری را انتخاب کنید؛ میدان‌های بی‌ربط نمایش داده نمی‌شوند">
         <div className="mb-2 flex flex-wrap gap-1">
@@ -2971,6 +3075,8 @@ export default function ContractsPanel({ lang }: { lang: Lang }) {
         />
       </Panel>
 
+      </>}
+      {show("measurement") && <>
       {/* ── فرم ۳: ریزمتره ── */}
       <EntryForm
         titleFa="ثبت برگهٔ ریزمتره"
@@ -3018,23 +3124,28 @@ export default function ContractsPanel({ lang }: { lang: Lang }) {
         }}
       />
 
+      </>}
       {/* دفتر وثیقه ذیل همان پیمان انتخاب‌شده می‌آید: ضمانت‌نامه بدون
           پیمانش معنا ندارد و صفحهٔ جدا، کاربر را وادار به انتخاب دوباره
           می‌کرد. */}
+      {(show("guarantees") || show("advance")) && <div data-contract-section={sectioned && section === "advance" ? "advance" : "guarantees"}>
       {selectedId && (
         <GuaranteeSection
+          part={sectioned ? (section === "advance" ? "advance" : "guarantees") : "all"}
           contractId={selectedId}
           userId={userId}
           onDone={() => { void refreshAll(); }}
         />
       )}
+        {!selectedId && <p role="status" className="text-[10px] tx3">{rtl ? "برای نمایش این بخش، ابتدا یک پیمان ثبت یا انتخاب کنید." : "Register or select a contract to view this section."}</p>}
+      </div>}
 
       {/* صورت‌وضعیت جزء هم ذیل همان پیمان: بدون دیدن ضمانت‌نامه و
           پیش‌پرداختِ بالای صفحه، عدد خالص پرداختنی به جزء گمراه‌کننده
           است. */}
       {/* پیشرفت پیش از صورت‌وضعیت جزء می‌آید: تصمیم دربارهٔ پرداخت به
           جزء بدون دانستن پیشرفت کل پیمان، تصمیم در تاریکی است. */}
-      {selectedId && (
+      {show("progress") && selectedId && (
         <ProgressSection
           contractId={selectedId}
           userId={userId}
@@ -3044,7 +3155,7 @@ export default function ContractsPanel({ lang }: { lang: Lang }) {
 
       {/* پل مالی پیش از تابلوی سلامت: نمرهٔ سلامتی که روی اعدادی بنا
           شده که هنوز به دفتر مالی نرسیده‌اند، نیمی از واقعیت است. */}
-      {selectedId && (
+      {show("finance") && selectedId && (
         <FinBridgeSection
           contractId={selectedId}
           userId={userId}
@@ -3054,6 +3165,7 @@ export default function ContractsPanel({ lang }: { lang: Lang }) {
 
       {/* تابلوی سلامت آخرین بخش است چون خلاصهٔ همهٔ بالاست: خواندنش
           پیش از دیدن جزئیات، نمره را بی‌معنا می‌کند. */}
+      {show("kpi") && <div data-contract-section="kpi">
       {selectedId && (
         <KpiSection
           contractId={selectedId}
@@ -3061,8 +3173,10 @@ export default function ContractsPanel({ lang }: { lang: Lang }) {
           onDone={() => { void refreshAll(); }}
         />
       )}
+        {!selectedId && <p role="status" className="text-[10px] tx3">{rtl ? "برای نمایش این بخش، ابتدا یک پیمان ثبت یا انتخاب کنید." : "Register or select a contract to view this section."}</p>}
+      </div>}
 
-      {selectedId && (
+      {show("subipc") && selectedId && (
         <SubIpcSection
           contractId={selectedId}
           userId={userId}
@@ -3072,10 +3186,11 @@ export default function ContractsPanel({ lang }: { lang: Lang }) {
 
       {/* گزارش‌ها در انتها: سندی که بیرون می‌رود باید پس از دیدن همهٔ
           بخش‌های بالا صادر شود، نه پیش از آن. */}
-      {selectedId && <ReportsSection contractId={selectedId} userId={userId} />}
+      {show("reports") && selectedId && <ReportsSection contractId={selectedId} userId={userId} />}
 
-      <div className="text-center text-[8px] font-extralight tx4" dir="ltr">
+      {!sectioned && <div className="text-center text-[8px] font-extralight tx4" dir="ltr">
         cnt-v1 · d14 · 14.1 Contract &amp; BOQ · 14.7 Guarantees · 14.8 Subcontractor IPC · 14.9 Progress · 14.10 KPI &amp; EWS · 14.11 Reports · 14.13 FIN Bridge
+      </div>}
       </div>
     </div>
   );

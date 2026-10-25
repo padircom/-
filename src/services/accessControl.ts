@@ -171,7 +171,12 @@ export const PERMISSION_CATALOG: PermissionDef[] = [
    * ولی نرخ را کسی تغییر می‌دهد که به پیمان دسترسی دارد — وگرنه هر سرکارگر
    * می‌توانست مبلغ صورت‌وضعیت را بالا ببرد. دور زدن دروازهٔ کیفی مجوز
    * جداگانه است تا در ممیزی مشخص باشد چه کسی آن را باز کرده. */
+  P("cnt.rating.view", "d14", "مشاهده ارزیابی و بهبود طرف قرارداد", "View party evaluations", "confidential"),
+  P("cnt.rating.edit", "d14", "ثبت ارزیابی و اقدام بهبود", "Record evaluations and improvements", "restricted", true),
+  P("cnt.rating.approve", "d14", "تأیید ارزیابی و اثربخشی بهبود", "Approve evaluations and verify improvements", "restricted", true),
   P("cnt.contract.view", "d14", "مشاهده شناسنامه پیمان", "View contract master", "confidential"),
+  P("cnt.variation.approve", "d14", "تصویب تغییر مقدار و نرخ کار جدید", "Approve quantity changes and extra work", "restricted", true),
+  P("cnt.amendment.approve", "d14", "تصمیم نهایی الحاقیه پیمان", "Approve contract amendments", "restricted", true),
   P("cnt.contract.edit", "d14", "ثبت و ویرایش پیمان و الحاقیه", "Edit contract and amendments", "restricted", true),
   P("cnt.risk.view", "d14", "مشاهدهٔ ریسک‌های قراردادی و بهبود قرارداد", "View contract risks & improvement", "confidential"),
   P("cnt.risk.edit", "d14", "ثبت و ویرایش ریسک، تعهد، اقدام و پیشنهاد اصلاح قرارداد", "Edit contract risks, obligations, actions & improvements", "restricted", true),
@@ -951,7 +956,7 @@ export const ROLE_CATALOG: RoleDef[] = [
     inherits: ["viewer"],
     clearance: "confidential",
     party: "contractor",
-    grants: ["eqm.workspace.view", "cnt.contract.view", "cnt.ipc.prepare", "fin.cost.view", "fin.ipc.prepare", "fin.invoice.issue", "fin.rate.view", "pex.evm.view", "hrm.productivity.view", "core.ai.run",
+    grants: ["eqm.workspace.view", "cnt.rating.view", "cnt.contract.view", "cnt.ipc.prepare", "fin.cost.view", "fin.ipc.prepare", "fin.invoice.issue", "fin.rate.view", "pex.evm.view", "hrm.productivity.view", "core.ai.run",
       /* هزینهٔ نیروی پیمانکاری بخشی از هزینهٔ مستقیم پروژه است و
        * کنترل هزینه باید مبنای آن را ببیند؛ ثبت و تأیید دست او نیست. */
       "hrm.crew.view", "hrm.sub.view", "hrm.analytics.view",
@@ -965,7 +970,7 @@ export const ROLE_CATALOG: RoleDef[] = [
        * تأیید PR و آزادسازی ذخیره دست مدیر پروژه است. */
       "fin.cost.post", "fin.procure.edit",
       "scm.vendor.view", "scm.vendor.manage", "scm.package.view", "scm.package.edit", "scm.bidder.view", "scm.bidder.manage", "scm.mr.view", "scm.mr.manage", "scm.mrr.view", "scm.mrr.post",
-      "cnt.contract.view",
+      "cnt.rating.view", "cnt.contract.view",
       "cnt.ipctemplate.edit",
       "cnt.ipc.prepare",
       "pmo.health.view",
@@ -1076,7 +1081,7 @@ export const ROLE_CATALOG: RoleDef[] = [
     grants: [
       "rcc.claim.view", "rcc.claim.edit", "rcc.change.raise", "rcc.issue.view", "rcc.issue.edit", "rcc.delay.view", "rcc.delay.edit", "rcc.delay.calculate",
       "fin.cost.view", "fin.rate.view", "ckm.letter.view", "ckm.letter.draft",
-      "cnt.contract.view", "cnt.contract.edit", "cnt.boq.edit", "cnt.ipc.prepare",
+      "cnt.rating.view", "cnt.contract.view", "cnt.contract.edit", "cnt.rating.edit", "cnt.boq.edit", "cnt.ipc.prepare",
       /* PMO-CONTRACT-RISK-ENGINE-V1.0: ریسک قراردادی را مدیر پیمان ثبت و
        * پایش می‌کند؛ تأیید قاعدهٔ امتیازدهی و پیشنهاد اصلاح با او نیست. */
       "cnt.risk.view", "cnt.risk.edit",
@@ -1112,7 +1117,7 @@ export const ROLE_CATALOG: RoleDef[] = [
        * صورت‌کارکرد هم با اوست، ولی تأیید نه — SOD-22 و SOD-23. */
       "hrm.sub.view", "hrm.sub.manage", "hrm.subipc.prepare",
     
-      "cnt.contract.view",
+      "cnt.rating.view", "cnt.contract.view",
       "cnt.ipctemplate.edit",
       "cnt.ipc.prepare",
       "pmo.charter.view",
@@ -1127,7 +1132,7 @@ export const ROLE_CATALOG: RoleDef[] = [
     inherits: ["viewer"],
     clearance: "restricted",
     party: "contractor",
-    grants: ["spm.plan.view", "oex.assessment.view", "eqm.workspace.view", "eqm.dispatch.approve",
+    grants: ["cnt.rating.approve", "cnt.variation.approve", "cnt.amendment.approve", "spm.plan.view", "oex.assessment.view", "eqm.workspace.view", "eqm.dispatch.approve",
       /* P7/CPMS: مدیر پروژه گزارش پیمانکار و دیسیپلینی را تأیید می‌کند،
        * ولی آزادسازی QC سمت خودش نیست. */
       "cpm.workarea.view", "cpm.dpr.view", "cpm.dpr.approve",
@@ -1200,7 +1205,7 @@ export const ROLE_CATALOG: RoleDef[] = [
       /* مدیر پروژه متره ثبت می‌کند چون کلید دور زدن دروازهٔ کیفی دست
        * اوست و باید بتواند همان‌جا ثبت را تمام کند؛ ولی عمداً
        * `cnt.boq.edit` ندارد تا نرخ را نتواند تغییر دهد. */
-      "cnt.contract.view", "cnt.measurement.record", "cnt.ipc.override",
+      "cnt.rating.view", "cnt.contract.view", "cnt.measurement.record", "cnt.ipc.override",
       "com.punch.record", "com.certificate.view", "com.system.view", "com.milestone.manage",
     
       "pmo.charter.view",
@@ -1209,7 +1214,7 @@ export const ROLE_CATALOG: RoleDef[] = [
       "pmo.form.approve",
       "pmo.health.view",
       "pmo.health.record",
-      "cnt.contract.view",
+      "cnt.rating.view", "cnt.contract.view",
       "cnt.ipc.approve",
       "gov.process.edit",
     "report.custom.publish", "itg.connector.view", "itg.export.run", "itg.calendar.sync",
@@ -1327,7 +1332,7 @@ export const ROLE_CATALOG: RoleDef[] = [
       "pmo.form.submit",
       "pmo.health.view",
       "pmo.health.record",
-      "cnt.contract.view",
+      "cnt.rating.view", "cnt.contract.view",
       "gov.process.edit",
       /* P9: خروجی و همگام‌سازی سامانه‌های بیرونی کار PMO است. انتشار قالب
        * گزارش به PMO داده نشد چون تحریر آن (از طریق planner) در همین نقش
@@ -1350,7 +1355,7 @@ export const ROLE_CATALOG: RoleDef[] = [
       "pmo.charter.approve",
       "pmo.health.view",
       "pmo.health.approve",
-      "cnt.contract.view",
+      "cnt.rating.view", "cnt.contract.view",
       "cnt.ipc.approve",
     "report.custom.publish", "itg.connector.view", "ai.history.view", "ai.export.run"
     ],
@@ -1361,7 +1366,7 @@ export const ROLE_CATALOG: RoleDef[] = [
     inherits: ["viewer"],
     clearance: "confidential",
     party: "consultant",
-    grants: ["doc.document.approve", "plan.progress.approve", "qms.itp.view", "qms.inspection.record", "qms.ncr.raise", "fin.ipc.prepare", "cnt.contract.view", "cnt.ipc.review", "cnt.guarantee.view", "cnt.progress.view", "cnt.kpi.view", "cnt.report.view", "cnt.risk.view",
+    grants: ["doc.document.approve", "plan.progress.approve", "qms.itp.view", "qms.inspection.record", "qms.ncr.raise", "fin.ipc.prepare", "cnt.rating.view", "cnt.contract.view", "cnt.ipc.review", "cnt.guarantee.view", "cnt.progress.view", "cnt.kpi.view", "cnt.report.view", "cnt.risk.view",
       "com.punch.record", "com.certificate.view", "ckm.letter.view", "ckm.letter.draft", "gov.gate.review", "eng.mdr.view", "eng.review.code", "eng.crs.resolve", "eng.vpr.review"],
   },
   {
@@ -1372,7 +1377,7 @@ export const ROLE_CATALOG: RoleDef[] = [
     // جداسازی دادهٔ پیمانکار از کارفرما محور جداگانه‌ای است (party) نه سطح دسترسی.
     clearance: "restricted",
     party: "client",
-    grants: ["fin.cost.view", "fin.ipc.approve", "cnt.contract.view", "cnt.ipc.approve",
+    grants: ["cnt.rating.approve", "cnt.variation.approve", "cnt.amendment.approve", "fin.cost.view", "fin.ipc.approve", "cnt.rating.view", "cnt.contract.view", "cnt.ipc.approve",
       /* آزادسازی و ضبط وثیقه تصمیم کارفرماست: پول از جیب او رفته و
        * برگشتنش هم به تشخیص او. */
       "cnt.guarantee.view", "cnt.guarantee.release", "cnt.progress.view", "cnt.kpi.view",
