@@ -1417,7 +1417,7 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
           {([
             ["gov", rtl ? "حاکمیت و فرآیندها (GOV)" : "Governance (GOV)"],
             ["pmo", rtl ? "دفتر پروژه (PMO)" : "PMO desk"],
-            ["ctl", rtl ? "گردش‌کار کنترل پروژه (CTL)" : "Control workflow (CTL)"],
+            ["ctl", rtl ? "نقشهٔ فرایندی مدیریت و کنترل پروژه" : "Project management & control process map"],
           ] as const).map(([k, label]) => (
             <button
               key={k}
