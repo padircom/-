@@ -198,7 +198,7 @@ export const domains: Domain[] = [
     icon: "🏛",
     accent: "#B8D4FF",
     title: { fa: "مدیریت حاکمیت و فرآیندهای PMBOK", en: "Governance & PMBOK Processes" },
-    nav: { fa: "مدیریت حاکمیت پروژه (PMBOK)", en: "Governance & PMBOK" },
+    nav: { fa: "مدیریت حاکمیت پروژه", en: "Governance & PMBOK" },
     processes: [
       {
         id: "d6-p1",
