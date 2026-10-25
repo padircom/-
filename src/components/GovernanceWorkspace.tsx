@@ -188,31 +188,6 @@ export default function GovernanceWorkspace({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden" dir={rtl ? "rtl" : "ltr"}>
-      {/* Top Header */}
-      <section className="glass-dark shrink-0 rounded-2xl p-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="grid h-8 w-8 place-items-center rounded-lg border border-indigo-400/40 bg-indigo-400/10 text-[15px]">🏛</span>
-          <div className="min-w-0 flex-1">
-            <h3 className="text-[12px] font-semibold tx1">{rtl ? "مدیریت حاکمیت و فرآیندهای PMBOK" : "Governance & PMBOK Process Management"}</h3>
-          </div>
-          <span className="rounded-lg px-2 py-1 text-[10px] font-semibold tabular-nums" style={{ background: `${color}22`, color }}>
-            {rtl ? "انطباق" : "Compliance"} {score}%
-          </span>
-          <span className="rounded-lg border b-line-soft px-2 py-1 text-[9px] tx3">
-            {rtl ? "نقض SLA" : "SLA breach"} {breaches.toLocaleString(rtl ? "fa-IR" : "en-US")}
-          </span>
-          <span className="rounded-lg border b-line-soft px-2 py-1 text-[9px] tx3">
-            {rtl ? "تصمیم باز" : "Open decisions"} {openDecisions.toLocaleString(rtl ? "fa-IR" : "en-US")}
-          </span>
-          <span
-            className={`rounded-lg px-2 py-1 text-[9px] ${source === "api" ? "bg-emerald-400/15 text-emerald-300" : "border b-line-soft tx3"}`}
-            title={source === "api" ? "/api/gov" : "mock"}
-          >
-            {source === "api" ? (rtl ? "داده زنده" : "Live data") : rtl ? "داده نمونه" : "Sample data"}
-          </span>
-        </div>
-      </section>
-
       {/* Tabs */}
       {!hideTabs && (
         <nav className="flex shrink-0 flex-wrap items-center gap-1.5 rounded-xl bg-black/15 p-1">
@@ -233,6 +208,25 @@ export default function GovernanceWorkspace({
 
       {/* Main Tab View */}
       <div className="thin-scroll min-h-0 flex-1 overflow-y-auto pe-1">
+        <div role="group" aria-label={rtl ? "شاخص‌های حاکمیت" : "Governance indicators"}
+          className="thin-scroll mb-2 flex items-center gap-1.5 overflow-x-auto whitespace-nowrap pb-1">
+          <span className="shrink-0 rounded-md px-1.5 py-0.5 text-[9px] font-semibold tabular-nums" style={{ background: `${color}22`, color }}>
+            {rtl ? "انطباق" : "Compliance"} {score}%
+          </span>
+          <span className="shrink-0 rounded-md border b-line-soft px-1.5 py-0.5 text-[9px] tx3">
+            {rtl ? "نقض SLA" : "SLA breach"} {breaches.toLocaleString(rtl ? "fa-IR" : "en-US")}
+          </span>
+          <span className="shrink-0 rounded-md border b-line-soft px-1.5 py-0.5 text-[9px] tx3">
+            {rtl ? "تصمیم باز" : "Open decisions"} {openDecisions.toLocaleString(rtl ? "fa-IR" : "en-US")}
+          </span>
+          <span
+            className={`shrink-0 rounded-md px-1.5 py-0.5 text-[9px] ${source === "api" ? "bg-emerald-400/15 text-emerald-300" : "border b-line-soft tx3"}`}
+            title={source === "api" ? "/api/gov" : "mock"}
+          >
+            {source === "api" ? (rtl ? "داده زنده" : "Live data") : rtl ? "داده نمونه" : "Sample data"}
+          </span>
+        </div>
+
         {/* TAB 1: WORKFLOWS */}
         {tab === "workflow" && (
           <div className="fade-rise space-y-2">
