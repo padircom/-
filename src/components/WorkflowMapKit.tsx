@@ -91,7 +91,7 @@ export function WorkflowNodeBox({
       )}
     </>
   );
-  const cls = `relative flex w-full flex-1 flex-col justify-center overflow-hidden rounded-xl border ${compact ? "px-2 py-1.5" : "px-3 py-2"} text-start transition ${
+  const cls = `relative flex w-full flex-1 flex-col justify-center overflow-hidden rounded-xl border ${compact ? "px-2 py-[7px]" : "px-3 py-2"} text-start transition ${
     isCross ? "border-dashed" : "border-solid"
   }`;
   const style = {
