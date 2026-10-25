@@ -1409,12 +1409,6 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
           <button type="button" onClick={() => { if (d6Guide) { setSelected(null); setD6View("gov"); } setD6Guide(v => !v); }} aria-pressed={d6Guide} className="glass-row shrink-0 rounded-lg px-3 py-2 text-[10.5px] tx1">
             {d6Guide ? (rtl ? "نقشهٔ فرایند" : "Process map") : (rtl ? "راهنمای ماژول" : "Module guide")}
           </button>
-          {cluster && (
-            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl text-[20px]"
-                  style={{ background: `${cluster.color}1f`, border: `1px solid ${cluster.color}55` }}>
-              {cluster.icon}
-            </span>
-          )}
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
               {cluster && (
