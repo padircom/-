@@ -79,7 +79,7 @@ export function WorkflowNodeBox({
         className={`absolute end-0 ${compact ? "top-1 bottom-1" : "top-2 bottom-2"} w-[3px] rounded-full`}
         style={{ background: isCross ? WF_COLOR.cross : accent, opacity: isCross ? 0.75 : 0.9 }}
       />
-      <span className={`block ${compact ? "text-[9px] leading-[13px]" : "text-[11px] leading-4"} font-medium text-start tx1`} style={compact ? { fontSize: "calc(var(--workspace-text-size, 0.75rem) * 1.1)", lineHeight: 1.1 } : undefined}>{title}</span>
+      <span className={`block ${compact ? "text-[9px] leading-[13px]" : "text-[11px] leading-4"} font-medium text-start tx1`} style={compact ? { fontSize: "calc(var(--workspace-text-size, 0.75rem) * 1.17)", lineHeight: 1.1 } : undefined}>{title}</span>
       {sub && !compact && <span className="mt-1 block text-[9.5px] font-light leading-4 text-start tx3">{sub}</span>}
       {isCross && !compact && (
         <span
@@ -91,7 +91,7 @@ export function WorkflowNodeBox({
       )}
     </>
   );
-  const cls = `relative flex w-full flex-1 flex-col justify-center overflow-hidden rounded-xl border ${compact ? "px-2 py-1.5" : "px-3 py-2"} text-start transition ${
+  const cls = `relative flex w-full flex-1 flex-col justify-center overflow-hidden rounded-xl border ${compact ? "px-2 py-[7px]" : "px-3 py-2"} text-start transition ${
     isCross ? "border-dashed" : "border-solid"
   }`;
   const style = {
@@ -136,7 +136,7 @@ export function WorkflowColumnHead({
   return (
     <div
       className={`flex items-center justify-center gap-1.5 rounded-xl px-2 font-medium text-white ${compact ? "py-1 text-[10px]" : "py-1.5 text-[10.5px]"}`}
-      style={{ background: `linear-gradient(180deg, ${color}, ${color}cc)`, boxShadow: `0 6px 16px -8px ${color}`, ...(compact ? { fontSize: "calc(var(--workspace-text-size, 0.75rem) * 1.1)" } : {}) }}
+      style={{ background: `linear-gradient(180deg, ${color}, ${color}cc)`, boxShadow: `0 6px 16px -8px ${color}`, ...(compact ? { fontSize: "calc(var(--workspace-text-size, 0.75rem) * 1.17)" } : {}) }}
     >
       <span aria-hidden="true" className="inline-flex">{WF_ICONS[icon]}</span>
       <span>{rtl ? fa : en}</span>
