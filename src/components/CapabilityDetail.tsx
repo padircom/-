@@ -29,6 +29,8 @@ type Props = {
   /** override پروژه‌ایِ ساختار d6/d20؛ نبودش یعنی framework.ts */
   processes?: Process[];
   onBack: () => void;
+  /** میزبان، مشخصات پروژه و دکمهٔ بازگشت را در هدر اصلی نمایش می‌دهد. */
+  hideHeader?: boolean;
   /** پرش به یک زیرفرآیندِ دیگر (پیوندهای میان‌دامنه‌ای). */
   onNavigate?: (target: { domainId: string; processId: string; subId: string }) => void;
 };
@@ -72,7 +74,7 @@ const seedClient = (subId: string): Template[] => [
 ];
 
 export default function CapabilityDetail({
-  lang, domainId, clusterId, projectId, processId, subId, processes, onBack, onNavigate,
+  lang, domainId, clusterId, projectId, processId, subId, processes, onBack, onNavigate, hideHeader = false,
 }: Props) {
   const rtl = lang === "fa";
   const { clusters, projectsByCluster, settings } = useSystem();
@@ -331,7 +333,7 @@ export default function CapabilityDetail({
   return (
     <div className="glass flex h-full min-h-0 flex-col rounded-2xl p-5" dir={rtl ? "rtl" : "ltr"}>
       {/* Top bar */}
-      <header className="b-line-soft mb-4 flex flex-wrap items-center gap-x-4 gap-y-2 border-b pb-3">
+      {!hideHeader && <header className="b-line-soft mb-4 flex flex-wrap items-center gap-x-4 gap-y-2 border-b pb-3">
         <button onClick={onBack} className="glass-row flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-[10.5px] font-light tx2 transition hover:tx1">
           <span className="inline-block rotate-180 rtl:rotate-0">→</span>
           {rtl ? "بازگشت به حوزه" : "Back to domain"}
@@ -360,7 +362,7 @@ export default function CapabilityDetail({
             </p>
           )}
         </div>
-      </header>
+      </header>}
 
       {/* اطلاعات متادیتا برای سایر حوزه‌ها؛ کارت‌های بالای زیرفرایندهای استراتژی نمایش داده نمی‌شوند. */}
       {domainId !== "d20" && <div className="grid grid-cols-2 gap-2 xl:grid-cols-4">

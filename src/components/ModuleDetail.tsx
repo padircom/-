@@ -1533,32 +1533,38 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
             {rtl ? "بازگشت به داشبورد" : "Back to dashboard"}
           </button>
           {(selected || strategyWorkspaceOpen) && <button type="button" onClick={() => { setSelected(null); setStrategyWorkspaceOpen(false); }} className="glass-row rounded-lg px-3 py-2 text-[10.5px] tx1">{rtl ? "بازگشت به داشبورد استراتژی" : "Back to strategy dashboard"}</button>}
-          <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl text-[20px]"
-                style={{ background: `${dom.accent}1f`, border: `1px solid ${dom.accent}55` }}>
-            {dom.icon}
-          </span>
           <div className="min-w-0 flex-1">
-            <h1 className="truncate text-[20px] font-semibold leading-tight" style={{ color: dom.accent }}>
-              {t(dom.title, lang)}
-            </h1>
-            <p className="mt-1 truncate text-[10px] font-extralight tx3">
-              {rtl ? "BSC — چهار منظر؛ تحقق از شاخص تا کلِ استراتژی بالا می‌رود" : "BSC — four perspectives; attainment rolls up from KPI to strategy"}
-            </p>
+            <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
+              {cluster && (
+                <h1 className="truncate text-[20px] font-semibold leading-tight" style={{ color: cluster.color }}>
+                  {t(cluster.title, lang)}
+                </h1>
+              )}
+              <span className="text-[16px] font-light tx4">/</span>
+              {project && (
+                <h2 className="truncate text-[19px] font-semibold leading-tight tx1">{t(project.name, lang)}</h2>
+              )}
+            </div>
+            {project && (
+              <p className="mt-1 truncate text-[10px] font-extralight tx3">
+                <span dir="ltr">{project.code}</span> · {t(project.client, lang)} · {t(project.location, lang)}
+              </p>
+            )}
           </div>
           {canEditTaxonomy && (
             <button type="button" onClick={() => setTaxonomyEditorOpen(true)} className="rounded-lg border border-sky-400/45 bg-sky-400/10 px-3 py-2 text-[10px] text-sky-200 hover:bg-sky-400/20">
               ✎ {rtl ? "ویرایش فرایندها" : "Edit processes"}
             </button>
           )}
-          <div className="shrink-0 text-end">
-            <div className="text-[9px] font-extralight tx3">{rtl ? "مالک: دفتر استراتژی" : "Owner: Strategy Office"}</div>
-            <div className="text-[11px] font-light tx1">{rtl ? "هدف ← شاخص ← ابتکار" : "Objective ← KPI ← Initiative"}</div>
+          <div className="shrink-0 text-end text-[11px] font-light tx1">
+            {t(dom.nav ?? dom.title, lang)}
           </div>
         </div>
         <div className="workspace-columns flex min-h-0 flex-1 gap-3 overflow-hidden">
           <div dir={rtl ? "rtl" : "ltr"} className="glass flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl p-3">
             {selected ? (
               <CapabilityDetail
+                hideHeader
                 lang={lang}
                 domainId={dom.id}
                 clusterId={target.clusterId}
