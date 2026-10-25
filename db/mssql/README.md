@@ -33,3 +33,10 @@ sqlcmd -S localhost\SQL2008EXPRESS -d PMO_Dashboard_DB -i seed__hse_og2401.sql
 | `V003__hse.sql` | `hse_incident` · `hse_permit` · `hse_inspection` · `hse_action` · `hse_manhour` · `hse_tbt` |
 | `seed__pex_og2401.sql` | سید پروژه OG-2401 (آینه `src/data/pexProject.ts`) |
 | `seed__hse_og2401.sql` | سید HSE پروژه OG-2401 (آینه `src/services/hse.ts`) |
+
+### الحاقیهٔ پیمان (افزایشی)
+
+`V004__contract_amendment_workflow.sql` روی جدول موجود `dbo.ContractAmendment`
+از اسکیما عمومی، ستون‌های مرجع سند و گردش تأیید را اضافه می‌کند؛ این جدول توسط
+V001 تا V003 ساخته نمی‌شود. پیش از اجرای V004 باید اسکیما عمومی پیمان نصب شده باشد.
+جزئیات و فرمان‌های ساخت موتور: `docs/CNT_Amendment_Workflow.md`.

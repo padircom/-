@@ -1,3 +1,4 @@
+import { registerContractAmendmentRoutes, AMENDMENT_DEDICATED_ROUTES } from "./contractAmendmentApi.js";
 import { registerStrategyExcellenceRoutes } from "./strategyExcellenceWorkspaceApi.js";
 import { registerCpmWorkspaceRoutes, CPM_DEDICATED_ROUTES } from "./cpmWorkspaceApi.js";
 import { registerPmoWorkspaceRoutes, PMO_DEDICATED_ROUTES } from "./pmoWorkspaceApi.js";
@@ -686,6 +687,7 @@ const DEDICATED_TABLE_ROUTES = {
   /* P8/PMO — منشور، فرم‌ساز و کارت سلامت؛ P8/CNT — قالب و سند صورت‌وضعیت. */
   ...PMO_DEDICATED_ROUTES,
   ...CNT_IPC_DEDICATED_ROUTES,
+  ...AMENDMENT_DEDICATED_ROUTES,
   /* P9/RPT-1 — قالب گزارش سفارشی؛ P9/ITG — دفتر اجرای اتصال‌دهنده‌های خروجی. */
   ...RPT_DEDICATED_ROUTES,
   ...ITG_OUTBOUND_DEDICATED_ROUTES,
@@ -1043,6 +1045,7 @@ registerCpmWorkspaceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: r
 registerPmoWorkspaceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
 /* P8/CNT: قالب‌پذیری صورت‌وضعیت — محاسبهٔ سرور و SOD-11. */
 registerCntIpcRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
+registerContractAmendmentRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
 /* P9/RPT-1: گزارش‌ساز سفارشی — مجموعه‌دادهٔ مجاز + انتشار با SOD-31. */
 registerReportBuilderRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
 /* P9/ITG-1..3: خروجی XER/XML/ICS و نوشتن در سامانهٔ بیرونی با دفتر اجرا. */

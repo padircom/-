@@ -1,3 +1,4 @@
+import ContractAmendmentsPanel from "./ContractAmendmentsPanel";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useCurrentProjectId } from "../context/SystemContext";
@@ -2885,7 +2886,7 @@ export default function ContractsPanel({ lang, activeSubId, navigationRequest }:
 
       <div data-contract-section="master" />
       {activeSubId === "d14-p1-s1" && (
-        <p role="status" className="text-[10px] tx3">{rtl ? "ثبت شناسنامه در همین صفحه موجود است؛ فرم مدیریت الحاقیه‌ها هنوز پیاده‌سازی نشده است." : "Contract registration is available on this page; amendment management is not yet implemented."}</p>
+        <p role="status" className="text-[10px] tx3">{rtl ? "ثبت شناسنامه و مدیریت الحاقیه‌های پیمان انتخاب‌شده در همین بخش قرار دارد." : "Contract registration and amendments for the selected contract are available in this section."}</p>
       )}
       {/* ── فرم ۱: ثبت پیمان ── */}
       <EntryForm
@@ -2943,6 +2944,9 @@ export default function ContractsPanel({ lang, activeSubId, navigationRequest }:
           return r;
         }}
       />
+
+      {/* الحاقیه ذیل همان پیمان؛ شناسهٔ پروژه و پیمان از انتخاب واقعی می‌آیند. */}
+      {selectedId && <ContractAmendmentsPanel key={`${projectId}:${selectedId}:${userId}`} lang={lang} projectId={projectId} contractId={selectedId} onDone={() => { void refreshAll(); }} />}
 
       {/* ── فرم ۲: ثبت ردیف فهرست بها (دوحالته) ── */}
       <Panel title="ثبت ردیف فهرست بها" note="ابتدا مبنای ارزش‌گذاری را انتخاب کنید؛ میدان‌های بی‌ربط نمایش داده نمی‌شوند">

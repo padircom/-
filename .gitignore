@@ -103,3 +103,6 @@ server/storage/change/
 server/contractRiskLogic.js
 server/contractClauseLogic.js
 server/contractRiskDocLogic.js
+
+# Generated contract-amendment workflow (npm run build:cntamend)
+server/contractAmendmentLogic.js
