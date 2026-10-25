@@ -3,7 +3,6 @@ import { type Lang } from "../data/framework";
 import { useAuth } from "../context/AuthContext";
 import { useCurrentProjectId } from "../context/SystemContext";
 import { logAudit } from "../services/auditLogger";
-import SystemBadge from "./SystemBadge";
 import ModuleWorkspaceShell from "./ModuleWorkspaceShell";
 import {
   DISCIPLINE_FA,
@@ -61,7 +60,7 @@ function openEngReport(projectId: string, code: string, format: string, audience
   window.open(url, "_blank", "noopener");
 }
 
-type Props = { lang: Lang; onBack: () => void };
+type Props = { lang: Lang; onBack: () => void; headerIdentity?: ReactNode };
 
 type Json = Record<string, any>;
 
@@ -561,7 +560,7 @@ const SEVERITY_TONE: Record<string, string> = {
   editorial: "tx3",
 };
 
-export default function EngineeringWorkspace({ lang, onBack }: Props) {
+export default function EngineeringWorkspace({ lang, onBack, headerIdentity }: Props) {
   /* شناسهٔ پروژه از «پروژهٔ جاری» می‌آید (SystemContext) — نه ثابتِ ماژول. */
   const projectId = useCurrentProjectId();
 
@@ -631,8 +630,8 @@ export default function EngineeringWorkspace({ lang, onBack }: Props) {
       accent={ENG_ACCENT}
       icon="📐"
       title={rtl ? "مدیریت مهندسی و طراحی" : "Engineering & Design Management"}
-      subtitle={rtl ? `موتور ${ENG_VERSION} · دامنه d12` : `${ENG_VERSION} · domain d12`}
-      badges={<SystemBadge domainId="d12" lang={lang} />}
+      headerIdentity={headerIdentity}
+      backLabel={rtl ? "بازگشت به داشبورد" : "Back to dashboard"}
       actions={loading ? <span className="text-[10px] font-light tx3">{rtl ? "در حال بارگذاری…" : "Loading…"}</span> : undefined}
       onBack={onBack}
       navTitle={rtl ? "حوزهٔ عملکردی: محدوده" : "Performance domain: Scope"}

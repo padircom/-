@@ -99,6 +99,8 @@ export type ModuleWorkspaceShellProps<T extends string = string> = {
   icon: ReactNode;
   title: string;
   subtitle?: ReactNode;
+  /** هویت صنعت و پروژه، جایگزین آیکن و عنوان پیش‌فرض؛ فقط با درخواست میزبان. */
+  headerIdentity?: ReactNode;
   /** نشان‌های وضعیت کنار عنوان (مثلاً «متصل به API»). */
   badges?: ReactNode;
   /** دکمه‌ها و انتخاب‌گرهای فوری در انتهای سربرگ. */
@@ -133,6 +135,7 @@ export default function ModuleWorkspaceShell<T extends string>({
   icon,
   title,
   subtitle,
+  headerIdentity,
   badges,
   actions,
   onBack,
@@ -171,6 +174,7 @@ export default function ModuleWorkspaceShell<T extends string>({
           </button>
         )}
 
+        {headerIdentity ?? (<>
         <ModuleIconTile accent={accent}>{icon}</ModuleIconTile>
 
         {/* بلوک عنوان حداقل عرض خوانا دارد؛ اگر انتخاب‌گرهای ماژول (مثل IIoT)
@@ -195,6 +199,8 @@ export default function ModuleWorkspaceShell<T extends string>({
           </div>
           {subtitle && <p className="mt-1 truncate text-[10px] font-extralight tx3">{subtitle}</p>}
         </div>
+
+        </>)}
 
         {(badges || actions) && (
           <div className="ms-auto flex min-w-0 max-w-full flex-wrap items-center justify-end gap-2 text-end [&_input]:max-w-52 [&_select]:max-w-52">

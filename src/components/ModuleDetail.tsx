@@ -938,7 +938,33 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
 
   /* ماژول مهندسی و طراحی — کامپوننت خودش نوار بازگشت و تب‌ها را دارد. */
   if (dom.id === "d12") {
-    return <EngineeringWorkspace lang={lang} onBack={onBack} />;
+    return <EngineeringWorkspace lang={lang} onBack={onBack} headerIdentity={
+      <>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
+            {cluster && (
+              <h1 className="truncate text-[20px] font-semibold leading-tight" style={{ color: cluster.color }}>
+                {t(cluster.title, lang)}
+              </h1>
+            )}
+            <span className="text-[16px] font-light tx4">/</span>
+            {project && (
+              <h2 className="truncate text-[19px] font-semibold leading-tight tx1">
+                {t(project.name, lang)} <span dir="ltr" className="inline-block text-[10px] font-light tx3">({project.code})</span>
+              </h2>
+            )}
+          </div>
+          {project && (
+            <p className="mt-1 truncate text-[10px] font-extralight tx3">
+              {t(project.client, lang)} · {t(project.location, lang)}
+            </p>
+          )}
+        </div>
+        <div className="shrink-0 text-end text-[11px] font-light tx1">
+          {rtl ? "مدیریت مهندسی و طراحی" : "Engineering & Design Management"}
+        </div>
+      </>
+    } />;
   }
 
   /* ماژول ایمنی، بهداشت و محیط‌زیست — هفت تب برابر هفت فرایند d16-p1..p7،
