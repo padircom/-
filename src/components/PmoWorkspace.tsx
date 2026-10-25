@@ -157,6 +157,12 @@ export default function PmoWorkspace({
         </nav>
       )}
 
+      {hideTabs && (
+        <button onClick={() => void reload()} className="self-end rounded-lg px-2.5 py-1 text-[9.5px] font-light tx3 transition hover:tx1">
+          ↻ {rtl ? "بازخوانی" : "Refresh"}
+        </button>
+      )}
+
       {metrics && (
         <div className="grid shrink-0 grid-cols-2 gap-2 md:grid-cols-4">
           {[

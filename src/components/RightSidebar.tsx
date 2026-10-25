@@ -32,6 +32,7 @@ export type ModuleNavTarget = {
   fromMap?: boolean;
   /** نمای اولیهٔ ماژول d6 هنگام بازگشت از نقشه. */
   initialView?: "gov" | "pmo" | "ctl";
+  pmoTab?: "charter" | "forms" | "health";
 };
 
 export type EnterpriseSystemView =

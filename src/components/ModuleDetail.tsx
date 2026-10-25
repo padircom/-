@@ -20,7 +20,7 @@ import ControlWorkflowMap from "./ControlWorkflowMap";
 import PmaWorkspace, { type PmaTab } from "./PmaWorkspace";
 import RiskClaimsWorkspace, { type D4Tab } from "./RiskClaimsWorkspace";
 import GovernanceWorkspace, { type GovTab } from "./GovernanceWorkspace";
-import PmoWorkspace from "./PmoWorkspace";
+import PmoWorkspace, { type PmoTab } from "./PmoWorkspace";
 import HseWorkspace, { type HseTab as HseFieldTab } from "./HseFieldWorkspace";
 import ContractsPanel from "./ContractsPanel";
 import ContractRiskWorkspace from "./ContractRiskWorkspace";
@@ -827,6 +827,7 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
   /* P8: میز کار دفتر پروژه (PMO-1..3) کنار میز حاکمیت d6؛ نوار کنار و
      حوزه‌های اصلی دست‌نخورده می‌مانند و فقط نمای درون d6 عوض می‌شود. */
   const [d6View, setD6View] = useState<"gov" | "pmo" | "ctl">(target.initialView ?? "gov");
+  const [pmoTab, setPmoTab] = useState<PmoTab>(target.pmoTab ?? "charter");
 
   const [d14View, setD14View] = useState<"contract" | "ipc" | "rating" | "risk">(
     contractView(target.processId, target.subId),
@@ -1483,14 +1484,15 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
             ) : d6Guide || (d6View === "gov" && !selected) ? (
               <InitiatingGuide lang={lang} processes={activeProcesses} projectName={project ? t(project.name, lang) : target.projectId} currentRole={user?.role} canEditStructure={canEditTaxonomy} guide={d6Guide} onSelect={(pId, sId) => { setSelected({ pId, sId }); setD6Guide(false); setD6View("gov"); audit("OPEN_SUBPROCESS", { projectId: target.projectId, entity: dom.id, entityId: sId }); }} />
             ) : d6View === "pmo" ? (
-              <PmoWorkspace lang={lang} />
+              <PmoWorkspace lang={lang} initialTab={pmoTab} hideTabs />
             ) : (
               <GovernanceWorkspace lang={lang} initialTab={d6Tab} hideTabs />
             )}
           </div>
           <DomainAside
-              onOpenPmo={() => { setSelected(null); setD6Guide(false); setD6View("pmo"); }}
+              onOpenPmo={(tab = "charter") => { setSelected(null); setD6Guide(false); setPmoTab(tab); setD6View("pmo"); }}
               pmoActive={d6View === "pmo" && !d6Guide}
+              activePmoTab={pmoTab}
               lang={lang}
               dom={dom}
               activeProcesses={activeProcesses}
@@ -1587,7 +1589,7 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
             )}
           </div>
           <DomainAside
-              onOpenPmo={() => onNavigate?.({ ...target, moduleId: "d6", processId: undefined, subId: undefined, initialView: "pmo" })}
+              onOpenPmo={(tab = "charter") => onNavigate?.({ ...target, moduleId: "d6", processId: undefined, subId: undefined, initialView: "pmo", pmoTab: tab })}
               lang={lang}
               dom={dom}
               activeProcesses={activeProcesses}
@@ -1911,6 +1913,7 @@ function DomainNavGroups({
   showSql,
   onOpenPmo,
   pmoActive,
+  activePmoTab,
   onSelectSub,
   onOpenModuleSub,
 }: {
@@ -1922,8 +1925,9 @@ function DomainNavGroups({
   extraSubs?: Record<string, { id: string; title: Bi }[]>;
   /** نمایش برچسب جدول‌های SQL زیر هر زیرفرآیند (مثل d17). */
   showSql?: boolean;
-  onOpenPmo?: () => void;
+  onOpenPmo?: (tab?: PmoTab) => void;
   pmoActive?: boolean;
+  activePmoTab?: PmoTab;
   onSelectSub: (processId: string, subId: string) => void;
   onOpenModuleSub: (moduleId: string, processId: string, subId: string) => void;
 }) {
@@ -2047,12 +2051,26 @@ function DomainNavGroups({
               </div>
             ))}
             {m.id === "d6" && onOpenPmo && (
-              <button type="button" onClick={onOpenPmo} aria-pressed={Boolean(pmoActive)}
+              <div>
+              <button type="button" onClick={() => onOpenPmo()} aria-pressed={Boolean(pmoActive)}
                 className={`mt-3 flex w-full items-center gap-1.5 rounded-lg px-2 py-2 text-start text-[10px] font-semibold transition hover:bg-[var(--row-hover)] ${pmoActive ? "row-on tx1" : "tx2"}`}>
                 <span className="h-px flex-1 bg-[var(--line-soft)]" aria-hidden="true" />
                 {rtl ? "دفتر مدیریت پروژه" : "Project Management Office"}
                 <span className="h-px flex-1 bg-[var(--line-soft)]" aria-hidden="true" />
               </button>
+              {([
+                ["charter", { fa: "منشور پروژه", en: "Project charter" }],
+                ["forms", { fa: "فرم‌ساز مصوب", en: "Approved forms" }],
+                ["health", { fa: "کارت سلامت پروژه", en: "Project health" }],
+              ] as const).map(([tab, label]) => (
+                <button key={tab} type="button" onClick={() => onOpenPmo(tab)}
+                  aria-pressed={Boolean(pmoActive && activePmoTab === tab)}
+                  className={`flex w-full items-center gap-2 rounded-lg py-1.5 pe-2 ps-7 text-start text-[10px] font-light tx1 transition hover:bg-[var(--row-hover)] ${pmoActive && activePmoTab === tab ? "row-on" : ""}`}>
+                  <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: m.accent }} />
+                  {t(label, lang)}
+                </button>
+              ))}
+              </div>
             )}
           </div>
         );
@@ -2084,6 +2102,7 @@ function DomainAside({
   showSql,
   onOpenPmo,
   pmoActive,
+  activePmoTab,
   onSelectSub,
   onOpenModuleSub,
 }: {
@@ -2093,8 +2112,9 @@ function DomainAside({
   selectedSubId?: string;
   extraSubs?: Record<string, { id: string; title: Bi }[]>;
   showSql?: boolean;
-  onOpenPmo?: () => void;
+  onOpenPmo?: (tab?: PmoTab) => void;
   pmoActive?: boolean;
+  activePmoTab?: PmoTab;
   onSelectSub: (processId: string, subId: string) => void;
   onOpenModuleSub: (moduleId: string, processId: string, subId: string) => void;
 }) {
@@ -2122,6 +2142,7 @@ function DomainAside({
           showSql={showSql}
           onOpenPmo={onOpenPmo}
           pmoActive={pmoActive}
+          activePmoTab={activePmoTab}
           onSelectSub={onSelectSub}
           onOpenModuleSub={onOpenModuleSub}
         />
