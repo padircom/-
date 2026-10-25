@@ -1400,6 +1400,7 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
   }
 
   if (dom.id === "d6") {
+    const returnToGovernanceMap = d6View === "ctl" || Boolean(selected) || d6Guide;
     return (
       <div className="flex h-full min-h-0 flex-col gap-3 overflow-hidden" dir={rtl ? "rtl" : "ltr"}>
         <div className="glass flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl px-3 py-2.5">
@@ -1439,10 +1440,10 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
           {d6View !== "pmo" && (
           <button type="button"
             aria-pressed={d6View === "ctl" && !d6Guide}
-            title={rtl ? "نقشهٔ فرایندی مدیریت و کنترل پروژه" : "Project management & control process map"}
-            onClick={() => { setD6View("ctl"); setD6Guide(false); setSelected(null); }}
-            className={`rounded-lg border px-3 py-2 text-[10px] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 ${d6View === "ctl" ? "toggle-on border-sky-400/50 font-medium tx1" : "b-line-soft font-normal tx3 hover:tx1"}`}>
-            {rtl ? "نقشهٔ فرایندی" : "Process map"}
+            title={returnToGovernanceMap ? (rtl ? "بازگشت به نقشهٔ حاکمیت" : "Back to governance map") : (rtl ? "نقشهٔ فرایندی مدیریت و کنترل پروژه" : "Project management & control process map")}
+            onClick={() => { setD6View(returnToGovernanceMap ? "gov" : "ctl"); setD6Guide(false); setSelected(null); }}
+            className={`min-w-[170px] rounded-lg border px-3 py-2 text-[10px] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 ${d6View === "ctl" ? "toggle-on border-sky-400/50 font-medium tx1" : "b-line-soft font-normal tx3 hover:tx1"}`}>
+            {returnToGovernanceMap ? (rtl ? "بازگشت به نقشهٔ حاکمیت" : "Back to governance map") : (rtl ? "نقشهٔ کنترل پروژه" : "Project control map")}
           </button>
           )}
           </div>
@@ -1450,11 +1451,7 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
             {d6View === "pmo" && !d6Guide ? (rtl ? "دفتر مدیریت پروژه" : "Project Management Office") : t(dom.nav ?? dom.title, lang)}
           </div>
         </div>
-        {d6View !== "pmo" && selected && (
-          <div className="flex shrink-0 items-center gap-2">
-            <button type="button" onClick={() => { setSelected(null); setD6View("gov"); setD6Guide(false); }} className="glass-row rounded-lg px-2.5 py-1 text-[10px] tx1">{rtl ? "← بازگشت به نقشه" : "← Back to map"}</button>
-          </div>
-        )}
+
 
         <div className="workspace-columns flex min-h-0 flex-1 gap-3 overflow-hidden">
           <div dir={rtl ? "rtl" : "ltr"} className="glass flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl p-3">
