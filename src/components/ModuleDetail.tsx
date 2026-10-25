@@ -1430,17 +1430,13 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
               </p>
             )}
           </div>
+          <div className="flex shrink-0 items-center gap-2">
           {canEditTaxonomy && (
             <button type="button" onClick={() => setTaxonomyEditorOpen(true)} className="rounded-lg border border-sky-400/45 bg-sky-400/10 px-3 py-2 text-[10px] text-sky-200 hover:bg-sky-400/20">
               ✎ {rtl ? "ویرایش فرایندها" : "Edit processes"}
             </button>
           )}
-          <div className="shrink-0 text-end text-[11px] font-light tx1">
-            {d6View === "pmo" && !d6Guide ? (rtl ? "دفتر مدیریت پروژه" : "Project Management Office") : t(dom.nav ?? dom.title, lang)}
-          </div>
-        </div>
-        {d6View !== "pmo" && <div className="flex shrink-0 flex-wrap items-center gap-2">
-          {selected && <button type="button" onClick={() => { setSelected(null); setD6View("gov"); setD6Guide(false); }} className="glass-row rounded-lg px-2.5 py-1 text-[10px] tx1">{rtl ? "← بازگشت به نقشه" : "← Back to map"}</button>}
+          {d6View !== "pmo" && (
           <button type="button"
             aria-pressed={d6View === "ctl" && !d6Guide}
             title={rtl ? "نقشهٔ فرایندی مدیریت و کنترل پروژه" : "Project management & control process map"}
@@ -1448,7 +1444,18 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
             className={`rounded-lg border px-3 py-2 text-[10px] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 ${d6View === "ctl" ? "toggle-on border-sky-400/50 font-medium tx1" : "b-line-soft font-normal tx3 hover:tx1"}`}>
             {rtl ? "نقشهٔ فرایندی" : "Process map"}
           </button>
-        </div>}
+          )}
+          </div>
+          <div className="shrink-0 text-end text-[11px] font-light tx1">
+            {d6View === "pmo" && !d6Guide ? (rtl ? "دفتر مدیریت پروژه" : "Project Management Office") : t(dom.nav ?? dom.title, lang)}
+          </div>
+        </div>
+        {d6View !== "pmo" && selected && (
+          <div className="flex shrink-0 items-center gap-2">
+            <button type="button" onClick={() => { setSelected(null); setD6View("gov"); setD6Guide(false); }} className="glass-row rounded-lg px-2.5 py-1 text-[10px] tx1">{rtl ? "← بازگشت به نقشه" : "← Back to map"}</button>
+          </div>
+        )}
+
         <div className="workspace-columns flex min-h-0 flex-1 gap-3 overflow-hidden">
           <div dir={rtl ? "rtl" : "ltr"} className="glass flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl p-3">
             {d6View === "ctl" ? (
