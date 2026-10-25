@@ -284,7 +284,7 @@ export default function App() {
               <span className="tx4">|</span>
               <span className="font-normal tx3">
                 {rtl
-                  ? "کارشناس ارشد مدیریت ساخت"
+                  ? "کارشناس ارشد مدیرت ساخته ها"
                   : "M.Sc. in Construction Management"}
               </span>
               <span className="tx4">|</span>
