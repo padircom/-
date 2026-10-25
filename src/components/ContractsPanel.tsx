@@ -273,8 +273,8 @@ const HEALTH_TONE: Record<string, string> = {
  * سطر، هر دو در جدول ساده نامرئی‌اند.
  */
 function GuaranteeSection({
-  contractId, userId, onDone,
-}: { contractId: string; userId: string; onDone: () => void }) {
+  contractId, userId, onDone, part = "all",
+}: { contractId: string; userId: string; onDone: () => void; part?: "all" | "guarantees" | "advance" }) {
   /* شناسهٔ پروژه از «پروژهٔ جاری» می‌آید (SystemContext) — نه ثابتِ ماژول. */
   const projectId = useCurrentProjectId();
 
@@ -339,6 +339,7 @@ function GuaranteeSection({
 
   return (
     <div className="space-y-3">
+      {part !== "advance" && <>
       {/* ── سلامت وثیقه‌ای ── */}
       <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
         <Metric
@@ -366,6 +367,7 @@ function GuaranteeSection({
         />
       </div>
 
+      </>}
       {msg && (
         <div
           className="glass rounded-2xl px-3 py-2.5"
@@ -387,6 +389,7 @@ function GuaranteeSection({
         </div>
       )}
 
+      {part !== "advance" && <>
       {/* ── خلأ پوشش ── */}
       {(reg?.coverageGapsFa?.length ?? 0) > 0 && (
         <Panel title="خلأ پوشش وثیقه" note="نبودِ یک سطر در جدول دیده نمی‌شود؛ اینجا دیده می‌شود">
@@ -539,6 +542,8 @@ function GuaranteeSection({
         }}
       />
 
+      </>}
+      {part !== "guarantees" && <>
       {/* ── پیش‌پرداخت ── */}
       <Panel
         title="دفتر پیش‌پرداخت"
@@ -628,6 +633,7 @@ function GuaranteeSection({
           }}
         />
       )}
+      </>}
     </div>
   );
 }
@@ -2604,10 +2610,13 @@ function ProgressSection({
   );
 }
 
-export default function ContractsPanel({ lang, activeSubId, navigationRequest }: {
+export default function ContractsPanel({ lang, activeSubId, navigationRequest, sectioned = false, selectedContractId, onContractChange }: {
   lang: Lang;
   activeSubId?: string;
   navigationRequest?: object | null;
+  sectioned?: boolean;
+  selectedContractId?: string;
+  onContractChange?: (id: string) => void;
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
   /* شناسهٔ پروژه از «پروژهٔ جاری» می‌آید (SystemContext) — نه ثابتِ ماژول. */
@@ -2618,8 +2627,23 @@ export default function ContractsPanel({ lang, activeSubId, navigationRequest }:
   const userId = user?.id ?? "";
 
   const [list, setList] = useState<Json | null>(null);
-  const [selectedId, setSelectedId] = useState<string>("");
-  const [detail, setDetail] = useState<Json | null>(null);
+  const [localSelectedId, setLocalSelectedId] = useState("");
+  const selectedId = selectedContractId ?? localSelectedId;
+  const setSelectedId = (id: string) => { setLocalSelectedId(id); onContractChange?.(id); };
+  const selectedIdRef = useRef(selectedId);
+  selectedIdRef.current = selectedId;
+  const [loadedDetail, setDetail] = useState<Json | null>(null);
+  const detail = loadedDetail?.contract?.Id === selectedId ? loadedDetail : null;
+  const section = ({
+    "d14-p1-s1": "master", "d14-p1-s2": "boq", "d14-p3-s1": "variation",
+    "d14-p6-s1": "guarantees", "d14-p5-s2": "advance", "d14-p7-s1": "kpi",
+    "d14-p2-s1": "measurement", "d14-p6-s2": "subipc", "d14-p7-s2": "finance",
+    "d14-p7-progress": "progress", "d14-p7-reports": "reports",
+  } as Record<string, string>)[activeSubId ?? ""] ?? "master";
+  const show = (name: string) => !sectioned || section === name;
+  const sectionTitle = ({ master: "شناسنامه و الحاقیه‌ها", boq: "فهرست بها و مراحل مقطوع", variation: "تغییر مقادیر و کار جدید",
+    guarantees: "ضمانت‌نامه و پایش انقضا", advance: "پیش‌پرداخت و سپرده", kpi: "شاخص‌ها و هشدارهای پیمان", measurement: "برگهٔ ریزمتره",
+    subipc: "صورت‌وضعیت پیمانکار جزء", finance: "انطباق با دفتر مالی", progress: "پیشرفت پیمان", reports: "گزارش‌های پیمان" } as Record<string, string>)[section];
   const [basisFilter, setBasisFilter] = useState<BasisFilter>("all");
   const [loading, setLoading] = useState(true);
   /* حالت ردیف تازه: تعیین می‌کند کدام میدان‌ها اصلاً دیده شوند. */
@@ -2645,7 +2669,8 @@ export default function ContractsPanel({ lang, activeSubId, navigationRequest }:
 
   const loadDetail = useCallback(async (id: string) => {
     if (!id) { setDetail(null); return; }
-    setDetail(await getJson(`/api/cnt/contracts/${encodeURIComponent(id)}?projectId=${projectId}`));
+    const next = await getJson(`/api/cnt/contracts/${encodeURIComponent(id)}?projectId=${projectId}`);
+    if (selectedIdRef.current === id) setDetail(next);
   }, [, projectId]);
 
   useEffect(() => { void loadDetail(selectedId); }, [selectedId, loadDetail]);
@@ -2655,23 +2680,10 @@ export default function ContractsPanel({ lang, activeSubId, navigationRequest }:
     await loadDetail(selectedId);
   }, [reload, loadDetail, selectedId]);
 
-  // پیمایش فقط در قاب داخلی؛ کلیک مجدد نیز بخش مقصد را در دید قرار می‌دهد.
+  // با تغییر بخش فقط اسکرول محتوای همان پنل به بالا برمی‌گردد؛ انتخاب پیمان مستقل است.
   useEffect(() => {
-    if (loading || !activeSubId) return;
-    const section = ({
-      "d14-p1-s1": "master",
-      "d14-p1-s2": "boq",
-      "d14-p3-s1": "variation",
-      "d14-p6-s1": "guarantees",
-      "d14-p7-s1": "kpi",
-    } as Record<string, string>)[activeSubId];
-    if (!section) return;
-    const node = rootRef.current?.querySelector<HTMLElement>(`[data-contract-section="${section}"]`);
-    const scroller = rootRef.current?.closest<HTMLElement>(".overflow-y-auto");
-    if (node && scroller) {
-      scroller.scrollTo({ top: scroller.scrollTop + node.getBoundingClientRect().top - scroller.getBoundingClientRect().top, behavior: "instant" });
-    }
-  }, [activeSubId, navigationRequest, loading, detail, selectedId]);
+    if (sectioned) rootRef.current?.querySelector<HTMLElement>("[data-contract-content]")?.scrollTo({ top: 0 });
+  }, [sectioned, activeSubId, navigationRequest]);
 
   if (loading && !list) {
     return <Panel title={rtl ? "پیمان و فهرست بها" : "Contracts & BOQ"}><div className="py-6 text-center text-[10px] tx3">در حال بارگذاری…</div></Panel>;
@@ -2688,7 +2700,20 @@ export default function ContractsPanel({ lang, activeSubId, navigationRequest }:
   const noAuth = userId ? undefined : "برای ثبت باید وارد شوید";
 
   return (
-    <div ref={rootRef} className="space-y-3">
+    <div ref={rootRef} className={sectioned ? "flex h-full min-h-0 flex-col gap-3" : "space-y-3"}>
+      {sectioned && <div className="glass-row flex shrink-0 flex-wrap items-center gap-2 rounded-xl px-3 py-2">
+        <label className="text-[10px] tx3" htmlFor="contract-section-selector">{rtl ? "پیمان انتخاب‌شده" : "Selected contract"}</label>
+        <select id="contract-section-selector" aria-label={rtl ? "پیمان انتخاب‌شده" : "Selected contract"} value={selectedId} disabled={!contracts.length}
+          onChange={e => setSelectedId(e.target.value)} className="glass-row min-w-0 flex-1 rounded-lg border b-line-soft px-2 py-1.5 text-[10px] tx1">
+          {!contracts.length && <option value="">—</option>}
+          {contracts.map(c => <option key={c.id} value={c.id}>{c.code} — {c.titleFa}</option>)}
+        </select>
+        <span className="text-[11px] font-semibold tx1">{rtl ? sectionTitle : ({ master: "Contract master & amendments", boq: "BOQ & milestones", variation: "Quantity changes & extra work", guarantees: "Guarantees & expiry", advance: "Advance & retention", kpi: "Contract KPIs & alerts", measurement: "Measurement sheet", subipc: "Subcontractor IPC", finance: "Financial reconciliation", progress: "Contract progress", reports: "Contract reports" } as Record<string, string>)[section]}</span>
+      </div>}
+      <div key={sectioned ? `${selectedId}:${section}` : undefined} data-contract-content className={sectioned ? "thin-scroll min-h-0 flex-1 space-y-3 overflow-y-auto" : "space-y-3"}>
+      {sectioned && !selectedId && section !== "master" && <p role="status" className="text-[10px] tx3">{rtl ? "ابتدا یک پیمان ثبت یا انتخاب کنید." : "Register or select a contract first."}</p>}
+      {show("master") && <>
+
       {/* ── شاخص‌های سبد پیمان ── */}
       <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
         <Metric label="تعداد پیمان" value={fmt(contracts.length)} />
@@ -2705,6 +2730,8 @@ export default function ContractsPanel({ lang, activeSubId, navigationRequest }:
 
       {/* ── فهرست پیمان‌ها ── */}
 
+      </>}
+      {!sectioned && <>
       <Panel title="سبد پیمان‌ها" note="سقف مجاز بر مبنای مبلغ اولیه سنجیده می‌شود، نه مبلغ جاری">
         {contracts.length === 0 ? (
           <div className="py-4 text-center text-[9.5px] tx3">هنوز پیمانی ثبت نشده است</div>
@@ -2751,11 +2778,12 @@ export default function ContractsPanel({ lang, activeSubId, navigationRequest }:
         )}
       </Panel>
 
+      </>}
       {activeSubId === "d14-p1-s2" && !detail && <div data-contract-section="boq" role="status" className="text-[10px] tx3">{rtl ? "برای مشاهدهٔ فهرست بها و مراحل مقطوع، ابتدا یک پیمان ثبت یا انتخاب کنید." : "Register or select a contract to view its BOQ and milestones."}</div>}
       {/* ── شناسنامهٔ پیمان انتخاب‌شده ── */}
       {detail && summary && (
         <>
-          <Panel
+          {show("master") && <Panel
             title={`شناسنامهٔ پیمان ${detail.contract.Code}`}
             note={`${detail.contract.contractTypeFa} · ${detail.contract.ContractorName ?? "—"}`}
           >
@@ -2782,8 +2810,9 @@ export default function ContractsPanel({ lang, activeSubId, navigationRequest }:
             {detail.mapping.noteFa && (
               <div className="mt-1 text-[8.5px] tx4">{detail.mapping.noteFa}</div>
             )}
-          </Panel>
+          </Panel>}
 
+          {show("boq") && <>
           <div data-contract-section="boq" />
           {/* ── فهرست بها با تفکیک دو حالت ── */}
           <Panel
@@ -2878,9 +2907,11 @@ export default function ContractsPanel({ lang, activeSubId, navigationRequest }:
               </div>
             </Panel>
           )}
+          </>}
         </>
       )}
 
+      {show("master") && <>
       <div data-contract-section="master" />
       {activeSubId === "d14-p1-s1" && (
         <p role="status" className="text-[10px] tx3">{rtl ? "ثبت شناسنامه و مدیریت الحاقیه‌های پیمان انتخاب‌شده در همین بخش قرار دارد." : "Contract registration and amendments for the selected contract are available in this section."}</p>
@@ -2945,11 +2976,13 @@ export default function ContractsPanel({ lang, activeSubId, navigationRequest }:
       {/* الحاقیه ذیل همان پیمان؛ شناسهٔ پروژه و پیمان از انتخاب واقعی می‌آیند. */}
       {selectedId && <ContractAmendmentsPanel key={`${projectId}:${selectedId}:${userId}`} lang={lang} projectId={projectId} contractId={selectedId} onDone={() => { void refreshAll(); }} />}
 
-      <div data-contract-section="variation">
+      </>}
+      {show("variation") && <div data-contract-section="variation">
         {selectedId ? <ContractVariationsPanel key={`${projectId}:${selectedId}:${userId}`} lang={lang} projectId={projectId} contractId={selectedId} onDone={() => { void refreshAll(); }} />
           : activeSubId === "d14-p3-s1" && <p role="status" className="text-[10px] tx3">{rtl ? "برای ثبت تغییر مقدار یا کار جدید، ابتدا یک پیمان ثبت یا انتخاب کنید." : "Register or select a contract to manage variations."}</p>}
-      </div>
+      </div>}
 
+      {show("boq") && <>
       {/* ── فرم ۲: ثبت ردیف فهرست بها (دوحالته) ── */}
       <Panel title="ثبت ردیف فهرست بها" note="ابتدا مبنای ارزش‌گذاری را انتخاب کنید؛ میدان‌های بی‌ربط نمایش داده نمی‌شوند">
         <div className="mb-2 flex flex-wrap gap-1">
@@ -3011,6 +3044,8 @@ export default function ContractsPanel({ lang, activeSubId, navigationRequest }:
         />
       </Panel>
 
+      </>}
+      {show("measurement") && <>
       {/* ── فرم ۳: ریزمتره ── */}
       <EntryForm
         titleFa="ثبت برگهٔ ریزمتره"
@@ -3058,26 +3093,28 @@ export default function ContractsPanel({ lang, activeSubId, navigationRequest }:
         }}
       />
 
+      </>}
       {/* دفتر وثیقه ذیل همان پیمان انتخاب‌شده می‌آید: ضمانت‌نامه بدون
           پیمانش معنا ندارد و صفحهٔ جدا، کاربر را وادار به انتخاب دوباره
           می‌کرد. */}
-      <div data-contract-section="guarantees">
+      {(show("guarantees") || show("advance")) && <div data-contract-section={sectioned && section === "advance" ? "advance" : "guarantees"}>
       {selectedId && (
         <GuaranteeSection
+          part={sectioned ? (section === "advance" ? "advance" : "guarantees") : "all"}
           contractId={selectedId}
           userId={userId}
           onDone={() => { void refreshAll(); }}
         />
       )}
         {!selectedId && <p role="status" className="text-[10px] tx3">{rtl ? "برای نمایش این بخش، ابتدا یک پیمان ثبت یا انتخاب کنید." : "Register or select a contract to view this section."}</p>}
-      </div>
+      </div>}
 
       {/* صورت‌وضعیت جزء هم ذیل همان پیمان: بدون دیدن ضمانت‌نامه و
           پیش‌پرداختِ بالای صفحه، عدد خالص پرداختنی به جزء گمراه‌کننده
           است. */}
       {/* پیشرفت پیش از صورت‌وضعیت جزء می‌آید: تصمیم دربارهٔ پرداخت به
           جزء بدون دانستن پیشرفت کل پیمان، تصمیم در تاریکی است. */}
-      {selectedId && (
+      {show("progress") && selectedId && (
         <ProgressSection
           contractId={selectedId}
           userId={userId}
@@ -3087,7 +3124,7 @@ export default function ContractsPanel({ lang, activeSubId, navigationRequest }:
 
       {/* پل مالی پیش از تابلوی سلامت: نمرهٔ سلامتی که روی اعدادی بنا
           شده که هنوز به دفتر مالی نرسیده‌اند، نیمی از واقعیت است. */}
-      {selectedId && (
+      {show("finance") && selectedId && (
         <FinBridgeSection
           contractId={selectedId}
           userId={userId}
@@ -3097,7 +3134,7 @@ export default function ContractsPanel({ lang, activeSubId, navigationRequest }:
 
       {/* تابلوی سلامت آخرین بخش است چون خلاصهٔ همهٔ بالاست: خواندنش
           پیش از دیدن جزئیات، نمره را بی‌معنا می‌کند. */}
-      <div data-contract-section="kpi">
+      {show("kpi") && <div data-contract-section="kpi">
       {selectedId && (
         <KpiSection
           contractId={selectedId}
@@ -3106,9 +3143,9 @@ export default function ContractsPanel({ lang, activeSubId, navigationRequest }:
         />
       )}
         {!selectedId && <p role="status" className="text-[10px] tx3">{rtl ? "برای نمایش این بخش، ابتدا یک پیمان ثبت یا انتخاب کنید." : "Register or select a contract to view this section."}</p>}
-      </div>
+      </div>}
 
-      {selectedId && (
+      {show("subipc") && selectedId && (
         <SubIpcSection
           contractId={selectedId}
           userId={userId}
@@ -3118,10 +3155,11 @@ export default function ContractsPanel({ lang, activeSubId, navigationRequest }:
 
       {/* گزارش‌ها در انتها: سندی که بیرون می‌رود باید پس از دیدن همهٔ
           بخش‌های بالا صادر شود، نه پیش از آن. */}
-      {selectedId && <ReportsSection contractId={selectedId} userId={userId} />}
+      {show("reports") && selectedId && <ReportsSection contractId={selectedId} userId={userId} />}
 
-      <div className="text-center text-[8px] font-extralight tx4" dir="ltr">
+      {!sectioned && <div className="text-center text-[8px] font-extralight tx4" dir="ltr">
         cnt-v1 · d14 · 14.1 Contract &amp; BOQ · 14.7 Guarantees · 14.8 Subcontractor IPC · 14.9 Progress · 14.10 KPI &amp; EWS · 14.11 Reports · 14.13 FIN Bridge
+      </div>}
       </div>
     </div>
   );

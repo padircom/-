@@ -422,6 +422,7 @@ function isIpcProcess(processId: string, subId?: string): boolean {
 function contractView(processId?: string, subId?: string): "contract" | "ipc" | "rating" | "risk" {
   if (subId === "d14-p1-risk") return "risk";
   if (processId === "d14-p8") return "rating";
+  if (["d14-p2-s1", "d14-p5-s2", "d14-p6-s2", "d14-p7-s2"].includes(subId ?? "")) return "contract";
   return processId && isIpcProcess(processId, subId) ? "ipc" : "contract";
 }
 
@@ -838,6 +839,8 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
   const [d6View, setD6View] = useState<"gov" | "pmo" | "ctl">(target.initialView ?? "gov");
   const [pmoTab, setPmoTab] = useState<PmoTab>(target.pmoTab ?? "charter");
 
+  const [d14ContractSelection, setD14ContractSelection] = useState<{ projectId: string; id: string } | null>(null);
+  const d14ContractId = d14ContractSelection?.projectId === target.projectId ? d14ContractSelection.id : "";
   const d14ScrollRef = useRef<HTMLDivElement>(null);
   const [d14View, setD14View] = useState<"contract" | "ipc" | "rating" | "risk">(
     contractView(target.processId, target.subId),
@@ -1057,7 +1060,7 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
               ) : d14View === "ipc" ? (
                 <CntIpcPanel lang={lang} />
               ) : (
-                <ContractsPanel lang={lang} activeSubId={selected?.sId ?? target.subId} navigationRequest={selected} />
+                <ContractsPanel key={`${target.projectId}:${user?.id ?? ""}`} lang={lang} sectioned selectedContractId={d14ContractId} onContractChange={(id) => setD14ContractSelection({ projectId: target.projectId, id })} activeSubId={selected?.sId ?? target.subId} navigationRequest={selected} />
               )}
             </div>
           </div>
@@ -1990,7 +1993,10 @@ function DomainNavGroups({
       module: m,
       processes: processes.map((p) => ({
         ...p,
-        subs: p.subs.filter((sub) => isIpcProcess(p.id, sub.id) === (section.key === "ipc")),
+        subs: [...p.subs, ...(p.id === "d14-p7" ? [
+          { id: "d14-p7-progress", title: { fa: "پیشرفت پیمان", en: "Contract progress" } },
+          { id: "d14-p7-reports", title: { fa: "گزارش‌های پیمان", en: "Contract reports" } },
+        ] : [])].filter((sub) => isIpcProcess(p.id, sub.id) === (section.key === "ipc")),
       })).filter((p) => p.subs.length > 0),
     }));
   });
