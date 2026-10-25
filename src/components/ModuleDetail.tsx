@@ -1437,18 +1437,16 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
               /* نقشهٔ گردش‌کار پایش و کنترل پروژه — همان جلوهٔ بصری نقشهٔ
                  گردش‌کار برنامه‌ریزی (d2). کلیک روی هر گره به ماژول
                  مقصد (پایش، هزینه، کیفیت، ریسک) می‌رود. */
-              <div className="fade-rise flex min-h-0 flex-1 flex-col">
-                <div className="mx-auto flex min-h-0 w-full max-w-[1100px] flex-1 flex-col">
-                  <div className="min-h-0 flex-1">
-                    <ControlWorkflowMap
-                      rtl={rtl}
-                      onOpenModule={(moduleId, processId, subId) => {
-                        setSelected(null);
-                        onNavigate?.({ ...target, moduleId, processId, subId });
-                      }}
-                    />
-                  </div>
-                  <p className="mt-2 shrink-0 text-center text-[10px] tx3">
+              <div className="fade-rise flex min-h-full items-center justify-center py-2">
+                <div className="w-full max-w-[1060px]">
+                  <ControlWorkflowMap
+                    rtl={rtl}
+                    onOpenModule={(moduleId, processId, subId) => {
+                      setSelected(null);
+                      onNavigate?.({ ...target, moduleId, processId, subId });
+                    }}
+                  />
+                  <p className="mt-2 text-center text-[10px] tx3">
                     {rtl ? "برای شروع، روی هر گره از نقشه کلیک کنید تا به ماژول مربوط بروید." : "Start by clicking any node on the map to open its module."}
                   </p>
                 </div>

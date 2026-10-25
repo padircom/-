@@ -7,10 +7,6 @@
  * روی دیگری هم دیده شود.
  */
 import type { ReactElement, ReactNode } from "react";
-import { useLayoutEffect, useRef, useState } from "react";
-
-/** عرض طراحی نقشه — مقیاس‌خودکار (fit-to-frame) بر مبنای همین عرض انجام می‌شود. */
-export const WF_DESIGN_WIDTH = 1060;
 
 /** نوع گره: ورودی/خروجی، پردازش (کنترل) یا ورودی بین‌ماژولی. */
 export type WorkflowNodeKind = "io" | "proc" | "cross";
@@ -168,10 +164,7 @@ export function WorkflowLegend({ rtl }: { rtl: boolean }) {
   );
 }
 
-/** پوستهٔ نقشه: عنوان، راهنما و کادر اصلی — مشترک بین همهٔ نقشه‌ها.
- *  مقیاس‌خودکار (fit-to-frame): کل نقشه مثل یک پوستر در قابش جا می‌شود؛
- *  اگر ارتفاع قاب مشخص (flex) باشد، طول هم در نظر گرفته می‌شود و دیگر
- *  هیچ‌چیز از کادر بیرون نمی‌زند. در قاب‌های ارتفاع-آزاد فقط عرض مبناست. */
+/** پوستهٔ نقشه: عنوان، راهنما و کادر اصلی — مشترک بین همهٔ نقشه‌ها. */
 export function WorkflowMapFrame({
   title,
   hint,
@@ -181,57 +174,17 @@ export function WorkflowMapFrame({
   hint: string;
   children: ReactNode;
 }) {
-  const boxRef = useRef<HTMLDivElement>(null);
-  const contentRef = useRef<HTMLDivElement>(null);
-  const fitRef = useRef(1);
-  const [fit, setFit] = useState<{ k: number; h: number }>({ k: 1, h: 0 });
-
-  useLayoutEffect(() => {
-    const box = boxRef.current;
-    const content = contentRef.current;
-    if (!box || !content) return;
-    const update = () => {
-      const natH = content.offsetHeight || content.scrollHeight;
-      const availW = box.clientWidth;
-      const availH = box.clientHeight;
-      let k = availW > 0 ? Math.min(1, (availW - 2) / WF_DESIGN_WIDTH) : 1;
-      // ارتفاع فقط وقتی مبناست که قاب از محتوا کوتاه‌تر باشد (قاب ارتفاع-آزاد
-      // همیشه هم‌اندازهٔ محتواست و نباید مقیاس را کوچک کند).
-      if (availH > 0 && natH * fitRef.current > availH + 4) {
-        k = Math.min(k, (availH - 2) / natH);
-      }
-      k = Math.max(0.12, k);
-      fitRef.current = k;
-      setFit({ k, h: natH });
-    };
-    update();
-    const ro = new ResizeObserver(update);
-    ro.observe(box);
-    ro.observe(content);
-    return () => ro.disconnect();
-  }, []);
-
   return (
-    <div ref={boxRef} className="flex h-full w-full items-center justify-center overflow-hidden">
-      <div
-        dir="ltr"
-        className="shrink-0"
-        style={{ width: WF_DESIGN_WIDTH * fit.k, height: fit.h * fit.k }}
-      >
-        <section
-          ref={contentRef}
-          dir="ltr"
-          aria-label={title}
-          className="rounded-2xl border b-line bg-[var(--row)] p-3"
-          style={{ width: WF_DESIGN_WIDTH, transform: `scale(${fit.k})`, transformOrigin: "top left" }}
-        >
-          <div className="flex flex-wrap items-baseline justify-between gap-2 px-1">
-            <h3 className="text-[13px] font-medium tx1">{title}</h3>
-            <span className="text-[9.5px] font-light tx3">{hint}</span>
-          </div>
-          {children}
-        </section>
+    <section
+      dir="ltr"
+      aria-label={title}
+      className="rounded-2xl border b-line bg-[var(--row)] p-3"
+    >
+      <div className="flex flex-wrap items-baseline justify-between gap-2 px-1">
+        <h3 className="text-[13px] font-medium tx1">{title}</h3>
+        <span className="text-[9.5px] font-light tx3">{hint}</span>
       </div>
-    </div>
+      {children}
+    </section>
   );
 }

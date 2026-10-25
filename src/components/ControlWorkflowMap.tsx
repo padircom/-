@@ -64,8 +64,8 @@ export default function ControlWorkflowMap({
   rtl: boolean;
   onOpenModule: (moduleId: string, processId?: string, subId?: string) => void;
 }) {
-  const arrow = "flex items-center justify-center text-[11px] leading-none tx4";
-  const gridCols = "grid-cols-[1.25fr_16px_1.05fr_16px_1.25fr_16px_1.1fr]";
+  const arrow = "flex items-center justify-center text-[12px] leading-none tx4";
+  const gridCols = "grid-cols-[1.25fr_20px_1.05fr_20px_1.25fr_20px_1.1fr]";
   const open = (node: ControlNode) =>
     node.moduleId ? () => onOpenModule(node.moduleId!, node.processId, node.subId) : undefined;
 
@@ -75,7 +75,7 @@ export default function ControlWorkflowMap({
       hint={rtl ? "با کلیک روی هر گره، به ماژول مربوط بروید" : "Click a node to open its module"}
     >
       {/* سرستون‌ها — نوار رنگی هر ستون */}
-      <div className={`mt-2 grid ${gridCols}`}>
+      <div className={`mt-3 grid ${gridCols}`}>
         <WorkflowColumnHead fa="ورودی‌ها" en="Inputs" rtl={rtl} color={C_INPUT} icon="inputs" compact />
         <div />
         <WorkflowColumnHead fa="هاب داده" en="Data hub" rtl={rtl} color={C_HUB} icon="hub" compact />
@@ -85,9 +85,9 @@ export default function ControlWorkflowMap({
         <WorkflowColumnHead fa="خروجی‌ها" en="Outputs" rtl={rtl} color={C_OUTPUT} icon="outputs" compact />
       </div>
 
-      <div className={`mt-1.5 grid ${gridCols} items-stretch`}>
+      <div className={`mt-2 grid ${gridCols} items-stretch`}>
         {/* ورودی‌ها */}
-        <div className="flex flex-col gap-1.5">
+        <div className="flex flex-col gap-2">
           {INPUTS.map((node) => (
             <WorkflowNodeBox key={node.titleEn} node={node} rtl={rtl} accent={C_INPUT} onNavigate={open(node)} compact />
           ))}
@@ -121,11 +121,11 @@ export default function ControlWorkflowMap({
         </div>
 
         {/* چرخهٔ کنترل */}
-        <div className="flex flex-col gap-1.5">
+        <div className="flex flex-col gap-2">
           {CYCLE.map((node, i) => (
-            <div key={node.titleEn} className="flex flex-1 flex-col gap-1.5">
+            <div key={node.titleEn} className="flex flex-1 flex-col gap-2">
               <WorkflowNodeBox node={node} rtl={rtl} accent={C_CYCLE} onNavigate={open(node)} compact />
-              {i < CYCLE.length - 1 && <div className="text-center text-[11px] leading-3 tx4">↓</div>}
+              {i < CYCLE.length - 1 && <div className="text-center text-[12px] leading-3 tx4">↓</div>}
             </div>
           ))}
         </div>
@@ -136,7 +136,7 @@ export default function ControlWorkflowMap({
         </div>
 
         {/* خروجی‌ها */}
-        <div className="flex flex-col gap-1.5">
+        <div className="flex flex-col gap-2">
           {OUTPUTS.map((node) => (
             <WorkflowNodeBox key={node.titleEn} node={node} rtl={rtl} accent={C_OUTPUT} onNavigate={open(node)} compact />
           ))}
@@ -144,11 +144,11 @@ export default function ControlWorkflowMap({
       </div>
 
       {/* حلقهٔ حاکمیت و کنترل */}
-      <div className="relative mt-3.5 rounded-2xl border border-dashed b-line px-2.5 pb-2.5 pt-3">
+      <div className="relative mt-5 rounded-2xl border border-dashed b-line px-3 pb-3 pt-4">
         <span className="absolute -top-2 start-5 rounded-full border b-line bg-[var(--bg-b)] px-2 text-[9.5px] tx3">
           {rtl ? "حلقهٔ حاکمیت و کنترل" : "Governance and control loop"}
         </span>
-        <div className="grid grid-cols-[1fr_16px_1fr_16px_1fr_16px_1fr] items-stretch">
+        <div className="grid grid-cols-[1fr_20px_1fr_20px_1fr_20px_1fr] items-stretch">
           <WorkflowNodeBox
             node={{ titleFa: "اجرای سایت و بازگشت به داده", titleEn: "Site execution & data feed-back", subFa: "نتیجهٔ اقدام به چرخهٔ پایش برمی‌گردد", subEn: "Results feed the monitoring cycle", kind: "cross" }}
             rtl={rtl}
@@ -180,7 +180,7 @@ export default function ControlWorkflowMap({
             onNavigate={() => onOpenModule("d3", "d3-p6", "d3-p6-s1")}
           />
         </div>
-        <p className="mt-1.5 text-center text-[8.5px] font-light tx4">
+        <p className="mt-2 text-center text-[9px] font-light tx4">
           {rtl ? "↺ نتیجهٔ اقدام‌های اصلاحی دوباره به‌عنوان ورودی چرخهٔ پایش و گزارش‌های دوره‌ای ثبت می‌شود." : "↺ Corrective-action results are recorded as input to the next monitoring cycle and period report."}
         </p>
       </div>
