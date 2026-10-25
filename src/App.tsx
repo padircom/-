@@ -360,7 +360,6 @@ export default function App() {
               <ModuleDetail
                 lang={lang}
                 target={moduleNav}
-                onOpenProduction={(tab) => setActiveSystemView({ system: "mes", tab })}
                 onBack={() => setModuleNav(null)}
                 onOpenFlowNet={() => {
                   setModuleNav(null);

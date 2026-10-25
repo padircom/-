@@ -428,7 +428,6 @@ type Props = {
   target: ModuleNavTarget;
   onBack: () => void;
   onOpenFlowNet?: () => void;
-  onOpenProduction?: (tab: "mrp" | "execution") => void;
   /** پرش به دامنه/زیرفرآیند دیگر (برای پیوندهای میان‌دامنه‌ای). */
   onNavigate?: (target: ModuleNavTarget) => void;
 };
@@ -442,7 +441,7 @@ function BackToMapButton({ rtl, onClick }: { rtl: boolean; onClick: () => void }
   );
 }
 
-function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onOpenProduction, onNavigate }: Props) {
+function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: Props) {
   const rtl = lang === "fa";
   const { clusters, projectsByCluster } = useSystem();
   const { user, can, audit } = useAuth();
@@ -1388,7 +1387,6 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onOpenProductio
             activeProcesses={activeProcesses}
             selectedSubId={selected?.sId}
             extraSubs={D5_PAGE_SUBS}
-            onOpenProduction={onOpenProduction}
             onSelectSub={(pId, sId) => {
               audit("OPEN_SUBPROCESS", { projectId: target.projectId, entity: dom.id, entityId: sId });
               setSelected({ pId, sId });
@@ -2065,7 +2063,6 @@ function DomainAside({
   selectedSubId,
   extraSubs,
   showSql,
-  onOpenProduction,
   onSelectSub,
   onOpenModuleSub,
 }: {
@@ -2075,7 +2072,6 @@ function DomainAside({
   selectedSubId?: string;
   extraSubs?: Record<string, { id: string; title: Bi }[]>;
   showSql?: boolean;
-  onOpenProduction?: (tab: "mrp" | "execution") => void;
   onSelectSub: (processId: string, subId: string) => void;
   onOpenModuleSub: (moduleId: string, processId: string, subId: string) => void;
 }) {
@@ -2104,20 +2100,7 @@ function DomainAside({
           onSelectSub={onSelectSub}
           onOpenModuleSub={onOpenModuleSub}
         />
-        {dom.id === "d5" && onOpenProduction && (
-          <div className="mt-3 border-t b-line-soft pt-2">
-            <div className="px-2 py-1 text-[9px] tx3">{rtl ? "عملیات تولید — در برنامه‌ریزی و کنترل تولید" : "Production operations — in MES"}</div>
-            {([
-              ["mrp", rtl ? "برنامه‌ریزی مواد و ثبت مصرف تولید" : "Production MRP & consumption entry"],
-              ["execution", rtl ? "ثبت ضایعات تولید" : "Production scrap entry"],
-            ] as const).map(([tab, label]) => (
-              <button key={tab} type="button" onClick={() => onOpenProduction(tab)}
-                className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-start text-[10px] tx1 hover:bg-[var(--row-hover)]">
-                <span aria-hidden="true">↗</span>{label}
-              </button>
-            ))}
-          </div>
-        )}
+
       </div>
     </aside>
   );
