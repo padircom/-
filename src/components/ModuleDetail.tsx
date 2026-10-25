@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   performanceDomainModules,
   performanceDomainOf,
@@ -410,6 +410,8 @@ const D1_TAB_BY_SUB: Record<string, EdmsTab> = {
   "d1-p4-s1": "transmittal",
   "d1-p5-s1": "lessons",
 };
+
+const D14_IPC_TEMPLATES_SUB_ID = "d14-p2-templates";
 
 /** تفکیک دسترسی‌های d14 در سایدبار؛ شناسه‌ها و مالکیت داده‌ها ثابت می‌مانند. */
 function isIpcProcess(processId: string, subId?: string): boolean {
@@ -836,6 +838,7 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
   const [d6View, setD6View] = useState<"gov" | "pmo" | "ctl">(target.initialView ?? "gov");
   const [pmoTab, setPmoTab] = useState<PmoTab>(target.pmoTab ?? "charter");
 
+  const d14ScrollRef = useRef<HTMLDivElement>(null);
   const [d14View, setD14View] = useState<"contract" | "ipc" | "rating" | "risk">(
     contractView(target.processId, target.subId),
   );
@@ -1052,26 +1055,9 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
             </div>
           </div>
         </div>
-        <div className="flex shrink-0 items-center gap-1.5">
-          {([
-            ["ipc", rtl ? "قالب‌پذیری صورت‌وضعیت" : "Configurable IPC"],
-            ["rating", rtl ? "ارزیابی پیمانکاران و تأمین‌کنندگان" : "Contractor & Supplier Rating"],
-          ] as const).map(([k, label]) => (
-            <button
-              key={k}
-              type="button"
-              onClick={() => setD14View(k)}
-              className={`rounded-lg px-2.5 py-1 text-[10px] font-light transition ${
-                d14View === k ? "toggle-on tx1" : "tx3 hover:tx2"
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
         <div className="workspace-columns flex min-h-0 flex-1 gap-3 overflow-hidden">
           <div className="glass flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl p-3">
-            <div className="thin-scroll min-h-0 flex-1 overflow-y-auto">
+            <div ref={d14ScrollRef} className="thin-scroll min-h-0 flex-1 overflow-y-auto">
               {d14View === "risk" ? (
                 <ContractRiskWorkspace lang={lang} projectId={target.projectId} />
               ) : d14View === "rating" ? (
@@ -1092,6 +1078,10 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
               audit("OPEN_SUBPROCESS", { projectId: target.projectId, entity: dom.id, entityId: sId });
               setSelected({ pId, sId });
               setD14View(contractView(pId, sId));
+              if (sId === D14_IPC_TEMPLATES_SUB_ID) {
+                d14ScrollRef.current?.scrollTo({ top: 0 });
+                d14ScrollRef.current?.querySelectorAll<HTMLElement>(".overflow-y-auto").forEach((el) => el.scrollTo({ top: 0 }));
+              }
             }}
             onOpenModuleSub={(moduleId, pId, sId) => onNavigate?.({ ...target, moduleId, processId: pId, subId: sId })}
           />
@@ -2042,6 +2032,19 @@ function DomainNavGroups({
               </span>
               <span className="h-px flex-1" style={{ background: "var(--line-soft)" }} aria-hidden="true" />
             </div>
+
+            {m.id === "d14" && key === "ipc" && (
+              <button
+                type="button"
+                onClick={() => isCurrent
+                  ? onSelectSub("d14-p2", D14_IPC_TEMPLATES_SUB_ID)
+                  : onOpenModuleSub(m.id, "d14-p2", D14_IPC_TEMPLATES_SUB_ID)}
+                className={`group flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-start transition hover:bg-[var(--row-hover)] ${isCurrent && selectedSubId === D14_IPC_TEMPLATES_SUB_ID ? "row-on" : ""}`}
+              >
+                <span className="shrink-0 text-[11px] leading-none" style={{ color: m.accent }} aria-hidden="true">▤</span>
+                <span className="min-w-0 flex-1 truncate text-[10px] font-normal tx1">{rtl ? "قالب‌های صورت‌وضعیت" : "IPC templates"}</span>
+              </button>
+            )}
 
             {procs.map((p, i) => (
               <div key={p.id}>
