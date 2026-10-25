@@ -202,7 +202,7 @@ export const domains: Domain[] = [
     processes: [
       {
         id: "d6-p1",
-        title: { fa: "حاکمیت (Governance)", en: "Governance" },
+        title: { fa: "حاکمیت", en: "Governance" },
         subs: [
           { id: "d6-p1-s1", title: { fa: "گردش فرآیند", en: "Process Workflow" }, activity: { fa: "گردش فرآیند سازمانی", en: "Org workflow" }, source: "PMBOK, سازمان / Org", sql: ["Process_Master", "Workflow_Instance"], output: "Process Report", connectsTo: "PMO", ai: "AI Process Advisor" },
         ],
