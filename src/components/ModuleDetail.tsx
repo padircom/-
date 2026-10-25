@@ -411,6 +411,18 @@ const D1_TAB_BY_SUB: Record<string, EdmsTab> = {
   "d1-p5-s1": "lessons",
 };
 
+/** تفکیک دسترسی‌های d14 در سایدبار؛ شناسه‌ها و مالکیت داده‌ها ثابت می‌مانند. */
+function isIpcProcess(processId: string, subId?: string): boolean {
+  return ["d14-p2", "d14-p4", "d14-p5"].includes(processId)
+    || subId === "d14-p6-s2" || subId === "d14-p7-s2";
+}
+
+function contractView(processId?: string, subId?: string): "contract" | "ipc" | "rating" | "risk" {
+  if (subId === "d14-p1-risk") return "risk";
+  if (processId === "d14-p8") return "rating";
+  return processId && isIpcProcess(processId, subId) ? "ipc" : "contract";
+}
+
 type Props = {
   lang: Lang;
   target: ModuleNavTarget;
@@ -817,7 +829,7 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
   const [d6View, setD6View] = useState<"gov" | "pmo" | "ctl">(target.initialView ?? "gov");
 
   const [d14View, setD14View] = useState<"contract" | "ipc" | "rating" | "risk">(
-    target.subId === "d14-p1-risk" ? "risk" : target.processId === "d14-p8" ? "rating" : "contract",
+    contractView(target.processId, target.subId),
   );
 
   /* MFG/MES: دسترسی به فضای کاری سامانهٔ مستقل تولید کارگاهی (Standalone MES)
@@ -1001,7 +1013,7 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
           {([
-            ["contract", rtl ? "پیمان و صورت‌وضعیت" : "Contract & IPC"],
+            ["contract", rtl ? "مدیریت پیمان" : "Contract Management"],
             ["ipc", rtl ? "قالب‌پذیری صورت‌وضعیت" : "Configurable IPC"],
             ["rating", rtl ? "ارزیابی پیمانکاران و تأمین‌کنندگان" : "Contractor & Supplier Rating"],
             ["risk", rtl ? "مدیریت ریسک قراردادها و بهبود قرارداد" : "Contract Risk & Improvement"],
@@ -1040,6 +1052,7 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
             onSelectSub={(pId, sId) => {
               audit("OPEN_SUBPROCESS", { projectId: target.projectId, entity: dom.id, entityId: sId });
               setSelected({ pId, sId });
+              setD14View(contractView(pId, sId));
             }}
             onOpenModuleSub={(moduleId, pId, sId) => onNavigate?.({ ...target, moduleId, processId: pId, subId: sId })}
           />
@@ -1917,16 +1930,34 @@ function DomainNavGroups({
     .filter((m) => m.group === dom.group)
     .filter((m) => m.id !== "d7" || can("system.manage"));
   if (!mods.length) return null;
+  const sections = mods.flatMap((m) => {
+    const processes = m.id === dom.id ? activeProcesses : m.processes;
+    if (m.id !== "d14") return [{ module: m, key: m.id, title: m.nav ?? m.title, processes }];
+    return [
+      { key: "contract", title: { fa: "مدیریت پیمان", en: "Contract Management" } },
+      { key: "ipc", title: { fa: "مدیریت صورت‌وضعیت", en: "Payment Certificate Management" } },
+    ].map((section) => ({
+      ...section,
+      module: m,
+      processes: processes.map((p) => ({
+        ...p,
+        subs: p.subs.filter((sub) => isIpcProcess(p.id, sub.id) === (section.key === "ipc")),
+      })).filter((p) => p.subs.length > 0),
+    }));
+  });
   return (
     <>
       {/* عنوان حوزهٔ عملکردی در سربرگ سایدبار آمده است؛ اینجا سرِ دستهٔ هر ماژول می‌آید. */}
-      {mods.map((m) => {
+      {sections.map(({ module: m, key, title, processes: procs }) => {
         const isCurrent = m.id === dom.id;
-        const procs = isCurrent
-          ? activeProcesses
-          : (domains.find((x) => x.id === m.id)?.processes ?? []);
+        const entry = procs[0];
+        const openSection = () => {
+          if (!entry?.subs[0]) return;
+          if (isCurrent) onSelectSub(entry.id, entry.subs[0].id);
+          else onOpenModuleSub(m.id, entry.id, entry.subs[0].id);
+        };
         return (
-          <div key={m.id}>
+          <div key={key}>
             {/* سرِ دستهٔ ماژول (فعال = رنگ ماژول) — ریتم سایدبار «برنامه‌ریزی و تولید» */}
             <div
               className="flex items-center gap-1.5 px-2 pb-0.5 pt-3 text-[9px] font-semibold tracking-wide"
@@ -1936,7 +1967,11 @@ function DomainNavGroups({
               <span className="h-px flex-1" style={{ background: "var(--line-soft)" }} aria-hidden="true" />
               <span className="inline-flex items-center gap-1">
                 <span aria-hidden="true">{m.icon}</span>
-                <span>{t(m.nav ?? m.title, lang)}</span>
+                {m.id === "d14" ? (
+                  <button type="button" onClick={openSection} className="text-start hover:underline">
+                    {t(title, lang)}
+                  </button>
+                ) : <span>{t(title, lang)}</span>}
               </span>
               <span className="h-px flex-1" style={{ background: "var(--line-soft)" }} aria-hidden="true" />
             </div>
