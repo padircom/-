@@ -109,3 +109,6 @@ server/contractAmendmentLogic.js
 
 # Generated contract-variation workflow (npm run build:cntvariation)
 server/contractVariationLogic.js
+
+# Generated periodic party evaluation engine (npm run build:vendorrating)
+server/vendorEvaluationLogic.js

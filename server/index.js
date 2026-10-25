@@ -1,3 +1,4 @@
+import { registerVendorRatingRoutes, RATING_DEDICATED_ROUTES } from "./vendorRatingApi.js";
 import { registerContractVariationRoutes, VARIATION_DEDICATED_ROUTES } from "./contractVariationApi.js";
 import { registerContractAmendmentRoutes, AMENDMENT_DEDICATED_ROUTES } from "./contractAmendmentApi.js";
 import { registerStrategyExcellenceRoutes } from "./strategyExcellenceWorkspaceApi.js";
@@ -689,6 +690,7 @@ const DEDICATED_TABLE_ROUTES = {
   ...PMO_DEDICATED_ROUTES,
   ...CNT_IPC_DEDICATED_ROUTES,
   ...AMENDMENT_DEDICATED_ROUTES,
+  ...RATING_DEDICATED_ROUTES,
   ...VARIATION_DEDICATED_ROUTES,
   /* P9/RPT-1 — قالب گزارش سفارشی؛ P9/ITG — دفتر اجرای اتصال‌دهنده‌های خروجی. */
   ...RPT_DEDICATED_ROUTES,
@@ -1047,6 +1049,7 @@ registerCpmWorkspaceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: r
 registerPmoWorkspaceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
 /* P8/CNT: قالب‌پذیری صورت‌وضعیت — محاسبهٔ سرور و SOD-11. */
 registerCntIpcRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
+registerVendorRatingRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
 registerContractAmendmentRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
 registerContractVariationRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
 /* P9/RPT-1: گزارش‌ساز سفارشی — مجموعه‌دادهٔ مجاز + انتشار با SOD-31. */

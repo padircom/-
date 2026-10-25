@@ -2437,6 +2437,16 @@ export const SCHEMA: TableDef[] = [
     ],
   },
   {
+    name: "VendorEvaluation", module: "d14", title: { fa: "ارزیابی دوره‌ای طرف قرارداد", en: "Periodic party evaluation" }, pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("SourceKind", "text", { len: 20 }), req("SourceId", "text", { len: 60 }), req("PartyName", "text", { len: 200 }), req("SourceCode", "text", { len: 60 }), req("PeriodDate", "date"), req("Scores", "json"), req("Weighted", "int"), req("Grade", "text", { len: 1 }), req("Weakest", "text", { len: 20 }), req("DocumentRef", "text", { len: 200 }), req("Status", "text", { len: 20 }), c("DecidedBy", "text", { len: 60 }), c("DecidedAt", "datetime"), c("DecisionNote", "text", { len: 2000 })],
+    indexes: [{ name: "UX_VendorEvaluation_Period", columns: ["ProjectId", "SourceKind", "SourceId", "PeriodDate"], unique: true }],
+  },
+  {
+    name: "VendorImprovement", module: "d14", title: { fa: "اقدام بهبود طرف قرارداد", en: "Party improvement action" }, pk: "Id",
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("EvaluationId", "text", { len: 60 }), req("Axis", "text", { len: 20 }), req("TitleFa", "text", { len: 400 }), req("OwnerId", "text", { len: 60 }), req("DueDate", "date"), req("Status", "text", { len: 20 }), c("Evidence", "text", { len: 2000 }), c("CompletedBy", "text", { len: 60 }), c("VerifiedBy", "text", { len: 60 }), c("VerifiedAt", "datetime")],
+    indexes: [{ name: "IX_VendorImprovement_Project", columns: ["ProjectId", "EvaluationId"] }],
+  },
+  {
     name: "ContractAmendment",
     module: "d14",
     title: { fa: "الحاقیه پیمان", en: "Contract amendment" },
@@ -6952,6 +6962,13 @@ export const MIGRATIONS: Migration[] = [
      * مهاجرت افزایشی با همان الگوی 0073؛ 0074 دست‌نخورده. */
     version: "0075", name: "pmis_change_document_file_fields",
     statements: ["DocNo", "FileNameFa", "MimeType", "SizeBytes", "Sha256"].map((col) => addColumnDdl("PmisChangeDocuments", col, "mssql")),
+  },
+  {
+    version: "0076", name: "vendor_evaluation_and_improvement",
+    statements: ["VendorEvaluation", "VendorImprovement"].flatMap(n => {
+      const t = TABLE_BY_NAME.get(n)!;
+      return [tableDdl(t, "mssql"), ...(t.indexes ?? []).map(i => indexDdl(t, i, "mssql"))];
+    }),
   },
 ];
 

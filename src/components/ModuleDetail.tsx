@@ -1056,7 +1056,7 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
               {d14View === "risk" ? (
                 <ContractRiskWorkspace lang={lang} projectId={target.projectId} />
               ) : d14View === "rating" ? (
-                <VendorRatingPanel lang={lang} />
+                <VendorRatingPanel key={`${target.projectId}:${user?.id ?? ""}`} lang={lang} projectId={target.projectId} section={(selected?.sId ?? target.subId) === "d14-p8-s2" ? "monitoring" : "scoring"} />
               ) : d14View === "ipc" ? (
                 <CntIpcPanel lang={lang} />
               ) : (
