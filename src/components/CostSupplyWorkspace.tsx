@@ -411,7 +411,7 @@ function SettingsPanel({ rtl, ws, canEdit, busy, onSave }: { rtl: boolean; ws: F
         {field("RetentionPct", "حسن انجام کار ٪", "Retention %")}
         {field("AdvanceRecoveryPct", "استهلاک پیش‌پرداخت ٪", "Advance recovery %")}
         {field("LegalDeductionPct", "کسور قانونی ٪", "Legal deductions %")}
-        {field("MrpHorizonDays", "افق MRP (روز)", "MRP horizon (days)")}
+        {field("MrpHorizonDays", "افق تجدید سفارش (روز)", "Reorder horizon (days)")}
       </div>
       <div className="mt-2 flex items-center gap-2">
         {canEdit ? (
@@ -419,7 +419,7 @@ function SettingsPanel({ rtl, ws, canEdit, busy, onSave }: { rtl: boolean; ws: F
         ) : (
           <span className="text-[9px] tx4">{rtl ? "فقط نمایش — ویرایش مجوز «ثبت هزینه» می‌خواهد" : "read-only"}</span>
         )}
-        <span className="text-[8.5px] tx4">{rtl ? "این فرض‌ها مستقیماً در پیش‌بینی نقدینگی و MRP استفاده می‌شوند." : "These assumptions drive the cash forecast and MRP."}</span>
+        <span className="text-[8.5px] tx4">{rtl ? "این فرض‌ها در پیش‌بینی نقدینگی و پیشنهاد تجدید سفارش استفاده می‌شوند." : "These assumptions drive the cash forecast and reorder suggestions."}</span>
       </div>
     </Section>
   );
@@ -833,7 +833,7 @@ function Tabs({ rtl, lang, tab, ws, v, perm, busy, client, act }: { rtl: boolean
           <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
             <Kpi label={rtl ? "PR باز" : "Open PRs"} value={String(v.openPrCount)} />
             <Kpi label={rtl ? "PR اضطراری" : "Emergency"} value={v.emergencyPct === null ? "—" : `${Math.round(v.emergencyPct)}%`} tone="text-amber-200" />
-            <Kpi label={rtl ? "پیشنهاد MRP" : "MRP suggestions"} value={String(v.mrp.length)} />
+            <Kpi label={rtl ? "پیشنهاد تجدید سفارش" : "Reorder suggestions"} value={String(v.mrp.length)} />
             <Kpi label={rtl ? "بودجهٔ متعهدنشده" : "Uncommitted budget"} value={fmtB(v.uncommitted, rtl)} />
           </div>
 
@@ -895,7 +895,7 @@ function Tabs({ rtl, lang, tab, ws, v, perm, busy, client, act }: { rtl: boolean
             )}
           </Section>
 
-          <Section title={rtl ? "اجرای MRP — پیشنهاد درخواست خرید" : "MRP run — PR suggestions"} note={rtl ? `کسری = نیاز ${v.settings.MrpHorizonDays} روزه (مصرف میانگین) + ذخیره ایمنی − موجودی − در راه` : `shortage over ${v.settings.MrpHorizonDays}-day horizon`}>
+          <Section title={rtl ? "پیشنهاد تجدید سفارش — درخواست خرید" : "Reorder suggestions — purchase requisitions"} note={rtl ? `کسری = نیاز ${v.settings.MrpHorizonDays} روزه (مصرف میانگین) + ذخیره ایمنی − موجودی − در راه` : `shortage over ${v.settings.MrpHorizonDays}-day horizon`}>
             {v.mrp.length === 0 ? (
               <p className="text-[9px] tx4">{rtl ? "کسری‌ای شناسایی نشد." : "No shortage."}</p>
             ) : (
@@ -1089,7 +1089,7 @@ function Tabs({ rtl, lang, tab, ws, v, perm, busy, client, act }: { rtl: boolean
               {[
                 { fa: "POهای در انتظار رسید کامل", en: "POs awaiting full receipt", v: String(ws.pos.filter((p) => p.Status === "issued" || p.Status === "acknowledged" || p.Status === "partially_received").length), icon: "📥" },
                 { fa: "اقلام در راه", en: "Items on order", v: String(ws.stock.filter((s) => Number(s.OnOrder ?? 0) > 0).length), icon: "🚚" },
-                { fa: "پیشنهاد سفارش مجدد (MRP)", en: "Reorder suggestions", v: String(v.mrp.length), icon: "🔁" },
+                { fa: "پیشنهاد تجدید سفارش", en: "Reorder suggestions", v: String(v.mrp.length), icon: "🔁" },
               ].map((c) => (
                 <div key={c.en} className="rounded-xl border b-line-soft bg-black/15 p-2">
                   <div className="text-[10px] tx1">{c.icon} {rtl ? c.fa : c.en}</div>

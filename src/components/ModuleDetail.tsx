@@ -350,7 +350,7 @@ const D5_PAGE_SUBS: Record<string, { id: string; title: Bi; tab: FinTab; sql: st
     { id: "d5-p3-ipc", title: { fa: "صورت‌وضعیت و کسورات", en: "Progress invoice" }, tab: "cash", sql: ["fin_progress_invoice"] },
   ],
   "d5-p4": [
-    { id: "d5-p4-mrp", title: { fa: "اجرای MRP و تاریخ نیاز کالا", en: "MRP & material need date" }, tab: "pr", sql: ["fin_mrp_run"] },
+    { id: "d5-p4-mrp", title: { fa: "پیشنهاد تجدید سفارش و تاریخ نیاز کالا", en: "Reorder suggestions & material need date" }, tab: "pr", sql: ["fin_mrp_run"] },
     { id: "d5-p4-bud", title: { fa: "کنترل بودجه و مسیر تأیید", en: "Budget check & approval route" }, tab: "pr", sql: ["fin_pr_line"] },
   ],
   "d5-p5": [
@@ -428,6 +428,7 @@ type Props = {
   target: ModuleNavTarget;
   onBack: () => void;
   onOpenFlowNet?: () => void;
+  onOpenProduction?: (tab: "mrp" | "execution") => void;
   /** پرش به دامنه/زیرفرآیند دیگر (برای پیوندهای میان‌دامنه‌ای). */
   onNavigate?: (target: ModuleNavTarget) => void;
 };
@@ -441,7 +442,7 @@ function BackToMapButton({ rtl, onClick }: { rtl: boolean; onClick: () => void }
   );
 }
 
-function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: Props) {
+function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onOpenProduction, onNavigate }: Props) {
   const rtl = lang === "fa";
   const { clusters, projectsByCluster } = useSystem();
   const { user, can, audit } = useAuth();
@@ -1387,6 +1388,7 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
             activeProcesses={activeProcesses}
             selectedSubId={selected?.sId}
             extraSubs={D5_PAGE_SUBS}
+            onOpenProduction={onOpenProduction}
             onSelectSub={(pId, sId) => {
               audit("OPEN_SUBPROCESS", { projectId: target.projectId, entity: dom.id, entityId: sId });
               setSelected({ pId, sId });
@@ -1940,7 +1942,14 @@ function DomainNavGroups({
       ].map(({ processIds, ...section }) => ({
         ...section,
         module: m,
-        processes: processes.filter((p) => processIds.includes(p.id)),
+        processes: processes.filter((p) => processIds.includes(p.id)).map((p) => p.id !== "d5-p8" ? p : ({
+          ...p,
+          title: { fa: "گزارش تراز مصالح و انحراف مصرف پروژه", en: "Project material balance & consumption variance report" },
+          subs: p.subs.map((sub) => sub.id !== "d5-p8-s2" ? sub : ({
+            ...sub,
+            title: { fa: "گزارش انحراف مصرف و ضایعات پروژه", en: "Project consumption variance & waste report" },
+          })),
+        })),
       }));
     }
     if (m.id !== "d14") return [{ module: m, key: m.id, title: m.nav ?? m.title, processes }];
@@ -2056,6 +2065,7 @@ function DomainAside({
   selectedSubId,
   extraSubs,
   showSql,
+  onOpenProduction,
   onSelectSub,
   onOpenModuleSub,
 }: {
@@ -2065,6 +2075,7 @@ function DomainAside({
   selectedSubId?: string;
   extraSubs?: Record<string, { id: string; title: Bi }[]>;
   showSql?: boolean;
+  onOpenProduction?: (tab: "mrp" | "execution") => void;
   onSelectSub: (processId: string, subId: string) => void;
   onOpenModuleSub: (moduleId: string, processId: string, subId: string) => void;
 }) {
@@ -2093,6 +2104,20 @@ function DomainAside({
           onSelectSub={onSelectSub}
           onOpenModuleSub={onOpenModuleSub}
         />
+        {dom.id === "d5" && onOpenProduction && (
+          <div className="mt-3 border-t b-line-soft pt-2">
+            <div className="px-2 py-1 text-[9px] tx3">{rtl ? "عملیات تولید — در برنامه‌ریزی و کنترل تولید" : "Production operations — in MES"}</div>
+            {([
+              ["mrp", rtl ? "برنامه‌ریزی مواد و ثبت مصرف تولید" : "Production MRP & consumption entry"],
+              ["execution", rtl ? "ثبت ضایعات تولید" : "Production scrap entry"],
+            ] as const).map(([tab, label]) => (
+              <button key={tab} type="button" onClick={() => onOpenProduction(tab)}
+                className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-start text-[10px] tx1 hover:bg-[var(--row-hover)]">
+                <span aria-hidden="true">↗</span>{label}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
     </aside>
   );
