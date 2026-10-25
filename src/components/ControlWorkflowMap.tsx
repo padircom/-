@@ -87,7 +87,7 @@ export default function ControlWorkflowMap({
 
       <div className={`mt-2 grid ${gridCols} items-stretch`}>
         {/* ورودی‌ها */}
-        <div className="flex flex-col gap-2.5">
+        <div className="flex flex-col gap-2">
           {INPUTS.map((node) => (
             <WorkflowNodeBox key={node.titleEn} node={node} rtl={rtl} accent={C_INPUT} onNavigate={open(node)} compact />
           ))}
@@ -118,9 +118,9 @@ export default function ControlWorkflowMap({
         </div>
 
         {/* چرخهٔ کنترل */}
-        <div className="flex flex-col gap-2.5">
+        <div className="flex flex-col gap-2">
           {CYCLE.map((node, i) => (
-            <div key={node.titleEn} className="flex flex-1 flex-col gap-2.5">
+            <div key={node.titleEn} className="flex flex-1 flex-col gap-2">
               <WorkflowNodeBox node={node} rtl={rtl} accent={C_CYCLE} onNavigate={open(node)} compact />
               {i < CYCLE.length - 1 && <div className="text-center text-[12px] leading-3 tx4">↓</div>}
             </div>
@@ -133,7 +133,7 @@ export default function ControlWorkflowMap({
         </div>
 
         {/* خروجی‌ها */}
-        <div className="flex flex-col gap-2.5">
+        <div className="flex flex-col gap-2">
           {OUTPUTS.map((node) => (
             <WorkflowNodeBox key={node.titleEn} node={node} rtl={rtl} accent={C_OUTPUT} onNavigate={open(node)} compact />
           ))}
