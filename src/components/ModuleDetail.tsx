@@ -627,6 +627,9 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
             <span className="inline-block rotate-180 rtl:rotate-0">→</span>
             {rtl ? "بازگشت به داشبورد" : "Back to dashboard"}
           </button>
+          {target.fromMap && (
+            <BackToMapButton rtl={rtl} onClick={() => onNavigate?.({ ...target, moduleId: "d6", processId: undefined, subId: undefined, fromMap: undefined, initialView: "ctl" })} />
+          )}
           {cluster && (
             <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl text-[20px]"
                   style={{ background: `${cluster.color}1f`, border: `1px solid ${cluster.color}55` }}>
@@ -980,6 +983,9 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
             <span className="inline-block rotate-180 rtl:rotate-0">→</span>
             {rtl ? "بازگشت به داشبورد" : "Back to dashboard"}
           </button>
+          {target.fromMap && (
+            <BackToMapButton rtl={rtl} onClick={() => onNavigate?.({ ...target, moduleId: "d6", processId: undefined, subId: undefined, fromMap: undefined, initialView: "ctl" })} />
+          )}
           {cluster && (
             <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl text-[20px]"
                   style={{ background: `${cluster.color}1f`, border: `1px solid ${cluster.color}55` }}>

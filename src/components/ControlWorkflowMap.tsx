@@ -26,13 +26,13 @@ interface ControlNode extends WorkflowMapNode {
 }
 
 const INPUTS: ControlNode[] = [
-  { titleFa: "برنامهٔ پایه و پیشرفت واقعی", titleEn: "Baseline & actual progress", subFa: "از ماژول برنامه‌ریزی", subEn: "From planning module", kind: "cross" },
-  { titleFa: "گزارش روزانه و هفتگی سایت", titleEn: "Site reports", subFa: "ثبت پیشرفت و تاریخ‌های واقعی", subEn: "Progress and actual dates", kind: "cross" },
+  { titleFa: "برنامهٔ پایه و پیشرفت واقعی", titleEn: "Baseline & actual progress", subFa: "از ماژول برنامه‌ریزی", subEn: "From planning module", moduleId: "d2", processId: "d2-p2", subId: "d2-p2-s1", kind: "cross" },
+  { titleFa: "گزارش روزانه و هفتگی سایت", titleEn: "Site reports", subFa: "ثبت پیشرفت و تاریخ‌های واقعی", subEn: "Progress and actual dates", moduleId: "d2", processId: "d2-p4", subId: "d2-p4-s1", kind: "cross" },
   { titleFa: "هزینهٔ واقعی و تعهدات پیمان", titleEn: "Actual cost & commitments", subFa: "هزینهٔ واقعی در برابر بودجه", subEn: "Actual cost vs budget", moduleId: "d5", processId: "d5-p2", subId: "d5-p2-s1", kind: "io" },
   { titleFa: "پیشرفت فیزیکی و برداشت احجام", titleEn: "Physical progress & measurement", subFa: "مقادیر اجراشده در دوره", subEn: "Measured quantities", moduleId: "d5", processId: "d5-p7", subId: "d5-p7-s2", kind: "io" },
   { titleFa: "نتایج بازرسی و عدم‌انطباق", titleEn: "Inspection & NCR results", subFa: "NCR و اقدام اصلاحی", subEn: "NCR and corrective action", moduleId: "d8", processId: "d8-p3", subId: "d8-p3-s1", kind: "io" },
   { titleFa: "ریسک‌ها، تغییرات و ادعاها", titleEn: "Risks, changes & claims", subFa: "ثبت و تحلیل ریسک", subEn: "Risk register", moduleId: "d4", processId: "d4-p1", subId: "d4-p1-s1", kind: "io" },
-  { titleFa: "قراردادها و تضمین‌ها", titleEn: "Contracts & guarantees", subFa: "تعهدات پیمان — از ماژول پیمان", subEn: "Contractual commitments", kind: "cross" },
+  { titleFa: "قراردادها و تضمین‌ها", titleEn: "Contracts & guarantees", subFa: "تعهدات پیمان — از ماژول پیمان", subEn: "Contractual commitments", moduleId: "d14", processId: "d14-p6", subId: "d14-p6-s1", kind: "cross" },
 ];
 
 const CYCLE: ControlNode[] = [
