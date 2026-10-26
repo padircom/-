@@ -81,6 +81,11 @@ export default function CapabilityDetail({
   const dom = domains.find((d) => d.id === domainId);
   const cluster = clusters.find((c) => c.id === clusterId);
   const project = (projectsByCluster[clusterId] ?? []).find((p) => p.id === projectId);
+  const projectName = project ? t(project.name, lang) : "";
+  const oilfieldNamePrefix = "توسعه میدان نفتی";
+  const placeCodeAfterOilfieldPrefix = lang === "fa"
+    && project?.code === "OG-2401"
+    && projectName.startsWith(`${oilfieldNamePrefix} `);
   const processSet = processes ?? dom?.processes ?? [];
   const proc = processSet.find((p) => p.id === processId);
   const sub = proc?.subs.find((s) => s.id === subId);
@@ -338,7 +343,7 @@ export default function CapabilityDetail({
           <span className="inline-block rotate-180 rtl:rotate-0">→</span>
           {rtl ? "بازگشت به حوزه" : "Back to domain"}
         </button>
-        {cluster && (
+        {cluster && cluster.id !== "c1" && (
           <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl text-[20px]"
                 style={{ background: `${cluster.color}1f`, border: `1px solid ${cluster.color}55` }}>
             {cluster.icon}
@@ -353,12 +358,21 @@ export default function CapabilityDetail({
             )}
             <span className="text-[16px] font-light tx4">/</span>
             {project && (
-              <h2 className="truncate text-[19px] font-semibold leading-tight tx1">{t(project.name, lang)}</h2>
+              <h2 className="truncate text-[19px] font-semibold leading-tight tx1">
+                {placeCodeAfterOilfieldPrefix ? (
+                  <>
+                    {oilfieldNamePrefix}{" "}
+                    <span dir="ltr" className="inline-block text-[10px] font-light tx3">{project.code}</span>{" "}
+                    {projectName.slice(oilfieldNamePrefix.length).trimStart()}
+                  </>
+                ) : projectName}
+              </h2>
             )}
           </div>
           {project && (
             <p className="mt-1 truncate text-[10px] font-extralight tx3">
-              <span dir="ltr">{project.code}</span> · {t(project.client, lang)} · {t(project.location, lang)}
+              {!placeCodeAfterOilfieldPrefix && <><span dir="ltr">{project.code}</span> · </>}
+              {t(project.client, lang)} · {t(project.location, lang)}
             </p>
           )}
         </div>

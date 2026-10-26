@@ -4,7 +4,6 @@ import { logAudit } from "../services/auditLogger";
 import { qmsApi } from "../services/qmsApiClient";
 import CpmWorkspace from "./CpmWorkspace";
 import {
-  QMS_FORMULA_VERSION,
   canProceed,
   capaRequired,
   certificationRisk,
@@ -294,14 +293,8 @@ export default function QualityWorkspace({
       {/* هدر */}
       <section className="glass-dark shrink-0 rounded-2xl p-3">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="grid h-8 w-8 place-items-center rounded-lg border border-emerald-400/40 bg-emerald-400/10 text-[15px]">🔬</span>
           <div className="min-w-0 flex-1">
             <h3 className="text-[12px] font-semibold tx1">{rtl ? "مدیریت کیفیت و بازرسی" : "Quality & Inspection Management"}</h3>
-            <p className="text-[8.5px] font-extralight tx3">
-              {rtl
-                ? "نقطه توقف مسدودکننده · هر NCR با مالک و اقدام اصلاحی · گواهی پیش از نصب · تحویل بدون پانچ کلاس A"
-                : "Hold points block work · every NCR owned with CAPA · certificate before installation · no MC with open class-A punch"}
-            </p>
           </div>
           <span className={`rounded-lg px-2 py-1 text-[10px] font-semibold tabular-nums ${gate.ok ? "bg-emerald-400/15 text-emerald-300" : "bg-rose-400/15 text-rose-300"}`}>
             {gate.ok ? (rtl ? "بدون توقف باز" : "No open hold") : `${rtl ? "توقف باز" : "Hold open"} ${blocking.length.toLocaleString(rtl ? "fa-IR" : "en-US")}`}
@@ -314,7 +307,6 @@ export default function QualityWorkspace({
           >
             {source === "api" ? (rtl ? "داده زنده" : "Live data") : rtl ? "داده نمونه" : "Sample data"}
           </span>
-          <span className="rounded-lg border b-line-soft px-2 py-1 font-mono text-[9px] tx3" dir="ltr">{QMS_FORMULA_VERSION} · {TODAY}</span>
         </div>
         {alerts.length > 0 && (
           <div className="mt-2 flex flex-wrap gap-1.5">

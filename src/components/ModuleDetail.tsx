@@ -654,6 +654,9 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
   })();
 
   const [planningTab, setPlanningTab] = useState<PexTab>(d2Tab);
+  const projectName = project ? t(project.name, lang) : "";
+  const oilfieldNamePrefix = "توسعه میدان نفتی";
+  const isOilfieldProject = lang === "fa" && project?.code === "OG-2401" && projectName.startsWith(`${oilfieldNamePrefix} `);
 
   if (dom.id === "d2") {
     return (
@@ -682,7 +685,18 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
               <span className="text-[16px] font-light tx4">/</span>
               {project && (
                 <h2 className="truncate text-[19px] font-semibold leading-tight tx1">
-                  {t(project.name, lang)} <span dir="ltr" className="inline-block text-[10px] font-light tx3">({project.code})</span>
+                  {isOilfieldProject ? (
+                    <>
+                      {oilfieldNamePrefix}{" "}
+                      <span dir="ltr" className="inline-block text-[10px] font-light tx3">{project.code}</span>{" "}
+                      {projectName.slice(oilfieldNamePrefix.length).trimStart()}
+                    </>
+                  ) : (
+                    <>
+                      {projectName}{" "}
+                      <span dir="ltr" className="inline-block text-[10px] font-light tx3">({project.code})</span>
+                    </>
+                  )}
                 </h2>
               )}
             </div>
@@ -736,7 +750,7 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
           {target.fromMap && (
             <BackToMapButton rtl={rtl} onClick={() => onNavigate?.({ ...target, moduleId: "d6", processId: undefined, subId: undefined, fromMap: undefined, initialView: "ctl" })} />
           )}
-          {cluster && (
+          {cluster && cluster.id !== "c1" && (
             <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl text-[20px]"
                   style={{ background: `${cluster.color}1f`, border: `1px solid ${cluster.color}55` }}>
               {cluster.icon}
@@ -751,21 +765,19 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
               )}
               <span className="text-[16px] font-light tx4">/</span>
               {project && (
-                <h2 className="truncate text-[19px] font-semibold leading-tight tx1">{t(project.name, lang)}</h2>
+                <h2 className="truncate text-[19px] font-semibold leading-tight tx1">
+                  {isOilfieldProject ? <>{oilfieldNamePrefix}{" "}<span dir="ltr" className="inline-block text-[10px] font-light tx3">{project.code}</span>{" "}{projectName.slice(oilfieldNamePrefix.length).trimStart()}</> : projectName}
+                </h2>
               )}
             </div>
             {project && (
               <p className="mt-1 truncate text-[10px] font-extralight tx3">
-                <span dir="ltr">{project.code}</span> · {t(project.client, lang)} · {t(project.location, lang)}
+                {!isOilfieldProject && <><span dir="ltr">{project.code}</span> · </>}{t(project.client, lang)} · {t(project.location, lang)}
               </p>
             )}
           </div>
           <div className="shrink-0 text-end">
-            <SystemBadge domainId={dom.id} lang={lang} className="mb-1 justify-end" />
             <div className="text-[9px] font-extralight tx3">{t(dom.title, lang)}</div>
-            <div className="text-[11px] font-light tx1">
-              {rtl ? "PMA — فقط Approved" : "PMA — Approved only"}
-            </div>
           </div>
         </div>
         <div className="workspace-columns flex min-h-0 flex-1 gap-3 overflow-hidden">
@@ -1984,6 +1996,7 @@ function DomainNavGroups({
   const [expandedD5Section, setExpandedD5Section] = useState<string | "none" | null>(null);
   const [expandedResourceSection, setExpandedResourceSection] = useState<string | "none" | null>(null);
   const [expandedHseSection, setExpandedHseSection] = useState<string | "none" | null>(null);
+  const [expandedRiskModules, setExpandedRiskModules] = useState<Record<string, boolean>>({});
   const [expandedProcessRows, setExpandedProcessRows] = useState<Record<string, boolean>>({});
   useEffect(() => setExpandedProcessRows({}), [dom.id]);
   const pd = performanceDomainOf(dom.id, dom.group);
@@ -2062,7 +2075,8 @@ function DomainNavGroups({
         const isD5Section = m.id === "d5";
         const isResourceSection = m.id === "d9" || m.id === "d10";
         const isHseSection = m.id === "d16" || m.id === "d17";
-        const isAccordionSection = isD14Section || isD5Section || isResourceSection || isHseSection;
+        const isRiskModuleSection = pd.id === "risk" && (m.id === "d3" || m.id === "d4");
+        const isAccordionSection = isD14Section || isD5Section || isResourceSection || isHseSection || isRiskModuleSection;
         const isRightAlignedHeader = isAccordionSection || m.id === "d8";
         const isExpanded = isD14Section
           ? (expandedD14Section === null ? activeD14SectionKey === key : expandedD14Section === key)
@@ -2072,7 +2086,9 @@ function DomainNavGroups({
               ? (expandedResourceSection === null ? activeResourceSectionKey === key : expandedResourceSection === key)
               : isHseSection
                 ? (expandedHseSection === null ? isCurrent : expandedHseSection === m.id)
-                : false;
+                : isRiskModuleSection
+                  ? (expandedRiskModules[m.id] ?? isCurrent)
+                  : false;
         const sectionBodyId = `domain-nav-${m.id}-${key}`;
         const entry = procs[0];
         const openSection = () => {
@@ -2092,6 +2108,10 @@ function DomainNavGroups({
             setExpandedHseSection(isExpanded ? "none" : m.id);
             return;
           }
+          if (isRiskModuleSection) {
+            setExpandedRiskModules((prev) => ({ ...prev, [m.id]: !isExpanded }));
+            return;
+          }
           if (!entry?.subs[0]) return;
           if (isCurrent) onSelectSub(entry.id, entry.subs[0].id);
           else onOpenModuleSub(m.id, entry.id, entry.subs[0].id);
@@ -2100,7 +2120,8 @@ function DomainNavGroups({
           if (isD14Section) setExpandedD14Section(null);
           if (isD5Section) setExpandedD5Section(null);
           if (isResourceSection) setExpandedResourceSection(null);
-          if (isHseSection || m.id === "d8") {
+          if (isRiskModuleSection) setExpandedRiskModules((prev) => ({ ...prev, [m.id]: true }));
+          if (isHseSection || m.id === "d8" || isRiskModuleSection) {
             setExpandedProcessRows((prev) => ({ ...prev, [`${m.id}:${processId}`]: true }));
           }
           if (isCurrent) onSelectSub(processId, subId);
@@ -2111,13 +2132,13 @@ function DomainNavGroups({
             {/* سرِ دستهٔ ماژول (فعال = رنگ ماژول) — ریتم سایدبار «برنامه‌ریزی و تولید» */}
             <div
               className="flex items-center gap-1.5 px-2 pb-0.5 pt-3 text-[9px] font-semibold tracking-wide"
-              style={{ color: isHseSection ? "#DC2626" : isResourceSection || isCurrent ? m.accent : undefined }}
+              style={{ color: isRiskModuleSection ? "#FF9F9F" : isHseSection ? "#DC2626" : isResourceSection || isCurrent ? m.accent : undefined }}
               role="presentation"
             >
               {!isRightAlignedHeader && <span className="h-px flex-1" style={{ background: "var(--line-soft)" }} aria-hidden="true" />}
               <span className={`inline-flex items-center gap-1 ${isD14Section && key === "risk" ? "max-w-[210px]" : ""}`}>
                 <span aria-hidden="true">{m.icon}</span>
-                {m.id === "d14" || m.id === "d5" || isResourceSection || isHseSection ? (
+                {m.id === "d14" || m.id === "d5" || isResourceSection || isHseSection || isRiskModuleSection ? (
                   <button
                     type="button"
                     onClick={openSection}
@@ -2148,13 +2169,13 @@ function DomainNavGroups({
             {procs.map((p, i) => {
               const processBodyId = `domain-nav-${m.id}-${p.id}`;
               const processKey = `${m.id}:${p.id}`;
-              const isProcessAccordion = isHseSection || m.id === "d8";
+              const isProcessAccordion = isHseSection || m.id === "d8" || isRiskModuleSection;
               const isProcessExpanded = !isProcessAccordion || (
-                expandedProcessRows[processKey] ?? (isCurrent && Boolean(selectedSubId?.startsWith(`${p.id}-`)))
+                expandedProcessRows[processKey] ?? (!isRiskModuleSection && isCurrent && Boolean(selectedSubId?.startsWith(`${p.id}-`)))
               );
               return (
                 <div key={p.id}>
-                  {/* فرایندهای HSE و کیفیت آکاردئونی‌اند تا فهرست سایدبار کوتاه بماند. */}
+                  {/* فرایندهای HSE، کیفیت و ماژول‌های ریسک آکاردئونی‌اند تا فهرست سایدبار کوتاه بماند. */}
                   {!(isD14Section && key === "risk") && (
                     isProcessAccordion ? (
                       <button
