@@ -1837,11 +1837,7 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
             )}
           </div>
           <div className="shrink-0 text-end">
-            <SystemBadge domainId={dom.id} lang={lang} className="mb-1 justify-end" />
-            <div className="text-[9px] font-extralight tx3">{t(dom.title, lang)}</div>
-            <div className="text-[11px] font-light tx1">
-              {rtl ? "نرخ حوادث بر پایهٔ نفرساعت واقعی" : "HSE — real man-hour TRIR"}
-            </div>
+            <div className="text-[11px] font-light tx1">{t(dom.title, lang)}</div>
           </div>
         </div>
         <div className="workspace-columns flex min-h-0 flex-1 gap-3 overflow-hidden">
