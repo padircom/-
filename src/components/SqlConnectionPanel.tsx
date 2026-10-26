@@ -296,8 +296,8 @@ export default function SqlConnectionPanel({ lang }: { lang: Lang }) {
                   ? "این اسکریپت را در SQL Server Management Studio اجرا کنید تا دیتابیس و جداولِ هسته ساخته شوند."
                   : "Run this in SQL Server Management Studio to create the database and core tables."
                 : rtl
-                  ? `شِمای کاملِ ${PMIS_FULL_SCHEMA_TABLE_COUNT} جدولِ ارجاع‌شده در فریم‌ورک؛ تولیدِ خودکار از کد (npm run db:schema). جدول‌هایی که ستونِ شناخته‌شده ندارند با ستونِ JSONِ Payload ساخته می‌شوند تا بعداً با شِمای واقعی جایگزین شود.`
-                  : `Full schema for all ${PMIS_FULL_SCHEMA_TABLE_COUNT} tables referenced by the framework; generated from code (npm run db:schema). Tables without known columns get a JSON Payload column until a real schema replaces them.`}
+                  ? `شِمای کاملِ ${PMIS_FULL_SCHEMA_TABLE_COUNT} جدول از منبع حقیقت persistence.ts؛ فقط نصب تازه (npm run db:schema). برای ارتقا از مهاجرت‌ها استفاده کنید.`
+                  : `Full schema for all ${PMIS_FULL_SCHEMA_TABLE_COUNT} tables from persistence.ts; fresh installs only (npm run db:schema). Use migrations for upgrades.`}
             </p>
             <pre className="thin-scroll max-h-[52vh] overflow-auto rounded-xl bg-black/40 p-3 text-[10px] leading-5 text-emerald-200" dir="ltr">{schemaScript}</pre>
           </div>

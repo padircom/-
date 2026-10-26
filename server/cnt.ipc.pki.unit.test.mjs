@@ -316,3 +316,19 @@ test("عدد طلایی CNT-1 دستنخورده ماند: ۱۶٬۰۰۰ ← ۱۳
   assert.equal(c.grossAmount, 16_000);
   assert.equal(c.netAmount, 13_680);
 });
+
+
+test('CA rotation: retained old CA verifies old signature; removal rejects it', () => {
+  const r = loadPkiSigner(env());
+  assert.equal(r.ok, true);
+  const canonical = 'rotation audit';
+  const signature = r.signer.sign(canonical, new Date(SIGN_AT));
+  for (const caPem of [OTHER_CA_PEM + '\n' + CA_PEM, CA_PEM + '\n' + OTHER_CA_PEM]) {
+    assert.equal(verifyPkiSignature(canonical, signature, LEAF_PEM,
+      { caPem, now: new Date(SIGN_AT) }).ok, true);
+  }
+  assert.equal(verifyPkiSignature(canonical, signature, LEAF_PEM,
+    { caPem: OTHER_CA_PEM, now: new Date(SIGN_AT) }).ok, false);
+  assert.equal(verifyPkiSignature(canonical + 'tampered', signature, LEAF_PEM,
+    { caPem: OTHER_CA_PEM + '\n' + CA_PEM, now: new Date(SIGN_AT) }).ok, false);
+});
