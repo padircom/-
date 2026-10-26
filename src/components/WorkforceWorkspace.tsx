@@ -4,7 +4,6 @@ import { useAuth } from "../context/AuthContext";
 import { useCurrentProjectId } from "../context/SystemContext";
 import { logAudit } from "../services/auditLogger";
 import {
-  HRM_FORMULA_VERSION,
   IRAN_LABOR_LAW,
   TRADE_BY_CODE,
   TRADE_CATALOG,
@@ -35,8 +34,6 @@ const TABS: { id: HrmTab; fa: string; en: string; icon: string; proc: string; de
   { id: "onboarding", fa: "پذیرش، احکام و انطباق", en: "Onboarding & Compliance", icon: "🪪", proc: "p5", deliverable: "D7" },
   { id: "analytics", fa: "تحلیل، هیستوگرام و گزارش", en: "Analytics & Histogram", icon: "📈", proc: "p6", deliverable: "D8" },
 ];
-
-const TODAY = "2026-09-08";
 
 /* ─────────────── داده نمونه (پروژه OG-2401) ─────────────── */
 
@@ -285,7 +282,6 @@ export default function WorkforceWorkspace({
           <span className="rounded-lg border b-line-soft px-2 py-1 text-[9px] tx3" dir="ltr">PI {pi.pi.toFixed(2)}</span>
           <span className="rounded-lg border b-line-soft px-2 py-1 text-[9px] tx3" dir="ltr">HC {fmt(currentPeriod.actualHC)}</span>
           <span className="rounded-lg border b-line-soft px-2 py-1 text-[9px] tx3">{rtl ? "داده نمونه" : "Sample data"}</span>
-          <span className="rounded-lg border b-line-soft px-2 py-1 font-mono text-[9px] tx3" dir="ltr">{HRM_FORMULA_VERSION} · {TODAY}</span>
         </div>
         {alerts.length > 0 && (
           <div className="mt-2 flex flex-wrap gap-1.5">

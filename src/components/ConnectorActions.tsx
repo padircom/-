@@ -177,7 +177,17 @@ export function ScheduleImportActions({ lang, projectId, onImported }: { lang: L
 
 type SapSyncResult = { source?: string; endpoint?: string; httpStatus?: number; recordCount?: number | null; shape?: string; note?: string; runAt?: string };
 
-export function ErpSyncAction({ lang, projectId }: { lang: Lang; projectId?: string }) {
+export function ErpSyncAction({
+  lang,
+  projectId,
+  showStatus = true,
+  showSyncButton = true,
+}: {
+  lang: Lang;
+  projectId?: string;
+  showStatus?: boolean;
+  showSyncButton?: boolean;
+}) {
   const rtl = lang === "fa";
   const { user } = useAuth();
   const contextProjectId = useCurrentProjectId();
@@ -222,11 +232,13 @@ export function ErpSyncAction({ lang, projectId }: { lang: Lang; projectId?: str
 
   return (
     <div className="flex flex-wrap items-center gap-1.5" data-connector-actions="erp-sync">
-      <ConnectorStatus lang={lang} id="sap" label="ERP / SAP" state={state} />
-      <button type="button" className={BUTTON} disabled={busy} onClick={() => void sync()}>
-        <span aria-hidden="true">⇄</span>
-        {busy ? (rtl ? "در حال همگام‌سازی…" : "syncing…") : rtl ? "همگام‌سازی با ERP / SAP" : "Sync with ERP / SAP"}
-      </button>
+      {showStatus && <ConnectorStatus lang={lang} id="sap" label="ERP / SAP" state={state} />}
+      {showSyncButton && (
+        <button type="button" className={BUTTON} disabled={busy} onClick={() => void sync()}>
+          <span aria-hidden="true">⇄</span>
+          {busy ? (rtl ? "در حال همگام‌سازی…" : "syncing…") : rtl ? "همگام‌سازی با ERP / SAP" : "Sync with ERP / SAP"}
+        </button>
+      )}
       <Notice note={note} lang={lang} />
     </div>
   );

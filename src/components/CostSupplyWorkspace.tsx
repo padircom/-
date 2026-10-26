@@ -129,10 +129,12 @@ export default function CostSupplyWorkspace({
   lang,
   initialTab = "cost",
   hideTabs = false,
+  hideHeader = false,
 }: {
   lang: Lang;
   initialTab?: FinTab;
   hideTabs?: boolean;
+  hideHeader?: boolean;
 }) {
   /* شناسهٔ پروژه از «پروژهٔ جاری» می‌آید (SystemContext) — نه ثابتِ ماژول. */
   const projectId = useCurrentProjectId();
@@ -318,7 +320,7 @@ export default function CostSupplyWorkspace({
   } else if (ws && view) {
     body = (
       <>
-        {showSettings && <SettingsPanel rtl={rtl} ws={ws} canEdit={perm.post} busy={busy} onSave={(s) => act(() => client.saveSettings(s), rtl ? "تنظیمات ذخیره شد" : "Settings saved", "FIN_SETTINGS_SET")} />}
+        {showSettings && <SettingsPanel lang={lang} rtl={rtl} ws={ws} canEdit={perm.post} busy={busy} onSave={(s) => act(() => client.saveSettings(s), rtl ? "تنظیمات ذخیره شد" : "Settings saved", "FIN_SETTINGS_SET")} />}
         {view.empty ? (
           <EmptyState rtl={rtl} canSeed={perm.post} busy={busy} onSeed={() => act(() => client.seed(), rtl ? "دادهٔ نمونه بارگذاری شد" : "Sample data loaded", "FIN_SAMPLE_SEEDED")}>
             {perm.budget && <AccountForm rtl={rtl} ws={ws} busy={busy} onCreate={(a) => act(() => client.createAccount(a), rtl ? "حساب هزینه ثبت شد" : "Cost account created")} />}
@@ -337,12 +339,23 @@ export default function CostSupplyWorkspace({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden" dir={rtl ? "rtl" : "ltr"}>
-      {header(independent ? null : view)}
-      {/* همگام‌سازی مالی از پنل حذف‌شدهٔ «منابع داده» به همین میز کار (گروه
-        * «پایش و کنترل» ➔ کنترل هزینه) منتقل شد. بیرون از تب‌ها می‌نشیند تا در
-        * حالت «دادهٔ خالی/بارگذاری» هم دیده شود و علت را صریح بگوید؛ تب‌های
-        * زنجیره تأمین همان دکمه را لازم ندارند. */}
-      {!tab.startsWith("scm-") && <ErpSyncAction lang={lang} />}
+      {!hideHeader && header(independent ? null : view)}
+      {hideHeader && (
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-2">
+          <button
+            type="button"
+            onClick={() => setShowSettings((open) => !open)}
+            aria-expanded={showSettings}
+            className={`${btnCls} border b-line-soft tx2 hover:tx1 ${showSettings ? "toggle-on" : ""}`}
+          >
+            ⚙ {rtl ? "تنظیمات مالی و اتصال‌ها" : "Finance & integrations"}
+          </button>
+          {!tab.startsWith("scm-") && <ErpSyncAction lang={lang} showStatus={false} />}
+        </div>
+      )}
+      {/* همگام‌سازی مالی از پنل حذف‌شدهٔ «منابع داده» به همین میز کار منتقل شده؛
+          وضعیت اتصال فقط داخل تنظیمات نشان داده می‌شود و هشدار تنها پس از اقدام است. */}
+      {!hideHeader && !tab.startsWith("scm-") && <ErpSyncAction lang={lang} />}
       {tabsNav}
       <div className="thin-scroll min-h-0 flex-1 space-y-3 overflow-y-auto pe-1">{body}</div>
     </div>
@@ -371,7 +384,7 @@ function EmptyState({ rtl, canSeed, busy, onSeed, children }: { rtl: boolean; ca
   );
 }
 
-function SettingsPanel({ rtl, ws, canEdit, busy, onSave }: { rtl: boolean; ws: FinWorkspacePayload; canEdit: boolean; busy: boolean; onSave: (s: unknown) => Promise<boolean> }) {
+function SettingsPanel({ lang, rtl, ws, canEdit, busy, onSave }: { lang: Lang; rtl: boolean; ws: FinWorkspacePayload; canEdit: boolean; busy: boolean; onSave: (s: unknown) => Promise<boolean> }) {
   const s = ws.settings;
   const rates = s.Rates ?? {};
   const f = useForm({
@@ -399,6 +412,11 @@ function SettingsPanel({ rtl, ws, canEdit, busy, onSave }: { rtl: boolean; ws: F
   };
   return (
     <Section title={rtl ? "تنظیمات مالی پروژه" : "Project finance settings"} note={rtl ? (ws.settingsSaved ? "ذخیره‌شده روی سرور" : "هنوز ذخیره نشده — مقادیر پیش‌فرض") : ws.settingsSaved ? "saved" : "defaults (not saved)"}>
+      <div className="mb-3 flex flex-wrap items-center gap-2 border-b b-line-soft pb-2">
+        <span className="text-[9px] font-light tx3">{rtl ? "وضعیت اتصال ERP / SAP" : "ERP / SAP connection status"}</span>
+        <ErpSyncAction lang={lang} showSyncButton={false} />
+        <span className="text-[8.5px] tx4">{rtl ? "پیکربندی اتصال در مدیریت سامانه ← اتصال SQL/API انجام می‌شود." : "Configure the connector in System Administration → SQL/API."}</span>
+      </div>
       <div className="grid grid-cols-2 gap-2 md:grid-cols-6">
         {field("DataDate", "تاریخ داده", "Data date", "date")}
         {field("CurrentPeriod", "دورهٔ جاری", "Current period")}

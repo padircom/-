@@ -109,7 +109,7 @@ export const performanceDomains: PerformanceDomain[] = [
   { id: "governance", title: { fa: "حاکمیت", en: "Governance" }, icon: "🏛", color: "#4C7FD1" },
   { id: "scope", title: { fa: "محدوده", en: "Scope" }, icon: "🎯", color: "#0FA08C" },
   { id: "schedule", title: { fa: "زمان‌بندی", en: "Schedule" }, icon: "📅", color: "#2E9E4F" },
-  { id: "finance", title: { fa: "مالی", en: "Finance" }, icon: "💰", color: "#D08A16" },
+  { id: "finance", title: { fa: "مدیریت پیمان و صورت‌وضعیت", en: "Contract & Payment Management" }, icon: "💰", color: "#D08A16" },
   { id: "stakeholders", title: { fa: "ذی‌نفعان", en: "Stakeholders" }, icon: "👥", color: "#E2711D" },
   { id: "resources", title: { fa: "منابع", en: "Resources" }, icon: "🔧", color: "#7A4BB8" },
   { id: "risk", title: { fa: "ریسک", en: "Risk" }, icon: "⚠️", color: "#D64A4A" },
@@ -139,10 +139,18 @@ export const domainPerformance: Record<string, PerformanceDomainId> = {
   d19: "extension",
 };
 
+/** برچسب حوزه می‌تواند با گروه فرایندی فرق کند؛ d5 در پایش/کنترل هزینه و تدارکات است. */
+function performanceDomainTitleInGroup(pd: PerformanceDomain, groupId?: string): Bi {
+  return pd.id === "finance" && groupId === "pg4"
+    ? { fa: "کنترل هزینه و تدارکات", en: "Cost Control & Procurement" }
+    : pd.title;
+}
+
 /** حوزهٔ عملکردیِ یک ماژول (برای برچسب سایدبار فرعی). */
-export function performanceDomainOf(domainId: string): PerformanceDomain | undefined {
+export function performanceDomainOf(domainId: string, groupId?: string): PerformanceDomain | undefined {
   const pid = domainPerformance[domainId];
-  return pid ? performanceDomains.find((p) => p.id === pid) : undefined;
+  const pd = pid ? performanceDomains.find((p) => p.id === pid) : undefined;
+  return pd ? { ...pd, title: performanceDomainTitleInGroup(pd, groupId) } : undefined;
 }
 
 /** ماژول‌های یک حوزهٔ عملکردی (لایهٔ ۳ در سایدبار فرعی). */
@@ -173,7 +181,7 @@ export function performanceDomainsInGroup(groupId: string): Array<PerformanceDom
     if (!bucket) {
       const pd = performanceDomains.find((p) => p.id === pid);
       if (!pd) continue;
-      bucket = { ...pd, modules: [] };
+      bucket = { ...pd, title: performanceDomainTitleInGroup(pd, groupId), modules: [] };
       out.push(bucket);
     }
     bucket.modules.push(m);
@@ -271,9 +279,9 @@ export const domains: Domain[] = [
       },
       {
         id: "d14-p9",
-        title: { fa: "مدیریت ریسک قراردادها", en: "Contract Risk Management" },
+        title: { fa: "دفتر ریسک قراردادی", en: "Contract Risk Register" },
         subs: [
-          { id: "d14-p9-s1", title: { fa: "ریسک و بهبود قرارداد", en: "Contract Risk & Improvement" }, activity: { fa: "شناسایی، امتیازدهی و پایش ریسک‌های قراردادی، تحلیل بندها، تعهدات و پیشنهاد اصلاح قرارداد؛ با حفظ ارجاع به کد پیمان", en: "Identify, score and monitor contract risks, analyse clauses, obligations and improvement proposals, retaining the contract-code link" }, source: "Contract, EDMS", sql: ["ContractRiskRegister", "ContractClauseFinding", "ContractImprovement"], output: "Contract Risk Register", connectsTo: "Contract Register, Claims, Delay, EDMS", ai: "ContractClauseAnalysisService" },
+          { id: "d14-p9-s1", title: { fa: "مرکز کنترل ریسک قراردادی", en: "Risk control center" }, activity: { fa: "شناسایی، امتیازدهی و پایش ریسک‌های قراردادی، تحلیل بندها، تعهدات و پیشنهاد اصلاح قرارداد؛ با حفظ ارجاع به کد پیمان", en: "Identify, score and monitor contract risks, analyse clauses, obligations and improvement proposals, retaining the contract-code link" }, source: "Contract, EDMS", sql: ["ContractRiskRegister", "ContractClauseFinding", "ContractImprovement"], output: "Contract Risk Register", connectsTo: "Contract Register, Claims, Delay, EDMS", ai: "ContractClauseAnalysisService" },
         ],
       },
       {
@@ -773,7 +781,7 @@ export const domains: Domain[] = [
     id: "d10",
     group: "pg3",
     icon: "👷",
-    accent: "#F59E0B",
+    accent: "#7A4BB8",
     title: { fa: "مدیریت منابع انسانی و بهره‌وری نیروی کار", en: "Human Resources & Workforce Productivity" },
     nav: { fa: "مدیریت منابع انسانی و کارکرد", en: "HR & Workforce Productivity" },
     processes: [
@@ -829,7 +837,7 @@ export const domains: Domain[] = [
     id: "d9",
     group: "pg3",
     icon: "🚜",
-    accent: "#38BDF8",
+    accent: "#7A4BB8",
     title: { fa: "مدیریت ماشین‌آلات و تجهیزات", en: "Machinery & Equipment Management" },
     processes: [
       {
