@@ -2071,6 +2071,7 @@ function DomainNavGroups({
         const isResourceSection = m.id === "d9" || m.id === "d10";
         const isHseSection = m.id === "d16" || m.id === "d17";
         const isAccordionSection = isD14Section || isD5Section || isResourceSection || isHseSection;
+        const isRightAlignedHeader = isAccordionSection || m.id === "d8";
         const isExpanded = isD14Section
           ? (expandedD14Section === null ? activeD14SectionKey === key : expandedD14Section === key)
           : isD5Section
@@ -2121,7 +2122,7 @@ function DomainNavGroups({
               style={{ color: isHseSection ? "#DC2626" : isResourceSection || isCurrent ? m.accent : undefined }}
               role="presentation"
             >
-              {!isAccordionSection && <span className="h-px flex-1" style={{ background: "var(--line-soft)" }} aria-hidden="true" />}
+              {!isRightAlignedHeader && <span className="h-px flex-1" style={{ background: "var(--line-soft)" }} aria-hidden="true" />}
               <span className={`inline-flex items-center gap-1 ${isD14Section && key === "risk" ? "max-w-[210px]" : ""}`}>
                 <span aria-hidden="true">{m.icon}</span>
                 {m.id === "d14" || m.id === "d5" || isResourceSection || isHseSection ? (
