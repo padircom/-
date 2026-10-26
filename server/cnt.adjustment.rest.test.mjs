@@ -83,10 +83,10 @@ async function makeItem(contractId, chapterCode, unitRate = 500_000) {
   return r.body.data.item;
 }
 
-async function makeIpc(contractId, lines) {
+async function makeIpc(contractId, lines, deductions = {}) {
   const r = await post(`/api/cnt/ipc?projectId=${PROJECT}`, {
     contractId, periodCode: `ADJ-${tag()}`,
-    periodFrom: "2026-01-01", periodTo: "2026-01-31", lines,
+    periodFrom: "2026-01-01", periodTo: "2026-01-31", lines, deductions,
   }, CONTRACTS);
   assert.equal(r.status, 201, JSON.stringify(r.body));
   return r.body.data;
@@ -176,6 +176,22 @@ test("خالص پرداختنی پس از تعدیل بازمحاسبه می‌�
   const detail = await get(`/api/cnt/ipc/${ipc.id}?projectId=${PROJECT}`, CONTRACTS);
   assert.equal(Number(detail.body.data.header.AdjustmentAmount), 10_000_000);
   assert.equal(Number(detail.body.data.header.NetPayable), 60_000_000);
+});
+
+test("بازمحاسبهٔ تعدیل، نرخ کسورات و ارزش افزودهٔ پیش‌نویس را حفظ می‌کند", async () => {
+  const c = await makeContract();
+  const item = await makeItem(c.Id, "03");
+  const ipc = await makeIpc(c.Id, [{ boqItemId: item.Id, cumQty: 100 }], { retainagePct: 10, vatPct: 9 });
+  const base = `B-${tag()}`, period = `P-${tag()}`;
+  await putIndex(base, "03", 100);
+  await putIndex(period, "03", 120);
+  const r = await post(`/api/cnt/ipc/${ipc.id}/adjustment?projectId=${PROJECT}`, { indexPeriod: period, baseIndexPeriod: base }, CONTRACTS);
+  assert.equal(r.status, 201, JSON.stringify(r.body));
+  const detail = await get(`/api/cnt/ipc/${ipc.id}?projectId=${PROJECT}`, CONTRACTS);
+  assert.equal(Number(detail.body.data.header.SubtotalAmount), 60_000_000);
+  assert.equal(Number(detail.body.data.header.TotalDeductions), 6_000_000);
+  assert.equal(Number(detail.body.data.header.VatAmount), 5_400_000);
+  assert.equal(Number(detail.body.data.header.NetPayable), 59_400_000);
 });
 
 test("شاخص پیش‌نویس محاسبهٔ تعدیل را مسدود می‌کند", async () => {
@@ -279,11 +295,50 @@ test("ثبت مابه‌التفاوت مصالح مبلغ را حساب می‌
 
   const r = await post(`/api/cnt/material-diff?projectId=${PROJECT}`, {
     contractId: c.Id, ipcId: ipc.id, materialCode: "STL-A3", materialNameFa: "میلگرد آجدار",
-    quantity: 120, baseRate: 300_000, periodRate: 380_000, unit: "کیلوگرم",
+    quantity: 120, baseRate: 300_000, periodRate: 380_000, unit: "کیلوگرم", evidenceDocNo: "INV-STEEL-01",
   }, CONTRACTS);
   assert.equal(r.status, 201, JSON.stringify(r.body));
   assert.equal(r.body.data.diffAmount, 9_600_000);
   assert.equal(r.body.data.direction, "up");
+  const detail = await get(`/api/cnt/ipc/${ipc.id}?projectId=${PROJECT}`, CONTRACTS);
+  assert.equal(Number(detail.body.data.header.MaterialDiffAmount), 9_600_000);
+  assert.equal(Number(detail.body.data.header.SubtotalAmount), 14_600_000);
+  assert.equal(Number(detail.body.data.header.NetPayable), 14_600_000);
+  const ledger = await get(`/api/cnt/material-diff?projectId=${PROJECT}&contractId=${c.Id}&ipcId=${ipc.id}`, CONTRACTS);
+  assert.equal(ledger.status, 200);
+  assert.equal(ledger.body.data.count, 1);
+  assert.equal(ledger.body.data.items[0].EvidenceDocNo, "INV-STEEL-01");
+  assert.equal(Number(ledger.body.data.items[0].DiffAmount), 9_600_000);
+});
+
+test("مابه‌التفاوت، کسورات درصدی و ارزش افزودهٔ صورت‌وضعیت را بازمحاسبه می‌کند", async () => {
+  const c = await makeContract();
+  const item = await makeItem(c.Id, "03");
+  const ipc = await makeIpc(c.Id, [{ boqItemId: item.Id, cumQty: 100 }], { retainagePct: 10, vatPct: 9 });
+  const r = await post(`/api/cnt/material-diff?projectId=${PROJECT}`, {
+    contractId: c.Id, ipcId: ipc.id, materialCode: "STEEL-ADJ", materialNameFa: "میلگرد",
+    quantity: 120, baseRate: 300_000, periodRate: 380_000,
+  }, CONTRACTS);
+  assert.equal(r.status, 201, JSON.stringify(r.body));
+  const detail = await get(`/api/cnt/ipc/${ipc.id}?projectId=${PROJECT}`, CONTRACTS);
+  assert.equal(Number(detail.body.data.header.SubtotalAmount), 59_600_000);
+  assert.equal(Number(detail.body.data.header.TotalDeductions), 5_960_000);
+  assert.equal(Number(detail.body.data.header.VatAmount), 5_364_000);
+  assert.equal(Number(detail.body.data.header.NetPayable), 59_004_000);
+  assert.equal(Number(detail.body.data.deductions.find(d => d.DeductionType === "retainage").Amount), 5_960_000);
+});
+
+test("صورت‌وضعیت به پیمان دیگری قابل نسبت دادن نیست", async () => {
+  const c = await makeContract();
+  const other = await makeContract();
+  const item = await makeItem(c.Id, "03");
+  const ipc = await makeIpc(c.Id, [{ boqItemId: item.Id, cumQty: 10 }]);
+  const r = await post(`/api/cnt/material-diff?projectId=${PROJECT}`, {
+    contractId: other.Id, ipcId: ipc.id, materialCode: "CEM-X", materialNameFa: "سیمان",
+    quantity: 1, baseRate: 100, periodRate: 110,
+  }, CONTRACTS);
+  assert.equal(r.status, 409);
+  assert.equal(r.body.error.code, "E-CNT-CONTRACT-MISMATCH");
 });
 
 test("همان قلم مصالح دو بار در یک صورت‌وضعیت ثبت نمی‌شود", async () => {

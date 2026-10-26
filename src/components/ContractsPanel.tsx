@@ -5,6 +5,7 @@ import { useAuth } from "../context/AuthContext";
 import { useCurrentProjectId, useSystem } from "../context/SystemContext";
 import { logAudit } from "../services/auditLogger";
 import CntIpcFilesPanel from "./CntIpcFilesPanel";
+import CntAdjustmentPanel from "./CntAdjustmentPanel";
 import type { Lang } from "../data/framework";
 
 /* ═══════════════ پنل پیمان و فهرست بها (cnt-v1، دامنهٔ d14) ═══════════════
@@ -3092,12 +3093,13 @@ export default function ContractsPanel({ lang, activeSubId, navigationRequest, s
     "d14-p1-s1": "master", "d14-p1-s2": "boq", "d14-p3-s1": "variation",
     "d14-p6-s1": "guarantees", "d14-p5-s2": "advance", "d14-p7-s1": "kpi",
     "d14-p2-s1": "measurement", "d14-p2-s2": "ipc", "d14-p5-s1": "ipc",
+    "d14-p4-s1": "adjustment", "d14-p4-s2": "adjustment",
     "d14-p6-s2": "subipc", "d14-p7-s2": "finance",
     "d14-p7-progress": "progress", "d14-p7-reports": "reports",
   } as Record<string, string>)[activeSubId ?? ""] ?? "master";
   const show = (name: string) => !sectioned || section === name;
   const sectionTitle = ({ master: "شناسنامه و الحاقیه‌ها", boq: "فهرست بها و مراحل مقطوع", variation: "تغییر مقادیر و کار جدید",
-    guarantees: "ضمانت‌نامه و پایش انقضا", advance: "پیش‌پرداخت و سپرده", kpi: "شاخص‌ها و هشدارهای پیمان", measurement: "برگهٔ ریزمتره", ipc: "صورت‌وضعیت پیمانکار اصلی",
+    guarantees: "ضمانت‌نامه و پایش انقضا", advance: "پیش‌پرداخت و سپرده", kpi: "شاخص‌ها و هشدارهای پیمان", measurement: "برگهٔ ریزمتره", ipc: "صورت‌وضعیت پیمانکار اصلی", adjustment: activeSubId === "d14-p4-s2" ? "مابه‌التفاوت مصالح" : "تعدیل بر پایه شاخص",
     subipc: "صورت‌وضعیت پیمانکار جزء", finance: "انطباق با دفتر مالی", progress: "پیشرفت پیمان", reports: "گزارش‌های پیمان" } as Record<string, string>)[section];
   const [basisFilter, setBasisFilter] = useState<BasisFilter>("all");
   const [loading, setLoading] = useState(true);
@@ -3163,7 +3165,7 @@ export default function ContractsPanel({ lang, activeSubId, navigationRequest, s
           {!contracts.length && <option value="">—</option>}
           {contracts.map(c => <option key={c.id} value={c.id}>{c.code} — {c.titleFa}</option>)}
         </select>
-        <span className="text-[11px] font-semibold tx1">{rtl ? sectionTitle : ({ master: "Contract master & amendments", boq: "BOQ & milestones", variation: "Quantity changes & extra work", guarantees: "Guarantees & expiry", advance: "Advance & retention", kpi: "Contract KPIs & alerts", measurement: "Measurement sheet", ipc: "Main IPC & workflow", subipc: "Subcontractor IPC", finance: "Financial reconciliation", progress: "Contract progress", reports: "Contract reports" } as Record<string, string>)[section]}</span>
+        <span className="text-[11px] font-semibold tx1">{rtl ? sectionTitle : ({ master: "Contract master & amendments", boq: "BOQ & milestones", variation: "Quantity changes & extra work", guarantees: "Guarantees & expiry", advance: "Advance & retention", kpi: "Contract KPIs & alerts", measurement: "Measurement sheet", ipc: "Main IPC & workflow", adjustment: activeSubId === "d14-p4-s2" ? "Material price differential" : "Index-based price adjustment", subipc: "Subcontractor IPC", finance: "Financial reconciliation", progress: "Contract progress", reports: "Contract reports" } as Record<string, string>)[section]}</span>
       </div>}
       <div key={sectioned ? `${selectedId}:${section}` : undefined} data-contract-content className={sectioned ? "thin-scroll min-h-0 flex-1 space-y-3 overflow-y-auto" : "space-y-3"}>
       {sectioned && !selectedId && section !== "master" && <p role="status" className="text-[10px] tx3">{rtl ? "ابتدا یک پیمان ثبت یا انتخاب کنید." : "Register or select a contract first."}</p>}
@@ -3610,6 +3612,14 @@ export default function ContractsPanel({ lang, activeSubId, navigationRequest, s
           onDone={() => { void refreshAll(); }}
         />
       )}
+
+      {show("adjustment") && selectedId && (
+        <div data-contract-section="adjustment">
+          <CntAdjustmentPanel projectId={projectId} contractId={selectedId} userId={userId} lang={lang} mode={activeSubId === "d14-p4-s2" ? "material" : "index"} />
+        </div>
+      )}
+
+      {show("adjustment") && !selectedId && <p role="status" className="text-[10px] tx3">{rtl ? "برای تعدیل، ابتدا یک پیمان ثبت یا انتخاب کنید." : "Register or select a contract before managing adjustments."}</p>}
 
       {show("subipc") && selectedId && (
         <SubIpcSection
