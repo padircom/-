@@ -49,12 +49,12 @@ const EMPTY = '—';
 const faNum = (v: unknown) => (v === null || v === undefined || v === '' ? EMPTY : String(v));
 const faDate = (iso?: string | null) => (iso ? String(iso).slice(0, 10) : EMPTY);
 
-export default function ContractRiskWorkspace({ lang, projectId, initialContractId, onOpenContract }: { lang: Lang; projectId: string; initialContractId?: string; onOpenContract?: (contractId: string) => void }) {
+export default function ContractRiskWorkspace({ lang, projectId }: { lang: Lang; projectId: string }) {
   const { user } = useAuth();
-  return <Live key={`${projectId}:${user?.id ?? ''}`} lang={lang} projectId={projectId} userId={user?.id ?? null} initialContractId={initialContractId} onOpenContract={onOpenContract} />;
+  return <Live key={`${projectId}:${user?.id ?? ''}`} lang={lang} projectId={projectId} userId={user?.id ?? null} />;
 }
 
-function Live({ lang, projectId, userId, initialContractId, onOpenContract }: { lang: Lang; projectId: string; userId: string | null; initialContractId?: string; onOpenContract?: (contractId: string) => void }) {
+function Live({ lang, projectId, userId }: { lang: Lang; projectId: string; userId: string | null }) {
   const fa = lang === 'fa';
   const [section, setSection] = useState<Section>('map');
   const [ws, setWs] = useState<Workspace | null>(null);
@@ -78,11 +78,6 @@ function Live({ lang, projectId, userId, initialContractId, onOpenContract }: { 
   const [impForm, setImpForm] = useState<Row>({});
   const [actForm, setActForm] = useState<Row>({ Strategy: 'mitigate' });
   const [ruleForm, setRuleForm] = useState<Row>({ Version: '1.0' });
-  const contractOptions = [...(ws?.contracts ?? [])];
-  const currentContractCode = String(riskForm.ContractCode ?? '').trim();
-  if (currentContractCode && !contractOptions.some((c) => String(c.Code ?? '') === currentContractCode)) {
-    contractOptions.unshift({ Code: currentContractCode, TitleFa: 'کد ثبت‌شده؛ تطبیق پیمان بررسی شود' });
-  }
 
   async function load() {
     const seq = ++generation.current;
@@ -93,13 +88,6 @@ function Live({ lang, projectId, userId, initialContractId, onOpenContract }: { 
     if (result.ok) { setWs(result.data); setError(''); } else { setWs(null); setError(result.message); }
   }
   useEffect(() => { mounted.current = true; void load(); return () => { mounted.current = false; generation.current++; }; }, [projectId, userId]);
-  useEffect(() => {
-    if (!initialContractId || !ws) return;
-    const linked = ws.contracts.find((c) => String(c.Id) === initialContractId);
-    if (!linked?.Code) return;
-    setRiskForm((current) => current.ContractCode ? current : { ...current, ContractCode: linked.Code });
-    setAnalyzeContract((current) => current || String(linked.Code));
-  }, [initialContractId, ws]);
 
   async function mutate(path: string, method: string, body?: unknown, okMsg?: string) {
     if (busy) return;
@@ -249,10 +237,7 @@ function Live({ lang, projectId, userId, initialContractId, onOpenContract }: { 
           <div className="glass rounded-2xl p-3">
             <h4 className="mb-2 text-[12px] font-medium tx1">قراردادهای پروژه (از شناسنامهٔ پیمان — بازنویسی نمی‌شوند)</h4>
             {ws.contracts.length === 0 ? <p className="text-[11px] tx3">قراردادی برای این پروژه ثبت نشده است.</p> : ws.contracts.map((c) => (
-              <div key={c.Id} className="glass-row mb-1 flex flex-wrap items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-[11px] tx2">
-                <span>{c.Code} · {c.TitleFa ?? c.NameFa ?? EMPTY} · کارفرما: {faNum(c.ClientNameFa ?? c.EmployerFa)} · پیمانکار: {faNum(c.ContractorNameFa)} · مبلغ: {faNum(c.Amount)} {faNum(c.Currency)}</span>
-                {onOpenContract && <button type="button" className={ghostCls} onClick={() => onOpenContract(String(c.Id))}>{fa ? 'بازکردن شناسنامه پیمان' : 'Open contract register'}</button>}
-              </div>
+              <div key={c.Id} className="glass-row mb-1 rounded-lg px-2 py-1.5 text-[11px] tx2">{c.Code} · {c.TitleFa ?? c.NameFa ?? EMPTY} · کارفرما: {faNum(c.ClientNameFa ?? c.EmployerFa)} · پیمانکار: {faNum(c.ContractorNameFa)} · مبلغ: {faNum(c.Amount)} {faNum(c.Currency)}</div>
             ))}
             {ws.amendments.length > 0 && <>
               <h4 className="mb-2 mt-3 text-[12px] font-medium tx1">الحاقیه‌ها و اصلاحیه‌ها</h4>
@@ -281,7 +266,7 @@ function Live({ lang, projectId, userId, initialContractId, onOpenContract }: { 
             <h4 className="mb-1 text-[12px] font-medium tx1">تحلیل بندهای قرارداد (ContractClauseAnalysisService)</h4>
             <p className="mb-2 text-[10px] font-extralight tx3">قاعده‌محور و صادقانه؛ بدون LLM متصل. سند اسکن‌شده یا متن ناقص، یافتهٔ قطعی تولید نمی‌کند. هر یافته تا بررسی کارشناس «پیشنهاد» است.</p>
             <div className="mb-2 grid gap-2 md:grid-cols-3">
-              <div><label className={labelCls}>پیمان مرتبط</label><select className={inputCls} value={analyzeContract} onChange={(e) => setAnalyzeContract(e.target.value)}><option value="">بدون پیوند به پیمان</option>{(ws?.contracts ?? []).map((c) => <option key={c.Id} value={c.Code}>{c.Code} · {c.TitleFa ?? c.NameFa ?? 'پیمان'}</option>)}</select></div>
+              <div><label className={labelCls}>کد قرارداد</label><input className={inputCls} value={analyzeContract} onChange={(e) => setAnalyzeContract(e.target.value)} placeholder="مثلاً CNT-01" /></div>
             </div>
             <textarea className={inputCls} rows={7} placeholder="متن استخراج‌شدهٔ قرارداد را اینجا بچسبانید (از EDMS)…" value={analyzeText} onChange={(e) => setAnalyzeText(e.target.value)} />
             <button type="button" className={`${btnCls} mt-2`} disabled={busy} onClick={async () => { setBusy(true); const r = await jsonRequest<Row>(base + '/analyze', userId, 'POST', { Text: analyzeText, ContractCode: analyzeContract || null, SourceLabel: 'متن قرارداد' }); setBusy(false); if (r.ok) { setAnalyzeResult(r.data.analysis); setNotice(r.data.analysis.status === 'analyzed' ? `${r.data.findings.length} یافته ذخیره شد` : ''); await load(); } else setError(r.message); }}>تحلیل متن</button>
@@ -314,7 +299,7 @@ function Live({ lang, projectId, userId, initialContractId, onOpenContract }: { 
             <div className="grid gap-2 md:grid-cols-3">
               <div className="md:col-span-2"><label className={labelCls}>عنوان ریسک *</label><input className={inputCls} value={riskForm.TitleFa ?? ''} onChange={(e) => setRiskForm({ ...riskForm, TitleFa: e.target.value })} /></div>
               <div><label className={labelCls}>دسته</label><select className={inputCls} value={riskForm.Category} onChange={(e) => setRiskForm({ ...riskForm, Category: e.target.value })}>{ws.categories.map((c) => <option key={c.code} value={c.code}>{c.labelFa}</option>)}</select></div>
-              <div><label className={labelCls}>پیمان مرتبط</label><select data-testid="contract-risk-contract-select" className={inputCls} value={riskForm.ContractCode ?? ''} onChange={(e) => setRiskForm({ ...riskForm, ContractCode: e.target.value || null })}><option value="">بدون پیوند به پیمان</option>{contractOptions.map((c) => <option key={c.Code} value={c.Code}>{c.Code} · {c.TitleFa ?? c.NameFa ?? 'پیمان'}</option>)}</select></div>
+              <div><label className={labelCls}>کد قرارداد</label><input className={inputCls} value={riskForm.ContractCode ?? ''} onChange={(e) => setRiskForm({ ...riskForm, ContractCode: e.target.value })} /></div>
               <div><label className={labelCls}>بند منشأ</label><input className={inputCls} value={riskForm.ClauseRef ?? ''} onChange={(e) => setRiskForm({ ...riskForm, ClauseRef: e.target.value })} /></div>
               <div><label className={labelCls}>مالک ریسک</label><input className={inputCls} value={riskForm.Owner ?? ''} onChange={(e) => setRiskForm({ ...riskForm, Owner: e.target.value })} /></div>
               {[['Probability', 'احتمال (۱–۵)'], ['ImpactTime', 'اثر زمانی'], ['ImpactFinancial', 'اثر مالی'], ['ImpactLegal', 'اثر حقوقی'], ['ImpactOperational', 'اثر عملیاتی'], ['ImpactQuality', 'اثر کیفی']].map(([k, t]) => (
@@ -351,10 +336,9 @@ function Live({ lang, projectId, userId, initialContractId, onOpenContract }: { 
                 {(() => { const rs = rationaleOf(latestAssessment(r.Code)); return rs.length ? (
                   <ul className="mt-1 space-y-0.5 text-[10px] tx3">{rs.map((x, i) => <li key={i}>· {x}</li>)}</ul>
                 ) : null; })()}
-                <div className="mt-1 flex flex-wrap gap-1.5">
+                <div className="mt-1 flex gap-1.5">
                   <button type="button" className={ghostCls} onClick={() => { setEditingRiskId(r.Id); setRiskForm({ ...r }); }}>ویرایش</button>
                   <button type="button" className={ghostCls} disabled={busy} onClick={() => void mutate(`/risks/${r.Id}/reassess`, 'POST', {}, 'ارزیابی مجدد ثبت شد')}>ارزیابی مجدد</button>
-                  {onOpenContract && r.ContractCode && ws.contracts.find((c) => c.Code === r.ContractCode) && <button type="button" className={ghostCls} onClick={() => onOpenContract(String(ws.contracts.find((c) => c.Code === r.ContractCode)?.Id))}>پیمان مرتبط: {r.ContractCode} ↗</button>}
                 </div>
               </div>
             ))}
