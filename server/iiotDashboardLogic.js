@@ -115,7 +115,12 @@ var PERMISSION_CATALOG = [
    * ولی نرخ را کسی تغییر می‌دهد که به پیمان دسترسی دارد — وگرنه هر سرکارگر
    * می‌توانست مبلغ صورت‌وضعیت را بالا ببرد. دور زدن دروازهٔ کیفی مجوز
    * جداگانه است تا در ممیزی مشخص باشد چه کسی آن را باز کرده. */
+  P("cnt.rating.view", "d14", "\u0645\u0634\u0627\u0647\u062F\u0647 \u0627\u0631\u0632\u06CC\u0627\u0628\u06CC \u0648 \u0628\u0647\u0628\u0648\u062F \u0637\u0631\u0641 \u0642\u0631\u0627\u0631\u062F\u0627\u062F", "View party evaluations", "confidential"),
+  P("cnt.rating.edit", "d14", "\u062B\u0628\u062A \u0627\u0631\u0632\u06CC\u0627\u0628\u06CC \u0648 \u0627\u0642\u062F\u0627\u0645 \u0628\u0647\u0628\u0648\u062F", "Record evaluations and improvements", "restricted", true),
+  P("cnt.rating.approve", "d14", "\u062A\u0623\u06CC\u06CC\u062F \u0627\u0631\u0632\u06CC\u0627\u0628\u06CC \u0648 \u0627\u062B\u0631\u0628\u062E\u0634\u06CC \u0628\u0647\u0628\u0648\u062F", "Approve evaluations and verify improvements", "restricted", true),
   P("cnt.contract.view", "d14", "\u0645\u0634\u0627\u0647\u062F\u0647 \u0634\u0646\u0627\u0633\u0646\u0627\u0645\u0647 \u067E\u06CC\u0645\u0627\u0646", "View contract master", "confidential"),
+  P("cnt.variation.approve", "d14", "\u062A\u0635\u0648\u06CC\u0628 \u062A\u063A\u06CC\u06CC\u0631 \u0645\u0642\u062F\u0627\u0631 \u0648 \u0646\u0631\u062E \u06A9\u0627\u0631 \u062C\u062F\u06CC\u062F", "Approve quantity changes and extra work", "restricted", true),
+  P("cnt.amendment.approve", "d14", "\u062A\u0635\u0645\u06CC\u0645 \u0646\u0647\u0627\u06CC\u06CC \u0627\u0644\u062D\u0627\u0642\u06CC\u0647 \u067E\u06CC\u0645\u0627\u0646", "Approve contract amendments", "restricted", true),
   P("cnt.contract.edit", "d14", "\u062B\u0628\u062A \u0648 \u0648\u06CC\u0631\u0627\u06CC\u0634 \u067E\u06CC\u0645\u0627\u0646 \u0648 \u0627\u0644\u062D\u0627\u0642\u06CC\u0647", "Edit contract and amendments", "restricted", true),
   P("cnt.risk.view", "d14", "\u0645\u0634\u0627\u0647\u062F\u0647\u0654 \u0631\u06CC\u0633\u06A9\u200C\u0647\u0627\u06CC \u0642\u0631\u0627\u0631\u062F\u0627\u062F\u06CC \u0648 \u0628\u0647\u0628\u0648\u062F \u0642\u0631\u0627\u0631\u062F\u0627\u062F", "View contract risks & improvement", "confidential"),
   P("cnt.risk.edit", "d14", "\u062B\u0628\u062A \u0648 \u0648\u06CC\u0631\u0627\u06CC\u0634 \u0631\u06CC\u0633\u06A9\u060C \u062A\u0639\u0647\u062F\u060C \u0627\u0642\u062F\u0627\u0645 \u0648 \u067E\u06CC\u0634\u0646\u0647\u0627\u062F \u0627\u0635\u0644\u0627\u062D \u0642\u0631\u0627\u0631\u062F\u0627\u062F", "Edit contract risks, obligations, actions & improvements", "restricted", true),
@@ -286,8 +291,11 @@ var PERMISSION_CATALOG = [
   P("fin.procure.edit", "d5", "\u062B\u0628\u062A \u062F\u0631\u062E\u0648\u0627\u0633\u062A/\u0633\u0641\u0627\u0631\u0634 \u062E\u0631\u06CC\u062F \u0648 \u0645\u0648\u062C\u0648\u062F\u06CC", "Edit PR/PO & stock", "confidential", true),
   P("fin.procure.approve", "d5", "\u062A\u0623\u06CC\u06CC\u062F \u062F\u0631\u062E\u0648\u0627\u0633\u062A \u062E\u0631\u06CC\u062F", "Approve purchase requisition", "restricted", true),
   P("fin.reserve.draw", "d5", "\u0622\u0632\u0627\u062F\u0633\u0627\u0632\u06CC \u0630\u062E\u06CC\u0631\u0647\u0654 \u0627\u062D\u062A\u06CC\u0627\u0637\u06CC", "Release contingency reserve", "restricted", true),
-  P("fin.ipc.prepare", "d5", "\u062A\u0647\u06CC\u0647 \u0635\u0648\u0631\u062A\u200C\u0648\u0636\u0639\u06CC\u062A", "Prepare payment certificate", "confidential", true),
-  P("fin.ipc.approve", "d5", "\u062A\u0623\u06CC\u06CC\u062F \u0635\u0648\u0631\u062A\u200C\u0648\u0636\u0639\u06CC\u062A", "Approve payment certificate", "restricted", true),
+  /* بازنشسته (ADR-CNT-IPC-UNIFY فاز ۳ / بند ۶): خانوادهٔ d14 (`cnt.ipc.*`)
+   * جانشین است. تعریف برای سازگاری تاریخی (حسابرسی/تفویض‌های قدیمی) باقی
+   * می‌ماند ولی دیگر به هیچ نقشی اعطا نمی‌شود و در SOD شرکت ندارد. */
+  P("fin.ipc.prepare", "d5", "\u062A\u0647\u06CC\u0647 \u0635\u0648\u0631\u062A\u200C\u0648\u0636\u0639\u06CC\u062A (\u0645\u0646\u0633\u0648\u062E \u2014 \u0628\u0647\u200C\u062C\u0627\u06CC \u0622\u0646 cnt.ipc.prepare)", "Prepare payment certificate (deprecated \u2014 use cnt.ipc.prepare)", "confidential", true),
+  P("fin.ipc.approve", "d5", "\u062A\u0623\u06CC\u06CC\u062F \u0635\u0648\u0631\u062A\u200C\u0648\u0636\u0639\u06CC\u062A (\u0645\u0646\u0633\u0648\u062E \u2014 \u0628\u0647\u200C\u062C\u0627\u06CC \u0622\u0646 cnt.ipc.approve)", "Approve payment certificate (deprecated \u2014 use cnt.ipc.approve)", "restricted", true),
   P("fin.rate.view", "d5", "\u0645\u0634\u0627\u0647\u062F\u0647 \u0646\u0631\u062E \u0648 \u0642\u06CC\u0645\u062A \u0648\u0627\u062D\u062F", "View unit rates", "restricted"),
   P("fin.invoice.issue", "d5", "\u0635\u062F\u0648\u0631 \u0641\u0627\u06A9\u062A\u0648\u0631", "Issue invoice", "restricted", true),
   /* ── d5 خرید و تدارکات — SCM (P5) ── */
@@ -921,12 +929,13 @@ var ROLE_CATALOG = [
     inherits: ["viewer"],
     clearance: "confidential",
     party: "contractor",
+    /* fin.ipc.prepare بازنشسته شد — همتای زندهٔ آن cnt.ipc.prepare است که از قبل اینجا هست. */
     grants: [
       "eqm.workspace.view",
+      "cnt.rating.view",
       "cnt.contract.view",
       "cnt.ipc.prepare",
       "fin.cost.view",
-      "fin.ipc.prepare",
       "fin.invoice.issue",
       "fin.rate.view",
       "pex.evm.view",
@@ -957,6 +966,7 @@ var ROLE_CATALOG = [
       "scm.mr.manage",
       "scm.mrr.view",
       "scm.mrr.post",
+      "cnt.rating.view",
       "cnt.contract.view",
       "cnt.ipctemplate.edit",
       "cnt.ipc.prepare",
@@ -1131,8 +1141,10 @@ var ROLE_CATALOG = [
       "fin.rate.view",
       "ckm.letter.view",
       "ckm.letter.draft",
+      "cnt.rating.view",
       "cnt.contract.view",
       "cnt.contract.edit",
+      "cnt.rating.edit",
       "cnt.boq.edit",
       "cnt.ipc.prepare",
       /* PMO-CONTRACT-RISK-ENGINE-V1.0: ریسک قراردادی را مدیر پیمان ثبت و
@@ -1187,6 +1199,7 @@ var ROLE_CATALOG = [
       "hrm.sub.view",
       "hrm.sub.manage",
       "hrm.subipc.prepare",
+      "cnt.rating.view",
       "cnt.contract.view",
       "cnt.ipctemplate.edit",
       "cnt.ipc.prepare",
@@ -1203,6 +1216,9 @@ var ROLE_CATALOG = [
     clearance: "restricted",
     party: "contractor",
     grants: [
+      "cnt.rating.approve",
+      "cnt.variation.approve",
+      "cnt.amendment.approve",
       "spm.plan.view",
       "oex.assessment.view",
       "eqm.workspace.view",
@@ -1252,9 +1268,9 @@ var ROLE_CATALOG = [
       "change.view",
       "change.approve",
       "change.implement",
+      /* fin.ipc.approve بازنشسته شد — همتای زندهٔ آن cnt.ipc.approve/cnt.ipc.override در ادامهٔ همین نقش هست. */
       "fin.cost.view",
       "fin.rate.view",
-      "fin.ipc.approve",
       "fin.procure.approve",
       "fin.reserve.draw",
       "qms.itp.view",
@@ -1349,6 +1365,7 @@ var ROLE_CATALOG = [
       /* مدیر پروژه متره ثبت می‌کند چون کلید دور زدن دروازهٔ کیفی دست
        * اوست و باید بتواند همان‌جا ثبت را تمام کند؛ ولی عمداً
        * `cnt.boq.edit` ندارد تا نرخ را نتواند تغییر دهد. */
+      "cnt.rating.view",
       "cnt.contract.view",
       "cnt.measurement.record",
       "cnt.ipc.override",
@@ -1362,6 +1379,7 @@ var ROLE_CATALOG = [
       "pmo.form.approve",
       "pmo.health.view",
       "pmo.health.record",
+      "cnt.rating.view",
       "cnt.contract.view",
       "cnt.ipc.approve",
       "gov.process.edit",
@@ -1561,6 +1579,7 @@ var ROLE_CATALOG = [
       "pmo.form.submit",
       "pmo.health.view",
       "pmo.health.record",
+      "cnt.rating.view",
       "cnt.contract.view",
       "gov.process.edit",
       /* P9: خروجی و همگام‌سازی سامانه‌های بیرونی کار PMO است. انتشار قالب
@@ -1610,6 +1629,7 @@ var ROLE_CATALOG = [
       "pmo.charter.approve",
       "pmo.health.view",
       "pmo.health.approve",
+      "cnt.rating.view",
       "cnt.contract.view",
       "cnt.ipc.approve",
       "report.custom.publish",
@@ -1624,13 +1644,14 @@ var ROLE_CATALOG = [
     inherits: ["viewer"],
     clearance: "confidential",
     party: "consultant",
+    /* fin.ipc.prepare بازنشسته شد — نقش مشاور همیشه «بررسی» بوده (cnt.ipc.review)، نه «تهیه». */
     grants: [
       "doc.document.approve",
       "plan.progress.approve",
       "qms.itp.view",
       "qms.inspection.record",
       "qms.ncr.raise",
-      "fin.ipc.prepare",
+      "cnt.rating.view",
       "cnt.contract.view",
       "cnt.ipc.review",
       "cnt.guarantee.view",
@@ -1657,9 +1678,13 @@ var ROLE_CATALOG = [
     // جداسازی دادهٔ پیمانکار از کارفرما محور جداگانه‌ای است (party) نه سطح دسترسی.
     clearance: "restricted",
     party: "client",
+    /* fin.ipc.approve بازنشسته شد — همتای زندهٔ آن cnt.ipc.approve در همین فهرست هست. */
     grants: [
+      "cnt.rating.approve",
+      "cnt.variation.approve",
+      "cnt.amendment.approve",
       "fin.cost.view",
-      "fin.ipc.approve",
+      "cnt.rating.view",
       "cnt.contract.view",
       "cnt.ipc.approve",
       /* آزادسازی و ضبط وثیقه تصمیم کارفرماست: پول از جیب او رفته و

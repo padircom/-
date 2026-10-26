@@ -94,7 +94,10 @@ test("هیچ نقشی در کاتالوگ تخلف SOD ندارد", () => {
 });
 
 test("قواعد SOD پیشین دست‌نخورده مانده‌اند", () => {
-  for (const id of ["SOD-01", "SOD-02", "SOD-03", "SOD-04", "SOD-05", "SOD-06", "SOD-07"]) {
+  /* SOD-01 عمداً حذف شد (ADR-CNT-IPC-UNIFY فاز ۳ / بند ۶): دو طرفش
+   * (fin.ipc.prepare/approve) بازنشسته و دیگر به هیچ نقشی اعطا نمی‌شوند؛
+   * SOD-11 (cnt.ipc.prepare/approve) جانشین زنده است و هنوز برقرار است. */
+  for (const id of ["SOD-02", "SOD-03", "SOD-04", "SOD-05", "SOD-06", "SOD-07", "SOD-11"]) {
     assert.ok(SOD_RULES.some((r) => r.id === id), `${id} حذف شده`);
   }
 });

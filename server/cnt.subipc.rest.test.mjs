@@ -540,20 +540,23 @@ test("ادعای بیش از مقدار اصلی، تأیید را می‌بند
 
 /* ══════════════ ۸) نشت و دور زدن ══════════════ */
 
-test("پروژهٔ دیگر به ردیف دسترسی ندارد — ۴۰۴ نه ۴۰۳", async () => {
+test("پروژهٔ دیگر به ردیف دسترسی ندارد — ۴۰۳ دامنهٔ پروژه", async () => {
+  /* ADR-CNT-IPC-UNIFY فاز ۳ / بند ۷: گارد پروژه روی همهٔ مسیرهای پیمانکار
+   * جزء نشست. کاربر CONTRACTS اصلاً مجوزی روی p-other ندارد، پس گاردِ
+   * دامنه پیش از هر نگاه به رکورد ۴۰۳ می‌دهد — همسان با /api/cnt/ipc/*. */
   const c = await makeContract();
   const s = await makeSub(c);
   for (const path of [
     `/api/cnt/subipc/${s.Id}?projectId=p-other`,
   ]) {
-    assert.equal((await get(path, CONTRACTS)).status, 404, path);
+    assert.equal((await get(path, CONTRACTS)).status, 403, path);
   }
   for (const [path, body] of [
     [`/api/cnt/subipc/${s.Id}/line?projectId=p-other`, { descriptionFa: "نشت" }],
     [`/api/cnt/subipc/${s.Id}/deduction?projectId=p-other`, { sourceModule: "other", descriptionFa: "شرح کافی", amount: 1 }],
     [`/api/cnt/subipc/${s.Id}/transition?projectId=p-other`, { to: "submitted" }],
   ]) {
-    assert.equal((await post(path, body, CONTRACTS)).status, 404, path);
+    assert.equal((await post(path, body, CONTRACTS)).status, 403, path);
   }
 });
 

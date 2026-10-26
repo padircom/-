@@ -1,5 +1,35 @@
 # انتقال به چت جدید — Arena Platform
 تاریخ به‌روزرسانی: 2026-10-26 — **گزارش مرجع جاری: `docs/GAP_ROADMAP.md`؛ بخش‌های پایین تاریخچه‌اند.**
+## نشست ۲۰۲۶-۱۰-۲۶ (ادامه) — CNT-IPC فاز ۳ بند ۶+۷: بازنشستگی `fin.ipc.*` + گسترش گارد پروژه
+- ادامهٔ همان شاخهٔ کاری، پس از مرج PR #46 (بندهای ۱ تا ۵ فاز ۳) در `main`.
+- **بند ۶:** تعریف‌های `fin.ipc.prepare`/`fin.ipc.approve` در کاتالوگ ماندند (یک تست
+  رگرسیون `eng.rbac.test.mjs` وجودشان را می‌خواهد) ولی از هر چهار نقشی که داشتند
+  (`cost_controller`، `project_manager`، `consultant`، `client`) حذف شدند؛ همتای
+  `cnt.ipc.*` از قبل روی همان نقش‌ها بود. SOD-01 (جفت `fin.ipc.*`) حذف شد؛ SOD-11
+  (جفت `cnt.ipc.*`) جانشین زنده است. رجیستری تازهٔ `DEPRECATED_PERMISSIONS` در
+  `src/services/accessControl.ts` این دو مجوز را از قاعدهٔ «هیچ مجوزی یتیم نماند»
+  (`orphanPermissions`) استثنا می‌کند.
+- **بند ۷:** `cntProjectAccess` روی ۲۶ مسیر قدیمی CNT نصب شد (پیمان/فهرست‌بها/
+  ریزمتره/تعدیل، وثیقه، پیش‌پرداخت، پیمانکار جزء، پل مالی). دو مسیر با مجوز پویا
+  (`/api/cnt/ipc/:id/action`, `/api/cnt/subipc/:id/transition`) میان‌افزار ثابت
+  نمی‌خورند؛ دومی با `projectId` واقعی (نه `undefined`) اصلاح شد — رخنهٔ دامنهٔ
+  واقعی بود. فلسفهٔ خطا: مسیرهایی که `projectId` را پیش از جست‌وجوی رکورد از
+  کلاینت می‌گیرند حالا ۴۰۳ دامنه می‌دهند؛ مسیرهای مبتنی بر شناسهٔ رکورد بدون
+  `projectId` در بدنه همچنان با فیلتر رکورد و ۴۰۴ کار می‌کنند. تست‌های
+  `cnt.guarantee.rest`, `cnt.subipc.rest`, `cnt.finbridge.rest` از `p1`/فرض نبودِ
+  گارد به `c1-p1` مهاجرت و دو سناریوی «کاربر اصلاً روی این پروژه نقشی ندارد» از
+  ۴۰۴ به ۴۰۳ به‌روز شدند.
+- جزئیات کامل در `docs/CNT_IPC_Unification_ADR.md` بخش «نتیجهٔ اجرای بندهای ۶ و ۷».
+- دروازه‌ها: `npx tsc --noEmit` ✅ · باندل `server/rbacLogic.js` (`build:rbac`) و
+  `server/iiotDashboardLogic.js` (`build:iiotdash`، چون از `accessControl.ts` از
+  راه `iiotApi.ts` عبور می‌کند) بازتولید شدند · تست هدفمند RBAC+CNT+IIoT-dashboard
+  (با `--test-concurrency=4` برای پایداری) سبز به‌جز ۴ شکست از پیش موجود و بی‌ربط
+  (شمارش کاتالوگ/قالب کد مجوز در `rbac.test.mjs`، شمارش جدول d14 در
+  `cnt.schema.test.mjs`) که پیش از این تغییرات هم روی `main` شکست می‌خوردند.
+- دودتست زنده روی `c1-p1`: `GET /api/cnt/guarantee` با پروژهٔ مجاز ۲۰۰، با پروژهٔ
+  غیرمجاز ۴۰۳؛ همین برای `GET /api/cnt/fin/reconcile`؛ `POST /api/cnt/subipc/:id/transition`
+  روی پروژهٔ غیرمجاز اکنون ۴۰۳ (پیش از اصلاح، بدون بررسی دامنه بود).
+
 ## نشست ۲۰۲۶-۱۰-۲۶ (CNT-IPC فاز ۱+۲) — امنیت مسیرهای صورت‌وضعیت اصلی + رابط آن در میز کار پیمان
 - شاخهٔ نشست: `arena/989be0e6-repo` · تصمیم معماری: `docs/CNT_IPC_Unification_ADR.md` (موتور BOQمحور هستهٔ واحد است؛ CNT-1 لایهٔ قالب می‌شود؛ فاز ۳ = یکپارچه‌سازی محاسبه/داده طبق همان سند).
 - **فاز ۱ (سرور):** `ipcRequiredActor` در `src/services/contracts.ts` (باندل `server/cntLogic.js` با `build:cnt` بازتولید شد)؛ مسیر `POST /api/cnt/ipc/:id/action` دیگر `actor` را از کلاینت نمی‌گیرد — نقش از وضعیت سند مشتق، مجوزش روی همان پروژه سنجیده و در `IPC_WorkflowStep.Actor` و پاسخ (`actor`) ثبت می‌شود. `cntProjectAccess` روی preview/create/list/detail/adjustment نشست. خواندن `CNT_RBAC_ENFORCE` در `cntEnforced()` یکی شد و مقدار ۰ در `NODE_ENV=production` سرور را متوقف می‌کند. تست‌های REST مصرف‌کنندهٔ IPC از پروژهٔ `p1` به `c1-p1` مهاجرت کردند (دامنهٔ واقعی کاربران RBAC)؛ بقیهٔ مسیرهای قدیمی CNT عمداً دست‌نخورده ماندند (فلسفهٔ ۴۰۴ آن‌ها در فاز ۳ تعیین تکلیف می‌شود).

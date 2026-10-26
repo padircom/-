@@ -15,7 +15,7 @@ import path from "node:path";
 
 const PORT = 4725;
 const BASE = `http://localhost:${PORT}`;
-const PROJECT = "p1";
+const PROJECT = "c1-p1"; /* دامنهٔ پروژهٔ کاربران آزمایشی RBAC؛ گارد پروژهٔ گسترش‌یافته آن را می‌سنجد (ADR-CNT-IPC-UNIFY فاز ۳ / بند ۷) */
 
 const CONTRACTS = "u-contracts";   /* ثبت و تمدید، ولی نه آزادسازی */
 const CLIENT = "u-client";         /* آزادسازی و ضبط */
