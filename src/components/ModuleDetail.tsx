@@ -1018,6 +1018,43 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
         lang={lang}
         onBack={onBack}
         hideTabs
+        headerIdentity={
+          <>
+            {cluster && (
+              <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl text-[20px]"
+                    style={{ background: `${cluster.color}1f`, border: `1px solid ${cluster.color}55` }}>
+                {cluster.icon}
+              </span>
+            )}
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
+                {cluster && (
+                  <h1 className="truncate text-[20px] font-semibold leading-tight" style={{ color: cluster.color }}>
+                    {t(cluster.title, lang)}
+                  </h1>
+                )}
+                <span className="text-[16px] font-light tx4">/</span>
+                {project && (
+                  <h2 className="truncate text-[19px] font-semibold leading-tight tx1">
+                    {t(project.name, lang)} <span dir="ltr" className="inline-block text-[10px] font-light tx3">({project.code})</span>
+                  </h2>
+                )}
+              </div>
+              {project && (
+                <p className="mt-1 truncate text-[10px] font-extralight tx3">
+                  {t(project.client, lang)} · {t(project.location, lang)}
+                </p>
+              )}
+            </div>
+            <div className="shrink-0 text-end">
+              <SystemBadge domainId={dom.id} lang={lang} className="mb-1 justify-end" />
+              <div className="text-[9px] font-extralight tx3">{t(dom.title, lang)}</div>
+              <div className="text-[11px] font-light tx1">
+                {rtl ? "مدیریت ایمنی و بهداشت" : "Health & Safety Management"}
+              </div>
+            </div>
+          </>
+        }
         initialTab={D16_TAB_BY_PROCESS[pid]}
         initialFieldTab={FIELD_HSE_TAB_BY_SUB[sid]}
         aside={
@@ -2210,9 +2247,12 @@ function perfDomainIcon(domainId: string, fallback: string, groupId?: string): s
 function perfDomainTitle(domainId: string, lang: Lang, fallback: string, groupId?: string): string {
   const pd = performanceDomainOf(domainId, groupId);
   if (!pd) return fallback;
+  const title: Bi = groupId === "pg3" && (domainId === "d16" || domainId === "d17")
+    ? { fa: "مدیریت ایمنی و بهداشت", en: "Health & Safety Management" }
+    : pd.title;
   return lang === "fa"
-    ? `حوزهٔ عملکردی: ${t(pd.title, lang)}`
-    : `Performance domain: ${t(pd.title, lang)}`;
+    ? `حوزهٔ عملکردی: ${t(title, lang)}`
+    : `Performance domain: ${t(title, lang)}`;
 }
 
 /** سایدبار فرعی ماژول: حوزهٔ عملکردی + ماژول‌های هم‌حوزه و فرآیندهایشان. */
