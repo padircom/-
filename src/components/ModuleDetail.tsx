@@ -2095,7 +2095,7 @@ function DomainNavGroups({
             {/* سرِ دستهٔ ماژول (فعال = رنگ ماژول) — ریتم سایدبار «برنامه‌ریزی و تولید» */}
             <div
               className="flex items-center gap-1.5 px-2 pb-0.5 pt-3 text-[9px] font-semibold tracking-wide"
-              style={{ color: isResourceSection || isCurrent ? m.accent : undefined }}
+              style={{ color: isHseSection ? "#DC2626" : isResourceSection || isCurrent ? m.accent : undefined }}
               role="presentation"
             >
               {!isAccordionSection && <span className="h-px flex-1" style={{ background: "var(--line-soft)" }} aria-hidden="true" />}
