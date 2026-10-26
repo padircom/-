@@ -36,7 +36,10 @@ function IPC(over = {}) {
 /* ───────────────────── ۱. شرط ارسال ───────────────────── */
 
 test("فقط صورت‌وضعیت تأییدشده قابل ارسال است", () => {
-  for (const state of ["draft", "contractor_submitted", "consultant_review", "consultant_approved", "employer_review", "rejected"]) {
+  /* consultant_review/employer_review در ADR-CNT-IPC-UNIFY فاز ۳ از
+   * IpcWorkflowState حذف شدند — حالت‌های مرده‌ای بودند که هیچ گذاری
+   * به/از آن‌ها در ماشین حالت واقعی وجود نداشت. */
+  for (const state of ["draft", "contractor_submitted", "consultant_approved", "rejected"]) {
     const p = ipcPostability({ ipc: IPC({ WorkflowState: state }), contract: CONTRACT, account: ACCOUNT });
     assert.equal(p.isPostable, false, `${state} نباید قابل ارسال باشد`);
     assert.equal(p.blockCode, "not_approved");

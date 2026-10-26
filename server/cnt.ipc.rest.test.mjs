@@ -68,6 +68,19 @@ async function get(p, userId) {
 
 const tag = () => `T${Date.now().toString(36).slice(-6)}${Math.floor(Math.random() * 900 + 100)}`;
 
+/** رکورد واقعی در جدول عمومی می‌سازد تا دروازهٔ کیفی صورت‌وضعیت همان را ببیند
+ * (الگوی server/cnt.forms.test.mjs). */
+async function seed(table, row) {
+  const res = await fetch(`${BASE}/api/data/${table}`, {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-user-id": "u-admin" },
+    body: JSON.stringify(row),
+  });
+  const j = await res.json();
+  assert.ok(res.status < 300, `ساخت ${table} نشد: ${JSON.stringify(j)}`);
+  return j.data ?? j;
+}
+
 async function makeContract(over = {}) {
   const r = await post(`/api/cnt/contracts?projectId=${PROJECT}`, {
     code: `C-${tag()}`,
@@ -397,6 +410,102 @@ test("فهرست صورت‌وضعیت‌ها اقدام‌های مجاز بع�
   assert.deepEqual(row.nextActions, ["submit"]);
   assert.equal(row.workflowStateFa, "پیش‌نویس");
   assert.equal(row.locked, false);
+});
+
+/* ───────── دروازهٔ کیفی سمت سرور (ADR-CNT-IPC-UNIFY فاز ۳ / بند ۱) ─────────
+ * qualityGateStatus دیگر از کلاینت پذیرفته نمی‌شود؛ از ریزمتره و تازه‌ترین
+ * وضعیت بازرسی/عدم‌انطباق مشتق می‌شود. */
+
+test("ادعای دروغین qualityGateStatus از کلاینت نادیده گرفته می‌شود", async () => {
+  const act = `ACT-${tag()}`;
+  await seed("InspectionRecord", {
+    ProjectId: PROJECT, Code: `IR-${tag()}`, ItpPointCode: "ITP-1",
+    ActivityId: act, InspectedAt: "2026-06-01", Outcome: "accepted", InspectedBy: "u-qc",
+  });
+  const c = await makeContract();
+  const item = await makeItem(c.Id, { unitRate: 1000 });
+  const ms = await post(`/api/cnt/measurement?projectId=${PROJECT}`, {
+    boqItemId: item.Id, sheetNo: 1, count: 1, length: 100, activityId: act,
+  }, SITE);
+  assert.equal(ms.status, 201, JSON.stringify(ms.body));
+  assert.equal(ms.body.data.qualityGate.status, "passed");
+
+  /* کلاینت سعی می‌کند با فرستادن «open_ncr» دروغین، ردیف را حذف نشان دهد —
+   * باید نادیده گرفته شود و سرور «passed» واقعی را از ریزمتره بخواند. */
+  const r = await post(`/api/cnt/ipc/preview?projectId=${PROJECT}`, {
+    contractId: c.Id,
+    lines: [{ boqItemId: item.Id, cumQty: 100, qualityGateStatus: "open_ncr" }],
+  }, CONTRACTS);
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(r.body.data.grossCurrent, 100_000);
+  assert.equal(r.body.data.qualityGates[item.Id].status, "passed");
+});
+
+test("عدم انطباق بازشده پس از ریزمتره، ادعای صورت‌وضعیت را می‌بندد — نه وضعیت لحظهٔ ریزمتره", async () => {
+  const act = `ACT-${tag()}`;
+  await seed("InspectionRecord", {
+    ProjectId: PROJECT, Code: `IR-${tag()}`, ItpPointCode: "ITP-1",
+    ActivityId: act, InspectedAt: "2026-06-01", Outcome: "accepted", InspectedBy: "u-qc",
+  });
+  const c = await makeContract();
+  const item = await makeItem(c.Id, { unitRate: 1000 });
+  const ms = await post(`/api/cnt/measurement?projectId=${PROJECT}`, {
+    boqItemId: item.Id, sheetNo: 1, count: 1, length: 100, activityId: act,
+  }, SITE);
+  assert.equal(ms.status, 201, JSON.stringify(ms.body));
+  assert.equal(ms.body.data.qualityGate.status, "passed");
+
+  /* عدم انطباق *بعد از* ریزمتره باز می‌شود. */
+  await seed("Ncr", {
+    ProjectId: PROJECT, Code: `NCR-${tag()}`, TitleFa: "ایراد کشف‌شده پس از ریزمتره",
+    Severity: "major", Discipline: "civil", RaisedBy: "u-qc",
+    RaisedAt: "2026-06-05", Status: "open", ActivityId: act,
+  });
+
+  const preview = await post(`/api/cnt/ipc/preview?projectId=${PROJECT}`, {
+    contractId: c.Id,
+    lines: [{ boqItemId: item.Id, cumQty: 100, qualityGateStatus: "passed" }],
+  }, CONTRACTS);
+  assert.equal(preview.status, 200, JSON.stringify(preview.body));
+  assert.equal(preview.body.data.grossCurrent, 0);
+  assert.equal(preview.body.data.qualityGates[item.Id].status, "open_ncr");
+
+  const created = await post(`/api/cnt/ipc?projectId=${PROJECT}`, {
+    contractId: c.Id, periodCode: `QG-${tag()}`,
+    periodFrom: "2026-06-01", periodTo: "2026-06-30",
+    lines: [{ boqItemId: item.Id, cumQty: 100 }],
+  }, CONTRACTS);
+  assert.equal(created.status, 201, JSON.stringify(created.body));
+  assert.equal(created.body.data.grossCurrent, 0);
+
+  const detail = await get(`/api/cnt/ipc/${created.body.data.id}?projectId=${PROJECT}`, CONTRACTS);
+  const line = detail.body.data.lines.find((l) => l.BoqItemId === item.Id);
+  assert.equal(line.QualityGateStatus, "open_ncr");
+  assert.equal(line.Status, "rejected");
+  assert.equal(line.OverrideBy, null);
+});
+
+test("ردیفی که هرگز ریزمتره‌اش به بازرسی گره نخورده، مسدود نمی‌شود (دروازه اختیاری است)", async () => {
+  const c = await makeContract();
+  const item = await makeItem(c.Id, { unitRate: 1000 });
+  const r = await post(`/api/cnt/ipc/preview?projectId=${PROJECT}`, {
+    contractId: c.Id,
+    lines: [{ boqItemId: item.Id, cumQty: 10 }],
+  }, CONTRACTS);
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(r.body.data.grossCurrent, 10_000);
+  assert.equal(r.body.data.qualityGates[item.Id].status, "passed");
+});
+
+test("دور زدن دروازهٔ کیفی بدون مجوز cnt.ipc.override رد می‌شود", async () => {
+  const c = await makeContract();
+  const item = await makeItem(c.Id, { unitRate: 1000 });
+  const r = await post(`/api/cnt/ipc/preview?projectId=${PROJECT}`, {
+    contractId: c.Id,
+    lines: [{ boqItemId: item.Id, cumQty: 10, override: true, overrideReasonFa: "فوریت صورت‌وضعیت" }],
+  }, CONTRACTS);
+  assert.equal(r.status, 403);
+  assert.equal(r.body.error.code, "E-CNT-OVERRIDE-FORBIDDEN");
 });
 
 test("وضعیت ماژول زیرماژول ۱۴٫۲ را تحویل‌شده اعلام می‌کند", async () => {
