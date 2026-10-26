@@ -13,7 +13,7 @@ import path from "node:path";
 
 const PORT = 4729;
 const BASE = `http://localhost:${PORT}`;
-const PROJECT = "p1";
+const PROJECT = "c1-p1"; /* دامنهٔ پروژهٔ کاربران آزمایشی RBAC؛ گارد پروژهٔ IPC آن را می‌سنجد */
 
 const CONTRACTS = "u-contracts";
 const PM = "u-pm";

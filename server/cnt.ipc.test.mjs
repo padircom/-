@@ -10,6 +10,7 @@ import {
   computeIpc,
   computeIpcLines,
   ipcNextActions,
+  ipcRequiredActor,
   ipcTransition,
   isIpcLocked,
   nextIpcSerial,
@@ -65,6 +66,18 @@ test("صورت‌وضعیت مصوب و پرداخت‌شده قفل است", ()
   assert.equal(isIpcLocked("rejected"), true);
   assert.equal(isIpcLocked("draft"), false);
   assert.equal(isIpcLocked("contractor_submitted"), false);
+});
+
+test("نقش اقدام‌کننده از وضعیت و اقدام مشتق می‌شود، نه از گفتهٔ کلاینت", () => {
+  assert.equal(ipcRequiredActor("draft", "submit"), "contractor");
+  assert.equal(ipcRequiredActor("contractor_submitted", "approve"), "consultant");
+  assert.equal(ipcRequiredActor("contractor_submitted", "return_for_correction"), "consultant");
+  assert.equal(ipcRequiredActor("consultant_approved", "approve"), "employer");
+  assert.equal(ipcRequiredActor("consultant_approved", "reject"), "employer");
+  assert.equal(ipcRequiredActor("approved", "pay"), "employer");
+  /* گذاری که در ماشین حالت نیست نقش ندارد؛ لایهٔ API روی آن ۴۰۹ می‌دهد. */
+  assert.equal(ipcRequiredActor("draft", "approve"), null);
+  assert.equal(ipcRequiredActor("paid", "pay"), null);
 });
 
 test("اقدام‌های مجاز بعدی بر اساس نقش فیلتر می‌شود", () => {
