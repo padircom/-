@@ -848,6 +848,11 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
 
   const [d14ContractSelection, setD14ContractSelection] = useState<{ projectId: string; id: string } | null>(null);
   const d14ContractId = d14ContractSelection?.projectId === target.projectId ? d14ContractSelection.id : "";
+  useEffect(() => {
+    if (target.moduleId === "d14" && target.contractId) {
+      setD14ContractSelection({ projectId: target.projectId, id: target.contractId });
+    }
+  }, [target.moduleId, target.projectId, target.contractId]);
   const d14ScrollRef = useRef<HTMLDivElement>(null);
   const [d14View, setD14View] = useState<"contract" | "ipc" | "rating" | "risk">(
     contractView(target.processId, target.subId),
@@ -1061,7 +1066,7 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
           <div className="glass flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl p-3">
             <div ref={d14ScrollRef} className="thin-scroll min-h-0 flex-1 overflow-y-auto">
               {d14View === "risk" ? (
-                <ContractRiskWorkspace lang={lang} projectId={target.projectId} />
+                <ContractRiskWorkspace lang={lang} projectId={target.projectId} initialContractId={target.contractId} onOpenContract={(contractId) => onNavigate?.({ ...target, moduleId: "d14", processId: "d14-p1", subId: "d14-p1-s1", contractId })} />
               ) : d14View === "rating" ? (
                 <VendorRatingPanel key={`${target.projectId}:${user?.id ?? ""}`} lang={lang} projectId={target.projectId} section={(selected?.sId ?? target.subId) === "d14-p8-s2" ? "monitoring" : "scoring"} />
               ) : d14View === "ipc" ? (
@@ -1078,12 +1083,63 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
             selectedSubId={selected?.sId}
             onSelectSub={(pId, sId) => {
               audit("OPEN_SUBPROCESS", { projectId: target.projectId, entity: dom.id, entityId: sId });
+              if (sId === "d14-p1-risk") {
+                onNavigate?.({ ...target, moduleId: "d21", processId: "d21-p1", subId: "d21-p1-s1", contractId: d14ContractId || undefined });
+                return;
+              }
               setSelected({ pId, sId });
               setD14View(contractView(pId, sId));
               if (sId === D14_IPC_TEMPLATES_SUB_ID) {
                 d14ScrollRef.current?.scrollTo({ top: 0 });
                 d14ScrollRef.current?.querySelectorAll<HTMLElement>(".overflow-y-auto").forEach((el) => el.scrollTo({ top: 0 }));
               }
+            }}
+            onOpenModuleSub={(moduleId, pId, sId) => onNavigate?.({ ...target, moduleId, processId: pId, subId: sId })}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  if (dom.id === "d21") {
+    return (
+      <div className="flex h-full min-h-0 flex-col gap-3 overflow-hidden" dir={rtl ? "rtl" : "ltr"}>
+        <div className="glass flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl px-3 py-2.5">
+          <button onClick={onBack} className="glass-row flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-[10.5px] font-light tx2 transition hover:tx1">
+            <span className="inline-block rotate-180 rtl:rotate-0">→</span>
+            {rtl ? "بازگشت به داشبورد" : "Back to dashboard"}
+          </button>
+          {cluster && <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl text-[20px]" style={{ background: `${cluster.color}1f`, border: `1px solid ${cluster.color}55` }}>{cluster.icon}</span>}
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
+              {cluster && <h1 className="truncate text-[20px] font-semibold leading-tight" style={{ color: cluster.color }}>{t(cluster.title, lang)}</h1>}
+              <span className="text-[16px] font-light tx4">/</span>
+              {project && <h2 className="truncate text-[19px] font-semibold leading-tight tx1">{t(project.name, lang)} <span dir="ltr" className="inline-block text-[10px] font-light tx3">({project.code})</span></h2>}
+            </div>
+            {project && <p className="mt-1 truncate text-[10px] font-extralight tx3">{t(project.client, lang)} · {t(project.location, lang)}</p>}
+          </div>
+          <div className="shrink-0 text-end text-[11px] font-light tx1">{t(dom.nav ?? dom.title, lang)}</div>
+        </div>
+        <div className="workspace-columns flex min-h-0 flex-1 gap-3 overflow-hidden">
+          <div className="glass flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl p-3">
+            <div className="thin-scroll min-h-0 flex-1 overflow-y-auto">
+              <ContractRiskWorkspace
+                key={`${target.projectId}:${user?.id ?? ""}`}
+                lang={lang}
+                projectId={target.projectId}
+                initialContractId={target.contractId}
+                onOpenContract={(contractId) => onNavigate?.({ ...target, moduleId: "d14", processId: "d14-p1", subId: "d14-p1-s1", contractId })}
+              />
+            </div>
+          </div>
+          <DomainAside
+            lang={lang}
+            dom={dom}
+            activeProcesses={activeProcesses}
+            selectedSubId={selected?.sId ?? target.subId}
+            onSelectSub={(pId, sId) => {
+              audit("OPEN_SUBPROCESS", { projectId: target.projectId, entity: dom.id, entityId: sId });
+              setSelected({ pId, sId });
             }}
             onOpenModuleSub={(moduleId, pId, sId) => onNavigate?.({ ...target, moduleId, processId: pId, subId: sId })}
           />

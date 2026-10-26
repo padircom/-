@@ -120,6 +120,7 @@ export const performanceDomains: PerformanceDomain[] = [
 export const domainPerformance: Record<string, PerformanceDomainId> = {
   d6: "governance",
   d20: "governance",
+  d21: "risk",
   d12: "scope",
   d15: "scope",
   d2: "schedule",
@@ -256,7 +257,7 @@ export const domains: Domain[] = [
         subs: [
           { id: "d14-p1-s1", title: { fa: "ثبت شناسنامه و الحاقیه‌ها", en: "Contract Master & Amendments" }, activity: { fa: "ثبت مشخصات پیمان، مبلغ اولیه، مدت و الحاقیه‌های بعدی با سطح اختیار تأیید", en: "Register contract terms, original value, duration and subsequent amendments with approval authority" }, source: "Contract Document, Employer", sql: ["ContractMaster", "ContractAmendment", "ApprovalAuthority"], output: "Contract Register", connectsTo: "Cost, Governance", ai: "AI Clause Extractor" },
           { id: "d14-p1-s2", title: { fa: "فهرست بها و مراحل مقطوع", en: "BOQ Items & Lump-Sum Milestones" }, activity: { fa: "بارگذاری ردیف‌های فهرست بها با مقدار و نرخ، یا تعریف مراحل پرداخت مقطوع", en: "Load BOQ lines with quantity and rate, or define lump-sum payment milestones" }, source: "Tender BOQ, Excel", sql: ["ContractBOQ_Item", "LumpSumMilestone"], output: "Priced BOQ", connectsTo: "Cost, Planning", ai: "AI Rate Benchmark" },
-          { id: "d14-p1-risk", title: { fa: "مدیریت ریسک قراردادها و بهبود قرارداد", en: "Contract Risk & Improvement" }, activity: { fa: "شناسایی، امتیازدهی و پایش ریسک‌های قراردادی، تحلیل بندها، تعهدات و پیشنهاد اصلاح قرارداد پیش از تبدیل ریسک به اختلاف، تأخیر یا خسارت", en: "Identify, score and monitor contract risks, analyse clauses, obligations and clause-improvement proposals before risks become disputes, delay or loss" }, source: "Contract, EDMS", sql: ["ContractRiskRegister", "ContractClauseFinding", "ContractImprovement"], output: "Contract Risk Register", connectsTo: "Claims, Delay, EDMS", ai: "ContractClauseAnalysisService" },
+          { id: "d14-p1-risk", title: { fa: "ریسک قراردادها (میان‌بر به ماژول مستقل)", en: "Contract Risk (open standalone module)" }, activity: { fa: "ورود مستقیم به ماژول مستقل ریسک قراردادها؛ ریسک‌ها همچنان به کد قرارداد و مدارک منبع پیوند دارند", en: "Shortcut to the standalone contract-risk module; risks remain linked to contract codes and source documents" }, source: "Contract, EDMS", sql: ["ContractRiskRegister", "ContractClauseFinding", "ContractImprovement"], output: "Contract Risk Register", connectsTo: "Claims, Delay, EDMS", ai: "ContractClauseAnalysisService" },
         ],
       },
       {
@@ -315,6 +316,24 @@ export const domains: Domain[] = [
         subs: [
           { id: "d14-p8-s1", title: { fa: "امتیازدهی وزنی", en: "Weighted Scoring" }, activity: { fa: "امتیازِ شش‌محوره (ایمنی، کیفیت، زمان، قیمت، مستندات، همکاری) با وزن‌های متمرکز و رتبهٔ A تا D", en: "Six-axis scoring (HSE, quality, schedule, price, documentation, cooperation) with central weights and A–D grading" }, source: "Inspection, Site Reports, Procurement", sql: ["VendorEvaluation"], output: "Rating Card", connectsTo: "Procurement, Quality, HSE", ai: "AI Performance Predictor" },
           { id: "d14-p8-s2", title: { fa: "روند، پایش و فهرستِ بهبود", en: "Trend, Watchlist & Improvement" }, activity: { fa: "مقایسه با دورهٔ قبل، نشان‌دار کردنِ رتبه‌های C و D و تعیین ضعیف‌ترین محور به‌عنوان هدفِ بهبود", en: "Compare with previous period, flag C/D grades and pick the weakest axis as improvement target" }, source: "Rating History", sql: ["VendorEvaluation", "VendorImprovement"], output: "Watchlist & Improvement Plan", connectsTo: "Governance, Procurement", ai: "AI Improvement Coach" },
+        ],
+      },
+    ],
+  },
+  {
+    /* ماژول مستقلِ هم‌سطح مدیریت پیمان؛ پیوندهای قراردادی در دفتر ریسک
+     * همچنان با ContractCode به شناسنامهٔ پیمان متصل می‌مانند. */
+    id: "d21",
+    group: "pg4",
+    icon: "⚠️",
+    accent: "#D64A4A",
+    title: { fa: "مدیریت ریسک قراردادها", en: "Contract Risk Management" },
+    processes: [
+      {
+        id: "d21-p1",
+        title: { fa: "ریسک و بهبود قرارداد", en: "Contract Risk & Improvement" },
+        subs: [
+          { id: "d21-p1-s1", title: { fa: "دفتر ریسک، تعهدات و اقدامات قراردادی", en: "Contract Risk, Obligations & Actions Register" }, activity: { fa: "ثبت و پایش ریسک، تعهد، تحلیل بند، اقدام پاسخ و پیشنهاد اصلاح با ارجاع به پیمان متناظر", en: "Register and monitor risks, obligations, clause analysis, response actions and improvements linked to the relevant contract" }, source: "Contract, EDMS", sql: ["ContractRiskRegister", "ContractRiskAssessment", "ContractObligation", "ContractRiskAction", "ContractClauseFinding", "ContractImprovement"], output: "Contract Risk Register & Dashboard", connectsTo: "Contract Management, Claims, Delay, EDMS", ai: "ContractClauseAnalysisService", links: [{ to: "d14-p1-s1", label: { fa: "بازگشت به شناسنامه پیمان", en: "Open contract register" } }] },
         ],
       },
     ],
