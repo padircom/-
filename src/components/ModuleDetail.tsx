@@ -1020,12 +1020,6 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
         hideTabs
         headerIdentity={
           <>
-            {cluster && (
-              <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl text-[20px]"
-                    style={{ background: `${cluster.color}1f`, border: `1px solid ${cluster.color}55` }}>
-                {cluster.icon}
-              </span>
-            )}
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
                 {cluster && (
@@ -1036,7 +1030,7 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
                 <span className="text-[16px] font-light tx4">/</span>
                 {project && (
                   <h2 className="truncate text-[19px] font-semibold leading-tight tx1">
-                    {t(project.name, lang)} <span dir="ltr" className="inline-block text-[10px] font-light tx3">({project.code})</span>
+                    <span dir="ltr" className="inline-block text-[10px] font-light tx3">{project.code}</span> {t(project.name, lang)}
                   </h2>
                 )}
               </div>
@@ -1822,12 +1816,6 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
             <span className="inline-block rotate-180 rtl:rotate-0">→</span>
             {rtl ? "بازگشت به داشبورد" : "Back to dashboard"}
           </button>
-          {cluster && (
-            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl text-[20px]"
-                  style={{ background: `${cluster.color}1f`, border: `1px solid ${cluster.color}55` }}>
-              {cluster.icon}
-            </span>
-          )}
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
               {cluster && (
@@ -1837,12 +1825,14 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
               )}
               <span className="text-[16px] font-light tx4">/</span>
               {project && (
-                <h2 className="truncate text-[19px] font-semibold leading-tight tx1">{t(project.name, lang)}</h2>
+                <h2 className="truncate text-[19px] font-semibold leading-tight tx1">
+                  <span dir="ltr" className="inline-block text-[10px] font-light tx3">{project.code}</span> {t(project.name, lang)}
+                </h2>
               )}
             </div>
             {project && (
               <p className="mt-1 truncate text-[10px] font-extralight tx3">
-                <span dir="ltr">{project.code}</span> · {t(project.client, lang)} · {t(project.location, lang)}
+                {t(project.client, lang)} · {t(project.location, lang)}
               </p>
             )}
           </div>
