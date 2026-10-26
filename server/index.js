@@ -249,6 +249,7 @@ import {
   computeIpc,
   cumulativeAdjustment,
   ipcNextActions,
+  ipcRequiredActor,
   materialDiff,
   ipcTransition,
   isIpcLocked,
@@ -6355,10 +6356,35 @@ const cntBad = (req, res, code, message, status = 400, detailsFa = null) =>
     },
   });
 
-/** گارد پروژه فقط برای مسیرهای پیشرفت، شاخص و گزارش؛ کاتالوگ بدون داده مستثناست. */
+/**
+ * کلید اجرای RBAC ماژول پیمان — یک نقطهٔ واحد به‌جای خواندن پراکندهٔ env.
+ *
+ * خاموش‌کردن آن (`CNT_RBAC_ENFORCE=0`) فقط ابزار استقرار مرحله‌ای در
+ * محیط توسعه/آزمون است. در محیط تولید (`NODE_ENV=production`) سرور با
+ * این مقدار اصلاً بالا نمی‌آید: ماژولی که صورت‌وضعیت و پول را جابه‌جا
+ * می‌کند نباید با یک متغیر محیطیِ فراموش‌شده بی‌قفل بماند.
+ */
+const CNT_RBAC_ENFORCED = String(process.env.CNT_RBAC_ENFORCE ?? "1") !== "0";
+if (!CNT_RBAC_ENFORCED && String(process.env.NODE_ENV ?? "") === "production") {
+  throw new Error("CNT_RBAC_ENFORCE=0 در محیط تولید مجاز نیست؛ اجرای مجوزهای پیمان/صورت‌وضعیت را فعال کنید");
+}
+if (!CNT_RBAC_ENFORCED) {
+  console.warn("[cnt] هشدار: CNT_RBAC_ENFORCE=0 — مجوزهای ماژول پیمان اجرا نمی‌شوند (فقط توسعه/آزمون)");
+}
+const cntEnforced = () => CNT_RBAC_ENFORCED;
+
+/**
+ * گارد دامنهٔ پروژه: مجوز باید روی همان پروژهٔ درخواست برقرار باشد، نه
+ * فقط در کاتالوگ نقش کاربر. روی مسیرهای صورت‌وضعیت، پیشرفت، شاخص و
+ * گزارش نصب است. شناسهٔ پروژه مثل خودِ هندلرها از query و در نبودش از
+ * بدنه خوانده می‌شود تا مسیر POSTای که پروژه را در بدنه می‌فرستد از
+ * گارد جا نماند؛ نبودِ هر دو یعنی هندلر خودش با E-CNT-NO-PROJECT ردش
+ * می‌کند و گارد چیزی برای سنجیدن ندارد.
+ */
 function cntProjectAccess(permission) {
   return (req, res, next) => {
-    const projectId = String(req.query.projectId ?? "");
+    if (!cntEnforced()) return next();
+    const projectId = String(req.query.projectId || engBody(req).projectId || "");
     if (!projectId) return next();
     if (!req.cntSubject || !rbacEvaluate(req.cntSubject, permission, { projectId }).allow) return cntBad(req, res, "E-CNT-PROJECT-FORBIDDEN", "دسترسی به این پروژه ندارید", 403);
     next();
@@ -6378,10 +6404,19 @@ function cntInvalid(req, res, issues) {
   });
 }
 
-/** میان‌افزار مجوز ماژول پیمان — همان قرارداد ماژول مهندسی با کد خطای خودش. */
+/**
+ * میان‌افزار مجوز ماژول پیمان — همان قرارداد ماژول مهندسی با کد خطای خودش.
+ *
+ * این میان‌افزار فقط «داشتن مجوز» را می‌سنجد؛ دامنهٔ پروژه عمداً کار
+ * `cntProjectAccess` است که روی مسیرهای داده‌دار (از جمله همهٔ مسیرهای
+ * صورت‌وضعیت) بعد از این نصب می‌شود تا خطای دامنه کد خودش
+ * (`E-CNT-PROJECT-FORBIDDEN`) را بدهد و رفتار مسیرهای قدیمیِ بدون گارد
+ * پروژه (که نشت بین پروژه را با فیلتر رکورد و ۴۰۴ می‌بندند) یک‌شبه
+ * عوض نشود.
+ */
 function cntRequire(permission) {
   return (req, res, next) => {
-    const enforce = String(process.env.CNT_RBAC_ENFORCE ?? "1") !== "0";
+    const enforce = cntEnforced();
     const subject = engSubject(req);
 
     if (!subject) {
@@ -7072,7 +7107,7 @@ async function cntIpcContext(r, projectId, contractId, excludeIpcId) {
 }
 
 /* پیش‌محاسبهٔ صورت‌وضعیت بدون ذخیره — برای دیدن مبلغ پیش از ثبت. */
-app.post("/api/cnt/ipc/preview", cntRequire("cnt.ipc.prepare"), async (req, res, next) => {
+app.post("/api/cnt/ipc/preview", cntRequire("cnt.ipc.prepare"), cntProjectAccess("cnt.ipc.prepare"), async (req, res, next) => {
   try {
     const b = engBody(req);
     const projectId = String(req.query.projectId || b.projectId || "");
@@ -7137,7 +7172,7 @@ app.post("/api/cnt/ipc/preview", cntRequire("cnt.ipc.prepare"), async (req, res,
 });
 
 /* ثبت صورت‌وضعیت جدید به همراه ردیف‌ها و کسورات. */
-app.post("/api/cnt/ipc", cntRequire("cnt.ipc.prepare"), async (req, res, next) => {
+app.post("/api/cnt/ipc", cntRequire("cnt.ipc.prepare"), cntProjectAccess("cnt.ipc.prepare"), async (req, res, next) => {
   try {
     const b = engBody(req);
     const projectId = String(req.query.projectId || b.projectId || "");
@@ -7287,13 +7322,17 @@ app.post("/api/cnt/ipc", cntRequire("cnt.ipc.prepare"), async (req, res, next) =
  *
  * مجوز لازم به خودِ اقدام بستگی دارد، پس اینجا داخل بدنه بررسی می‌شود
  * نه با یک میان‌افزار ثابت — ارسال کار پیمانکار است ولی تصویب کار
- * کارفرما، و یک مجوز واحد کل تفکیک وظیفه را از بین می‌برد. */
-const CNT_ACTION_PERMISSION = {
-  submit: "cnt.ipc.prepare",
-  approve: null,
-  reject: null,
-  return_for_correction: null,
-  pay: "cnt.ipc.approve",
+ * کارفرما، و یک مجوز واحد کل تفکیک وظیفه را از بین می‌برد.
+ *
+ * نقش اقدام‌کننده از بدنهٔ درخواست خوانده نمی‌شود: از وضعیت فعلی سند و
+ * اقدام، با `ipcRequiredActor` موتور مشتق می‌شود و مجوز همان نقش روی
+ * همان پروژه از کاربر خواسته می‌شود. فیلد `actor` ارسالی کلاینت‌های
+ * قدیمی برای سازگاری پذیرفته ولی نادیده گرفته می‌شود تا آنچه در
+ * تاریخچهٔ گردش ثبت می‌شود نقشِ بررسی‌شدهٔ سرور باشد، نه ادعای کلاینت. */
+const CNT_ACTOR_PERMISSION = {
+  contractor: "cnt.ipc.prepare",
+  consultant: "cnt.ipc.review",
+  employer: "cnt.ipc.approve",
 };
 
 app.post("/api/cnt/ipc/:id/action", async (req, res, next) => {
@@ -7303,10 +7342,10 @@ app.post("/api/cnt/ipc/:id/action", async (req, res, next) => {
     if (!projectId) return cntBad(req, res, "E-CNT-NO-PROJECT", "پارامتر projectId الزامی است");
 
     const action = String(b.action || "");
-    const actor = String(b.actor || "");
     const issues = engValidate(b, [
       { field: "action", titleFa: "اقدام", required: true, oneOf: ["submit", "approve", "reject", "return_for_correction", "pay"] },
-      { field: "actor", titleFa: "نقش اقدام‌کننده", required: true, oneOf: ["contractor", "consultant", "employer"] },
+      /* actor منسوخ است: اگر کلاینت قدیمی بفرستد فقط قالبش سنجیده می‌شود. */
+      { field: "actor", titleFa: "نقش اقدام‌کننده", oneOf: ["contractor", "consultant", "employer"] },
     ]);
     if (issues.length) return cntInvalid(req, res, issues);
 
@@ -7318,17 +7357,22 @@ app.post("/api/cnt/ipc/:id/action", async (req, res, next) => {
     ]);
     if (!ipc) return cntBad(req, res, "E-CNT-NOT-FOUND", `صورت‌وضعیت ${req.params.id} یافت نشد`, 404);
 
-    /* مجوز بر اساس نقشی که اقدام می‌کند، نه بر اساس نوع اقدام تنها. */
-    const permission =
-      CNT_ACTION_PERMISSION[action] ??
-      (actor === "consultant" ? "cnt.ipc.review" : "cnt.ipc.approve");
     const subject = engSubject(req);
-    const enforce = String(process.env.CNT_RBAC_ENFORCE ?? "1") !== "0";
+    const enforce = cntEnforced();
+    if (enforce && !subject) {
+      return res.status(401).json({ ok: false, error: { code: "E-CNT-AUTH-REQUIRED", message: "شناسهٔ کاربر برای این اقدام الزامی است", permission: null, traceId: req.requestId } });
+    }
+
+    /* گذار ناممکن از این وضعیت، پیش از سنجش مجوز ۴۰۹ است: اقدام اشتباه
+     * روی سندِ در وضعیت اشتباه «مجوز ندارید» نیست. */
+    const actor = ipcRequiredActor(ipc.WorkflowState, action);
+    if (!actor) {
+      const bad = ipcTransition(ipc.WorkflowState, action, "contractor");
+      return cntBad(req, res, bad.code, bad.messageFa, 409);
+    }
+    const permission = CNT_ACTOR_PERMISSION[actor];
     if (enforce) {
-      if (!subject) {
-        return res.status(401).json({ ok: false, error: { code: "E-CNT-AUTH-REQUIRED", message: "شناسهٔ کاربر برای این اقدام الزامی است", permission, traceId: req.requestId } });
-      }
-      const verdict = rbacEvaluate(subject, permission, { projectId: undefined });
+      const verdict = rbacEvaluate(subject, permission, { projectId });
       if (!verdict.allow) {
         return res.status(403).json({ ok: false, error: { code: "E-CNT-FORBIDDEN", message: `کاربر ${subject.displayName} مجوز «${permission}» را ندارد`, permission, traceId: req.requestId } });
       }
@@ -7369,6 +7413,8 @@ app.post("/api/cnt/ipc/:id/action", async (req, res, next) => {
       serialNo: ipc.SerialNo,
       from: move.from,
       workflowState: move.to,
+      /* نقش مشتق‌شدهٔ سرور؛ کلاینت برای نمایش «توسط مشاور/کارفرما» لازمش دارد. */
+      actor,
       stepNo,
       locked: isIpcLocked(move.to),
       nextActions: ipcNextActions(move.to),
@@ -7377,7 +7423,7 @@ app.post("/api/cnt/ipc/:id/action", async (req, res, next) => {
 });
 
 /* فهرست صورت‌وضعیت‌های یک پیمان. */
-app.get("/api/cnt/ipc", cntRequire("cnt.contract.view"), async (req, res, next) => {
+app.get("/api/cnt/ipc", cntRequire("cnt.contract.view"), cntProjectAccess("cnt.contract.view"), async (req, res, next) => {
   try {
     const projectId = String(req.query.projectId || "");
     const contractId = String(req.query.contractId || "");
@@ -7409,7 +7455,7 @@ app.get("/api/cnt/ipc", cntRequire("cnt.contract.view"), async (req, res, next) 
 });
 
 /* جزئیات کامل یک صورت‌وضعیت با ردیف‌ها، کسورات و تاریخچهٔ گردش. */
-app.get("/api/cnt/ipc/:id", cntRequire("cnt.contract.view"), async (req, res, next) => {
+app.get("/api/cnt/ipc/:id", cntRequire("cnt.contract.view"), cntProjectAccess("cnt.contract.view"), async (req, res, next) => {
   try {
     const projectId = String(req.query.projectId || "");
     if (!projectId) return cntBad(req, res, "E-CNT-NO-PROJECT", "پارامتر projectId الزامی است");
@@ -7522,7 +7568,7 @@ app.get("/api/cnt/index", cntRequire("cnt.contract.view"), async (req, res, next
 });
 
 /* محاسبهٔ تعدیل یک صورت‌وضعیت بر مبنای کارکرد فصل‌های همان دوره. */
-app.post("/api/cnt/ipc/:id/adjustment", cntRequire("cnt.ipc.prepare"), async (req, res, next) => {
+app.post("/api/cnt/ipc/:id/adjustment", cntRequire("cnt.ipc.prepare"), cntProjectAccess("cnt.ipc.prepare"), async (req, res, next) => {
   try {
     const b = engBody(req);
     const projectId = String(req.query.projectId || b.projectId || "");
@@ -7906,7 +7952,7 @@ app.post("/api/cnt/retainage/release", cntRequire("cnt.retainage.manage"), async
 
 function comRequire(permission) {
   return (req, res, next) => {
-    const enforce = String(process.env.CNT_RBAC_ENFORCE ?? "1") !== "0";
+    const enforce = cntEnforced();
     const subject = engSubject(req);
     if (!subject) {
       if (!enforce) return next();

@@ -638,6 +638,425 @@ function GuaranteeSection({
   );
 }
 
+/* ─────────────── صورت‌وضعیت پیمانکار اصلی (14.2) ─────────────── */
+
+const IPC_STATE_TONE: Record<string, string> = {
+  draft: "tx2",
+  contractor_submitted: "text-sky-300",
+  consultant_approved: "text-amber-300",
+  approved: "text-emerald-300",
+  rejected: "text-rose-300",
+  paid: "text-emerald-200",
+};
+
+const IPC_ACTION_FA: Record<string, string> = {
+  submit: "ارسال",
+  approve: "تأیید",
+  reject: "رد",
+  return_for_correction: "برگشت برای اصلاح",
+  pay: "پرداخت",
+};
+
+const IPC_ACTOR_FA: Record<string, string> = {
+  contractor: "پیمانکار",
+  consultant: "مشاور",
+  employer: "کارفرما",
+};
+
+const ipcInputCls = "w-full rounded-lg border b-line-soft bg-black/25 px-2 py-1.5 text-[10px] tx1 outline-none transition focus:border-sky-400/50";
+
+/**
+ * دفتر و گردش صورت‌وضعیت پیمانکار اصلی روی موتور BOQمحور (cnt-v1).
+ *
+ * تا پیش از این بخش، مسیرهای `/api/cnt/ipc` هیچ مصرف‌کننده‌ای در رابط
+ * کاربری نداشتند و چرخهٔ صورت‌وضعیت اصلی فقط از API قابل انجام بود، در
+ * حالی که پل مالی و گزارش‌ها روی همین رکوردها سوارند. این بخش همان
+ * چرخه را کامل می‌کند: ساخت از تجمعیِ ردیف‌های فهرست‌بها، پیش‌نمایش
+ * محاسبهٔ سرور پیش از ثبت، و اقدام‌های گردش بر اساس `nextActions`
+ * خودِ سرور. نقش اقدام‌کننده (پیمانکار/مشاور/کارفرما) را سرور از
+ * وضعیت سند مشتق می‌کند؛ این پنل عمداً هیچ `actor`ای نمی‌فرستد.
+ *
+ * مقدار واردشده برای هر ردیف «تجمعی تا پایان دوره» است، نه کارکرد
+ * دوره: جاری را سرور از تجمعی دوره‌های قبل کم می‌کند تا اصلاح یک
+ * صورت‌وضعیت قدیمی زنجیره را نشکند.
+ */
+function IpcSection({
+  contractId, userId, boqItems, onDone,
+}: { contractId: string; userId: string; boqItems: Json[]; onDone: () => void }) {
+  const projectId = useCurrentProjectId();
+
+  const [reg, setReg] = useState<Json | null>(null);
+  const [denied, setDenied] = useState(false);
+  const [unauth, setUnauth] = useState(false);
+  const [openId, setOpenId] = useState("");
+  const [detail, setDetail] = useState<Json | null>(null);
+  const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const [head, setHead] = useState({ periodCode: "", periodFrom: "", periodTo: "", ipcType: "interim" });
+  const [amounts, setAmounts] = useState<Record<string, string>>({});
+  const [claims, setClaims] = useState<Record<string, string>>({});
+  const [preview, setPreview] = useState<Json | null>(null);
+
+  const load = useCallback(async () => {
+    if (!contractId) { setReg(null); return; }
+    const r = await getGuarded(`/api/cnt/ipc?projectId=${projectId}&contractId=${encodeURIComponent(contractId)}`, userId);
+    setReg(r.data);
+    setDenied(r.denied);
+    setUnauth(r.unauth);
+  }, [contractId, userId, projectId]);
+
+  const loadDetail = useCallback(async (id: string) => {
+    if (!id) { setDetail(null); return; }
+    const r = await getGuarded(`/api/cnt/ipc/${encodeURIComponent(id)}?projectId=${projectId}`, userId);
+    setDetail(r.data);
+  }, [userId, projectId]);
+
+  useEffect(() => { void load(); }, [load]);
+  useEffect(() => { void loadDetail(openId); }, [openId, loadDetail]);
+
+  /* پیمان که عوض شد، صورت‌وضعیت باز و پیش‌نویس فرم پیمان قبلی نباید بماند. */
+  useEffect(() => {
+    setOpenId(""); setDetail(null); setMsg(null); setPreview(null); setClaims({});
+  }, [contractId]);
+
+  if (!contractId) return null;
+
+  if (denied) {
+    return (
+      <Panel title="صورت‌وضعیت پیمانکار اصلی">
+        <div className="py-4 text-center">
+          <div className="text-[10px] tx2">
+            {unauth ? "برای دیدن صورت‌وضعیت باید وارد شوید" : "نقش شما اجازهٔ دیدن صورت‌وضعیت‌های این پیمان را ندارد"}
+          </div>
+          {!unauth && <div className="mt-1 font-mono text-[8.5px] tx4">cnt.contract.view</div>}
+          <div className="mt-1 text-[8.5px] tx3">اعداد پنهان‌اند، نه صفر.</div>
+        </div>
+      </Panel>
+    );
+  }
+
+  const rows: Json[] = reg?.items ?? [];
+  const inFlow = rows.filter((x) => x.workflowState === "contractor_submitted" || x.workflowState === "consultant_approved");
+  const settled = rows.filter((x) => x.workflowState === "approved" || x.workflowState === "paid");
+  const settledNet = settled.reduce((s, x) => s + (Number(x.netPayable) || 0), 0);
+
+  const numOrUndef = (v: string | undefined) => (v === undefined || v.trim() === "" ? undefined : Number(v));
+
+  const buildPayload = () => {
+    const lines = boqItems.flatMap((it) => {
+      const raw = claims[String(it.Id)];
+      if (raw === undefined || raw.trim() === "") return [];
+      return [it.PricingBasis === "lump_sum"
+        ? { boqItemId: String(it.Id), cumPct: Number(raw) }
+        : { boqItemId: String(it.Id), cumQty: Number(raw) }];
+    });
+    const deductions: Record<string, number> = {};
+    for (const k of ["insurancePct", "taxPct", "retainagePct", "advanceRecoveryPct", "vatPct", "penaltyAmount", "otherAmount"] as const) {
+      const v = numOrUndef(amounts[k]);
+      if (v !== undefined && Number.isFinite(v)) deductions[k] = v;
+    }
+    return {
+      contractId,
+      lines,
+      adjustmentAmount: numOrUndef(amounts.adjustmentAmount),
+      materialDiffAmount: numOrUndef(amounts.materialDiffAmount),
+      deductions,
+    };
+  };
+
+  const runPreview = async () => {
+    setBusy(true); setMsg(null);
+    const r = await postJson(`/api/cnt/ipc/preview?projectId=${projectId}`, buildPayload(), userId);
+    setBusy(false);
+    if (r.ok) { setPreview(r.data); logAudit("CNT_IPC_PREVIEW", "Contracts", "پیش‌نمایش صورت‌وضعیت"); }
+    else { setPreview(null); setMsg({ kind: "err", text: r.messageFa }); }
+  };
+
+  const runCreate = async () => {
+    setBusy(true); setMsg(null);
+    const r = await postJson(`/api/cnt/ipc?projectId=${projectId}`, {
+      ...buildPayload(),
+      periodCode: head.periodCode.trim(),
+      periodFrom: head.periodFrom,
+      periodTo: head.periodTo,
+      ipcType: head.ipcType,
+    }, userId);
+    setBusy(false);
+    if (r.ok) {
+      logAudit("CNT_IPC_CREATE", "Contracts", `صورت‌وضعیت ${r.data.serialNo}`);
+      setMsg({ kind: "ok", text: `صورت‌وضعیت شمارهٔ ${fmt(r.data.serialNo)} به‌صورت پیش‌نویس ثبت شد` });
+      setPreview(null); setClaims({});
+      await load();
+      if (r.data.id) setOpenId(String(r.data.id));
+      onDone();
+    } else {
+      setMsg({ kind: "err", text: r.messageFa });
+    }
+  };
+
+  const runAction = async (id: string, action: string) => {
+    setBusy(true); setMsg(null);
+    /* actor فرستاده نمی‌شود؛ سرور نقش را از وضعیت سند مشتق می‌کند. */
+    const r = await postJson(`/api/cnt/ipc/${encodeURIComponent(id)}/action?projectId=${projectId}`, { action }, userId);
+    setBusy(false);
+    if (r.ok) {
+      logAudit("CNT_IPC_ACTION", "Contracts", `${action} توسط ${r.data.actor ?? ""}`);
+      setMsg({ kind: "ok", text: `اقدام «${IPC_ACTION_FA[action] ?? action}» در نقش ${IPC_ACTOR_FA[String(r.data.actor)] ?? ""} ثبت شد` });
+      await load();
+      if (openId) await loadDetail(openId);
+      onDone();
+    } else {
+      setMsg({ kind: "err", text: r.messageFa });
+    }
+  };
+
+  const header: Json = detail?.header ?? {};
+  const detailLines: Json[] = detail?.lines ?? [];
+  const detailDeductions: Json[] = detail?.deductions ?? [];
+  const detailSteps: Json[] = detail?.workflow ?? [];
+  const boqById = new Map(boqItems.map((i) => [String(i.Id), i]));
+  const previewLines: Json[] = preview?.lines ?? [];
+
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+        <Metric label="تعداد صورت‌وضعیت" value={fmt(reg?.count ?? 0)} />
+        <Metric label="در جریان تأیید" value={fmt(inFlow.length)} tone={inFlow.length ? "text-sky-300" : "tx1"} />
+        <Metric label="مصوب / پرداخت‌شده" value={fmt(settled.length)} />
+        <Metric label="خالص مصوب (جمع)" value={fmtB(settledNet)} hint="میلیارد ریال" />
+      </div>
+
+      {msg && (
+        <p role="status" className={`rounded-lg px-2 py-1 text-[9px] ${msg.kind === "ok" ? "bg-emerald-400/10 text-emerald-300" : "bg-rose-400/10 text-rose-300"}`}>{msg.text}</p>
+      )}
+
+      <Panel title="دفتر صورت‌وضعیت‌های پیمانکار اصلی" note="گردش: پیمانکار ← مشاور ← کارفرما ← پرداخت؛ نقش هر اقدام را سرور تعیین می‌کند">
+        {rows.length === 0 ? (
+          <div className="py-3 text-center text-[9px] tx3">صورت‌وضعیتی ثبت نشده است.</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-[9.5px]">
+              <thead className="tx3">
+                <tr className="border-b b-line-soft">
+                  <th className="px-2 py-1 text-start">سریال</th>
+                  <th className="px-2 py-1 text-start">دوره</th>
+                  <th className="px-2 py-1 text-start">وضعیت</th>
+                  <th className="px-2 py-1 text-start">کارکرد جاری</th>
+                  <th className="px-2 py-1 text-start">خالص پرداختنی</th>
+                  <th className="px-2 py-1 text-start">اقدام</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((x) => (
+                  <tr key={x.id} className="border-b b-line-soft/50">
+                    <td className="px-2 py-1 tabular-nums tx2" dir="ltr">{fmt(x.serialNo)}</td>
+                    <td className="px-2 py-1 tx1" dir="ltr">{x.periodCode}</td>
+                    <td className={`px-2 py-1 ${IPC_STATE_TONE[String(x.workflowState)] ?? "tx2"}`}>{x.workflowStateFa}</td>
+                    <td className="px-2 py-1 tabular-nums tx2" dir="ltr">{fmt(x.grossCurrent)}</td>
+                    <td className="px-2 py-1 tabular-nums tx1" dir="ltr">{fmt(x.netPayable)}</td>
+                    <td className="px-2 py-1">
+                      <span className="flex flex-wrap gap-1">
+                        <button disabled={busy} onClick={() => setOpenId(openId === x.id ? "" : String(x.id))}
+                          className="rounded-lg border b-line-soft px-2 py-0.5 text-[8.5px] tx2 transition hover:tx1 disabled:opacity-40">
+                          {openId === x.id ? "بستن" : "جزئیات"}
+                        </button>
+                        {(x.nextActions ?? []).map((a: string) => (
+                          <button key={a} disabled={busy || !userId} onClick={() => void runAction(String(x.id), a)}
+                            className="rounded-lg border border-sky-400/40 bg-sky-400/10 px-2 py-0.5 text-[8.5px] text-sky-200 transition hover:bg-sky-400/20 disabled:opacity-40">
+                            {IPC_ACTION_FA[a] ?? a}
+                          </button>
+                        ))}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {!userId && <div className="mt-1 text-[8.5px] tx4">برای اقدام گردش باید وارد شوید؛ هر دکمه مجوز نقش همان گام را می‌خواهد.</div>}
+      </Panel>
+
+      {openId && detail && (
+        <Panel title={`جزئیات صورت‌وضعیت ${fmt(header.SerialNo)}`} note={header.workflowStateFa}>
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
+            <Metric label="کارکرد جاری" value={fmt(header.GrossCurrent)} />
+            <Metric label="کارکرد تجمعی" value={fmt(header.GrossCumulative)} />
+            <Metric label="کسورات" value={fmt(header.TotalDeductions)} />
+            <Metric label="ارزش افزوده" value={fmt(header.VatAmount)} />
+            <Metric label="خالص پرداختنی" value={fmt(header.NetPayable)} />
+          </div>
+
+          {detailLines.length > 0 && (
+            <div className="mt-2 overflow-x-auto">
+              <table className="w-full text-[9.5px]">
+                <thead className="tx3">
+                  <tr className="border-b b-line-soft">
+                    <th className="px-2 py-1 text-start">ردیف</th>
+                    <th className="px-2 py-1 text-start">تجمعی قبل</th>
+                    <th className="px-2 py-1 text-start">تجمعی این دوره</th>
+                    <th className="px-2 py-1 text-start">جاری</th>
+                    <th className="px-2 py-1 text-start">مبلغ جاری</th>
+                    <th className="px-2 py-1 text-start">دروازهٔ کیفی</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {detailLines.map((l) => {
+                    const item = boqById.get(String(l.BoqItemId));
+                    const lump = l.PricingBasis === "lump_sum";
+                    return (
+                      <tr key={l.Id} className="border-b b-line-soft/50">
+                        <td className="px-2 py-1 tx1">{item ? `${item.ItemNo} — ${item.TitleFa}` : String(l.BoqItemId)}</td>
+                        <td className="px-2 py-1 tabular-nums tx2" dir="ltr">{lump ? `${l.PrevPct ?? 0}٪` : fmt(l.PrevQty)}</td>
+                        <td className="px-2 py-1 tabular-nums tx2" dir="ltr">{lump ? `${l.CumPct ?? 0}٪` : fmt(l.CumQty)}</td>
+                        <td className="px-2 py-1 tabular-nums tx2" dir="ltr">{fmt(l.CurrentQty)}</td>
+                        <td className="px-2 py-1 tabular-nums tx1" dir="ltr">{fmt(l.EarnedCurrent)}</td>
+                        <td className="px-2 py-1 tx3">{l.Status === "rejected" ? "کنار گذاشته شده" : (l.QualityGateStatus ?? "—")}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {detailDeductions.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-1">
+              {detailDeductions.map((d) => (
+                <span key={d.Id} className="rounded-lg border b-line-soft px-2 py-0.5 text-[8.5px] tx2">
+                  {d.typeFa}{d.RatePct != null ? ` ${d.RatePct}٪` : ""}: <span className="tabular-nums tx1" dir="ltr">{fmt(d.Amount)}</span>
+                </span>
+              ))}
+            </div>
+          )}
+
+          {detailSteps.length > 0 && (
+            <div className="mt-2 space-y-1">
+              {detailSteps.map((s) => (
+                <div key={s.Id} className="text-[8.5px] tx3">
+                  {fmt(s.StepNo)}. {IPC_ACTION_FA[String(s.Action)] ?? s.Action} توسط {IPC_ACTOR_FA[String(s.Actor)] ?? s.Actor}
+                  {s.ActedAt ? ` · ${String(s.ActedAt).slice(0, 10)}` : ""}{s.CommentFa ? ` · ${s.CommentFa}` : ""}
+                </div>
+              ))}
+            </div>
+          )}
+        </Panel>
+      )}
+
+      <Panel title="صورت‌وضعیت تازه" note="مقدار هر ردیف تجمعی تا پایان دوره است؛ ردیف خالی وارد سند نمی‌شود">
+        <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+          <label className="block">
+            <span className="mb-1 block text-[8.5px] font-extralight tx3">کد دوره *</span>
+            <input className={ipcInputCls} dir="ltr" value={head.periodCode} onChange={(e) => setHead((h) => ({ ...h, periodCode: e.target.value }))} placeholder="1405-01" />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-[8.5px] font-extralight tx3">از تاریخ *</span>
+            <input className={ipcInputCls} type="date" dir="ltr" value={head.periodFrom} onChange={(e) => setHead((h) => ({ ...h, periodFrom: e.target.value }))} />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-[8.5px] font-extralight tx3">تا تاریخ *</span>
+            <input className={ipcInputCls} type="date" dir="ltr" value={head.periodTo} onChange={(e) => setHead((h) => ({ ...h, periodTo: e.target.value }))} />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-[8.5px] font-extralight tx3">نوع</span>
+            <select className={ipcInputCls} value={head.ipcType} onChange={(e) => setHead((h) => ({ ...h, ipcType: e.target.value }))}>
+              <option value="interim">موقت</option>
+              <option value="final">قطعی</option>
+              <option value="advance">پیش‌پرداخت</option>
+              <option value="adjustment_only">فقط تعدیل</option>
+            </select>
+          </label>
+        </div>
+
+        {boqItems.length === 0 ? (
+          <div className="mt-2 text-[9px] tx3">این پیمان هنوز ردیف فهرست‌بها ندارد؛ اول از بخش فهرست‌بها ردیف ثبت کنید.</div>
+        ) : (
+          <div className="mt-2 overflow-x-auto">
+            <table className="w-full text-[9.5px]">
+              <thead className="tx3">
+                <tr className="border-b b-line-soft">
+                  <th className="px-2 py-1 text-start">ردیف</th>
+                  <th className="px-2 py-1 text-start">شرح</th>
+                  <th className="px-2 py-1 text-start">مبنا</th>
+                  <th className="px-2 py-1 text-start">تجمعی تا پایان دوره</th>
+                </tr>
+              </thead>
+              <tbody>
+                {boqItems.map((it) => (
+                  <tr key={it.Id} className="border-b b-line-soft/50">
+                    <td className="px-2 py-1 font-mono tx2" dir="ltr">{it.ItemNo}</td>
+                    <td className="px-2 py-1 tx1">{it.TitleFa}</td>
+                    <td className="px-2 py-1 tx3">{it.pricingBasisFa ?? it.PricingBasis}</td>
+                    <td className="px-2 py-1">
+                      <input className={`${ipcInputCls} max-w-36`} type="number" dir="ltr"
+                        placeholder={it.PricingBasis === "lump_sum" ? "درصد تجمعی" : `مقدار تجمعی (${it.Unit ?? ""})`}
+                        value={claims[String(it.Id)] ?? ""}
+                        onChange={(e) => { setClaims((c) => ({ ...c, [String(it.Id)]: e.target.value })); setPreview(null); }} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-4">
+          {([
+            ["adjustmentAmount", "مبلغ تعدیل"], ["materialDiffAmount", "مابه‌التفاوت مصالح"],
+            ["insurancePct", "بیمه ٪"], ["taxPct", "مالیات تکلیفی ٪"],
+            ["retainagePct", "سپرده حسن انجام کار ٪"], ["advanceRecoveryPct", "بازیافت پیش‌پرداخت ٪"],
+            ["vatPct", "ارزش افزوده ٪"], ["penaltyAmount", "جریمه (مبلغ)"],
+            ["otherAmount", "سایر کسور (مبلغ)"],
+          ] as const).map(([k, fa]) => (
+            <label key={k} className="block">
+              <span className="mb-1 block text-[8.5px] font-extralight tx3">{fa}</span>
+              <input className={ipcInputCls} type="number" dir="ltr" value={amounts[k] ?? ""}
+                onChange={(e) => { setAmounts((a) => ({ ...a, [k]: e.target.value })); setPreview(null); }} />
+            </label>
+          ))}
+        </div>
+
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <button disabled={busy || !userId || boqItems.length === 0} onClick={() => void runPreview()}
+            className="rounded-lg border b-line-soft px-3 py-1.5 text-[9.5px] tx2 transition hover:tx1 disabled:opacity-40">
+            🔍 پیش‌نمایش محاسبهٔ سرور
+          </button>
+          <button disabled={busy || !userId || boqItems.length === 0} onClick={() => void runCreate()}
+            className="rounded-lg border border-sky-400/40 bg-sky-400/10 px-3 py-1.5 text-[9.5px] text-sky-200 transition hover:bg-sky-400/20 disabled:opacity-40">
+            ＋ ثبت صورت‌وضعیت (پیش‌نویس)
+          </button>
+          {!userId && <span className="text-[8.5px] tx4">برای ثبت باید وارد شوید</span>}
+        </div>
+
+        {preview && (
+          <div className="mt-2 rounded-xl border b-line-soft bg-black/15 p-2 text-[9.5px]">
+            <div className="flex flex-wrap gap-3">
+              <span className="tx2">سریال بعدی: <b className="tx1 tabular-nums" dir="ltr">{fmt(preview.serialNo)}</b></span>
+              <span className="tx2">کارکرد جاری: <b className="tx1 tabular-nums" dir="ltr">{fmt(preview.grossCurrent)}</b></span>
+              <span className="tx2">تجمعی: <b className="tx1 tabular-nums" dir="ltr">{fmt(preview.grossCumulative)}</b></span>
+              <span className="tx2">کسورات: <b className="text-amber-200 tabular-nums" dir="ltr">{fmt(preview.totalDeductions)}</b></span>
+              <span className="tx2">خالص پرداختنی: <b className="text-emerald-300 tabular-nums" dir="ltr">{fmt(preview.netPayable)}</b></span>
+              {preview.ceiling && (
+                <span className={`rounded px-1 ${CEILING_TONE[String(preview.ceiling.status)] ?? ""}`}>
+                  سقف پیمان: {CEILING_FA[String(preview.ceiling.status)] ?? preview.ceiling.status}
+                </span>
+              )}
+              {(preview.excludedCount ?? 0) > 0 && <span className="text-amber-200">{fmt(preview.excludedCount)} ردیف کنار گذاشته شد</span>}
+            </div>
+            {previewLines.filter((l) => l.excludeReasonFa).map((l) => (
+              <div key={l.BoqItemId} className="mt-1 text-[8.5px] text-amber-200">
+                {boqById.get(String(l.BoqItemId))?.ItemNo ?? l.BoqItemId}: {l.excludeReasonFa}
+              </div>
+            ))}
+            <div className="mt-1 text-[8px] tx4">پیش‌نمایش چیزی ذخیره نمی‌کند و عددش همان عدد سند نهایی است.</div>
+          </div>
+        )}
+      </Panel>
+    </div>
+  );
+}
+
 /* ─────────────── صورت‌وضعیت پیمانکار جزء (14.8) ─────────────── */
 
 const SUB_STATE_FA: Record<string, string> = {
@@ -2668,12 +3087,13 @@ export default function ContractsPanel({ lang, activeSubId, navigationRequest, s
   const section = ({
     "d14-p1-s1": "master", "d14-p1-s2": "boq", "d14-p3-s1": "variation",
     "d14-p6-s1": "guarantees", "d14-p5-s2": "advance", "d14-p7-s1": "kpi",
-    "d14-p2-s1": "measurement", "d14-p6-s2": "subipc", "d14-p7-s2": "finance",
+    "d14-p2-s1": "measurement", "d14-p2-s2": "ipc", "d14-p5-s1": "ipc",
+    "d14-p6-s2": "subipc", "d14-p7-s2": "finance",
     "d14-p7-progress": "progress", "d14-p7-reports": "reports",
   } as Record<string, string>)[activeSubId ?? ""] ?? "master";
   const show = (name: string) => !sectioned || section === name;
   const sectionTitle = ({ master: "شناسنامه و الحاقیه‌ها", boq: "فهرست بها و مراحل مقطوع", variation: "تغییر مقادیر و کار جدید",
-    guarantees: "ضمانت‌نامه و پایش انقضا", advance: "پیش‌پرداخت و سپرده", kpi: "شاخص‌ها و هشدارهای پیمان", measurement: "برگهٔ ریزمتره",
+    guarantees: "ضمانت‌نامه و پایش انقضا", advance: "پیش‌پرداخت و سپرده", kpi: "شاخص‌ها و هشدارهای پیمان", measurement: "برگهٔ ریزمتره", ipc: "صورت‌وضعیت پیمانکار اصلی",
     subipc: "صورت‌وضعیت پیمانکار جزء", finance: "انطباق با دفتر مالی", progress: "پیشرفت پیمان", reports: "گزارش‌های پیمان" } as Record<string, string>)[section];
   const [basisFilter, setBasisFilter] = useState<BasisFilter>("all");
   const [loading, setLoading] = useState(true);
@@ -2739,7 +3159,7 @@ export default function ContractsPanel({ lang, activeSubId, navigationRequest, s
           {!contracts.length && <option value="">—</option>}
           {contracts.map(c => <option key={c.id} value={c.id}>{c.code} — {c.titleFa}</option>)}
         </select>
-        <span className="text-[11px] font-semibold tx1">{rtl ? sectionTitle : ({ master: "Contract master & amendments", boq: "BOQ & milestones", variation: "Quantity changes & extra work", guarantees: "Guarantees & expiry", advance: "Advance & retention", kpi: "Contract KPIs & alerts", measurement: "Measurement sheet", subipc: "Subcontractor IPC", finance: "Financial reconciliation", progress: "Contract progress", reports: "Contract reports" } as Record<string, string>)[section]}</span>
+        <span className="text-[11px] font-semibold tx1">{rtl ? sectionTitle : ({ master: "Contract master & amendments", boq: "BOQ & milestones", variation: "Quantity changes & extra work", guarantees: "Guarantees & expiry", advance: "Advance & retention", kpi: "Contract KPIs & alerts", measurement: "Measurement sheet", ipc: "Main IPC & workflow", subipc: "Subcontractor IPC", finance: "Financial reconciliation", progress: "Contract progress", reports: "Contract reports" } as Record<string, string>)[section]}</span>
       </div>}
       <div key={sectioned ? `${selectedId}:${section}` : undefined} data-contract-content className={sectioned ? "thin-scroll min-h-0 flex-1 space-y-3 overflow-y-auto" : "space-y-3"}>
       {sectioned && !selectedId && section !== "master" && <p role="status" className="text-[10px] tx3">{rtl ? "ابتدا یک پیمان ثبت یا انتخاب کنید." : "Register or select a contract first."}</p>}
@@ -3176,6 +3596,17 @@ export default function ContractsPanel({ lang, activeSubId, navigationRequest, s
         {!selectedId && <p role="status" className="text-[10px] tx3">{rtl ? "برای نمایش این بخش، ابتدا یک پیمان ثبت یا انتخاب کنید." : "Register or select a contract to view this section."}</p>}
       </div>}
 
+      {/* صورت‌وضعیت اصلی پیش از جزء می‌آید: پرداخت به جزء به تأیید همین
+          سند گره خورده و بدون دیدنش عدد جزء معنا ندارد. */}
+      {show("ipc") && selectedId && (
+        <IpcSection
+          contractId={selectedId}
+          userId={userId}
+          boqItems={items}
+          onDone={() => { void refreshAll(); }}
+        />
+      )}
+
       {show("subipc") && selectedId && (
         <SubIpcSection
           contractId={selectedId}
@@ -3189,7 +3620,7 @@ export default function ContractsPanel({ lang, activeSubId, navigationRequest, s
       {show("reports") && selectedId && <ReportsSection contractId={selectedId} userId={userId} />}
 
       {!sectioned && <div className="text-center text-[8px] font-extralight tx4" dir="ltr">
-        cnt-v1 · d14 · 14.1 Contract &amp; BOQ · 14.7 Guarantees · 14.8 Subcontractor IPC · 14.9 Progress · 14.10 KPI &amp; EWS · 14.11 Reports · 14.13 FIN Bridge
+        cnt-v1 · d14 · 14.1 Contract &amp; BOQ · 14.2 Main IPC · 14.7 Guarantees · 14.8 Subcontractor IPC · 14.9 Progress · 14.10 KPI &amp; EWS · 14.11 Reports · 14.13 FIN Bridge
       </div>}
       </div>
     </div>

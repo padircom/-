@@ -731,6 +731,22 @@ export function ipcTransition(
   return { ok: true, from, to: match.to, code: null, messageFa: "" };
 }
 
+/**
+ * نقشِ تنها اقدام‌کنندهٔ مجاز برای یک (وضعیت، اقدام) — یا null اگر چنین
+ * گذاری در ماشین حالت نیست.
+ *
+ * چرا این تابع لازم شد: نقش اقدام‌کننده باید در سرور از روی وضعیت خودِ
+ * سند مشتق شود، نه از بدنهٔ درخواست. وقتی کلاینت `actor` را اعلام
+ * می‌کرد، چیزی که در تاریخچهٔ گردش (`IPC_WorkflowStep.Actor`) ثبت
+ * می‌شد گفتهٔ کلاینت بود، نه واقعیت بررسی‌شده. حالا سرور با همین
+ * جدول گذار نقش لازم را پیدا می‌کند، مجوز متناظر همان نقش را از کاربر
+ * می‌خواهد و همان نقش مشتق‌شده را در ممیزی می‌نویسد؛ مقدار ارسالی
+ * کلاینت حداکثر برای سازگاری خوانده و نادیده گرفته می‌شود.
+ */
+export function ipcRequiredActor(from: IpcWorkflowState, action: IpcAction): Actor | null {
+  return IPC_TRANSITIONS.find((t) => t.from === from && t.action === action)?.actor ?? null;
+}
+
 /** گام‌های مجاز بعدی — برای غیرفعال کردن دکمه‌ها در رابط کاربری. */
 export function ipcNextActions(from: IpcWorkflowState, actor?: Actor): IpcAction[] {
   return IPC_TRANSITIONS.filter((t) => t.from === from && (!actor || t.actor === actor)).map(

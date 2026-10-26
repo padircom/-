@@ -333,6 +333,9 @@ function ipcTransition(from, action, actor) {
   }
   return { ok: true, from, to: match.to, code: null, messageFa: "" };
 }
+function ipcRequiredActor(from, action) {
+  return IPC_TRANSITIONS.find((t) => t.from === from && t.action === action)?.actor ?? null;
+}
 function ipcNextActions(from, actor) {
   return IPC_TRANSITIONS.filter((t) => t.from === from && (!actor || t.actor === actor)).map(
     (t) => t.action
@@ -3402,6 +3405,7 @@ export {
   ipcCycle,
   ipcNextActions,
   ipcPostability,
+  ipcRequiredActor,
   ipcTransition,
   isCntAudienceAllowed,
   isIpcLocked,

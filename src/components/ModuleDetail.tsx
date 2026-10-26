@@ -422,8 +422,15 @@ function isIpcProcess(processId: string, subId?: string): boolean {
 function contractView(processId?: string, subId?: string): "contract" | "ipc" | "rating" | "risk" {
   if (subId === "d14-p1-risk") return "risk";
   if (processId === "d14-p8") return "rating";
-  if (["d14-p2-s1", "d14-p5-s2", "d14-p6-s2", "d14-p7-s2"].includes(subId ?? "")) return "contract";
-  return processId && isIpcProcess(processId, subId) ? "ipc" : "contract";
+  /* نمای «قالب‌های صورت‌وضعیت» (CNT-1) فقط از میان‌بر خودش باز می‌شود.
+   * پیش‌تر کل فرایندهای d14-p2/p4/p5 به پنل قالب می‌رفتند و زیرفرایند
+   * «تهیه و گردش صورت‌وضعیت» کاربر را به‌جای دفتر صورت‌وضعیت اصلی
+   * (InterimPaymentCertificate) به قالب‌ساز می‌رساند. حالا آن
+   * زیرفرایندها در میز کار پیمان بخش خودشان را دارند (از جمله بخش
+   * صورت‌وضعیت اصلی با کلید ipc در ContractsPanel) و isIpcProcess فقط
+   * برای دسته‌بندی سایدبار می‌ماند. */
+  if (subId === D14_IPC_TEMPLATES_SUB_ID) return "ipc";
+  return "contract";
 }
 
 type Props = {

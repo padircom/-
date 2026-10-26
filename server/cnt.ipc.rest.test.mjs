@@ -13,7 +13,7 @@ import path from "node:path";
 
 const PORT = 4714;
 const BASE = `http://localhost:${PORT}`;
-const PROJECT = "p1";
+const PROJECT = "c1-p1"; /* دامنهٔ پروژهٔ کاربران آزمایشی RBAC؛ گارد پروژهٔ IPC آن را می‌سنجد */
 
 const CONTRACTS = "u-contracts";   // تهیه‌کننده
 const CONSULTANT = "u-consultant"; // تأیید مشاور
@@ -287,6 +287,63 @@ test("زنجیرهٔ کامل ارسال، تأیید مشاور، تصویب ک
   assert.equal(detail.body.data.workflow.length, 3);
   assert.deepEqual(detail.body.data.workflow.map((w) => w.StepNo), [1, 2, 3]);
   assert.ok(detail.body.data.header.EmployerApprovedAt);
+});
+
+test("گردش بدون اعلام actor هم کامل می‌شود و نقش از سرور مشتق می‌شود", async () => {
+  const id = await makeDraft();
+
+  const s1 = await post(`/api/cnt/ipc/${id}/action?projectId=${PROJECT}`, { action: "submit" }, CONTRACTS);
+  assert.equal(s1.status, 200, JSON.stringify(s1.body));
+  assert.equal(s1.body.data.actor, "contractor");
+
+  const s2 = await post(`/api/cnt/ipc/${id}/action?projectId=${PROJECT}`, { action: "approve" }, CONSULTANT);
+  assert.equal(s2.status, 200, JSON.stringify(s2.body));
+  assert.equal(s2.body.data.actor, "consultant");
+
+  const s3 = await post(`/api/cnt/ipc/${id}/action?projectId=${PROJECT}`, { action: "approve" }, CLIENT);
+  assert.equal(s3.status, 200, JSON.stringify(s3.body));
+  assert.equal(s3.body.data.actor, "employer");
+
+  const s4 = await post(`/api/cnt/ipc/${id}/action?projectId=${PROJECT}`, { action: "pay" }, CLIENT);
+  assert.equal(s4.status, 200, JSON.stringify(s4.body));
+  assert.equal(s4.body.data.workflowState, "paid");
+  assert.equal(s4.body.data.actor, "employer");
+});
+
+test("actor دروغین کلاینت بی‌اثر است و در تاریخچه نقش واقعی ثبت می‌شود", async () => {
+  const id = await makeDraft();
+  await post(`/api/cnt/ipc/${id}/action?projectId=${PROJECT}`, { action: "submit", actor: "employer" }, CONTRACTS);
+
+  /* مشاور خود را کارفرما جا می‌زند؛ سرور باید او را همان مشاور بشناسد. */
+  const r = await post(`/api/cnt/ipc/${id}/action?projectId=${PROJECT}`, { action: "approve", actor: "employer" }, CONSULTANT);
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(r.body.data.workflowState, "consultant_approved");
+  assert.equal(r.body.data.actor, "consultant");
+
+  const detail = await get(`/api/cnt/ipc/${id}?projectId=${PROJECT}`, CONTRACTS);
+  assert.deepEqual(detail.body.data.workflow.map((w) => w.Actor), ["contractor", "consultant"]);
+});
+
+test("کاربر بیرون از دامنهٔ پروژه روی مسیرهای صورت‌وضعیت ۴۰۳ می‌گیرد", async () => {
+  /* u-cost فقط c1-p1 را دارد و cnt.contract.view هم دارد؛ پس رد او روی
+   * c1-p2 فقط می‌تواند از گارد دامنهٔ پروژه آمده باشد. */
+  const list = await get(`/api/cnt/ipc?projectId=c1-p2`, "u-cost");
+  assert.equal(list.status, 403);
+  assert.equal(list.body.error.code, "E-CNT-PROJECT-FORBIDDEN");
+
+  const c = await makeContract();
+  const preview = await post(`/api/cnt/ipc/preview?projectId=c3-p1`, {
+    contractId: c.Id, lines: [],
+  }, CONTRACTS);
+  assert.equal(preview.status, 403);
+  assert.equal(preview.body.error.code, "E-CNT-PROJECT-FORBIDDEN");
+});
+
+test("اقدام گردش بدون شناسهٔ کاربر ۴۰۱ می‌دهد", async () => {
+  const id = await makeDraft();
+  const r = await post(`/api/cnt/ipc/${id}/action?projectId=${PROJECT}`, { action: "submit" });
+  assert.equal(r.status, 401);
+  assert.equal(r.body.error.code, "E-CNT-AUTH-REQUIRED");
 });
 
 test("تهیه‌کننده نمی‌تواند صورت‌وضعیت خودش را تصویب کند", async () => {
