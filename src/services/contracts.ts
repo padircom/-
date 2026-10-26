@@ -5130,6 +5130,11 @@ export type CntReportInput = {
   finSummary?: Record<string, unknown> | null;
   periodLabel?: string;
   asOf?: string;
+  /* فاز ۴ ADR-CNT-IPC-UNIFY: گامهای گردش «تأیید ثبتشده» و هش لحظهٔ
+   * صدور سند. فقط وقتی حضور دارند وارد برگهٔ صورتوضعیت میشوند تا نسخهٔ
+   * قدیمی JSON报告 (پیش از فاز ۴) بایتکبهبایت همان بماند. */
+  signatures?: Record<string, unknown>[];
+  snapshotSha256?: string | null;
 };
 
 type Section =
@@ -5221,6 +5226,45 @@ function buildIpcSheet(inp: CntReportInput): Section[] {
         en: "Prepared by contractor, verified by consultant, approved by employer",
       },
     },
+    /* فاز ۴: در نسخهٔ رسمی PDF، گامهای گردش بهصورت «تأیید ثبتشده» همراه
+     * هش Snapshot سند چاپ میشوند. اینجا همان دادهٔ سرور است، نه چیزی که
+     * کلاینت ساخته باشد. PKI عمداً نیامده — مرحلهٔ جداگانهای است. */
+    ...(inp.signatures && inp.signatures.length
+      ? [{
+          kind: "table",
+          title: { fa: "گواهی تأیید ثبتشده (گام نخست امضا)", en: "Recorded attestation (signature phase 1)" },
+          note: {
+            fa: "هر گام، هش نمایهٔ لحظهٔ همان گام را مهر میکند؛ تغییر سند پس از تأیید، ناسازگاری زنجیره آشکار میشود. این امضای دیجیتال PKI نیست.",
+            en: "Each step seals the hash of the document snapshot at that moment; post-approval tampering breaks the chain. Not a PKI digital signature.",
+          },
+          columns: [
+            { key: "stepNo", title: { fa: "گام", en: "Step" }, weight: 1 },
+            { key: "actorFa", title: { fa: "نقش", en: "Actor" }, weight: 2 },
+            { key: "actionFa", title: { fa: "اقدام", en: "Action" }, weight: 2 },
+            { key: "actedAt", title: { fa: "زمان", en: "At" }, weight: 3 },
+            { key: "shortHash", title: { fa: "هش سند (خلاصه)", en: "Doc hash (short)" }, weight: 3 },
+            { key: "methodFa", title: { fa: "روش", en: "Method" }, weight: 2 },
+          ],
+          rows: (inp.signatures ?? []).map((s) => ({
+            stepNo: cell(s.StepNo),
+            actorFa: cell(s.ActorFa ?? s.Actor),
+            actionFa: cell(s.ActionFa ?? s.Action),
+            actedAt: cell(s.ActedAt),
+            shortHash: String(s.SnapshotSha256 ?? "").slice(0, 12) || "—",
+            methodFa: cell(s.MethodFa ?? "recorded"),
+          })),
+        } as Section]
+      : []),
+    ...(inp.snapshotSha256
+      ? [{
+          kind: "text",
+          title: { fa: "شناسهٔ یکپارچگی سند", en: "Document integrity digest" },
+          body: {
+            fa: `هش SHA-256 نمایهٔ لحظهٔ صدور: ${inp.snapshotSha256}`,
+            en: `SHA-256 of the snapshot at issue time: ${inp.snapshotSha256}`,
+          },
+        } as Section]
+      : []),
   ];
 }
 
@@ -5698,4 +5742,268 @@ export function contractActualCurve(contractAmount: number, ipcs: (Parameters<ty
   const curve = sCurve({ planned: [], actual });
   const points = curve.points.map(p => ({ ...p, plannedPct: null, plannedAmount: null, variancePct: null }));
   return { ...curve, hasPlan: false, latest: points.length ? points[points.length - 1] : null, maxLagPct: null, points, warningsFa: [...curve.warningsFa, ...(approved.length < ipcs.filter(x => ["approved", "paid"].includes(String(x.WorkflowState)) && x.Status !== "cancelled").length ? ["صورت‌وضعیت بدون کد دورهٔ مرتب‌شدنی در منحنی وارد نشده است"] : [])] };
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * فاز ۴ ADR-CNT-IPC-UNIFY — گواهی تأیید ثبتشده و زنجیرهٔ هش سند
+ * ---------------------------------------------------------------------------
+ * «امضا» در گام اول یعنی یک تأیید ثبتشده (recorded attestation) بههمراه هش
+ * نمایهٔ سند در همان لحظه — نه امضای دیجیتال PKI. اتصال PKI مرحلهٔ جداگانه
+ * و بیرون از این گام است (نک: ADR بخش ۵). قرار دادن هش در IPC_WorkflowStep
+ * یعنی تاریخچهٔ گردش، خودش سند ممیزی یکپارچگی است: تغییر سند پس از تأیید،
+ * زنجیره را میشکند.
+ *
+ * چرا هش SHA-256 در لایهٔ سرور گرفته میشود: این موتور در رابط کاربری هم
+ * ایمپورت میشود و نباید به node:crypto وابسته باشد. موتور فقط رشتهٔ کانونی
+ * (canonical) پایدار را میسازد؛ سرور با createHash هش واقعی را میگیرد.
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+export const IPC_SNAPSHOT_VERSION = "ipc-snapshot-v1";
+/** روش تأیید ثبتشده — PKI عمداً مقدار دیگری خواهد داشت در مرحلهٔ جداگانه. */
+export const IPC_SIGNATURE_METHOD = "recorded";
+
+/** انواع ضمانتنامهای که «ضمانتنامهٔ حسن انجام کار» محسوب میشوند (D7). */
+export const IPC_PERFORMANCE_GUARANTEE_TYPES = ["performance", "retention"] as const;
+
+/** رشتهسازی پایدار: ترتیب کلیدها always ثابت است تا هش وابسته به ترتیب شیء نباشد. */
+export function ipcStableStringify(value: unknown): string {
+  if (value === null || value === undefined) return "null";
+  if (typeof value === "number") return Number.isFinite(value) ? String(value) : "null";
+  if (typeof value === "boolean") return value ? "true" : "false";
+  if (typeof value === "string") return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(ipcStableStringify).join(",")}]`;
+  if (typeof value === "object") {
+    const obj = value as Record<string, unknown>;
+    return `{${Object.keys(obj).sort().map((k) => `${JSON.stringify(k)}:${ipcStableStringify(obj[k])}`).join(",")}}`;
+  }
+  return "null";
+}
+
+export type IpcSnapshotInput = {
+  ipc?: Record<string, unknown> | null;
+  lines?: Record<string, unknown>[];
+  deductions?: Record<string, unknown>[];
+  steps?: Record<string, unknown>[];
+};
+
+/** فیلدهای هدر سند که در نمایه میآیند — فیلدهای حسابرسی/زمانی عمداً حذف میشوند. */
+const IPC_SNAPSHOT_HEADER_FIELDS = [
+  "Id", "ProjectId", "ContractId", "SerialNo", "IpcType", "PeriodCode",
+  "PeriodFrom", "PeriodTo", "GrossCurrent", "GrossCumulative", "AdjustmentAmount",
+  "MaterialDiffAmount", "SubtotalAmount", "TotalDeductions", "VatAmount",
+  "NetPayable", "WorkflowState", "Status", "PostedToFin", "LegacyRef",
+] as const;
+const IPC_SNAPSHOT_LINE_FIELDS = [
+  "BoqItemId", "PricingBasis", "PrevQty", "CumQty", "CurrentQty", "PrevPct",
+  "CumPct", "UnitRate", "EarnedCurrent", "EarnedCumulative", "QualityGateStatus",
+  "OverrideBy", "OverrideReasonFa", "Status",
+] as const;
+const IPC_SNAPSHOT_DEDUCTION_FIELDS = [
+  "DeductionType", "BaseAmount", "RatePct", "Amount", "IsStatutory", "NoteFa",
+] as const;
+const IPC_SNAPSHOT_STEP_FIELDS = [
+  "StepNo", "Actor", "Action", "ActedAt", "SnapshotSha256", "DocumentSha256", "PrevHash",
+] as const;
+
+function pickFields(row: Record<string, unknown>, fields: readonly string[]): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const f of fields) out[f] = row[f] ?? null;
+  return out;
+}
+
+/**
+ * نمایهٔ کانونی سند: فقط فیلدهای مالی/هویتی، با آرایههای مرتبشده.
+ * مقادیر عددی به number تبدیل میشوند تا «۱۲» رشتهای و ۱۲ عددی یک هش بدهند —
+ * وگرنه خواندن از درایور JSON در برابر SQL دو سند متفاوت میساخت.
+ */
+export function ipcDocumentSnapshot(input: IpcSnapshotInput): Record<string, unknown> {
+  const ipc = input.ipc ?? {};
+  const norm = (v: unknown) => (v === null || v === undefined || v === "" ? null
+    : typeof v === "number" ? (Number.isFinite(v) ? v : null)
+      : typeof v === "boolean" ? (v ? 1 : 0)
+        /* رشتهای که دقیقاً یک عدد است (درایور SQL گاهی DECIMAL را رشته
+         * برمیگرداند) هم به number میرود تا هش وابسته به نوع درایور نباشد. */
+        : /^-?\d+(\.\d+)?$/.test(String(v).trim()) ? Number(String(v).trim())
+          : String(v));
+  const normalize = (row: Record<string, unknown>, fields: readonly string[]) => {
+    const picked = pickFields(row, fields);
+    const out: Record<string, unknown> = {};
+    for (const k of fields) out[k] = norm(picked[k]);
+    return out;
+  };
+  const lines = [...(input.lines ?? [])]
+    .map((l) => normalize(l ?? {}, IPC_SNAPSHOT_LINE_FIELDS))
+    .sort((a, b) => ipcStableStringify(a).localeCompare(ipcStableStringify(b)));
+  const deductions = [...(input.deductions ?? [])]
+    .map((d) => normalize(d ?? {}, IPC_SNAPSHOT_DEDUCTION_FIELDS))
+    .sort((a, b) => ipcStableStringify(a).localeCompare(ipcStableStringify(b)));
+  const steps = [...(input.steps ?? [])]
+    .map((s) => normalize(s ?? {}, IPC_SNAPSHOT_STEP_FIELDS));
+  return {
+    version: IPC_SNAPSHOT_VERSION,
+    header: normalize(ipc, IPC_SNAPSHOT_HEADER_FIELDS),
+    lines,
+    deductions,
+    steps,
+  };
+}
+
+/** رشتهٔ کانونی سند — ورودی تابع هش در لایهٔ سرور. */
+export function ipcDocumentCanonical(input: IpcSnapshotInput): string {
+  return ipcStableStringify(ipcDocumentSnapshot(input));
+}
+
+/**
+ * هستهٔ یک گام زنجیره: هش سند + هش گام قبل + فرادادهٔ گام.
+ * جداسازیاش از خود سند یعنی هر گام امضای لحظهٔ خودش است، نه کپی گام قبل.
+ */
+export function ipcStepCanonical(input: {
+  documentSha256: string;
+  prevHash: string | null;
+  stepNo: number;
+  actor: string;
+  actorUserId: string;
+  action: string;
+  actedAt: string;
+  commentFa?: string | null;
+}): string {
+  return ipcStableStringify({
+    version: IPC_SNAPSHOT_VERSION,
+    method: IPC_SIGNATURE_METHOD,
+    documentSha256: input.documentSha256,
+    prevHash: input.prevHash ?? null,
+    stepNo: input.stepNo,
+    actor: input.actor,
+    actorUserId: input.actorUserId,
+    action: input.action,
+    actedAt: input.actedAt,
+    commentFa: input.commentFa ?? null,
+  });
+}
+
+/** متن فارسی «تأیید ثبتشده» که در PDF و تاریخچه چاپ میشود. */
+export function ipcAttestationFa(input: {
+  actorFa: string;
+  actionFa: string;
+  actedAt: string;
+  snapshotSha256: string;
+}): string {
+  return `تأیید ثبتشدهٔ ${input.actorFa} — ${input.actionFa} در ${input.actedAt}`
+    + ` · هش سند: ${input.snapshotSha256.slice(0, 16)}…`
+    + ` · روش: تأیید ثبتشده (امضای دیجیتال PKI در این گام اعمال نشده است)`;
+}
+
+/**
+ * راستیآزمایی زنجیرهٔ هش گامها: هش هر گام باید دوباره از فرادادهٔ همان گام
+ * بهدست آید و به هش گام قبل متصل باشد. تغییر مبلغ سند یا حذف/دستکاری یک
+ * گام، اینجا آشکار میشود. `hashFn` تزریق میشود تا موتور خالص بماند.
+ */
+export function verifyIpcSnapshotChain(steps: Record<string, unknown>[], hashFn: (canonical: string) => string): {
+  ok: boolean;
+  checked: number;
+  issuesFa: string[];
+} {
+  const issuesFa: string[] = [];
+  let prevHash: string | null = null;
+  let checked = 0;
+  const sorted = [...steps].sort((a, b) => num(a.StepNo) - num(b.StepNo));
+  for (const s of sorted) {
+    if (!s.SnapshotSha256 || !s.DocumentSha256) continue; /* گامهای پیش از فاز ۴ */
+    const canonical = ipcStepCanonical({
+      documentSha256: String(s.DocumentSha256),
+      prevHash: prevHash,
+      stepNo: num(s.StepNo),
+      actor: String(s.Actor ?? ""),
+      actorUserId: String(s.ActorUserId ?? ""),
+      action: String(s.Action ?? ""),
+      actedAt: String(s.ActedAt ?? ""),
+      commentFa: s.CommentFa == null ? null : String(s.CommentFa),
+    });
+    if (hashFn(canonical) !== s.SnapshotSha256) {
+      issuesFa.push(`هش گام ${String(s.StepNo)} با فرادادهٔ همان گام نمیخواند؛ سند یا تاریخچه دستکاری شده است`);
+    }
+    if (s.PrevHash && s.PrevHash !== prevHash) {
+      issuesFa.push(`گام ${String(s.StepNo)} به هش گام پیشین متصل نیست`);
+    }
+    prevHash = String(s.SnapshotSha256);
+    checked += 1;
+  }
+  return { ok: issuesFa.length === 0, checked, issuesFa };
+}
+
+/* ─────────────── گیت تصویب ضمانتنامهٔ حسن انجام کار ─────────────── */
+
+export type IpcGuaranteeGateVerdict = {
+  ok: boolean;
+  blocking: boolean;
+  code: string | null;
+  issuesFa: string[];
+  warningsFa: string[];
+  checked: number;
+  validCount: number;
+  asOf: string;
+  guarantees: { Code: string; EffectiveExpiry: string | null; DaysToExpiry: number | null; Status: string; Alert: string }[];
+};
+
+/**
+ * پیش از «approve» صورتوضعیت: اعتبار و تاریخ انقضای ضمانتنامهٔ حسن انجام
+ * کار سنجیده میشود. ضمانتنامهای که ثبت شده ولی منقضی/آزاد/ضبط شده باشد
+ * تصویب را مسدود میکند؛ نبودِ رکورد، بسته به `requirePresent` یا هشدار است
+ * یا خطا (تا پروژههای قدیمی که هنوز دفتر وثیقهشان مهاجرت نکرده ناگهان
+ * قفل نشوند، ولی سازمان بتواند الزامش کند).
+ */
+export function ipcApprovalGuaranteeGate(input: {
+  guarantees?: GuaranteeRow[];
+  now?: Date;
+  requirePresent?: boolean;
+}): IpcGuaranteeGateVerdict {
+  const now = input.now ?? new Date();
+  const asOf = now.toISOString().slice(0, 10);
+  const rows = (input.guarantees ?? []).filter((g) =>
+    (IPC_PERFORMANCE_GUARANTEE_TYPES as readonly string[]).includes(String(g.GuaranteeType ?? "")),
+  );
+  const issuesFa: string[] = [];
+  const warningsFa: string[] = [];
+  const evaluated = rows.map((g) => {
+    const state = guaranteeState(g, now);
+    return { row: g, state };
+  });
+  const valid = evaluated.filter(({ state }) => state.isLive && !state.isExpiredSilently);
+  const summary = evaluated.map(({ row, state }) => ({
+    Code: String(row.Code ?? ""),
+    EffectiveExpiry: state.effectiveExpiry,
+    DaysToExpiry: state.daysToExpiry,
+    Status: state.status,
+    Alert: state.alert,
+  }));
+
+  if (rows.length === 0) {
+    const msg = "هیچ ضمانتنامهٔ حسن انجام کاری برای این پیمان ثبت نشده است؛ پوشش وثیقهای نامشخص است";
+    if (input.requirePresent) issuesFa.push(msg);
+    else warningsFa.push(msg);
+  } else if (valid.length === 0) {
+    issuesFa.push("ضمانتنامهٔ حسن انجام کار منقضی، آزاد یا ضبط شده است؛ تصویب صورتوضعیت تا تمدید وثیقه مجاز نیست");
+  }
+  for (const { row, state } of evaluated) {
+    if (!state.isLive || state.isExpiredSilently) continue;
+    if (state.alert === "d30" || state.alert === "d10" || state.alert === "d3") {
+      warningsFa.push(`ضمانتنامهٔ ${String(row.Code ?? "")}: ${state.alertFa} (${state.daysToExpiry} روز مانده)`);
+    }
+    if (!state.effectiveExpiry) {
+      warningsFa.push(`ضمانتنامهٔ ${String(row.Code ?? "")} تاریخ انقضای مؤثر ندارد؛ پایش انقضا ممکن نیست`);
+    }
+  }
+
+  return {
+    ok: issuesFa.length === 0,
+    blocking: issuesFa.length > 0,
+    code: issuesFa.length === 0 ? null
+      : rows.length === 0 ? "E-CNT-IPC-GUARANTEE-MISSING" : "E-CNT-IPC-GUARANTEE-EXPIRED",
+    issuesFa,
+    warningsFa,
+    checked: rows.length,
+    validCount: valid.length,
+    asOf,
+    guarantees: summary,
+  };
 }

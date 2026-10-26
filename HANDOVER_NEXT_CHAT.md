@@ -1,5 +1,38 @@
 # انتقال به چت جدید — Arena Platform
-تاریخ به‌روزرسانی: 2026-10-26 — **گزارش مرجع جاری: `docs/GAP_ROADMAP.md`؛ بخش‌های پایین تاریخچه‌اند.**
+تاریخ به‌روزرسانی: 2026-10-26 — **گزارش مرجع جاری: `docs/GAP_ROADMAP.md`؛ بخش‌های پایین تاریخچهٕاند.**
+## نشست ۲۰۲۶-۱۰-۲۶ — CNT-IPC فاز ۴: خروجی و اتصالهای بیرونی (ADR-CNT-IPC-UNIFY بخش ۵)
+- شاخهٔ نشست: `arena/87123c73-repo` (پس از مرج PR #46/#47 فاز ۱ تا ۳ در `main`).
+- **بند ۱ — PDF رسمی:** مسیر اختصاصی `GET /api/cnt/ipc/:id/pdf` خروجی **باینری واقعی**
+  `%PDF-` (`htmlToPdf` از `server/pdfRenderer.js`) از همان مدل `RPT-CNT-IPC` موتور
+  هسته میدهد (TD-CNT-11 بسته شد). مجوز `cnt.report.issue` + دروازهٔ سربرگ رسمی.
+  `format=json` پیشنمایش، `engine=print` همان HTML چاپی قدیمی، نبود مرورگر → ۵۰۱
+  صادقانه `E-CNT-IPC-PDF-UNAVAILABLE`. هش صدور در هدر `x-cnt-ipc-doc-sha256` و متن سند.
+- **بند ۲ — امضا گام اول:** توابع خالص `ipcDocumentSnapshot`/`ipcDocumentCanonical`/
+  `ipcStepCanonical`/`ipcAttestationFa`/`verifyIpcSnapshotChain` در `contracts.ts`.
+  هر گام `IPC_WorkflowStep` هش SHA-256 سند + هش زنجیرهای گام (`PrevHash`) +
+  `SignatureMethod=recorded` + متن «تأیید ثبتشده» دارد؛ ستونها + مهاجرت **۰۰۷۸**.
+  **PKI عمداً انجام نشد** (`pkiApplied=false`) — مرحلهٔ جداگانهٔ بعدی است.
+- **بند ۳ — گیت تصویب ضمانتنامه:** `ipcApprovalGuaranteeGate` پیش از `approve`،
+  ضمانتنامهٔ حسن انجام کار (`performance`/`retention`) را با `guaranteeState` میسنجد؛
+  موجودِ منقضی → ۴۰۹ `E-CNT-IPC-GUARANTEE-EXPIRED`؛ نبود رکورد → هشدار، مگر
+  `CNT_IPC_GUARANTEE_REQUIRED=1` (آنگاه `E-CNT-IPC-GUARANTEE-MISSING`). نتیجه در
+  `GuaranteeCheckJson` گام ثبت میشود. تمایز «نبود سطر» از «منقضی» عمدی است (فلسفهٔ D7).
+- **بند ۴ — Excel اختصاصی:** `server/cntExcelApi.js` (جدید) چهار مسیر
+  `/api/cnt/excel/:projectId/{templates,measurements}` GET/POST با XLSX باینری
+  واقعی و پیشفرض preview (commit=1 مینویسد)؛ Quantity ریزمتره از ابعاد مشتق
+  میشود نه از فایل. `MeasurementSheet` به `DEDICATED_TABLE_ROUTES` اضافه شد تا
+  موتور عمومی فایل (`/api/integration/*`) دور نزند. مجوز + گارد پروژه + AuditLog.
+- **دروازهها:** `npx tsc --noEmit` تمیز · باندلهای `build:cnt`/`build:sql`/
+  `build:rpt`/`build:cntipc` و همهٔ ۶۰ باندل گیتایگنورشده بازتولید شدند ·
+  ۲۰ تست واحد موتور (شامل اعداد طلایی D4 ۹۱٬۰۰۰٬۰۰۰ و CNT-1 ۱۳٬۶۸۰) + ۱۷ تست
+  REST فاز ۴ سبز · ۶۳۰ تست هدفمند CNT/مهاجرت/اسکیما سبز (۳ شکست
+  `cnt.schema`/`sql` همان شکستهای ازپیشموجود `main`اند — با `git stash` تأیید شد؛
+  ۲ شکست شمارش کاتالوگ `rbac.test.mjs` هم ازپیشموجود است). تستهای p8/pmo با
+  concurrency=4 ناپایدار و با =1 سبزاند (رقابت پورت/داده، همان نکتهٔ قدیمی).
+- دودتست زندهٔ `c1-p1`: گردش سهگام → زنجیرهٔ هش `ok:true` → PDF ۳۲۸٬۵۳۳ بایت
+  `%PDF-` → خروجی XLSX قالبها/ریزمتره `PK` — همه ۲۰۰.
+- جزئیات کامل در `docs/CNT_IPC_Unification_ADR.md` بخش «نتیجهٔ اجرای فاز ۴».
+
 ## نشست ۲۰۲۶-۱۰-۲۶ (ادامه) — CNT-IPC فاز ۳ بند ۶+۷: بازنشستگی `fin.ipc.*` + گسترش گارد پروژه
 - ادامهٔ همان شاخهٔ کاری، پس از مرج PR #46 (بندهای ۱ تا ۵ فاز ۳) در `main`.
 - **بند ۶:** تعریف‌های `fin.ipc.prepare`/`fin.ipc.approve` در کاتالوگ ماندند (یک تست

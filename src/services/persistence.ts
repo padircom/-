@@ -2722,11 +2722,22 @@ export const SCHEMA: TableDef[] = [
       req("StepNo", "int"),
       req("Actor", "text", { len: 20, comment: "contractor|consultant|employer" }),
       c("ActorUserId", "text", { len: 60 }),
-      req("Action", "text", { len: 30, comment: "submit|approve|reject|return_for_correction" }),
+      req("Action", "text", { len: 30, comment: "submit|approve|reject|return_for_correction|pay" }),
       req("ActedAt", "datetime"),
       c("DueAt", "date"),
       c("OverdueDays", "int"),
       c("CommentFa", "text", { len: 1000 }),
+      /* فاز ۴ ADR-CNT-IPC-UNIFY — «امضا» گام اول: تأیید ثبتشده + هش
+       * نمایهٔ سند. nullableاند چون گامهای پیش از فاز ۴ چنین هشی ندارند
+       * (مهاجرت ۰۰۷۸ روی دادهٔ موجود آنها خالی میگذارد). PKI مرحلهٔ جدا
+       * است؛ SignatureMethod=recorded صریحاً میگوید امضای دیجیتال نشده. */
+      c("SnapshotSha256", "text", { len: 64, comment: "SHA-256 of the step canonical (ipc-snapshot-v1)" }),
+      c("DocumentSha256", "text", { len: 64, comment: "SHA-256 of the document snapshot at this step" }),
+      c("PrevHash", "text", { len: 64, comment: "SnapshotSha256 of the previous step (hash chain)" }),
+      c("SignatureMethod", "text", { len: 24, comment: "recorded (PKI is a separate phase)" }),
+      c("SignatureVersion", "text", { len: 24, comment: "ipc-snapshot-v1" }),
+      c("AttestationFa", "text", { len: 600, comment: "Recorded attestation printed on the official PDF" }),
+      c("GuaranteeCheckJson", "text", { comment: "Approval guarantee gate verdict (JSON), approve actions only" }),
     ],
     indexes: [{ name: "UX_IPC_WorkflowStep", columns: ["IpcId", "StepNo"], unique: true }],
   },
@@ -6975,6 +6986,16 @@ export const MIGRATIONS: Migration[] = [
   {
     version: "0077", name: "contract_snapshot_data_quality",
     statements: ["ExpiringGuaranteeCount", "IsGapReliable"].map(col => addColumnDdl("ContractMetricsSnapshot", col, "mssql")),
+  },
+  {
+    /* فاز ۴ ADR-CNT-IPC-UNIFY: تأیید ثبتشده + هش نمایهٔ سند در تاریخچهٔ
+     * گردش. addColumnDdl ایدمپوتنت است و ستونها nullableاند، پس اجرا روی
+     * پایگاهٔ زنده گامهای قدیمی را نمیشکند. */
+    version: "0078", name: "ipc_workflow_attestation",
+    statements: [
+      "SnapshotSha256", "DocumentSha256", "PrevHash", "SignatureMethod",
+      "SignatureVersion", "AttestationFa", "GuaranteeCheckJson",
+    ].map(col => addColumnDdl("IPC_WorkflowStep", col, "mssql")),
   },
 ];
 
