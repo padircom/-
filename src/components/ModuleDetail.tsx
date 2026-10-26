@@ -1850,7 +1850,7 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
             <SystemBadge domainId={dom.id} lang={lang} className="mb-1 justify-end" />
             <div className="text-[9px] font-extralight tx3">{t(dom.title, lang)}</div>
             <div className="text-[11px] font-light tx1">
-              {rtl ? "HSE — TRIR از من‌اور واقعی" : "HSE — real man-hour TRIR"}
+              {rtl ? "نرخ حوادث بر پایهٔ نفرساعت واقعی" : "HSE — real man-hour TRIR"}
             </div>
           </div>
         </div>
@@ -1863,7 +1863,6 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
               dom={dom}
               activeProcesses={activeProcesses}
               selectedSubId={selected?.sId}
-              showSql
               onSelectSub={(pId, sId) => {
                 audit("OPEN_SUBPROCESS", { projectId: target.projectId, entity: dom.id, entityId: sId });
                 setSelected({ pId, sId })

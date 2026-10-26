@@ -1020,8 +1020,8 @@ export const domains: Domain[] = [
         id: "d16-p7",
         title: { fa: "ایمنی، بهداشت و محیط‌زیست کارگاهی", en: "Field Health, Safety & Environment" },
         subs: [
-          { id: "d16-p7-s1", title: { fa: "نمای کلی HSE کارگاهی", en: "Field HSE Overview" }, activity: { fa: "نمای کلی ایمنی کارگاه", en: "Field safety overview" }, source: "HSE Field", sql: ["hse_incident", "hse_permit", "hse_inspection"], output: "Field HSE Dashboard", connectsTo: "Daily Planning", ai: "" },
-          { id: "d16-p7-s2", title: { fa: "رجیستر حوادث", en: "Incident Register" }, activity: { fa: "ثبت و پیگیری حوادث کارگاهی", en: "Record and track field incidents" }, source: "HSE Field", sql: ["hse_incident"], output: "Incident Register", connectsTo: "HSE", ai: "" },
+          { id: "d16-p7-s1", title: { fa: "نمای کلی ایمنی و بهداشت کارگاهی", en: "Field HSE Overview" }, activity: { fa: "نمای کلی ایمنی کارگاه", en: "Field safety overview" }, source: "HSE Field", sql: ["hse_incident", "hse_permit", "hse_inspection"], output: "Field HSE Dashboard", connectsTo: "Daily Planning", ai: "" },
+          { id: "d16-p7-s2", title: { fa: "ثبت حوادث", en: "Incident Register" }, activity: { fa: "ثبت و پیگیری حوادث کارگاهی", en: "Record and track field incidents" }, source: "HSE Field", sql: ["hse_incident"], output: "Incident Register", connectsTo: "HSE", ai: "" },
           { id: "d16-p7-s3", title: { fa: "پروانه‌های کار", en: "Work Permits" }, activity: { fa: "گردش پروانه‌های کارگاهی", en: "Field permit workflow" }, source: "HSE Field", sql: ["hse_permit"], output: "Permit Register", connectsTo: "HSE", ai: "" },
           { id: "d16-p7-s4", title: { fa: "بازرسی‌های کارگاهی", en: "Field Inspections" }, activity: { fa: "بازرسی و یافته‌های کارگاهی", en: "Field inspection and findings" }, source: "HSE Field", sql: ["hse_inspection"], output: "Inspection Register", connectsTo: "HSE", ai: "" },
           { id: "d16-p7-s5", title: { fa: "بهداشت و محیط‌زیست کارگاهی", en: "Field Health & Environment" }, activity: { fa: "پایش بهداشت و محیط‌زیست", en: "Field health and environment" }, source: "HSE Field", sql: ["hse_tbt"], output: "Health & Environment", connectsTo: "HSE", ai: "" },
@@ -1547,48 +1547,48 @@ export const domains: Domain[] = [
     group: "pg3",
     icon: "⛑️",
     accent: "#A3E635",
-    title: { fa: "ثبت سریع میدانی HSE", en: "HSE Quick Field Register" },
+    title: { fa: "ثبت سریع میدانی ایمنی و بهداشت", en: "HSE Quick Field Register" },
     processes: [
       {
         id: "d17-p1",
-        title: { fa: "داشبورد و پایش HSE", en: "HSE Dashboard & Monitoring" },
+        title: { fa: "داشبورد و پایش ایمنی و بهداشت", en: "HSE Dashboard & Monitoring" },
         subs: [
-          { id: "d17-p1-s1", title: { fa: "شاخص‌های TRIR/LTIFR و امتیاز HSE", en: "TRIR/LTIFR & HSE score" }, activity: { fa: "پایش نرخ OSHA از من‌اور واقعی", en: "OSHA rates from real man-hours" }, source: "DPR, hse_manhour", sql: ["hse_incident", "hse_manhour"], output: "HSE Dashboard", connectsTo: "PMA / KPI", ai: "AI TRIR Forecast" },
+          { id: "d17-p1-s1", title: { fa: "نرخ حوادث و امتیاز ایمنی", en: "TRIR/LTIFR & HSE score" }, activity: { fa: "پایش نرخ OSHA از من‌اور واقعی", en: "OSHA rates from real man-hours" }, source: "DPR, hse_manhour", sql: ["hse_incident", "hse_manhour"], output: "HSE Dashboard", connectsTo: "PMA / KPI", ai: "AI TRIR Forecast" },
         ],
       },
       {
         id: "d17-p2",
         title: { fa: "مدیریت حوادث", en: "Incident Management" },
         subs: [
-          { id: "d17-p2-s1", title: { fa: "ثبت و رجیستر حوادث", en: "Incident registry" }, activity: { fa: "طبقه‌بندی OSHA و ثبت حادثه", en: "OSHA classification & reporting" }, source: "Field Report, DPR", sql: ["hse_incident"], output: "Incident Register", connectsTo: "CAPA, Claims", ai: "AI Severity Triage" },
+          { id: "d17-p2-s1", title: { fa: "ثبت و فهرست حوادث", en: "Incident registry" }, activity: { fa: "طبقه‌بندی OSHA و ثبت حادثه", en: "OSHA classification & reporting" }, source: "Field Report, DPR", sql: ["hse_incident"], output: "Incident Register", connectsTo: "CAPA, Claims", ai: "AI Severity Triage" },
         ],
       },
       {
         id: "d17-p3",
-        title: { fa: "پروانه کار (PTW)", en: "Permit to Work (PTW)" },
+        title: { fa: "پروانه انجام کار", en: "Permit to Work (PTW)" },
         subs: [
-          { id: "d17-p3-s1", title: { fa: "چرخه صدور و گیت WO", en: "Permit cycle & WO gate" }, activity: { fa: "صدور PTW و کنترل کار پرخطر", en: "PTW issue & high-risk control" }, source: "Work Order", sql: ["hse_permit"], output: "PTW Status", connectsTo: "Work Orders", ai: "AI Permit Risk Check" },
+          { id: "d17-p3-s1", title: { fa: "چرخه صدور و دروازهٔ دستورکار", en: "Permit cycle & WO gate" }, activity: { fa: "صدور PTW و کنترل کار پرخطر", en: "PTW issue & high-risk control" }, source: "Work Order", sql: ["hse_permit"], output: "PTW Status", connectsTo: "Work Orders", ai: "AI Permit Risk Check" },
         ],
       },
       {
         id: "d17-p4",
         title: { fa: "بازرسی‌ها", en: "Inspections" },
         subs: [
-          { id: "d17-p4-s1", title: { fa: "چک‌لیست و نمره A–D", en: "Checklist & A-D score" }, activity: { fa: "ثبت بازرسی و سررسید بعدی", en: "Inspection log & next due" }, source: "HSE Walkdown", sql: ["hse_inspection"], output: "Inspection Score", connectsTo: "Actions", ai: "AI Finding Detector" },
+          { id: "d17-p4-s1", title: { fa: "فهرست بازرسی و درجهٔ الف تا د", en: "Checklist & A-D score" }, activity: { fa: "ثبت بازرسی و سررسید بعدی", en: "Inspection log & next due" }, source: "HSE Walkdown", sql: ["hse_inspection"], output: "Inspection Score", connectsTo: "Actions", ai: "AI Finding Detector" },
         ],
       },
       {
         id: "d17-p5",
         title: { fa: "بهداشت و محیط‌زیست", en: "Health & Environment" },
         subs: [
-          { id: "d17-p5-s1", title: { fa: "TBT، معاینات، پسماند و نشت", en: "TBT, checkups, waste & spills" }, activity: { fa: "پایش بهداشت و محیط‌زیست", en: "Health & env monitoring" }, source: "Clinic, Waste Log", sql: ["hse_tbt"], output: "Health/Env Report", connectsTo: "Governance", ai: "AI Spill Tiering" },
+          { id: "d17-p5-s1", title: { fa: "جلسهٔ ایمنی پیش از کار، معاینات، پسماند و نشت", en: "TBT, checkups, waste & spills" }, activity: { fa: "پایش بهداشت و محیط‌زیست", en: "Health & env monitoring" }, source: "Clinic, Waste Log", sql: ["hse_tbt"], output: "Health/Env Report", connectsTo: "Governance", ai: "AI Spill Tiering" },
         ],
       },
       {
         id: "d17-p6",
         title: { fa: "اقدامات اصلاحی", en: "Corrective Actions" },
         subs: [
-          { id: "d17-p6-s1", title: { fa: "SLA و ارجاع CAPA", en: "SLA & CAPA tracking" }, activity: { fa: "پیگیری اقدام و ارجاع CAPA", en: "Action follow-up & CAPA referral" }, source: "Inspection, Audit", sql: ["hse_action"], output: "Action Closure", connectsTo: "GOV CAPA", ai: "AI Escalation Watch" },
+          { id: "d17-p6-s1", title: { fa: "مهلت رسیدگی و ارجاع اقدامات اصلاحی و پیشگیرانه", en: "SLA & CAPA tracking" }, activity: { fa: "پیگیری اقدام و ارجاع CAPA", en: "Action follow-up & CAPA referral" }, source: "Inspection, Audit", sql: ["hse_action"], output: "Action Closure", connectsTo: "GOV CAPA", ai: "AI Escalation Watch" },
         ],
       },
     ],
