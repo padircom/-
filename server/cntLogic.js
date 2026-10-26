@@ -2894,7 +2894,42 @@ function buildIpcSheet(inp) {
         fa: `\u062A\u0647\u06CC\u0647: ${String(c.ContractorName ?? "\u067E\u06CC\u0645\u0627\u0646\u06A9\u0627\u0631")} \xB7 \u062A\u0623\u06CC\u06CC\u062F \u0641\u0646\u06CC: ${String(c.ConsultantName ?? "\u0645\u0634\u0627\u0648\u0631")} \xB7 \u062A\u0635\u0648\u06CC\u0628: ${String(c.EmployerName ?? "\u06A9\u0627\u0631\u0641\u0631\u0645\u0627")}`,
         en: "Prepared by contractor, verified by consultant, approved by employer"
       }
-    }
+    },
+    /* فاز ۴: در نسخهٔ رسمی PDF، گامهای گردش بهصورت «تأیید ثبتشده» همراه
+     * هش Snapshot سند چاپ میشوند. اینجا همان دادهٔ سرور است، نه چیزی که
+     * کلاینت ساخته باشد. PKI عمداً نیامده — مرحلهٔ جداگانهای است. */
+    ...inp.signatures && inp.signatures.length ? [{
+      kind: "table",
+      title: { fa: "\u06AF\u0648\u0627\u0647\u06CC \u062A\u0623\u06CC\u06CC\u062F \u062B\u0628\u062A\u0634\u062F\u0647 (\u06AF\u0627\u0645 \u0646\u062E\u0633\u062A \u0627\u0645\u0636\u0627)", en: "Recorded attestation (signature phase 1)" },
+      note: {
+        fa: "\u0647\u0631 \u06AF\u0627\u0645\u060C \u0647\u0634 \u0646\u0645\u0627\u06CC\u0647\u0654 \u0644\u062D\u0638\u0647\u0654 \u0647\u0645\u0627\u0646 \u06AF\u0627\u0645 \u0631\u0627 \u0645\u0647\u0631 \u0645\u06CC\u06A9\u0646\u062F\u061B \u062A\u063A\u06CC\u06CC\u0631 \u0633\u0646\u062F \u067E\u0633 \u0627\u0632 \u062A\u0623\u06CC\u06CC\u062F\u060C \u0646\u0627\u0633\u0627\u0632\u06AF\u0627\u0631\u06CC \u0632\u0646\u062C\u06CC\u0631\u0647 \u0622\u0634\u06A9\u0627\u0631 \u0645\u06CC\u0634\u0648\u062F. \u0627\u06CC\u0646 \u0627\u0645\u0636\u0627\u06CC \u062F\u06CC\u062C\u06CC\u062A\u0627\u0644 PKI \u0646\u06CC\u0633\u062A.",
+        en: "Each step seals the hash of the document snapshot at that moment; post-approval tampering breaks the chain. Not a PKI digital signature."
+      },
+      columns: [
+        { key: "stepNo", title: { fa: "\u06AF\u0627\u0645", en: "Step" }, weight: 1 },
+        { key: "actorFa", title: { fa: "\u0646\u0642\u0634", en: "Actor" }, weight: 2 },
+        { key: "actionFa", title: { fa: "\u0627\u0642\u062F\u0627\u0645", en: "Action" }, weight: 2 },
+        { key: "actedAt", title: { fa: "\u0632\u0645\u0627\u0646", en: "At" }, weight: 3 },
+        { key: "shortHash", title: { fa: "\u0647\u0634 \u0633\u0646\u062F (\u062E\u0644\u0627\u0635\u0647)", en: "Doc hash (short)" }, weight: 3 },
+        { key: "methodFa", title: { fa: "\u0631\u0648\u0634", en: "Method" }, weight: 2 }
+      ],
+      rows: (inp.signatures ?? []).map((s) => ({
+        stepNo: cell(s.StepNo),
+        actorFa: cell(s.ActorFa ?? s.Actor),
+        actionFa: cell(s.ActionFa ?? s.Action),
+        actedAt: cell(s.ActedAt),
+        shortHash: String(s.SnapshotSha256 ?? "").slice(0, 12) || "\u2014",
+        methodFa: cell(s.MethodFa ?? "recorded")
+      }))
+    }] : [],
+    ...inp.snapshotSha256 ? [{
+      kind: "text",
+      title: { fa: "\u0634\u0646\u0627\u0633\u0647\u0654 \u06CC\u06A9\u067E\u0627\u0631\u0686\u06AF\u06CC \u0633\u0646\u062F", en: "Document integrity digest" },
+      body: {
+        fa: `\u0647\u0634 SHA-256 \u0646\u0645\u0627\u06CC\u0647\u0654 \u0644\u062D\u0638\u0647\u0654 \u0635\u062F\u0648\u0631: ${inp.snapshotSha256}`,
+        en: `SHA-256 of the snapshot at issue time: ${inp.snapshotSha256}`
+      }
+    }] : []
   ];
 }
 function buildBoqSheet(inp) {
@@ -3320,6 +3355,197 @@ function contractActualCurve(contractAmount, ipcs) {
   const points = curve.points.map((p) => ({ ...p, plannedPct: null, plannedAmount: null, variancePct: null }));
   return { ...curve, hasPlan: false, latest: points.length ? points[points.length - 1] : null, maxLagPct: null, points, warningsFa: [...curve.warningsFa, ...approved.length < ipcs.filter((x) => ["approved", "paid"].includes(String(x.WorkflowState)) && x.Status !== "cancelled").length ? ["\u0635\u0648\u0631\u062A\u200C\u0648\u0636\u0639\u06CC\u062A \u0628\u062F\u0648\u0646 \u06A9\u062F \u062F\u0648\u0631\u0647\u0654 \u0645\u0631\u062A\u0628\u200C\u0634\u062F\u0646\u06CC \u062F\u0631 \u0645\u0646\u062D\u0646\u06CC \u0648\u0627\u0631\u062F \u0646\u0634\u062F\u0647 \u0627\u0633\u062A"] : []] };
 }
+var IPC_SNAPSHOT_VERSION = "ipc-snapshot-v1";
+var IPC_SIGNATURE_METHOD = "recorded";
+var IPC_PERFORMANCE_GUARANTEE_TYPES = ["performance", "retention"];
+function ipcStableStringify(value) {
+  if (value === null || value === void 0) return "null";
+  if (typeof value === "number") return Number.isFinite(value) ? String(value) : "null";
+  if (typeof value === "boolean") return value ? "true" : "false";
+  if (typeof value === "string") return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(ipcStableStringify).join(",")}]`;
+  if (typeof value === "object") {
+    const obj = value;
+    return `{${Object.keys(obj).sort().map((k) => `${JSON.stringify(k)}:${ipcStableStringify(obj[k])}`).join(",")}}`;
+  }
+  return "null";
+}
+var IPC_SNAPSHOT_HEADER_FIELDS = [
+  "Id",
+  "ProjectId",
+  "ContractId",
+  "SerialNo",
+  "IpcType",
+  "PeriodCode",
+  "PeriodFrom",
+  "PeriodTo",
+  "GrossCurrent",
+  "GrossCumulative",
+  "AdjustmentAmount",
+  "MaterialDiffAmount",
+  "SubtotalAmount",
+  "TotalDeductions",
+  "VatAmount",
+  "NetPayable",
+  "WorkflowState",
+  "Status",
+  "PostedToFin",
+  "LegacyRef"
+];
+var IPC_SNAPSHOT_LINE_FIELDS = [
+  "BoqItemId",
+  "PricingBasis",
+  "PrevQty",
+  "CumQty",
+  "CurrentQty",
+  "PrevPct",
+  "CumPct",
+  "UnitRate",
+  "EarnedCurrent",
+  "EarnedCumulative",
+  "QualityGateStatus",
+  "OverrideBy",
+  "OverrideReasonFa",
+  "Status"
+];
+var IPC_SNAPSHOT_DEDUCTION_FIELDS = [
+  "DeductionType",
+  "BaseAmount",
+  "RatePct",
+  "Amount",
+  "IsStatutory",
+  "NoteFa"
+];
+var IPC_SNAPSHOT_STEP_FIELDS = [
+  "StepNo",
+  "Actor",
+  "Action",
+  "ActedAt",
+  "SnapshotSha256",
+  "DocumentSha256",
+  "PrevHash"
+];
+function pickFields(row, fields) {
+  const out = {};
+  for (const f of fields) out[f] = row[f] ?? null;
+  return out;
+}
+function ipcDocumentSnapshot(input) {
+  const ipc = input.ipc ?? {};
+  const norm = (v) => v === null || v === void 0 || v === "" ? null : typeof v === "number" ? Number.isFinite(v) ? v : null : typeof v === "boolean" ? v ? 1 : 0 : /^-?\d+(\.\d+)?$/.test(String(v).trim()) ? Number(String(v).trim()) : String(v);
+  const normalize = (row, fields) => {
+    const picked = pickFields(row, fields);
+    const out = {};
+    for (const k of fields) out[k] = norm(picked[k]);
+    return out;
+  };
+  const lines = [...input.lines ?? []].map((l) => normalize(l ?? {}, IPC_SNAPSHOT_LINE_FIELDS)).sort((a, b) => ipcStableStringify(a).localeCompare(ipcStableStringify(b)));
+  const deductions = [...input.deductions ?? []].map((d) => normalize(d ?? {}, IPC_SNAPSHOT_DEDUCTION_FIELDS)).sort((a, b) => ipcStableStringify(a).localeCompare(ipcStableStringify(b)));
+  const steps = [...input.steps ?? []].map((s) => normalize(s ?? {}, IPC_SNAPSHOT_STEP_FIELDS));
+  return {
+    version: IPC_SNAPSHOT_VERSION,
+    header: normalize(ipc, IPC_SNAPSHOT_HEADER_FIELDS),
+    lines,
+    deductions,
+    steps
+  };
+}
+function ipcDocumentCanonical(input) {
+  return ipcStableStringify(ipcDocumentSnapshot(input));
+}
+function ipcStepCanonical(input) {
+  return ipcStableStringify({
+    version: IPC_SNAPSHOT_VERSION,
+    method: IPC_SIGNATURE_METHOD,
+    documentSha256: input.documentSha256,
+    prevHash: input.prevHash ?? null,
+    stepNo: input.stepNo,
+    actor: input.actor,
+    actorUserId: input.actorUserId,
+    action: input.action,
+    actedAt: input.actedAt,
+    commentFa: input.commentFa ?? null
+  });
+}
+function ipcAttestationFa(input) {
+  return `\u062A\u0623\u06CC\u06CC\u062F \u062B\u0628\u062A\u0634\u062F\u0647\u0654 ${input.actorFa} \u2014 ${input.actionFa} \u062F\u0631 ${input.actedAt} \xB7 \u0647\u0634 \u0633\u0646\u062F: ${input.snapshotSha256.slice(0, 16)}\u2026 \xB7 \u0631\u0648\u0634: \u062A\u0623\u06CC\u06CC\u062F \u062B\u0628\u062A\u0634\u062F\u0647 (\u0627\u0645\u0636\u0627\u06CC \u062F\u06CC\u062C\u06CC\u062A\u0627\u0644 PKI \u062F\u0631 \u0627\u06CC\u0646 \u06AF\u0627\u0645 \u0627\u0639\u0645\u0627\u0644 \u0646\u0634\u062F\u0647 \u0627\u0633\u062A)`;
+}
+function verifyIpcSnapshotChain(steps, hashFn) {
+  const issuesFa = [];
+  let prevHash = null;
+  let checked = 0;
+  const sorted = [...steps].sort((a, b) => num(a.StepNo) - num(b.StepNo));
+  for (const s of sorted) {
+    if (!s.SnapshotSha256 || !s.DocumentSha256) continue;
+    const canonical = ipcStepCanonical({
+      documentSha256: String(s.DocumentSha256),
+      prevHash,
+      stepNo: num(s.StepNo),
+      actor: String(s.Actor ?? ""),
+      actorUserId: String(s.ActorUserId ?? ""),
+      action: String(s.Action ?? ""),
+      actedAt: String(s.ActedAt ?? ""),
+      commentFa: s.CommentFa == null ? null : String(s.CommentFa)
+    });
+    if (hashFn(canonical) !== s.SnapshotSha256) {
+      issuesFa.push(`\u0647\u0634 \u06AF\u0627\u0645 ${String(s.StepNo)} \u0628\u0627 \u0641\u0631\u0627\u062F\u0627\u062F\u0647\u0654 \u0647\u0645\u0627\u0646 \u06AF\u0627\u0645 \u0646\u0645\u06CC\u062E\u0648\u0627\u0646\u062F\u061B \u0633\u0646\u062F \u06CC\u0627 \u062A\u0627\u0631\u06CC\u062E\u0686\u0647 \u062F\u0633\u062A\u06A9\u0627\u0631\u06CC \u0634\u062F\u0647 \u0627\u0633\u062A`);
+    }
+    if (s.PrevHash && s.PrevHash !== prevHash) {
+      issuesFa.push(`\u06AF\u0627\u0645 ${String(s.StepNo)} \u0628\u0647 \u0647\u0634 \u06AF\u0627\u0645 \u067E\u06CC\u0634\u06CC\u0646 \u0645\u062A\u0635\u0644 \u0646\u06CC\u0633\u062A`);
+    }
+    prevHash = String(s.SnapshotSha256);
+    checked += 1;
+  }
+  return { ok: issuesFa.length === 0, checked, issuesFa };
+}
+function ipcApprovalGuaranteeGate(input) {
+  const now = input.now ?? /* @__PURE__ */ new Date();
+  const asOf = now.toISOString().slice(0, 10);
+  const rows = (input.guarantees ?? []).filter(
+    (g) => IPC_PERFORMANCE_GUARANTEE_TYPES.includes(String(g.GuaranteeType ?? ""))
+  );
+  const issuesFa = [];
+  const warningsFa = [];
+  const evaluated = rows.map((g) => {
+    const state = guaranteeState(g, now);
+    return { row: g, state };
+  });
+  const valid = evaluated.filter(({ state }) => state.isLive && !state.isExpiredSilently);
+  const summary = evaluated.map(({ row, state }) => ({
+    Code: String(row.Code ?? ""),
+    EffectiveExpiry: state.effectiveExpiry,
+    DaysToExpiry: state.daysToExpiry,
+    Status: state.status,
+    Alert: state.alert
+  }));
+  if (rows.length === 0) {
+    const msg = "\u0647\u06CC\u0686 \u0636\u0645\u0627\u0646\u062A\u0646\u0627\u0645\u0647\u0654 \u062D\u0633\u0646 \u0627\u0646\u062C\u0627\u0645 \u06A9\u0627\u0631\u06CC \u0628\u0631\u0627\u06CC \u0627\u06CC\u0646 \u067E\u06CC\u0645\u0627\u0646 \u062B\u0628\u062A \u0646\u0634\u062F\u0647 \u0627\u0633\u062A\u061B \u067E\u0648\u0634\u0634 \u0648\u062B\u06CC\u0642\u0647\u0627\u06CC \u0646\u0627\u0645\u0634\u062E\u0635 \u0627\u0633\u062A";
+    if (input.requirePresent) issuesFa.push(msg);
+    else warningsFa.push(msg);
+  } else if (valid.length === 0) {
+    issuesFa.push("\u0636\u0645\u0627\u0646\u062A\u0646\u0627\u0645\u0647\u0654 \u062D\u0633\u0646 \u0627\u0646\u062C\u0627\u0645 \u06A9\u0627\u0631 \u0645\u0646\u0642\u0636\u06CC\u060C \u0622\u0632\u0627\u062F \u06CC\u0627 \u0636\u0628\u0637 \u0634\u062F\u0647 \u0627\u0633\u062A\u061B \u062A\u0635\u0648\u06CC\u0628 \u0635\u0648\u0631\u062A\u0648\u0636\u0639\u06CC\u062A \u062A\u0627 \u062A\u0645\u062F\u06CC\u062F \u0648\u062B\u06CC\u0642\u0647 \u0645\u062C\u0627\u0632 \u0646\u06CC\u0633\u062A");
+  }
+  for (const { row, state } of evaluated) {
+    if (!state.isLive || state.isExpiredSilently) continue;
+    if (state.alert === "d30" || state.alert === "d10" || state.alert === "d3") {
+      warningsFa.push(`\u0636\u0645\u0627\u0646\u062A\u0646\u0627\u0645\u0647\u0654 ${String(row.Code ?? "")}: ${state.alertFa} (${state.daysToExpiry} \u0631\u0648\u0632 \u0645\u0627\u0646\u062F\u0647)`);
+    }
+    if (!state.effectiveExpiry) {
+      warningsFa.push(`\u0636\u0645\u0627\u0646\u062A\u0646\u0627\u0645\u0647\u0654 ${String(row.Code ?? "")} \u062A\u0627\u0631\u06CC\u062E \u0627\u0646\u0642\u0636\u0627\u06CC \u0645\u0624\u062B\u0631 \u0646\u062F\u0627\u0631\u062F\u061B \u067E\u0627\u06CC\u0634 \u0627\u0646\u0642\u0636\u0627 \u0645\u0645\u06A9\u0646 \u0646\u06CC\u0633\u062A`);
+    }
+  }
+  return {
+    ok: issuesFa.length === 0,
+    blocking: issuesFa.length > 0,
+    code: issuesFa.length === 0 ? null : rows.length === 0 ? "E-CNT-IPC-GUARANTEE-MISSING" : "E-CNT-IPC-GUARANTEE-EXPIRED",
+    issuesFa,
+    warningsFa,
+    checked: rows.length,
+    validCount: valid.length,
+    asOf,
+    guarantees: summary
+  };
+}
 export {
   ADVANCE_CUSTOMARY_CAP_PCT,
   ADVANCE_DEFAULT_RECOVERY_PCT,
@@ -3349,6 +3575,9 @@ export {
   GUARANTEE_TYPE_FA,
   HEALTH_BAND_FA,
   INDEX_STATUS_FA,
+  IPC_PERFORMANCE_GUARANTEE_TYPES,
+  IPC_SIGNATURE_METHOD,
+  IPC_SNAPSHOT_VERSION,
   IPC_WORKFLOW_FA,
   KPI_BY_CODE,
   MILESTONE_EFFECTIVE_STATUS,
@@ -3400,10 +3629,16 @@ export {
   guaranteeHealth,
   guaranteeRegister,
   guaranteeState,
+  ipcApprovalGuaranteeGate,
+  ipcAttestationFa,
   ipcCycle,
+  ipcDocumentCanonical,
+  ipcDocumentSnapshot,
   ipcNextActions,
   ipcPostability,
   ipcRequiredActor,
+  ipcStableStringify,
+  ipcStepCanonical,
   ipcTransition,
   isCntAudienceAllowed,
   isIpcLocked,
@@ -3439,5 +3674,6 @@ export {
   validateBoq,
   validateBoqItem,
   validateGuaranteeInput,
+  verifyIpcSnapshotChain,
   warrantyEnd
 };

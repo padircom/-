@@ -6,6 +6,7 @@ import { registerStrategyExcellenceRoutes } from "./strategyExcellenceWorkspaceA
 import { registerCpmWorkspaceRoutes, CPM_DEDICATED_ROUTES } from "./cpmWorkspaceApi.js";
 import { registerPmoWorkspaceRoutes, PMO_DEDICATED_ROUTES } from "./pmoWorkspaceApi.js";
 import { registerCntIpcRoutes, CNT_IPC_DEDICATED_ROUTES } from "./cntIpcApi.js";
+import { registerCntExcelRoutes, CNT_EXCEL_DEDICATED_ROUTES } from "./cntExcelApi.js";
 import { registerReportBuilderRoutes, RPT_DEDICATED_ROUTES } from "./reportBuilderApi.js";
 import { registerItgOutboundRoutes, ITG_OUTBOUND_DEDICATED_ROUTES } from "./itgOutboundApi.js";
 import { registerAiAssistantRoutes, AI_DEDICATED_ROUTES } from "./aiAssistantApi.js";
@@ -328,6 +329,14 @@ import {
   getCntReport,
   isCntAudienceAllowed,
   buildCntReport,
+  /* فاز ۴ ADR-CNT-IPC-UNIFY — تأیید ثبتشده/هش سند و گیت ضمانتنامه */
+  IPC_SNAPSHOT_VERSION,
+  IPC_SIGNATURE_METHOD,
+  ipcDocumentCanonical,
+  ipcStepCanonical,
+  ipcAttestationFa,
+  verifyIpcSnapshotChain,
+  ipcApprovalGuaranteeGate,
 } from "./cntLogic.js";
 
 import {
@@ -691,6 +700,9 @@ const DEDICATED_TABLE_ROUTES = {
   /* P8/PMO — منشور، فرم‌ساز و کارت سلامت؛ P8/CNT — قالب و سند صورت‌وضعیت. */
   ...PMO_DEDICATED_ROUTES,
   ...CNT_IPC_DEDICATED_ROUTES,
+  /* فاز ۴: ریزمتره و قالبها مسیر اختصاصی Excel دارند؛ موتور عمومی فایل
+   * نباید مستقیماً روی MeasurementSheet بنویسد. */
+  ...CNT_EXCEL_DEDICATED_ROUTES,
   ...AMENDMENT_DEDICATED_ROUTES,
   ...RATING_DEDICATED_ROUTES,
   ContractMetricsSnapshot: "/api/cnt/kpi/snapshot",
@@ -1053,6 +1065,8 @@ registerCpmWorkspaceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: r
 registerPmoWorkspaceRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
 /* P8/CNT: قالب‌پذیری صورت‌وضعیت — محاسبهٔ سرور و SOD-11. */
 registerCntIpcRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
+/* فاز ۴: ورود/خروج اختصاصی Excel قالبها و ریزمتره (نه موتور عمومی فایل). */
+registerCntExcelRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
 registerVendorRatingRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
 registerContractAmendmentRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
 registerContractVariationRoutes(app, { repo, subjects: ENG_RBAC_SUBJECTS, evaluate: rbacEvaluate });
@@ -7459,6 +7473,32 @@ const CNT_ACTOR_PERMISSION = {
   employer: "cnt.ipc.approve",
 };
 
+/* فاز ۴: واژگان فارسی گامها و نقشها برای «تأیید ثبتشده» روی PDF رسمی. */
+const CNT_IPC_ACTOR_FA = { contractor: "پیمانکار", consultant: "مشاور", employer: "کارفرما" };
+const CNT_IPC_ACTION_FA = {
+  submit: "ارسال", approve: "تأیید/تصویب", reject: "رد",
+  return_for_correction: "بازگشت برای اصلاح", pay: "پرداخت",
+};
+/** SHA-256 متن کانونی — تنها نقطهای که هش سند گرفته میشود. */
+const cntSha256 = (canonical) => crypto.createHash("sha256").update(canonical).digest("hex");
+/** ردیفهای «تأیید ثبتشده» برای برگهٔ رسمی PDF (همان مدل RPT-CNT-IPC). */
+function cntSignatureLedger(steps) {
+  return steps.map((s) => ({
+    StepNo: s.StepNo,
+    Actor: s.Actor,
+    ActorFa: CNT_IPC_ACTOR_FA[s.Actor] ?? s.Actor,
+    Action: s.Action,
+    ActionFa: CNT_IPC_ACTION_FA[s.Action] ?? s.Action,
+    ActedAt: s.ActedAt,
+    SnapshotSha256: s.SnapshotSha256 ?? null,
+    DocumentSha256: s.DocumentSha256 ?? null,
+    AttestationFa: s.AttestationFa ?? null,
+    MethodFa: s.SignatureMethod === IPC_SIGNATURE_METHOD ? "تأیید ثبتشده" : (s.SignatureMethod ?? "—"),
+  }));
+}
+/** آیا نبود ضمانتنامهٔ حسن انجام کار، تصویب را مسدود کند؟ (پیشفرض: هشدار) */
+const cntGuaranteeRequired = () => String(process.env.CNT_IPC_GUARANTEE_REQUIRED ?? "0") === "1";
+
 app.post("/api/cnt/ipc/:id/action", async (req, res, next) => {
   try {
     const b = engBody(req);
@@ -7505,12 +7545,66 @@ app.post("/api/cnt/ipc/:id/action", async (req, res, next) => {
     const move = ipcTransition(ipc.WorkflowState, action, actor);
     if (!move.ok) return cntBad(req, res, move.code, move.messageFa, 409);
 
-    const steps = await r.list("IPC_WorkflowStep", {
-      where: [{ column: "IpcId", op: "eq", value: String(ipc.Id) }],
-      limit: 500,
-    });
-    const stepNo = steps.reduce((m, s) => Math.max(m, Number(s.StepNo) || 0), 0) + 1;
+    /* ── فاز ۴ / بند ۳: گیت تصویب ضمانتنامهٔ حسن انجام کار ──
+     * پیش از هر «approve» (هم تأیید مشاور و هم تصویب کارفرما)، اعتبار و
+     * تاریخ انقضای ضمانتنامهٔ حسن انجام کار پیمان سنجیده میشود. ضمانتنامهای
+     * که هست و منقضی/آزاد/ضبط شده، تصویب را مسدود میکند؛ نبود رکورد فقط
+     * هشدار است مگر سازمان الزامش کند (CNT_IPC_GUARANTEE_REQUIRED=1).
+     * نتیجهٔ کامل در تاریخچه ثبت میشود تا ممیزی بتواند بپرسد «هنگام تصویب
+     * وثیقه چه وضعی داشت؟» — نه فقط اینکه تصویب شد. */
+    let guaranteeVerdict = null;
+    if (action === "approve") {
+      const guarantees = await r.list("ContractGuarantee", {
+        where: [{ column: "ContractId", op: "eq", value: String(ipc.ContractId) }],
+        limit: 500,
+      });
+      guaranteeVerdict = ipcApprovalGuaranteeGate({
+        guarantees,
+        now: new Date(),
+        requirePresent: cntGuaranteeRequired(),
+      });
+      if (guaranteeVerdict.blocking) {
+        return cntBad(req, res, guaranteeVerdict.code,
+          guaranteeVerdict.issuesFa.join("؛ "), 409, guaranteeVerdict.issuesFa);
+      }
+    }
+
+    const [steps, lines, deductions] = await Promise.all([
+      r.list("IPC_WorkflowStep", {
+        where: [{ column: "IpcId", op: "eq", value: String(ipc.Id) }],
+        limit: 500,
+      }),
+      r.list("IPC_LineItem", { where: [{ column: "IpcId", op: "eq", value: String(ipc.Id) }], limit: 20000 }),
+      r.list("IPC_Deduction", { where: [{ column: "IpcId", op: "eq", value: String(ipc.Id) }], limit: 200 }),
+    ]);
+    const sortedSteps = steps.sort((a, b2) => (Number(a.StepNo) || 0) - (Number(b2.StepNo) || 0));
+    const stepNo = sortedSteps.reduce((m, s) => Math.max(m, Number(s.StepNo) || 0), 0) + 1;
     const now = new Date().toISOString();
+    const commentFa = b.commentFa ? String(b.commentFa) : null;
+
+    /* ── فاز ۴ / بند ۲: «امضا» گام اول = تأیید ثبتشده + هش نمایهٔ سند ──
+     * نمایهٔ سند شامل هدر، ردیفها، کسورات و گامهای تاکنون است؛ هش گام
+     * علاوه بر هش سند، هش گام قبل را هم میگیرد (زنجیره). نتیجه در همان
+     * رکورد IPC_WorkflowStep مینشیند، پس PDF و ممیزی یک منبع دارند.
+     * PKI عمداً اینجا نیست — مرحلهٔ جداگانهٔ ADR است. */
+    const documentSha256 = cntSha256(ipcDocumentCanonical({ ipc, lines, deductions, steps: sortedSteps }));
+    const prevHash = sortedSteps.length ? (sortedSteps[sortedSteps.length - 1].SnapshotSha256 ?? null) : null;
+    const snapshotSha256 = cntSha256(ipcStepCanonical({
+      documentSha256,
+      prevHash,
+      stepNo,
+      actor,
+      actorUserId: String(userId),
+      action,
+      actedAt: now,
+      commentFa,
+    }));
+    const attestationFa = ipcAttestationFa({
+      actorFa: CNT_IPC_ACTOR_FA[actor] ?? actor,
+      actionFa: CNT_IPC_ACTION_FA[action] ?? action,
+      actedAt: now,
+      snapshotSha256,
+    });
 
     await r.create("IPC_WorkflowStep", {
       ProjectId: projectId,
@@ -7520,7 +7614,14 @@ app.post("/api/cnt/ipc/:id/action", async (req, res, next) => {
       ActorUserId: String(userId),
       Action: action,
       ActedAt: now,
-      CommentFa: b.commentFa ? String(b.commentFa) : null,
+      CommentFa: commentFa,
+      SnapshotSha256: snapshotSha256,
+      DocumentSha256: documentSha256,
+      PrevHash: prevHash,
+      SignatureMethod: IPC_SIGNATURE_METHOD,
+      SignatureVersion: IPC_SNAPSHOT_VERSION,
+      AttestationFa: attestationFa,
+      GuaranteeCheckJson: guaranteeVerdict ? JSON.stringify(guaranteeVerdict) : null,
     }, userId, "IPCW");
 
     const patch = { WorkflowState: move.to };
@@ -7542,6 +7643,17 @@ app.post("/api/cnt/ipc/:id/action", async (req, res, next) => {
       stepNo,
       locked: isIpcLocked(move.to),
       nextActions: ipcNextActions(move.to),
+      /* فاز ۴: گواهی تأیید ثبتشده و هش سند — همان چیزی که PDF رسمی چاپ میکند. */
+      signature: {
+        method: IPC_SIGNATURE_METHOD,
+        version: IPC_SNAPSHOT_VERSION,
+        snapshotSha256,
+        documentSha256,
+        prevHash,
+        attestationFa,
+        pkiApplied: false,
+      },
+      guaranteeGate: guaranteeVerdict,
     }));
   } catch (err) { next(err); }
 });
@@ -7608,6 +7720,14 @@ app.get("/api/cnt/ipc/:id", cntRequire("cnt.contract.view"), cntProjectAccess("c
       lines,
       deductions: deductions.map((d) => ({ ...d, typeFa: DEDUCTION_TYPE_FA[d.DeductionType] ?? d.DeductionType })),
       workflow: steps,
+      /* فاز ۴: تأییدهای ثبتشده و نتیجهٔ راستیآزمایی زنجیرهٔ هش. */
+      signatures: cntSignatureLedger(steps),
+      snapshot: {
+        version: IPC_SNAPSHOT_VERSION,
+        documentSha256: cntSha256(ipcDocumentCanonical({ ipc, lines, deductions, steps })),
+        chain: verifyIpcSnapshotChain(steps, cntSha256),
+        pkiApplied: false,
+      },
     }));
   } catch (err) { next(err); }
 });
@@ -14796,6 +14916,19 @@ async function cntReportPayload(r, sc, contract, code, q = {}) {
     base.ipc = ipc ?? null;
     base.ipcLines = ipc ? inputs.ipcLines.filter((l) => String(l.IpcId) === String(ipc.Id)) : [];
     base.deductions = ipc ? inputs.deductions.filter((d) => String(d.IpcId) === String(ipc.Id)) : [];
+    /* فاز ۴: «تأییدهای ثبتشده» و هش لحظهٔ صدور تنها در نسخهٔ رسمی
+     * (audience=official) وارد برگه میشوند تا خروجی JSON داخلی报告 قدیمی
+     * بایتکبهبایت همان بماند. */
+    if (ipc && q.audience === "official") {
+      const wf = await r.list("IPC_WorkflowStep", {
+        where: [{ column: "IpcId", op: "eq", value: String(ipc.Id) }], limit: 500,
+      });
+      const sortedWf = wf.sort((a, b) => (Number(a.StepNo) || 0) - (Number(b.StepNo) || 0));
+      base.signatures = cntSignatureLedger(sortedWf);
+      base.snapshotSha256 = cntSha256(ipcDocumentCanonical({
+        ipc, lines: base.ipcLines, deductions: base.deductions, steps: sortedWf,
+      }));
+    }
   }
 
   if (code === "RPT-CNT-PRG" || code === "RPT-CNT-EXEC") {
@@ -14829,7 +14962,11 @@ async function cntReportPayload(r, sc, contract, code, q = {}) {
     base.finSummary = contractFinSummary({ contract, ipcs: inputs.ipcs, postings: inputs.postings });
   }
 
-  return buildCntReport(code, base);
+  const report = buildCntReport(code, base);
+  /* فاز ۴: هش نمایهٔ لحظهٔ صدور را کنار报告 برگردان تا PDF و ممیزی
+   * بدانند دقیقاً کدام نسخه از سند امضا/چاپ شده است. فقط نسخهٔ رسمی. */
+  if (report && base.snapshotSha256) report.snapshotSha256 = base.snapshotSha256;
+  return report;
 }
 
 /**
@@ -14922,6 +15059,84 @@ app.get("/api/cnt/reports/:code/render", async (req, res, next) => {
       res.setHeader("content-disposition", `inline; filename="${exportFileName(body, lh, "pdf")}"`);
     }
     return res.send(html);
+  } catch (e) { next(e); }
+});
+
+/* ═══════════ فاز ۴ ADR-CNT-IPC-UNIFY / بند ۱ — PDF رسمی صورتجلسه ═══════════
+ *
+ * خروجی رسمی از **مدل فعلی RPT-CNT-IPC** (موتور BOQمحور هسته) ساخته
+ * میشود، نه قالب قدیمی CNT-1 که در فاز ۳ بازنشسته شد. همان `buildCntReport`
+ * و همان چاپ A4 سهطرفه، ولی:
+ *   ۱) نسخهٔ رسمی PDF **باینری واقعی** است (Headless Chromium)، نه HTML
+ *      آمادهٔ چاپ که به نام PDF تحویل شود (TD-CNT-11 بسته شد).
+ *   ۲) «تأییدهای ثبتشده» و هش نمایهٔ سند (بند ۲) در خود سند چاپ میشوند.
+ *   ۳) در نبود فونت/مرورگر، ۵۰۱ صادقانه میدهد و `engine=print` همان
+ *      HTML چاپی سابق را در دسترس میگذارد (تنزل آرام، دروغ دربارهٔ نوع
+ *      فایل ممنوع).
+ *
+ * مجوز `cnt.report.issue` همان مجوز صدور نسخهٔ رسمی است؛ سربرگ کامل
+ * هم مثل `/render?audience=official` الزامی میماند. */
+app.get("/api/cnt/ipc/:id/pdf", cntRequire("cnt.report.issue"), cntProjectAccess("cnt.report.issue"), async (req, res, next) => {
+  try {
+    const projectId = String(req.query.projectId || "");
+    if (!projectId) return cntBad(req, res, "E-CNT-NO-PROJECT", "پارامتر projectId الزامی است");
+
+    const r = await repo();
+    const ipc = await r.findOne("InterimPaymentCertificate", [
+      { column: "ProjectId", op: "eq", value: projectId },
+      { column: "Id", op: "eq", value: String(req.params.id) },
+    ]);
+    if (!ipc) return cntBad(req, res, "E-CNT-NOT-FOUND", `صورتوضعیت ${req.params.id} یافت نشد`, 404);
+
+    const sc = { projectId, contractId: String(ipc.ContractId) };
+    const contract = await cntContractOf(r, sc.projectId, sc.contractId);
+    if (!contract) return cntBad(req, res, "E-CNT-CONTRACT-NOT-FOUND", "پیمان پیدا نشد", 404);
+
+    const code = "RPT-CNT-IPC";
+    const q = { ...req.query, audience: "official", ipcId: String(ipc.Id) };
+    const body = await cntReportPayload(r, sc, contract, code, q);
+    if (!body) return cntBad(req, res, "E-CNT-RPT-CODE", "سازندهٔ برگهٔ صورتوضعیت یافت نشد", 404);
+
+    const lh = cntLetterhead(req.query, contract, code, Number(ipc.SerialNo) || 1);
+    const issues = validateLetterhead(lh, "official");
+    const blocking = issues.filter((i) => i.severity === "error");
+    if (blocking.length > 0) {
+      return cntBad(req, res, "E-CNT-RPT-LETTERHEAD", "سربرگ سند رسمی کامل نیست", 422,
+        blocking.map((i) => (i.message?.fa ?? i.message ?? String(i.code))));
+    }
+
+    const lang = String(req.query.lang || "fa") === "en" ? "en" : "fa";
+    const fileName = exportFileName(body, lh, "pdf");
+    /* مستند JSON بدون وابستگی به مرورگر — برای تست و پیشنمایش داده. */
+    if (req.query.format === "json") {
+      return res.json(cntOk(req, {
+        report: body, letterhead: lh, issues,
+        model: "RPT-CNT-IPC", engine: "server-pdf", signaturePhase: 1, pkiApplied: false,
+      }));
+    }
+
+    const html = toPrintHtml(body, lh, "official", lang);
+    /* مسیر قدیمی چاپ مرورگر همچنان در دسترس است (سازگاری با UI/محیط بدون Chromium). */
+    if (req.query.engine === "print") {
+      res.setHeader("content-type", "text/html; charset=utf-8");
+      res.setHeader("content-disposition", `inline; filename="${fileName}"`);
+      return res.send(html);
+    }
+
+    let pdf;
+    try {
+      const { htmlToPdf } = await import("./pdfRenderer.js");
+      pdf = await htmlToPdf(html);
+    } catch (err) {
+      return cntBad(req, res, "E-CNT-IPC-PDF-UNAVAILABLE",
+        "موتور تولید PDF واقعی روی این سرور در دسترس نیست؛ با engine=print خروجی چاپی بگیرید",
+        501, [String(err?.message ?? err)]);
+    }
+    res.setHeader("content-type", "application/pdf");
+    res.setHeader("content-disposition", `attachment; filename="${fileName}"`);
+    res.setHeader("x-cnt-ipc-doc-sha256", String(body.snapshotSha256 ?? ""));
+    res.setHeader("x-cnt-ipc-doc-no", lh.docNo);
+    return res.send(pdf);
   } catch (e) { next(e); }
 });
 
