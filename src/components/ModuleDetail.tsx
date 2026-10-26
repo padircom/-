@@ -1992,8 +1992,8 @@ function DomainNavGroups({
   const [expandedD5Section, setExpandedD5Section] = useState<string | "none" | null>(null);
   const [expandedResourceSection, setExpandedResourceSection] = useState<string | "none" | null>(null);
   const [expandedHseSection, setExpandedHseSection] = useState<string | "none" | null>(null);
-  const [expandedHseProcess, setExpandedHseProcess] = useState<string | "none" | null>(null);
-  useEffect(() => setExpandedHseProcess(null), [dom.id]);
+  const [expandedProcessRows, setExpandedProcessRows] = useState<Record<string, boolean>>({});
+  useEffect(() => setExpandedProcessRows({}), [dom.id]);
   const pd = performanceDomainOf(dom.id, dom.group);
   if (!pd) return null;
   /* ماژول «مدیریت سامانه و پیکربندی پایه» (d7) فقط مدیر سامانه می‌بیند؛
@@ -2107,7 +2107,9 @@ function DomainNavGroups({
           if (isD14Section) setExpandedD14Section(null);
           if (isD5Section) setExpandedD5Section(null);
           if (isResourceSection) setExpandedResourceSection(null);
-          if (isHseSection) setExpandedHseProcess(`${m.id}:${processId}`);
+          if (isHseSection || m.id === "d8") {
+            setExpandedProcessRows((prev) => ({ ...prev, [`${m.id}:${processId}`]: true }));
+          }
           if (isCurrent) onSelectSub(processId, subId);
           else onOpenModuleSub(m.id, processId, subId);
         };
@@ -2153,19 +2155,18 @@ function DomainNavGroups({
             {procs.map((p, i) => {
               const processBodyId = `domain-nav-${m.id}-${p.id}`;
               const processKey = `${m.id}:${p.id}`;
-              const isProcessExpanded = !isHseSection || (
-                expandedHseProcess === null
-                  ? isCurrent && Boolean(selectedSubId?.startsWith(`${p.id}-`))
-                  : expandedHseProcess === processKey
+              const isProcessAccordion = isHseSection || m.id === "d8";
+              const isProcessExpanded = !isProcessAccordion || (
+                expandedProcessRows[processKey] ?? (isCurrent && Boolean(selectedSubId?.startsWith(`${p.id}-`)))
               );
               return (
                 <div key={p.id}>
-                  {/* فرایندهای HSE آکاردئونی‌اند تا فهرست سایدبار کوتاه بماند. */}
+                  {/* فرایندهای HSE و کیفیت آکاردئونی‌اند تا فهرست سایدبار کوتاه بماند. */}
                   {!(isD14Section && key === "risk") && (
-                    isHseSection ? (
+                    isProcessAccordion ? (
                       <button
                         type="button"
-                        onClick={() => setExpandedHseProcess(isProcessExpanded ? "none" : processKey)}
+                        onClick={() => setExpandedProcessRows((prev) => ({ ...prev, [processKey]: !isProcessExpanded }))}
                         aria-expanded={isProcessExpanded}
                         aria-controls={processBodyId}
                         className="group flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-start transition hover:bg-[var(--row-hover)]"
@@ -2194,7 +2195,7 @@ function DomainNavGroups({
                       </div>
                     )
                   )}
-                  <div id={isHseSection ? processBodyId : undefined} hidden={isHseSection && !isProcessExpanded}>
+                  <div id={isProcessAccordion ? processBodyId : undefined} hidden={isProcessAccordion && !isProcessExpanded}>
                     {/* زیرفرآیندها — تودرتو، با حالت انتخاب‌شده */}
                     {[...p.subs, ...(extraSubs?.[p.id] ?? [])]
                       .filter((s, i, arr) => arr.findIndex((x) => x.id === s.id) === i)
