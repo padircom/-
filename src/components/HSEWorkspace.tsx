@@ -355,7 +355,8 @@ export default function HSEWorkspace({ lang, onBack, initialTab, initialFieldTab
           onClick={onBack}
           className="glass-row flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-[10.5px] font-light tx2 transition hover:tx1"
         >
-          {rtl ? "→ بازگشت" : "← Back"}
+          <span className="inline-block rotate-180 rtl:rotate-0">→</span>
+          {rtl ? "بازگشت به داشبورد" : "Back to dashboard"}
         </button>
         {headerIdentity ?? (
           <div className="flex min-w-0 flex-1 items-center gap-2">
@@ -371,12 +372,15 @@ export default function HSEWorkspace({ lang, onBack, initialTab, initialFieldTab
             </div>
           </div>
         )}
-        {loading && <span className="text-[10px] font-light tx3">{rtl ? "در حال بارگذاری…" : "Loading…"}</span>}
         <button
+          type="button"
           onClick={() => void reload()}
-          className="glass-row shrink-0 rounded-lg px-3 py-2 text-[10px] font-light tx2 transition hover:tx1"
+          disabled={loading}
+          aria-label={rtl ? "بازخوانی" : "Refresh"}
+          title={rtl ? "بازخوانی" : "Refresh"}
+          className="glass-row grid h-8 w-8 shrink-0 place-items-center rounded-lg text-[14px] tx2 transition hover:tx1 disabled:opacity-50"
         >
-          {rtl ? "بازخوانی" : "Refresh"}
+          ↻
         </button>
       </div>
 

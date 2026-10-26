@@ -1041,11 +1041,7 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
               )}
             </div>
             <div className="shrink-0 text-end">
-              <SystemBadge domainId={dom.id} lang={lang} className="mb-1 justify-end" />
-              <div className="text-[9px] font-extralight tx3">{t(dom.title, lang)}</div>
-              <div className="text-[11px] font-light tx1">
-                {rtl ? "مدیریت ایمنی و بهداشت" : "Health & Safety Management"}
-              </div>
+              <div className="text-[11px] font-light tx1">{t(dom.title, lang)}</div>
             </div>
           </>
         }
@@ -1996,6 +1992,8 @@ function DomainNavGroups({
   const [expandedD5Section, setExpandedD5Section] = useState<string | "none" | null>(null);
   const [expandedResourceSection, setExpandedResourceSection] = useState<string | "none" | null>(null);
   const [expandedHseSection, setExpandedHseSection] = useState<string | "none" | null>(null);
+  const [expandedHseProcess, setExpandedHseProcess] = useState<string | "none" | null>(null);
+  useEffect(() => setExpandedHseProcess(null), [dom.id]);
   const pd = performanceDomainOf(dom.id, dom.group);
   if (!pd) return null;
   /* ماژول «مدیریت سامانه و پیکربندی پایه» (d7) فقط مدیر سامانه می‌بیند؛
@@ -2109,6 +2107,7 @@ function DomainNavGroups({
           if (isD14Section) setExpandedD14Section(null);
           if (isD5Section) setExpandedD5Section(null);
           if (isResourceSection) setExpandedResourceSection(null);
+          if (isHseSection) setExpandedHseProcess(`${m.id}:${processId}`);
           if (isCurrent) onSelectSub(processId, subId);
           else onOpenModuleSub(m.id, processId, subId);
         };
@@ -2151,45 +2150,81 @@ function DomainNavGroups({
               </button>
             )}
 
-            {procs.map((p, i) => (
-              <div key={p.id}>
-                {/* فرآیند — سطر تخت و بدون قاب کارت؛ در d14 شماره حذف شده تا فهرست
-                    شبیه ناوبری باشد، نه یک توالی اجباری؛ زیرفرآیندها با نقطه مشخص‌اند. */}
-                {!(isD14Section && key === "risk") && (
-                  <div className="group flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-start transition hover:bg-[var(--row-hover)]">
-                    {!isD14Section && <span className="text-[8px] font-light tabular-nums tx4">{(i + 1).toLocaleString(rtl ? "fa-IR" : "en-US")}</span>}
-                    <span className="shrink-0 text-[11px] leading-none" style={{ color: m.accent }} aria-hidden="true">▪</span>
-                    <span className="min-w-0 flex-1 truncate text-[10px] font-normal tx1">{t(p.title, lang)}</span>
+            {procs.map((p, i) => {
+              const processBodyId = `domain-nav-${m.id}-${p.id}`;
+              const processKey = `${m.id}:${p.id}`;
+              const isProcessExpanded = !isHseSection || (
+                expandedHseProcess === null
+                  ? isCurrent && Boolean(selectedSubId?.startsWith(`${p.id}-`))
+                  : expandedHseProcess === processKey
+              );
+              return (
+                <div key={p.id}>
+                  {/* فرایندهای HSE آکاردئونی‌اند تا فهرست سایدبار کوتاه بماند. */}
+                  {!(isD14Section && key === "risk") && (
+                    isHseSection ? (
+                      <button
+                        type="button"
+                        onClick={() => setExpandedHseProcess(isProcessExpanded ? "none" : processKey)}
+                        aria-expanded={isProcessExpanded}
+                        aria-controls={processBodyId}
+                        className="group flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-start transition hover:bg-[var(--row-hover)]"
+                      >
+                        <span className="text-[8px] font-light tabular-nums tx4">{(i + 1).toLocaleString(rtl ? "fa-IR" : "en-US")}</span>
+                        <span className="shrink-0 text-[11px] leading-none" style={{ color: m.accent }} aria-hidden="true">▪</span>
+                        <span className="min-w-0 flex-1 truncate text-[10px] font-normal tx1">{t(p.title, lang)}</span>
+                        <svg
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.8"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          className={`h-3 w-3 shrink-0 tx4 transition-transform ${isProcessExpanded ? "rotate-180" : ""}`}
+                          aria-hidden="true"
+                        >
+                          <path d="m6 9 6 6 6-6" />
+                        </svg>
+                      </button>
+                    ) : (
+                      <div className="group flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-start transition hover:bg-[var(--row-hover)]">
+                        {!isD14Section && <span className="text-[8px] font-light tabular-nums tx4">{(i + 1).toLocaleString(rtl ? "fa-IR" : "en-US")}</span>}
+                        <span className="shrink-0 text-[11px] leading-none" style={{ color: m.accent }} aria-hidden="true">▪</span>
+                        <span className="min-w-0 flex-1 truncate text-[10px] font-normal tx1">{t(p.title, lang)}</span>
+                      </div>
+                    )
+                  )}
+                  <div id={isHseSection ? processBodyId : undefined} hidden={isHseSection && !isProcessExpanded}>
+                    {/* زیرفرآیندها — تودرتو، با حالت انتخاب‌شده */}
+                    {[...p.subs, ...(extraSubs?.[p.id] ?? [])]
+                      .filter((s, i, arr) => arr.findIndex((x) => x.id === s.id) === i)
+                      .map((s) => {
+                        const sqlTables = (s as { sql?: string[] }).sql ?? [];
+                        return (
+                          <button
+                            key={s.id}
+                            type="button"
+                            onClick={() => selectSub(p.id, s.id)}
+                            className={`group flex w-full items-center gap-2 rounded-lg py-1.5 pe-2 ps-7 text-start transition hover:bg-[var(--row-hover)] ${
+                              isCurrent && selectedSubId === s.id ? "row-on" : ""
+                            }`}
+                          >
+                            <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: m.accent }} />
+                            <span className="min-w-0 flex-1 truncate text-[10px] font-light tx1">{t(s.title, lang)}</span>
+                            {showSql && sqlTables.length > 0 && (
+                              <span className="flex shrink-0 flex-wrap gap-1">
+                                {sqlTables.map((tbl) => (
+                                  <span key={tbl} className="rounded bg-sky-400/10 px-1 py-[1px] text-[7.5px] font-light text-sky-300" dir="ltr">🗄 {tbl}</span>
+                                ))}
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
                   </div>
-                )}
-                {/* زیرفرآیندها — تودرتو، با حالت انتخاب‌شده */}
-                {[...p.subs, ...(extraSubs?.[p.id] ?? [])]
-                  .filter((s, i, arr) => arr.findIndex((x) => x.id === s.id) === i)
-                  .map((s) => {
-                  const sqlTables = (s as { sql?: string[] }).sql ?? [];
-                  return (
-                    <button
-                      key={s.id}
-                      type="button"
-                      onClick={() => selectSub(p.id, s.id)}
-                      className={`group flex w-full items-center gap-2 rounded-lg py-1.5 pe-2 ps-7 text-start transition hover:bg-[var(--row-hover)] ${
-                        isCurrent && selectedSubId === s.id ? "row-on" : ""
-                      }`}
-                    >
-                      <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: m.accent }} />
-                      <span className="min-w-0 flex-1 truncate text-[10px] font-light tx1">{t(s.title, lang)}</span>
-                      {showSql && sqlTables.length > 0 && (
-                        <span className="flex shrink-0 flex-wrap gap-1">
-                          {sqlTables.map((tbl) => (
-                            <span key={tbl} className="rounded bg-sky-400/10 px-1 py-[1px] text-[7.5px] font-light text-sky-300" dir="ltr">🗄 {tbl}</span>
-                          ))}
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            ))}
+                </div>
+              );
+            })}
             </div>
             {m.id === "d6" && onOpenPmo && (
               <div>
