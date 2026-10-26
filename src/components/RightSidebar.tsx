@@ -28,8 +28,6 @@ export type ModuleNavTarget = {
   projectId: string;
   processId?: string;
   subId?: string;
-  /** شناسهٔ پیمانی که از پیوندهای میان‌ماژولی باز می‌شود. */
-  contractId?: string;
   /** پرش از نقشهٔ فرایندی (CTL) — نشانگر دکمهٔ بازگشت به نقشه. */
   fromMap?: boolean;
   /** بازگشت از ورودی‌های بین‌ماژولی به نقشهٔ برنامه‌ریزی. */
