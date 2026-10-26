@@ -668,7 +668,7 @@ export const SCHEMA: TableDef[] = [
     module: "d4",
     title: { fa: "مأموریت کارشناسی بازسازی زمان‌بندی ادعا", en: "Forensic schedule reconstruction mission" },
     pk: "Id",
-    columns: [id(), req("ProjectId", "text", { len: 60 }), req("Code", "text", { len: 40 }), req("TitleFa", "text", { len: 400 }), c("PurposeFa", "text", { len: 2000 }), req("PeriodFrom", "date"), req("PeriodTo", "date"), c("AnalysisStandard", "text", { len: 20, default: "'BOTH'", comment: "AACE_29R03|SCL_V2|BOTH" }), c("ClaimCode", "text", { len: 40 }), c("DelayEventCode", "text", { len: 40 }), c("ContractCode", "text", { len: 60 }), c("ScheduleFileRefs", "json"), c("CurrentStep", "int", { default: "1", comment: "۱..۸ دستورالعمل کارشناسی" }), req("Status", "text", { len: 20, default: "'draft'", comment: "draft|in_progress|on_hold|completed|cancelled" }), c("CreatedBy", "text", { len: 60 }), c("StartedAt", "datetime"), c("CompletedAt", "datetime"), c("ExpertNoteFa", "text", { len: 2000 }), c("ApprovedBy", "text", { len: 60 }), c("ApprovedAt", "datetime")],
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("Code", "text", { len: 40 }), req("TitleFa", "text", { len: 400 }), c("PurposeFa", "text", { len: 2000 }), req("PeriodFrom", "date"), req("PeriodTo", "date"), c("AnalysisStandard", "text", { len: 20, default: "'BOTH'", comment: "AACE_29R03|SCL_V2|BOTH" }), c("ClaimCode", "text", { len: 40 }), c("DelayEventCode", "text", { len: 40 }), c("ContractCode", "text", { len: 60 }), c("ScheduleFileRefs", "json"), c("CurrentStep", "int", { default: "1", comment: "۱..۸ دستورالعمل کارشناسی" }), req("Status", "text", { len: 20, default: "'draft'", comment: "draft|in_progress|on_hold|completed|cancelled" }), c("StartedAt", "datetime"), c("CompletedAt", "datetime"), c("ExpertNoteFa", "text", { len: 2000 }), c("ApprovedBy", "text", { len: 60 }), c("ApprovedAt", "datetime")],
     indexes: [{ name: "UX_PmisSchedReconMissions_Code", columns: ["ProjectId", "Code"], unique: true }],
   },
   {
@@ -740,7 +740,7 @@ export const SCHEMA: TableDef[] = [
     module: "d4",
     title: { fa: "مقاطع زمانی و قطع‌های دوره‌ای (Cut-Off Dates)", en: "Time slice snapshots / cut-off dates" },
     pk: "Id",
-    columns: [id(), req("ProjectId", "text", { len: 60 }), req("MissionCode", "text", { len: 40 }), req("Code", "text", { len: 40 }), req("LabelFa", "text", { len: 300 }), req("CutoffDate", "date"), c("DataKind", "text", { len: 20, comment: "periodic_update|claim_event|milestone|other" }), c("SourceRefs", "json"), c("MetricsJson", "json"), req("Status", "text", { len: 10, default: "'open'", comment: "open|frozen" }), c("CreatedBy", "text", { len: 60 }), c("CreatedAt", "datetime"), c("NoteFa", "text", { len: 1000 })],
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("MissionCode", "text", { len: 40 }), req("Code", "text", { len: 40 }), req("LabelFa", "text", { len: 300 }), req("CutoffDate", "date"), c("DataKind", "text", { len: 20, comment: "periodic_update|claim_event|milestone|other" }), c("SourceRefs", "json"), c("MetricsJson", "json"), req("Status", "text", { len: 10, default: "'open'", comment: "open|frozen" }), c("NoteFa", "text", { len: 1000 })],
     indexes: [{ name: "UX_PmisSchedReconSnapshots_Code", columns: ["ProjectId", "MissionCode", "Code"], unique: true }],
   },
   {
@@ -771,7 +771,7 @@ export const SCHEMA: TableDef[] = [
     module: "d4",
     title: { fa: "پرونده اختلاف", en: "Dispute case" },
     pk: "Id",
-    columns: [id(), req("ProjectId", "text", { len: 60 }), req("Code", "text", { len: 40 }), req("TitleFa", "text", { len: 400 }), req("SubjectCode", "text", { len: 30, comment: "DISPUTE_SUBJECTS.code" }), c("DescriptionFa", "text", { len: 2000 }), c("EmployerFa", "text", { len: 300 }), c("ContractorFa", "text", { len: 300 }), c("ConsultantFa", "text", { len: 300 }), c("CourtRefFa", "text", { len: 300, comment: "مرجع ارجاع/رسیدگی" }), c("ExpertScopeFa", "text", { len: 2000, comment: "حدود مأموریت کارشناسی" }), c("ClaimDescriptionFa", "text", { len: 2000, comment: "شرح خواسته‌ها" }), c("ClaimedAmount", "decimal", { precision: 20, scale: 2 }), c("Currency", "text", { len: 10, default: "'IRR'" }), c("ClaimedDelayDays", "int"), c("ContractCode", "text", { len: 60 }), c("ClaimCode", "text", { len: 40 }), c("DelayEventCode", "text", { len: 40 }), c("DelayCaseId", "text", { len: 60 }), c("LossCaseId", "text", { len: 60 }), c("ContractRiskId", "text", { len: 60 }), c("IncidentDate", "date"), c("RegistrationDate", "date"), c("ResponseDeadline", "date"), c("DeliveryDeadline", "date"), c("Priority", "text", { len: 10, default: "'normal'", comment: "low|normal|high|urgent" }), c("InternalOwnerFa", "text", { len: 200 }), req("Status", "text", { len: 25, default: "'draft'", comment: "draft|registered|awaiting_documents|under_review|awaiting_party_response|report_drafting|pending_review|ready_for_delivery|delivered|closed|archived" }), c("CreatedBy", "text", { len: 60 }), c("StatusChangedBy", "text", { len: 60 }), c("StatusChangedAt", "datetime"), c("StatusNoteFa", "text", { len: 1000 }), c("ExpertNoteFa", "text", { len: 2000 })],
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("Code", "text", { len: 40 }), req("TitleFa", "text", { len: 400 }), req("SubjectCode", "text", { len: 30, comment: "DISPUTE_SUBJECTS.code" }), c("DescriptionFa", "text", { len: 2000 }), c("EmployerFa", "text", { len: 300 }), c("ContractorFa", "text", { len: 300 }), c("ConsultantFa", "text", { len: 300 }), c("CourtRefFa", "text", { len: 300, comment: "مرجع ارجاع/رسیدگی" }), c("ExpertScopeFa", "text", { len: 2000, comment: "حدود مأموریت کارشناسی" }), c("ClaimDescriptionFa", "text", { len: 2000, comment: "شرح خواسته‌ها" }), c("ClaimedAmount", "decimal", { precision: 20, scale: 2 }), c("Currency", "text", { len: 10, default: "'IRR'" }), c("ClaimedDelayDays", "int"), c("ContractCode", "text", { len: 60 }), c("ClaimCode", "text", { len: 40 }), c("DelayEventCode", "text", { len: 40 }), c("DelayCaseId", "text", { len: 60 }), c("LossCaseId", "text", { len: 60 }), c("ContractRiskId", "text", { len: 60 }), c("IncidentDate", "date"), c("RegistrationDate", "date"), c("ResponseDeadline", "date"), c("DeliveryDeadline", "date"), c("Priority", "text", { len: 10, default: "'normal'", comment: "low|normal|high|urgent" }), c("InternalOwnerFa", "text", { len: 200 }), req("Status", "text", { len: 25, default: "'draft'", comment: "draft|registered|awaiting_documents|under_review|awaiting_party_response|report_drafting|pending_review|ready_for_delivery|delivered|closed|archived" }), c("StatusChangedBy", "text", { len: 60 }), c("StatusChangedAt", "datetime"), c("StatusNoteFa", "text", { len: 1000 }), c("ExpertNoteFa", "text", { len: 2000 })],
     indexes: [{ name: "UX_PmisDisputeCases_Code", columns: ["ProjectId", "Code"], unique: true }, { name: "IX_PmisDisputeCases_Status", columns: ["ProjectId", "Status"] }, { name: "IX_PmisDisputeCases_Contract", columns: ["ProjectId", "ContractCode"] }],
   },
   {
@@ -882,7 +882,7 @@ export const SCHEMA: TableDef[] = [
     module: "d4",
     title: { fa: "درخواست تغییر (چرخهٔ کامل)", en: "Change request (full lifecycle)" },
     pk: "Id",
-    columns: [id(), req("ProjectId", "text", { len: 60 }), req("Code", "text", { len: 40 }), req("TitleFa", "text", { len: 400 }), c("ContractCode", "text", { len: 60 }), c("DescriptionFa", "text", { len: 4000 }), req("RequestedBy", "text", { len: 60 }), c("RequestedByRoleCode", "text", { len: 30, comment: "CHANGE_ROLES.code" }), c("RequestDate", "date"), c("ChangeType", "text", { len: 30, comment: "CHANGE_TYPES.code" }), c("ReasonFa", "text", { len: 2000 }), c("NecessityFa", "text", { len: 2000 }), c("AffectedScopeFa", "text", { len: 2000 }), c("WbsRefs", "json"), c("ActivityRefs", "json"), c("SupportDocRefs", "json"), c("ClauseRefs", "json"), c("OptionsJson", "json"), c("InitialCostEstimate", "decimal", { precision: 20, scale: 2 }), c("Currency", "text", { len: 10, default: "'IRR'" }), c("InitialTimeImpactDays", "int"), c("InitialRisksJson", "json"), c("Priority", "text", { len: 10, default: "'normal'" }), c("ReviewOwnerFa", "text", { len: 200 }), c("ReviewDueDate", "date"), req("Status", "text", { len: 30, default: "'draft'", comment: "CHANGE_STATUSES" }), c("CreatedBy", "text", { len: 60 }), c("StatusChangedBy", "text", { len: 60 }), c("StatusChangedAt", "datetime"), c("StatusNoteFa", "text", { len: 1000 }), c("DecisionFa", "text", { len: 2000, comment: "متن تصمیم مرجع مجاز" }), c("RejectionReasonFa", "text", { len: 2000 }), c("DecidedBy", "text", { len: 60 }), c("DecidedAt", "datetime"), c("ClosedAt", "datetime"), c("ClosedBy", "text", { len: 60 })],
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("Code", "text", { len: 40 }), req("TitleFa", "text", { len: 400 }), c("ContractCode", "text", { len: 60 }), c("DescriptionFa", "text", { len: 4000 }), req("RequestedBy", "text", { len: 60 }), c("RequestedByRoleCode", "text", { len: 30, comment: "CHANGE_ROLES.code" }), c("RequestDate", "date"), c("ChangeType", "text", { len: 30, comment: "CHANGE_TYPES.code" }), c("ReasonFa", "text", { len: 2000 }), c("NecessityFa", "text", { len: 2000 }), c("AffectedScopeFa", "text", { len: 2000 }), c("WbsRefs", "json"), c("ActivityRefs", "json"), c("SupportDocRefs", "json"), c("ClauseRefs", "json"), c("OptionsJson", "json"), c("InitialCostEstimate", "decimal", { precision: 20, scale: 2 }), c("Currency", "text", { len: 10, default: "'IRR'" }), c("InitialTimeImpactDays", "int"), c("InitialRisksJson", "json"), c("Priority", "text", { len: 10, default: "'normal'" }), c("ReviewOwnerFa", "text", { len: 200 }), c("ReviewDueDate", "date"), req("Status", "text", { len: 30, default: "'draft'", comment: "CHANGE_STATUSES" }), c("StatusChangedBy", "text", { len: 60 }), c("StatusChangedAt", "datetime"), c("StatusNoteFa", "text", { len: 1000 }), c("DecisionFa", "text", { len: 2000, comment: "متن تصمیم مرجع مجاز" }), c("RejectionReasonFa", "text", { len: 2000 }), c("DecidedBy", "text", { len: 60 }), c("DecidedAt", "datetime"), c("ClosedAt", "datetime"), c("ClosedBy", "text", { len: 60 })],
     indexes: [{ name: "UX_PmisChangeRequests_Code", columns: ["ProjectId", "Code"], unique: true }, { name: "IX_PmisChangeRequests_Status", columns: ["ProjectId", "Status"] }, { name: "IX_PmisChangeRequests_Contract", columns: ["ProjectId", "ContractCode"] }],
   },
   {
@@ -922,7 +922,7 @@ export const SCHEMA: TableDef[] = [
     module: "d4",
     title: { fa: "پیوند ریسکِ ناشی از تغییر", en: "Change risk link" },
     pk: "Id",
-    columns: [id(), req("ProjectId", "text", { len: 60 }), req("ChangeCode", "text", { len: 40 }), req("Code", "text", { len: 40 }), req("LinkType", "text", { len: 15, comment: "new|escalated|reduced" }), req("DescriptionFa", "text", { len: 2000 }), c("RiskRegisterRef", "text", { len: 60, comment: "پیوند نرم به ثبت ریسک اصلی" }), c("Probability", "int"), c("Severity", "int"), c("Score", "int"), c("MethodFa", "text", { len: 400 }), c("OwnerFa", "text", { len: 200 }), c("ControlActionsJson", "json"), c("ActionDueDate", "date"), c("ResidualNoteFa", "text", { len: 1000 }), c("CreatedBy", "text", { len: 60 }), c("CreatedAt", "datetime")],
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("ChangeCode", "text", { len: 40 }), req("Code", "text", { len: 40 }), req("LinkType", "text", { len: 15, comment: "new|escalated|reduced" }), req("DescriptionFa", "text", { len: 2000 }), c("RiskRegisterRef", "text", { len: 60, comment: "پیوند نرم به ثبت ریسک اصلی" }), c("Probability", "int"), c("Severity", "int"), c("Score", "int"), c("MethodFa", "text", { len: 400 }), c("OwnerFa", "text", { len: 200 }), c("ControlActionsJson", "json"), c("ActionDueDate", "date"), c("ResidualNoteFa", "text", { len: 1000 })],
     indexes: [{ name: "UX_PmisChangeRiskLinks_Code", columns: ["ProjectId", "ChangeCode", "Code"], unique: true }],
   },
   {
@@ -930,7 +930,7 @@ export const SCHEMA: TableDef[] = [
     module: "d4",
     title: { fa: "ادعا/اختلاف مرتبط با تغییر", en: "Change claim/dispute link" },
     pk: "Id",
-    columns: [id(), req("ProjectId", "text", { len: 60 }), req("ChangeCode", "text", { len: 40 }), req("Code", "text", { len: 40 }), req("LinkType", "text", { len: 30, comment: "objection|work_order_dispute|rate_quantity|delay_effect|cost_claim|time_effect|monitoring" }), req("DescriptionFa", "text", { len: 2000 }), c("ClaimRefCode", "text", { len: 40, comment: "پیوند نرم به ادعای RCC" }), c("ExpertCaseRef", "text", { len: 40, comment: "پیوند نرم به PmisDisputeCases.Code" }), c("CorrespondenceJson", "json"), c("SupportingDocRefsJson", "json"), c("Status", "text", { len: 20, default: "'open'", comment: "open|escalated|linked|resolved|closed" }), c("CreatedBy", "text", { len: 60 }), c("CreatedAt", "datetime")],
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("ChangeCode", "text", { len: 40 }), req("Code", "text", { len: 40 }), req("LinkType", "text", { len: 30, comment: "objection|work_order_dispute|rate_quantity|delay_effect|cost_claim|time_effect|monitoring" }), req("DescriptionFa", "text", { len: 2000 }), c("ClaimRefCode", "text", { len: 40, comment: "پیوند نرم به ادعای RCC" }), c("ExpertCaseRef", "text", { len: 40, comment: "پیوند نرم به PmisDisputeCases.Code" }), c("CorrespondenceJson", "json"), c("SupportingDocRefsJson", "json"), c("Status", "text", { len: 20, default: "'open'", comment: "open|escalated|linked|resolved|closed" })],
     indexes: [{ name: "UX_PmisChangeClaimLinks_Code", columns: ["ProjectId", "ChangeCode", "Code"], unique: true }],
   },
   {
@@ -946,7 +946,7 @@ export const SCHEMA: TableDef[] = [
     module: "d4",
     title: { fa: "کنترل اجرای تغییر مصوب", en: "Approved change implementation" },
     pk: "Id",
-    columns: [id(), req("ProjectId", "text", { len: 60 }), req("ChangeCode", "text", { len: 40 }), req("Code", "text", { len: 40 }), req("Step", "text", { len: 30, comment: "instruction_issued|started|baselines_updated|execution_control|verified|completed" }), req("Status", "text", { len: 20, comment: "planned|in_progress|done|blocked" }), c("BaselineUpdateRef", "text", { len: 80, comment: "پیوند نرم به نسخه مبنای به‌روزشده" }), c("ExecutionResultFa", "text", { len: 2000 }), c("VerifiedBy", "text", { len: 60 }), c("VerifiedAt", "datetime"), c("VerifiedNoteFa", "text", { len: 1000 }), c("UpdatedBy", "text", { len: 60 }), c("UpdatedAt", "datetime")],
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("ChangeCode", "text", { len: 40 }), req("Code", "text", { len: 40 }), req("Step", "text", { len: 30, comment: "instruction_issued|started|baselines_updated|execution_control|verified|completed" }), req("Status", "text", { len: 20, comment: "planned|in_progress|done|blocked" }), c("BaselineUpdateRef", "text", { len: 80, comment: "پیوند نرم به نسخه مبنای به‌روزشده" }), c("ExecutionResultFa", "text", { len: 2000 }), c("VerifiedBy", "text", { len: 60 }), c("VerifiedAt", "datetime"), c("VerifiedNoteFa", "text", { len: 1000 })],
     indexes: [{ name: "UX_PmisChangeImplementation_Code", columns: ["ProjectId", "ChangeCode", "Code"], unique: true }],
   },
   {
@@ -970,7 +970,7 @@ export const SCHEMA: TableDef[] = [
     module: "d4",
     title: { fa: "تنظیمات گردش‌کار تغییر", en: "Change workflow setting" },
     pk: "Id",
-    columns: [id(), req("ProjectId", "text", { len: 60 }), req("SettingKey", "text", { len: 60 }), req("SettingValueJson", "json"), c("UpdatedBy", "text", { len: 60 }), c("UpdatedAt", "datetime")],
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("SettingKey", "text", { len: 60 }), req("SettingValueJson", "json")],
     indexes: [{ name: "UX_PmisChangeSettings_Key", columns: ["ProjectId", "SettingKey"], unique: true }],
   },
 
@@ -2438,12 +2438,14 @@ export const SCHEMA: TableDef[] = [
   },
   {
     name: "VendorEvaluation", module: "d14", title: { fa: "ارزیابی دوره‌ای طرف قرارداد", en: "Periodic party evaluation" }, pk: "Id",
-    columns: [id(), req("ProjectId", "text", { len: 60 }), req("SourceKind", "text", { len: 20 }), req("SourceId", "text", { len: 60 }), req("PartyName", "text", { len: 200 }), req("SourceCode", "text", { len: 60 }), req("PeriodDate", "date"), req("Scores", "json"), req("Weighted", "int"), req("Grade", "text", { len: 1 }), req("Weakest", "text", { len: 20 }), req("DocumentRef", "text", { len: 200 }), req("Status", "text", { len: 20 }), c("DecidedBy", "text", { len: 60 }), c("DecidedAt", "datetime"), c("DecisionNote", "text", { len: 2000 })],
+    /* مقادیر Status همان گذارهای `vendorRatingApi` هستند؛ مستندسازیاش
+     * روی ستون است تا تست اسکیما و DDL生成شده یک منبع حقیقت داشته باشند. */
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("SourceKind", "text", { len: 20 }), req("SourceId", "text", { len: 60 }), req("PartyName", "text", { len: 200 }), req("SourceCode", "text", { len: 60 }), req("PeriodDate", "date"), req("Scores", "json"), req("Weighted", "int"), req("Grade", "text", { len: 1 }), req("Weakest", "text", { len: 20 }), req("DocumentRef", "text", { len: 200 }), req("Status", "text", { len: 20, comment: "submitted|approved|rejected" }), c("DecidedBy", "text", { len: 60 }), c("DecidedAt", "datetime"), c("DecisionNote", "text", { len: 2000 })],
     indexes: [{ name: "UX_VendorEvaluation_Period", columns: ["ProjectId", "SourceKind", "SourceId", "PeriodDate"], unique: true }],
   },
   {
     name: "VendorImprovement", module: "d14", title: { fa: "اقدام بهبود طرف قرارداد", en: "Party improvement action" }, pk: "Id",
-    columns: [id(), req("ProjectId", "text", { len: 60 }), req("EvaluationId", "text", { len: 60 }), req("Axis", "text", { len: 20 }), req("TitleFa", "text", { len: 400 }), req("OwnerId", "text", { len: 60 }), req("DueDate", "date"), req("Status", "text", { len: 20 }), c("Evidence", "text", { len: 2000 }), c("CompletedBy", "text", { len: 60 }), c("VerifiedBy", "text", { len: 60 }), c("VerifiedAt", "datetime")],
+    columns: [id(), req("ProjectId", "text", { len: 60 }), req("EvaluationId", "text", { len: 60 }), req("Axis", "text", { len: 20 }), req("TitleFa", "text", { len: 400 }), req("OwnerId", "text", { len: 60 }), req("DueDate", "date"), req("Status", "text", { len: 20, comment: "open|in_progress|completed|verified|cancelled" }), c("Evidence", "text", { len: 2000 }), c("CompletedBy", "text", { len: 60 }), c("VerifiedBy", "text", { len: 60 }), c("VerifiedAt", "datetime")],
     indexes: [{ name: "IX_VendorImprovement_Project", columns: ["ProjectId", "EvaluationId"] }],
   },
   {
@@ -2736,8 +2738,19 @@ export const SCHEMA: TableDef[] = [
       c("PrevHash", "text", { len: 64, comment: "SnapshotSha256 of the previous step (hash chain)" }),
       c("SignatureMethod", "text", { len: 24, comment: "recorded (PKI is a separate phase)" }),
       c("SignatureVersion", "text", { len: 24, comment: "ipc-snapshot-v1" }),
-      c("AttestationFa", "text", { len: 600, comment: "Recorded attestation printed on the official PDF" }),
+      c("AttestationFa", "text", { len: 600, comment: "Recorded attestation or X.509 signature attestation printed on the official PDF" }),
       c("GuaranteeCheckJson", "text", { comment: "Approval guarantee gate verdict (JSON), approve actions only" }),
+      /* فاز ۵ / گام دوم امضا: امضای دیجیتال X.509. گواهی خود سند روی گام
+       * ذخیره میشود تا چرخش کلید، راستیآزمایی امضاهای قدیمی را نشکند.
+       * nullableاند: گامهای فاز ۴ (و محیط بدون پیکربندی PKI) چیزی ندارند. */
+      c("PkiSignature", "text", { comment: "Base64 signature over ipc-pki-v1 canonical" }),
+      c("PkiCertPem", "text", { comment: "Leaf X.509 certificate PEM used at this step" }),
+      c("PkiCertSha256", "text", { len: 64, comment: "SHA-256 of the certificate DER" }),
+      c("PkiKeyId", "text", { len: 120, comment: "Configured key identifier" }),
+      c("PkiAlgorithm", "text", { len: 40, comment: "SHA256-RSA / SHA256-EC / ED25519" }),
+      c("PkiSignedAt", "datetime"),
+      c("PkiTrustLevel", "text", { len: 24, comment: "ca-verified|self-signed" }),
+      c("PkiCertInfoJson", "text", { comment: "Public certificate metadata (subject/issuer/serial/validity), no private key" }),
     ],
     indexes: [{ name: "UX_IPC_WorkflowStep", columns: ["IpcId", "StepNo"], unique: true }],
   },
@@ -6995,6 +7008,15 @@ export const MIGRATIONS: Migration[] = [
     statements: [
       "SnapshotSha256", "DocumentSha256", "PrevHash", "SignatureMethod",
       "SignatureVersion", "AttestationFa", "GuaranteeCheckJson",
+    ].map(col => addColumnDdl("IPC_WorkflowStep", col, "mssql")),
+  },
+  {
+    /* فاز ۵: گام دوم امضا. ستونها nullable و ایدمپوتنتاند تا گامهای
+     * فاز ۴ و پایگاههای بدون پیکربندی PKI دستنخورده بمانند. */
+    version: "0079", name: "ipc_workflow_pki_signature",
+    statements: [
+      "PkiSignature", "PkiCertPem", "PkiCertSha256", "PkiKeyId",
+      "PkiAlgorithm", "PkiSignedAt", "PkiTrustLevel", "PkiCertInfoJson",
     ].map(col => addColumnDdl("IPC_WorkflowStep", col, "mssql")),
   },
 ];

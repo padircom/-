@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useCurrentProjectId, useSystem } from "../context/SystemContext";
 import { logAudit } from "../services/auditLogger";
+import CntIpcFilesPanel from "./CntIpcFilesPanel";
 import type { Lang } from "../data/framework";
 
 /* ═══════════════ پنل پیمان و فهرست بها (cnt-v1، دامنهٔ d14) ═══════════════
@@ -943,6 +944,9 @@ function IpcSection({
           )}
         </Panel>
       )}
+
+      {/* فاز ۵: اسناد، امضا و تبادل فایل — API فاز ۴ بالاخره مصرفکنندهٔ UI دارد. */}
+      <CntIpcFilesPanel contractId={contractId} ipcId={openId} userId={userId} />
 
       <Panel title="صورت‌وضعیت تازه" note="مقدار هر ردیف تجمعی تا پایان دوره است؛ ردیف خالی وارد سند نمی‌شود">
         <div className="grid grid-cols-2 gap-2 md:grid-cols-4">

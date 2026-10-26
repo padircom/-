@@ -2896,12 +2896,15 @@ function buildIpcSheet(inp) {
       }
     },
     /* فاز ۴: در نسخهٔ رسمی PDF، گامهای گردش بهصورت «تأیید ثبتشده» همراه
-     * هش Snapshot سند چاپ میشوند. اینجا همان دادهٔ سرور است، نه چیزی که
-     * کلاینت ساخته باشد. PKI عمداً نیامده — مرحلهٔ جداگانهای است. */
+     * هش Snapshot سند چاپ میشوند (فاز ۵: در صورت پیکربندی معتبر، امضای
+     * دیجیتال X.509 هم روی همان گامها مینشیند — نه اینکه متن قدیمی بماند). */
     ...inp.signatures && inp.signatures.length ? [{
       kind: "table",
-      title: { fa: "\u06AF\u0648\u0627\u0647\u06CC \u062A\u0623\u06CC\u06CC\u062F \u062B\u0628\u062A\u0634\u062F\u0647 (\u06AF\u0627\u0645 \u0646\u062E\u0633\u062A \u0627\u0645\u0636\u0627)", en: "Recorded attestation (signature phase 1)" },
-      note: {
+      title: inp.pkiApplied ? { fa: "\u06AF\u0648\u0627\u0647\u06CC \u0627\u0645\u0636\u0627\u06CC \u062F\u06CC\u062C\u06CC\u062A\u0627\u0644 (X.509)", en: "Digital signature certificate (X.509)" } : { fa: "\u06AF\u0648\u0627\u0647\u06CC \u062A\u0623\u06CC\u06CC\u062F \u062B\u0628\u062A\u0634\u062F\u0647 (\u06AF\u0627\u0645 \u0646\u062E\u0633\u062A \u0627\u0645\u0636\u0627)", en: "Recorded attestation (signature phase 1)" },
+      note: inp.pkiApplied ? {
+        fa: "\u0647\u0631 \u06AF\u0627\u0645\u060C \u0647\u0634 \u0646\u0645\u0627\u06CC\u0647\u0654 \u0644\u062D\u0638\u0647\u0654 \u0647\u0645\u0627\u0646 \u06AF\u0627\u0645 \u0631\u0627 \u0628\u0627 \u06A9\u0644\u06CC\u062F \u062E\u0635\u0648\u0635\u06CC \u06AF\u0648\u0627\u0647\u06CC X.509 \u067E\u06CC\u06A9\u0631\u0628\u0646\u062F\u06CC\u0634\u062F\u0647 \u0627\u0645\u0636\u0627 \u0645\u06CC\u06A9\u0646\u062F\u061B \u062A\u063A\u06CC\u06CC\u0631 \u0633\u0646\u062F \u06CC\u0627 \u062A\u0627\u0631\u06CC\u062E\u0686\u0647 \u067E\u0633 \u0627\u0632 \u0627\u0645\u0636\u0627\u060C \u0631\u0627\u0633\u062A\u06CC\u0622\u0632\u0645\u0627\u06CC\u06CC \u0631\u0627 \u0645\u06CC\u0634\u06A9\u0646\u062F. \u0645\u0647\u0631 \u0632\u0645\u0627\u0646\u06CC \u0645\u0639\u062A\u0628\u0631 \u0648 \u0628\u0631\u0631\u0633\u06CC \u0627\u0628\u0637\u0627\u0644 (OCSP/CRL) \u0627\u0639\u0645\u0627\u0644 \u0646\u0634\u062F\u0647 \u0627\u0633\u062A.",
+        en: "Each step signs the snapshot hash with the configured X.509 private key; tampering breaks verification. No trusted timestamp or revocation check (OCSP/CRL) is applied."
+      } : {
         fa: "\u0647\u0631 \u06AF\u0627\u0645\u060C \u0647\u0634 \u0646\u0645\u0627\u06CC\u0647\u0654 \u0644\u062D\u0638\u0647\u0654 \u0647\u0645\u0627\u0646 \u06AF\u0627\u0645 \u0631\u0627 \u0645\u0647\u0631 \u0645\u06CC\u06A9\u0646\u062F\u061B \u062A\u063A\u06CC\u06CC\u0631 \u0633\u0646\u062F \u067E\u0633 \u0627\u0632 \u062A\u0623\u06CC\u06CC\u062F\u060C \u0646\u0627\u0633\u0627\u0632\u06AF\u0627\u0631\u06CC \u0632\u0646\u062C\u06CC\u0631\u0647 \u0622\u0634\u06A9\u0627\u0631 \u0645\u06CC\u0634\u0648\u062F. \u0627\u06CC\u0646 \u0627\u0645\u0636\u0627\u06CC \u062F\u06CC\u062C\u06CC\u062A\u0627\u0644 PKI \u0646\u06CC\u0633\u062A.",
         en: "Each step seals the hash of the document snapshot at that moment; post-approval tampering breaks the chain. Not a PKI digital signature."
       },
@@ -2920,6 +2923,27 @@ function buildIpcSheet(inp) {
         actedAt: cell(s.ActedAt),
         shortHash: String(s.SnapshotSha256 ?? "").slice(0, 12) || "\u2014",
         methodFa: cell(s.MethodFa ?? "recorded")
+      }))
+    }] : [],
+    /* فاز ۵: گواهیهای امضا فقط وقتی چاپ میشوند که واقعاً امضا شدهاند؛
+     * سربرگ جدول شامل subject/issuer/اثرانگشت/بازهٔ اعتبار است. */
+    ...inp.pkiApplied && inp.pkiCertificates && inp.pkiCertificates.length ? [{
+      kind: "table",
+      title: { fa: "\u06AF\u0648\u0627\u0647\u06CC\u0647\u0627\u06CC \u062F\u06CC\u062C\u06CC\u062A\u0627\u0644 \u0645\u0648\u0631\u062F \u0627\u0633\u062A\u0641\u0627\u062F\u0647", en: "Signing certificates" },
+      note: { fa: "\u0631\u0627\u0633\u062A\u06CC\u0622\u0632\u0645\u0627\u06CC\u06CC \u0627\u0632 \u0645\u0633\u06CC\u0631 \u0627\u062E\u062A\u0635\u0627\u0635\u06CC API \u0627\u0646\u062C\u0627\u0645 \u0645\u06CC\u0634\u0648\u062F\u061B \u0627\u06CC\u0646 \u062C\u062F\u0648\u0644 \u0641\u0642\u0637 \u0647\u0648\u06CC\u062A \u06AF\u0648\u0627\u0647\u06CC\u0647\u0627 \u0631\u0627 \u0627\u0639\u0644\u0627\u0645 \u0645\u06CC\u06A9\u0646\u062F.", en: "Verification is done through the dedicated API; this table only declares certificate identities." },
+      columns: [
+        { key: "keyId", title: { fa: "\u0634\u0646\u0627\u0633\u0647\u0654 \u06A9\u0644\u06CC\u062F", en: "Key id" }, weight: 2 },
+        { key: "subject", title: { fa: "\u0645\u0648\u0636\u0648\u0639", en: "Subject" }, weight: 4 },
+        { key: "issuer", title: { fa: "\u0635\u0627\u062F\u0631\u06A9\u0646\u0646\u062F\u0647", en: "Issuer" }, weight: 4 },
+        { key: "fingerprint", title: { fa: "\u0627\u062B\u0631\u0627\u0646\u06AF\u0634\u062A (\u062E\u0644\u0627\u0635\u0647)", en: "Fingerprint (short)" }, weight: 3 },
+        { key: "validTo", title: { fa: "\u0627\u0639\u062A\u0628\u0627\u0631 \u062A\u0627", en: "Valid to" }, weight: 2 }
+      ],
+      rows: inp.pkiCertificates.map((c2) => ({
+        keyId: cell(c2.KeyId),
+        subject: cell(c2.Subject),
+        issuer: cell(c2.Issuer),
+        fingerprint: String(c2.CertSha256 ?? "").slice(0, 16) || "\u2014",
+        validTo: cell(c2.ValidTo)
       }))
     }] : [],
     ...inp.snapshotSha256 ? [{
@@ -3357,6 +3381,8 @@ function contractActualCurve(contractAmount, ipcs) {
 }
 var IPC_SNAPSHOT_VERSION = "ipc-snapshot-v1";
 var IPC_SIGNATURE_METHOD = "recorded";
+var IPC_PKI_SIGNATURE_METHOD = "pki-x509";
+var IPC_PKI_VERSION = "ipc-pki-v1";
 var IPC_PERFORMANCE_GUARANTEE_TYPES = ["performance", "retention"];
 function ipcStableStringify(value) {
   if (value === null || value === void 0) return "null";
@@ -3456,7 +3482,7 @@ function ipcDocumentCanonical(input) {
 function ipcStepCanonical(input) {
   return ipcStableStringify({
     version: IPC_SNAPSHOT_VERSION,
-    method: IPC_SIGNATURE_METHOD,
+    method: input.method ?? IPC_SIGNATURE_METHOD,
     documentSha256: input.documentSha256,
     prevHash: input.prevHash ?? null,
     stepNo: input.stepNo,
@@ -3485,7 +3511,11 @@ function verifyIpcSnapshotChain(steps, hashFn) {
       actorUserId: String(s.ActorUserId ?? ""),
       action: String(s.Action ?? ""),
       actedAt: String(s.ActedAt ?? ""),
-      commentFa: s.CommentFa == null ? null : String(s.CommentFa)
+      commentFa: s.CommentFa == null ? null : String(s.CommentFa),
+      /* گام ۲ (PKI) method متفاوتی دارد؛ اگر از روی رکورد خوانده نشود،
+       * هش گامهای امضاشده نادرست راستیآزمایی میشد. گامهای فاز ۴ همچنان
+       * مقدار پیشفرض `recorded` را میگیرند (سازگاری بایتکبهبایت). */
+      method: s.SignatureMethod == null ? IPC_SIGNATURE_METHOD : String(s.SignatureMethod)
     });
     if (hashFn(canonical) !== s.SnapshotSha256) {
       issuesFa.push(`\u0647\u0634 \u06AF\u0627\u0645 ${String(s.StepNo)} \u0628\u0627 \u0641\u0631\u0627\u062F\u0627\u062F\u0647\u0654 \u0647\u0645\u0627\u0646 \u06AF\u0627\u0645 \u0646\u0645\u06CC\u062E\u0648\u0627\u0646\u062F\u061B \u0633\u0646\u062F \u06CC\u0627 \u062A\u0627\u0631\u06CC\u062E\u0686\u0647 \u062F\u0633\u062A\u06A9\u0627\u0631\u06CC \u0634\u062F\u0647 \u0627\u0633\u062A`);
@@ -3497,6 +3527,65 @@ function verifyIpcSnapshotChain(steps, hashFn) {
     checked += 1;
   }
   return { ok: issuesFa.length === 0, checked, issuesFa };
+}
+function ipcPkiCanonical(input) {
+  return ipcStableStringify({
+    version: IPC_PKI_VERSION,
+    method: IPC_PKI_SIGNATURE_METHOD,
+    step: ipcStepCanonical({
+      documentSha256: input.documentSha256,
+      prevHash: input.prevHash,
+      stepNo: input.stepNo,
+      actor: input.actor,
+      actorUserId: input.actorUserId,
+      action: input.action,
+      actedAt: input.actedAt,
+      commentFa: input.commentFa,
+      method: IPC_PKI_SIGNATURE_METHOD
+    }),
+    certSha256: input.certSha256,
+    keyId: input.keyId,
+    algorithm: input.algorithm,
+    signedAt: input.signedAt
+  });
+}
+function ipcPkiAttestationFa(input) {
+  return `\u0627\u0645\u0636\u0627\u06CC \u062F\u06CC\u062C\u06CC\u062A\u0627\u0644 ${input.actorFa} \u2014 ${input.actionFa} \u062F\u0631 ${input.signedAt} \xB7 \u0647\u0634 \u0633\u0646\u062F: ${input.snapshotSha256.slice(0, 16)}\u2026 \xB7 \u06AF\u0648\u0627\u0647\u06CC: ${input.certSubject} (\u0627\u062B\u0631\u0627\u0646\u06AF\u0634\u062A ${input.certSha256.slice(0, 16)}\u2026) \xB7 \u0631\u0648\u0634: \u0627\u0645\u0636\u0627\u06CC \u0646\u0627\u0645\u062A\u0642\u0627\u0631\u0646 X.509 (\u0628\u062F\u0648\u0646 \u0627\u062F\u0639\u0627\u06CC \u0645\u0647\u0631 \u0632\u0645\u0627\u0646\u06CC \u0645\u0639\u062A\u0628\u0631 \u06CC\u0627 OCSP)`;
+}
+function verifyIpcPkiSignatures(steps, verifyFn) {
+  const issuesFa = [];
+  const out = [];
+  const sorted = [...steps].sort((a, b) => num(a.StepNo) - num(b.StepNo));
+  let checked = 0;
+  for (const s of sorted) {
+    if (!s.PkiSignature) continue;
+    const canonical = ipcPkiCanonical({
+      documentSha256: String(s.DocumentSha256 ?? ""),
+      prevHash: s.PrevHash == null ? null : String(s.PrevHash),
+      stepNo: num(s.StepNo),
+      actor: String(s.Actor ?? ""),
+      actorUserId: String(s.ActorUserId ?? ""),
+      action: String(s.Action ?? ""),
+      actedAt: String(s.ActedAt ?? ""),
+      commentFa: s.CommentFa == null ? null : String(s.CommentFa),
+      certSha256: String(s.PkiCertSha256 ?? ""),
+      keyId: String(s.PkiKeyId ?? ""),
+      algorithm: String(s.PkiAlgorithm ?? ""),
+      signedAt: String(s.PkiSignedAt ?? "")
+    });
+    let verdict;
+    try {
+      verdict = verifyFn(canonical, s) ?? { ok: false };
+    } catch (e) {
+      verdict = { ok: false, issuesFa: [`\u0631\u0627\u0633\u062A\u06CC\u0622\u0632\u0645\u0627\u06CC\u06CC \u06AF\u0627\u0645 ${String(s.StepNo)} \u0628\u0627 \u062E\u0637\u0627 \u0631\u0648\u0628\u0647\u0631\u0648 \u0634\u062F: ${String(e?.message ?? e)}`] };
+    }
+    const stepIssues = verdict.issuesFa ?? [];
+    if (!verdict.ok && stepIssues.length === 0) stepIssues.push(`\u0627\u0645\u0636\u0627\u06CC \u062F\u06CC\u062C\u06CC\u062A\u0627\u0644 \u06AF\u0627\u0645 ${String(s.StepNo)} \u0645\u0639\u062A\u0628\u0631 \u0646\u06CC\u0633\u062A`);
+    out.push({ stepNo: num(s.StepNo), ok: !!verdict.ok, issuesFa: stepIssues });
+    issuesFa.push(...stepIssues);
+    checked += 1;
+  }
+  return { ok: issuesFa.length === 0, checked, issuesFa, steps: out };
 }
 function ipcApprovalGuaranteeGate(input) {
   const now = input.now ?? /* @__PURE__ */ new Date();
@@ -3576,6 +3665,8 @@ export {
   HEALTH_BAND_FA,
   INDEX_STATUS_FA,
   IPC_PERFORMANCE_GUARANTEE_TYPES,
+  IPC_PKI_SIGNATURE_METHOD,
+  IPC_PKI_VERSION,
   IPC_SIGNATURE_METHOD,
   IPC_SNAPSHOT_VERSION,
   IPC_WORKFLOW_FA,
@@ -3635,6 +3726,8 @@ export {
   ipcDocumentCanonical,
   ipcDocumentSnapshot,
   ipcNextActions,
+  ipcPkiAttestationFa,
+  ipcPkiCanonical,
   ipcPostability,
   ipcRequiredActor,
   ipcStableStringify,
@@ -3674,6 +3767,7 @@ export {
   validateBoq,
   validateBoqItem,
   validateGuaranteeInput,
+  verifyIpcPkiSignatures,
   verifyIpcSnapshotChain,
   warrantyEnd
 };

@@ -5135,6 +5135,11 @@ export type CntReportInput = {
    * قدیمی JSON报告 (پیش از فاز ۴) بایتکبهبایت همان بماند. */
   signatures?: Record<string, unknown>[];
   snapshotSha256?: string | null;
+  /* فاز ۵: وقتی امضای دیجیتال واقعاً اعمال شده، سرور این پرچم و فهرست
+   * گواهیها را میفرستد تا برگهٔ رسمی دیگر نگوید «PKI نیست». نبود یعنی
+   * همان خروجی فاز ۴، بایتکبهبایت. */
+  pkiApplied?: boolean;
+  pkiCertificates?: Record<string, unknown>[];
 };
 
 type Section =
@@ -5227,16 +5232,23 @@ function buildIpcSheet(inp: CntReportInput): Section[] {
       },
     },
     /* فاز ۴: در نسخهٔ رسمی PDF، گامهای گردش بهصورت «تأیید ثبتشده» همراه
-     * هش Snapshot سند چاپ میشوند. اینجا همان دادهٔ سرور است، نه چیزی که
-     * کلاینت ساخته باشد. PKI عمداً نیامده — مرحلهٔ جداگانهای است. */
+     * هش Snapshot سند چاپ میشوند (فاز ۵: در صورت پیکربندی معتبر، امضای
+     * دیجیتال X.509 هم روی همان گامها مینشیند — نه اینکه متن قدیمی بماند). */
     ...(inp.signatures && inp.signatures.length
       ? [{
           kind: "table",
-          title: { fa: "گواهی تأیید ثبتشده (گام نخست امضا)", en: "Recorded attestation (signature phase 1)" },
-          note: {
-            fa: "هر گام، هش نمایهٔ لحظهٔ همان گام را مهر میکند؛ تغییر سند پس از تأیید، ناسازگاری زنجیره آشکار میشود. این امضای دیجیتال PKI نیست.",
-            en: "Each step seals the hash of the document snapshot at that moment; post-approval tampering breaks the chain. Not a PKI digital signature.",
-          },
+          title: inp.pkiApplied
+            ? { fa: "گواهی امضای دیجیتال (X.509)", en: "Digital signature certificate (X.509)" }
+            : { fa: "گواهی تأیید ثبتشده (گام نخست امضا)", en: "Recorded attestation (signature phase 1)" },
+          note: inp.pkiApplied
+            ? {
+                fa: "هر گام، هش نمایهٔ لحظهٔ همان گام را با کلید خصوصی گواهی X.509 پیکربندیشده امضا میکند؛ تغییر سند یا تاریخچه پس از امضا، راستیآزمایی را میشکند. مهر زمانی معتبر و بررسی ابطال (OCSP/CRL) اعمال نشده است.",
+                en: "Each step signs the snapshot hash with the configured X.509 private key; tampering breaks verification. No trusted timestamp or revocation check (OCSP/CRL) is applied.",
+              }
+            : {
+                fa: "هر گام، هش نمایهٔ لحظهٔ همان گام را مهر میکند؛ تغییر سند پس از تأیید، ناسازگاری زنجیره آشکار میشود. این امضای دیجیتال PKI نیست.",
+                en: "Each step seals the hash of the document snapshot at that moment; post-approval tampering breaks the chain. Not a PKI digital signature.",
+              },
           columns: [
             { key: "stepNo", title: { fa: "گام", en: "Step" }, weight: 1 },
             { key: "actorFa", title: { fa: "نقش", en: "Actor" }, weight: 2 },
@@ -5252,6 +5264,29 @@ function buildIpcSheet(inp: CntReportInput): Section[] {
             actedAt: cell(s.ActedAt),
             shortHash: String(s.SnapshotSha256 ?? "").slice(0, 12) || "—",
             methodFa: cell(s.MethodFa ?? "recorded"),
+          })),
+        } as Section]
+      : []),
+    /* فاز ۵: گواهیهای امضا فقط وقتی چاپ میشوند که واقعاً امضا شدهاند؛
+     * سربرگ جدول شامل subject/issuer/اثرانگشت/بازهٔ اعتبار است. */
+    ...(inp.pkiApplied && inp.pkiCertificates && inp.pkiCertificates.length
+      ? [{
+          kind: "table",
+          title: { fa: "گواهیهای دیجیتال مورد استفاده", en: "Signing certificates" },
+          note: { fa: "راستیآزمایی از مسیر اختصاصی API انجام میشود؛ این جدول فقط هویت گواهیها را اعلام میکند.", en: "Verification is done through the dedicated API; this table only declares certificate identities." },
+          columns: [
+            { key: "keyId", title: { fa: "شناسهٔ کلید", en: "Key id" }, weight: 2 },
+            { key: "subject", title: { fa: "موضوع", en: "Subject" }, weight: 4 },
+            { key: "issuer", title: { fa: "صادرکننده", en: "Issuer" }, weight: 4 },
+            { key: "fingerprint", title: { fa: "اثرانگشت (خلاصه)", en: "Fingerprint (short)" }, weight: 3 },
+            { key: "validTo", title: { fa: "اعتبار تا", en: "Valid to" }, weight: 2 },
+          ],
+          rows: inp.pkiCertificates.map((c) => ({
+            keyId: cell(c.KeyId),
+            subject: cell(c.Subject),
+            issuer: cell(c.Issuer),
+            fingerprint: String(c.CertSha256 ?? "").slice(0, 16) || "—",
+            validTo: cell(c.ValidTo),
           })),
         } as Section]
       : []),
@@ -5759,8 +5794,11 @@ export function contractActualCurve(contractAmount: number, ipcs: (Parameters<ty
  * ═══════════════════════════════════════════════════════════════════════════ */
 
 export const IPC_SNAPSHOT_VERSION = "ipc-snapshot-v1";
-/** روش تأیید ثبتشده — PKI عمداً مقدار دیگری خواهد داشت در مرحلهٔ جداگانه. */
+/** روش تأیید ثبتشده (گام ۱) — گام ۲ `IPC_PKI_SIGNATURE_METHOD` را دارد. */
 export const IPC_SIGNATURE_METHOD = "recorded";
+/** فاز ۵ / گام دوم امضا: امضای نامتقارن روی هش سند با گواهی X.509. */
+export const IPC_PKI_SIGNATURE_METHOD = "pki-x509";
+export const IPC_PKI_VERSION = "ipc-pki-v1";
 
 /** انواع ضمانتنامهای که «ضمانتنامهٔ حسن انجام کار» محسوب میشوند (D7). */
 export const IPC_PERFORMANCE_GUARANTEE_TYPES = ["performance", "retention"] as const;
@@ -5866,10 +5904,12 @@ export function ipcStepCanonical(input: {
   action: string;
   actedAt: string;
   commentFa?: string | null;
+  /** گام ۱ پیشفرض `recorded` است؛ گام ۲ (PKI) صریحاً `pki-x509` میفرستد. */
+  method?: string;
 }): string {
   return ipcStableStringify({
     version: IPC_SNAPSHOT_VERSION,
-    method: IPC_SIGNATURE_METHOD,
+    method: input.method ?? IPC_SIGNATURE_METHOD,
     documentSha256: input.documentSha256,
     prevHash: input.prevHash ?? null,
     stepNo: input.stepNo,
@@ -5918,6 +5958,10 @@ export function verifyIpcSnapshotChain(steps: Record<string, unknown>[], hashFn:
       action: String(s.Action ?? ""),
       actedAt: String(s.ActedAt ?? ""),
       commentFa: s.CommentFa == null ? null : String(s.CommentFa),
+      /* گام ۲ (PKI) method متفاوتی دارد؛ اگر از روی رکورد خوانده نشود،
+       * هش گامهای امضاشده نادرست راستیآزمایی میشد. گامهای فاز ۴ همچنان
+       * مقدار پیشفرض `recorded` را میگیرند (سازگاری بایتکبهبایت). */
+      method: s.SignatureMethod == null ? IPC_SIGNATURE_METHOD : String(s.SignatureMethod),
     });
     if (hashFn(canonical) !== s.SnapshotSha256) {
       issuesFa.push(`هش گام ${String(s.StepNo)} با فرادادهٔ همان گام نمیخواند؛ سند یا تاریخچه دستکاری شده است`);
@@ -5929,6 +5973,115 @@ export function verifyIpcSnapshotChain(steps: Record<string, unknown>[], hashFn:
     checked += 1;
   }
   return { ok: issuesFa.length === 0, checked, issuesFa };
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * فاز ۵ ADR-CNT-IPC-UNIFY — گام دوم امضا: امضای دیجیتال X.509
+ * ---------------------------------------------------------------------------
+ * گام ۱ فقط «تأیید ثبتشده» و هش زنجیرهای بود. اینجا لایهٔ جداگانهای میآید:
+ * رشتهٔ کانونی گام (همان `ipcStepCanonical` ولی با method متفاوت) بههمراه
+ * هویت گواهی (اثرانگشت، keyId، الگوریتم، زمان امضا) امضا میشود. موتور
+ * همچنان خالص است: `crypto.verify` بهصورت `verifyFn` تزریق میشود. گامهای
+ * فاز ۴ که PkiSignature ندارند نادیده گرفته میشوند، نه اینکه خطا بدهند.
+ *
+ * صداقت مهمتر از سبز شدن تست است: اگر کلید/گواهی معتبر پیکربندی نشده،
+ * سرور `pkiApplied=false` برمیگرداند و هیچ گواهی خودامضای ساختگی به نام
+ * PKI امضا نمیکند. زنجیرهٔ اعتماد فقط وقتی پذیرفته میشود که گواهی امضا
+ * توسط لنگر اعتماد (CA) پیکربندیشده صادر و تأیید شده باشد.
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+export type IpcPkiSignatureInput = {
+  documentSha256: string;
+  prevHash: string | null;
+  stepNo: number;
+  actor: string;
+  actorUserId: string;
+  action: string;
+  actedAt: string;
+  commentFa?: string | null;
+  certSha256: string;
+  keyId: string;
+  algorithm: string;
+  signedAt: string;
+};
+
+/** رشتهای که دقیقاً امضا میشود — بازسازی آن از روی رکورد گام ممکن باشد. */
+export function ipcPkiCanonical(input: IpcPkiSignatureInput): string {
+  return ipcStableStringify({
+    version: IPC_PKI_VERSION,
+    method: IPC_PKI_SIGNATURE_METHOD,
+    step: ipcStepCanonical({
+      documentSha256: input.documentSha256,
+      prevHash: input.prevHash,
+      stepNo: input.stepNo,
+      actor: input.actor,
+      actorUserId: input.actorUserId,
+      action: input.action,
+      actedAt: input.actedAt,
+      commentFa: input.commentFa,
+      method: IPC_PKI_SIGNATURE_METHOD,
+    }),
+    certSha256: input.certSha256,
+    keyId: input.keyId,
+    algorithm: input.algorithm,
+    signedAt: input.signedAt,
+  });
+}
+
+/** متن فارسی گواهی امضای دیجیتال که روی PDF رسمی چاپ میشود. */
+export function ipcPkiAttestationFa(input: {
+  actorFa: string;
+  actionFa: string;
+  signedAt: string;
+  snapshotSha256: string;
+  certSubject: string;
+  certSha256: string;
+}): string {
+  return `امضای دیجیتال ${input.actorFa} — ${input.actionFa} در ${input.signedAt}`
+    + ` · هش سند: ${input.snapshotSha256.slice(0, 16)}…`
+    + ` · گواهی: ${input.certSubject} (اثرانگشت ${input.certSha256.slice(0, 16)}…)`
+    + ` · روش: امضای نامتقارن X.509 (بدون ادعای مهر زمانی معتبر یا OCSP)`;
+}
+
+/**
+ * راستیآزمایی همهٔ گامهای دارای امضای دیجیتال. `verifyFn` تزریق میشود تا
+ * موتور به node:crypto وابسته نماند؛ امضای نادرست، گواهی منقضی، یا تغییر
+ * هر فیلد گام بعد از امضا اینجا آشکار میشود.
+ */
+export function verifyIpcPkiSignatures(
+  steps: Record<string, unknown>[],
+  verifyFn: (canonical: string, step: Record<string, unknown>) => { ok: boolean; issuesFa?: string[] },
+): { ok: boolean; checked: number; issuesFa: string[]; steps: { stepNo: number; ok: boolean; issuesFa: string[] }[] } {
+  const issuesFa: string[] = [];
+  const out: { stepNo: number; ok: boolean; issuesFa: string[] }[] = [];
+  const sorted = [...steps].sort((a, b) => num(a.StepNo) - num(b.StepNo));
+  let checked = 0;
+  for (const s of sorted) {
+    if (!s.PkiSignature) continue; /* گام فاز ۴ — فقط تأیید ثبتشده */
+    const canonical = ipcPkiCanonical({
+      documentSha256: String(s.DocumentSha256 ?? ""),
+      prevHash: s.PrevHash == null ? null : String(s.PrevHash),
+      stepNo: num(s.StepNo),
+      actor: String(s.Actor ?? ""),
+      actorUserId: String(s.ActorUserId ?? ""),
+      action: String(s.Action ?? ""),
+      actedAt: String(s.ActedAt ?? ""),
+      commentFa: s.CommentFa == null ? null : String(s.CommentFa),
+      certSha256: String(s.PkiCertSha256 ?? ""),
+      keyId: String(s.PkiKeyId ?? ""),
+      algorithm: String(s.PkiAlgorithm ?? ""),
+      signedAt: String(s.PkiSignedAt ?? ""),
+    });
+    let verdict: { ok: boolean; issuesFa?: string[] };
+    try { verdict = verifyFn(canonical, s) ?? { ok: false }; }
+    catch (e) { verdict = { ok: false, issuesFa: [`راستیآزمایی گام ${String(s.StepNo)} با خطا روبهرو شد: ${String((e as Error)?.message ?? e)}`] }; }
+    const stepIssues = verdict.issuesFa ?? [];
+    if (!verdict.ok && stepIssues.length === 0) stepIssues.push(`امضای دیجیتال گام ${String(s.StepNo)} معتبر نیست`);
+    out.push({ stepNo: num(s.StepNo), ok: !!verdict.ok, issuesFa: stepIssues });
+    issuesFa.push(...stepIssues);
+    checked += 1;
+  }
+  return { ok: issuesFa.length === 0, checked, issuesFa, steps: out };
 }
 
 /* ─────────────── گیت تصویب ضمانتنامهٔ حسن انجام کار ─────────────── */

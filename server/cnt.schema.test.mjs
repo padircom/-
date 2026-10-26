@@ -28,10 +28,17 @@ const byName = (n) => SCHEMA.find((t) => t.name === n);
 /* ══════ اسکیما ══════ */
 
 test("ماژول d14 جدول‌های پیمان و قالب صورت‌وضعیت (CNT-1) را دارد", () => {
-  /* ۲۴ جدول پیشین + دو جدول P8/CNT-1: قالب صورت‌وضعیت و صورت‌وضعیت دوره.
-   * عدد عمداً صریح است تا حذف ناخواستهٔ جدول دیده شود. */
-  assert.equal(D14.length, 26);
-  for (const n of ["CntIpcTemplate", "CntIpcCertificate"]) {
+  /* عدد ۲۶ مربوط به ۲۴ جدول نخست + دو جدول P8/CNT-1 بود. بعدها جدولهای
+   * ریسک/ارزیابی طرف قرارداد/فاز ۵ به همان d14 اضافه شدند (امروز ۳۵
+   * جدول). عدد مطلق دیگر معیار خوبی نیست: افزایش جدول نباید تست را
+   * بشکند. آنچه مهم است حذف نشدن جدولهای محوری است — پس فهرست صریح
+   * نامها + کف ۲۶ جای assert.equal ثابت نشست. */
+  assert.ok(D14.length >= 26, `تعداد جدولهای d14 کم شده است: ${D14.length}`);
+  for (const n of [
+    "CntIpcTemplate", "CntIpcCertificate", "ContractMaster", "ContractBOQ_Item",
+    "InterimPaymentCertificate", "IPC_LineItem", "IPC_WorkflowStep", "IPC_Deduction",
+    "MeasurementSheet", "ContractGuarantee", "VendorEvaluation", "VendorImprovement",
+  ]) {
     assert.ok(D14.some((t) => t.name === n), `${n} در ماژول d14 نیست`);
   }
 });
