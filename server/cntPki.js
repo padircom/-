@@ -84,6 +84,18 @@ function checkExtendedKeyUsage(leaf, issuesFa) {
 
 function checkChain(leaf, caPem, now, allowSelfSigned, issuesFa) {
   if (caPem) {
+    // A server-managed trust bundle permits explicit overlap during CA rotation.
+    // Never trust a CA supplied by a workflow row or detached verification caller.
+    const blocks = caPem.match(/-----BEGIN CERTIFICATE-----[\s\S]*?-----END CERTIFICATE-----/g) ?? [];
+    if (blocks.length > 1) {
+      for (const pem of blocks) {
+        const candidateIssues = [];
+        const level = checkChain(leaf, pem, now, false, candidateIssues);
+        if (level && candidateIssues.length === 0) return level;
+      }
+      issuesFa.push("هیچ CA معتبری در بستهٔ اعتماد، صادرکنندهٔ این گواهی نیست");
+      return null;
+    }
     const ca = certOf(caPem, issuesFa, "CA");
     if (!ca) return null;
     if (ca.ca !== true) issuesFa.push("CA: گواهی مرجع BasicConstraints=CA:TRUE ندارد");
