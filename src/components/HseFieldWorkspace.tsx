@@ -124,7 +124,6 @@ export default function HseWorkspace({
   const [incidents, setIncidents] = useState<HseIncidentDto[]>(seedIncidents);
   const [permits, setPermits] = useState<HsePermitDto[]>(seedPermits);
   const [inspections, setInspections] = useState<HseInspectionDto[]>(seedInspections);
-  const [source, setSource] = useState<"sql" | "seed" | null>(null);
   const [apiOk, setApiOk] = useState(true);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -164,12 +163,10 @@ export default function HseWorkspace({
       listPermits(PEX_PROJECT.code),
       listInspections(PEX_PROJECT.code),
     ]);
-    let anySql = false;
-    if (ri.status === "fulfilled" && ri.value.length) { setIncidents(ri.value); anySql = true; }
-    if (rp.status === "fulfilled" && rp.value.length) { setPermits(rp.value); anySql = true; }
-    if (rn.status === "fulfilled" && rn.value.length) { setInspections(rn.value); anySql = true; }
+    if (ri.status === "fulfilled" && ri.value.length) setIncidents(ri.value);
+    if (rp.status === "fulfilled" && rp.value.length) setPermits(rp.value);
+    if (rn.status === "fulfilled" && rn.value.length) setInspections(rn.value);
     setApiOk(ri.status === "fulfilled" || rp.status === "fulfilled" || rn.status === "fulfilled");
-    setSource(anySql ? "sql" : "seed");
   }, []);
 
   useEffect(() => {
@@ -268,32 +265,6 @@ export default function HseWorkspace({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden" dir={rtl ? "rtl" : "ltr"}>
-      <section className="glass-dark shrink-0 rounded-2xl p-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="grid h-8 w-8 place-items-center rounded-lg border border-amber-400/40 bg-amber-400/10 text-[15px]">🦺</span>
-          <div className="min-w-0 flex-1">
-            <h3 className="text-[12px] font-semibold tx1">
-              {rtl ? "ایمنی، بهداشت و محیط‌زیست (HSE)" : "Health, Safety & Environment (HSE)"}
-            </h3>
-            <p className="text-[8.5px] font-extralight tx3">
-              {rtl
-                ? "نرخ OSHA از من‌اور واقعی · WO پرخطر بدون PTW فعال هشدار می‌گیرد · اقدام بحرانی به CAPA ارجاع می‌شود"
-                : "OSHA rates from real man-hours · high-risk WO without active PTW warns · critical actions go to CAPA"}
-            </p>
-          </div>
-          <span
-            className="rounded-lg border px-2 py-1 text-[9px]"
-            dir="ltr"
-            style={{
-              borderColor: source === "sql" ? "#8FE3C855" : "#9AA4B255",
-              color: source === "sql" ? "#8FE3C8" : "#9AA4B2",
-            }}
-          >
-            {source === "sql" ? "● SQL" : "○ Seed"}
-          </span>
-        </div>
-      </section>
-
       {!hideTabs && (
         <nav className="flex shrink-0 flex-wrap items-center gap-1 rounded-xl bg-black/15 p-1">
           {TABS.map((item) => (

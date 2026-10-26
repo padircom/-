@@ -6,7 +6,7 @@ import ProcessFlowMaps from './ProcessFlowMaps';
 import { type Lang } from '../data/framework';
 
 /**
- * PMO-CONTRACT-RISK-ENGINE-V1.0 — «مدیریت ریسک قراردادها و بهبود قرارداد» (d14).
+ * PMO-CONTRACT-RISK-ENGINE-V1.0 — «مدیریت ریسک قراردادها» (d14).
  * همهٔ عددها از /api/cnt-risk می‌آیند؛ دادهٔ خالی = پیام خالی، نه عدد ساختگی.
  * امتیاز ریسک اینجا فقط اولویت‌بندی است و هرگز مبلغ یا مدت تمدید تولید نمی‌کند.
  */
@@ -37,7 +37,8 @@ const SECTIONS = [
   ['reports', 'گزارش‌ها و خروجی‌های مدیریتی'],
   ['settings', 'تنظیمات و کتابخانهٔ قواعد ارزیابی'],
 ] as const;
-type Section = (typeof SECTIONS)[number][0];
+export type ContractRiskSection = (typeof SECTIONS)[number][0];
+type Section = ContractRiskSection;
 
 const BAND_FA: Record<string, string> = { low: 'پایین', medium: 'متوسط', high: 'بالا', critical: 'بحرانی' };
 const BAND_COLOR: Record<string, string> = { low: '#16a34a', medium: '#d97706', high: '#ea580c', critical: '#dc2626' };
@@ -49,14 +50,36 @@ const EMPTY = '—';
 const faNum = (v: unknown) => (v === null || v === undefined || v === '' ? EMPTY : String(v));
 const faDate = (iso?: string | null) => (iso ? String(iso).slice(0, 10) : EMPTY);
 
-export default function ContractRiskWorkspace({ lang, projectId }: { lang: Lang; projectId: string }) {
+export default function ContractRiskWorkspace({
+  lang,
+  projectId,
+  activeSection,
+  onSectionChange,
+}: {
+  lang: Lang;
+  projectId: string;
+  activeSection: ContractRiskSection;
+  onSectionChange: (section: ContractRiskSection) => void;
+}) {
   const { user } = useAuth();
-  return <Live key={`${projectId}:${user?.id ?? ''}`} lang={lang} projectId={projectId} userId={user?.id ?? null} />;
+  return <Live key={`${projectId}:${user?.id ?? ''}`} lang={lang} projectId={projectId} userId={user?.id ?? null} section={activeSection} onSectionChange={onSectionChange} />;
 }
 
-function Live({ lang, projectId, userId }: { lang: Lang; projectId: string; userId: string | null }) {
+function Live({
+  lang,
+  projectId,
+  userId,
+  section,
+  onSectionChange,
+}: {
+  lang: Lang;
+  projectId: string;
+  userId: string | null;
+  section: ContractRiskSection;
+  onSectionChange: (section: ContractRiskSection) => void;
+}) {
   const fa = lang === 'fa';
-  const [section, setSection] = useState<Section>('map');
+  const setSection = onSectionChange;
   const [ws, setWs] = useState<Workspace | null>(null);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -164,18 +187,19 @@ function Live({ lang, projectId, userId }: { lang: Lang; projectId: string; user
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <h3 className="text-[15px] font-semibold tx1">{fa ? 'مدیریت ریسک قراردادها و بهبود قرارداد' : 'Contract Risk & Improvement'}</h3>
-        <span className="text-[9.5px] font-extralight tx3">PMO-CONTRACT-RISK-ENGINE-V1.0 · {fa ? 'امتیاز ریسک فقط برای اولویت‌بندی است؛ مبلغ خسارت یا مدت تمدید از آن ساخته نمی‌شود' : 'risk score is prioritisation only'}</span>
-      </div>
-
-      <div className="flex flex-wrap gap-1.5">
-        {SECTIONS.map(([k, label]) => (
-          <button key={k} type="button" onClick={() => setSection(k)} className={`rounded-lg px-2.5 py-1 text-[10.5px] font-light transition ${section === k ? 'toggle-on tx1' : 'tx3 hover:tx2'}`}>{label}</button>
-        ))}
-        {section !== 'map' && (
-          <button type="button" onClick={() => setSection('map')} className="rounded-lg border b-line-soft px-2.5 py-1 text-[10.5px] font-light tx2 transition hover:tx1">{fa ? '↩ بازگشت به نقشهٔ فرایند' : '↩ Back to process map'}</button>
-        )}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <h3 className="text-[15px] font-semibold tx1">{fa ? 'مدیریت ریسک قراردادها' : 'Contract Risk Management'}</h3>
+          <span className="text-[9.5px] font-extralight tx3">PMO-CONTRACT-RISK-ENGINE-V1.0 · {fa ? 'امتیاز ریسک فقط برای اولویت‌بندی است؛ مبلغ خسارت یا مدت تمدید از آن ساخته نمی‌شود' : 'risk score is prioritisation only'}</span>
+        </div>
+        <button
+          type="button"
+          onClick={() => setSection('map')}
+          aria-pressed={section === 'map'}
+          className={`shrink-0 rounded-lg border b-line-soft px-3 py-1.5 text-[10.5px] font-light transition ${section === 'map' ? 'toggle-on tx1' : 'tx2 hover:tx1'}`}
+        >
+          🗺 {fa ? 'نقشهٔ فرایند' : 'Process map'}
+        </button>
       </div>
 
       {error && <div className="glass rounded-xl px-3 py-2 text-[11px]" style={{ color: '#dc2626' }}>{error}</div>}

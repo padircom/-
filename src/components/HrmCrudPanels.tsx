@@ -93,6 +93,7 @@ const EnterpriseCrudBlock: React.FC<SimpleCrudProps> = ({
       {subtitle && <p className="text-xs tx3 px-1">{subtitle}</p>}
       <CrudResource<Record<string, unknown>>
         fa={true}
+        persianDates
         caption={title}
         rows={rows}
         columns={columns}

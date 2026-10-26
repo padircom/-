@@ -57,6 +57,8 @@ function resolveMaybe<T, V>(value: Maybe<T, V> | undefined, row: T): V | undefin
 
 export interface CrudResourceProps<T> {
   fa: boolean;
+  /** Opt in to Jalali date controls for selected modules; default remains Gregorian. */
+  persianDates?: boolean;
   caption: string;
   rows: T[];
   columns: GridColumnDef<T>[];
@@ -102,7 +104,7 @@ type Pending<T> = { action: ResourceAction<T>; row: T } | null;
 
 export default function CrudResource<T>(props: CrudResourceProps<T>) {
   const {
-    fa, caption, rows, columns, rowKey, loading, error, onRetry, onChanged, describeError, emptyText,
+    fa, persianDates = false, caption, rows, columns, rowKey, loading, error, onRetry, onChanged, describeError, emptyText,
     create, edit, viewFields, actions, toolbarExtra, defaultSort, defaultPageSize, pageSizes,
   } = props;
   const tr = (faText: string, enText: string) => (fa ? faText : enText);
@@ -226,6 +228,7 @@ export default function CrudResource<T>(props: CrudResourceProps<T>) {
         <FormDialog
           open={creating}
           fa={fa}
+          persianDates={persianDates}
           mode="create"
           wide
           title={create.title}
@@ -245,6 +248,7 @@ export default function CrudResource<T>(props: CrudResourceProps<T>) {
         <FormDialog
           open={editing !== null}
           fa={fa}
+          persianDates={persianDates}
           mode="edit"
           wide
           title={edit.title}
@@ -277,6 +281,7 @@ export default function CrudResource<T>(props: CrudResourceProps<T>) {
         <FormDialog
           open
           fa={fa}
+          persianDates={persianDates}
           mode="create"
           title={pendingForm.title}
           fields={pendingForm.fields}

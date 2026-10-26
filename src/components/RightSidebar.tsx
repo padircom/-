@@ -385,8 +385,13 @@ export default function RightSidebar({
   /* ── لایهٔ ۲ — حوزهٔ عملکردی (زیر گروه فرایندی) ──
    * ماژول‌های این حوزه (لایهٔ ۳) در سایدبار فرعیِ صفحهٔ ماژول
    * فهرست می‌شوند؛ اینجا فقط انتخابِ ورود انجام می‌شود. */
-  const renderPerfDomain = (pd: PerformanceDomain & { modules: Domain[] }) => {
+  const renderPerfDomain = (pd: PerformanceDomain & { modules: Domain[] }, groupId?: string) => {
     const isOpen = openPerf === pd.id;
+    const title = pd.id === "extension" && groupId === "pg3"
+      ? { fa: "مدیریت ایمنی و بهداشت", en: "Health & Safety Management" }
+      : pd.id === "extension" && groupId === "pg4"
+        ? { fa: "مدیریت کیفیت و بازرسی", en: "Quality & Inspection Management" }
+        : pd.title;
     const first = pd.modules[0];
     const pdNoData = selCluster ? (moduleDataGaps[first.id] ?? []).includes(selCluster) : false;
     const canEnter = Boolean(selCluster && selProject && !pdNoData);
@@ -401,7 +406,7 @@ export default function RightSidebar({
         >
           <span className="shrink-0 text-[12px] leading-none">{pd.icon}</span>
           <span className="min-w-0 flex-1 truncate text-[10.5px] font-medium" style={{ color: pd.color }}>
-            {t(pd.title, lang)}
+            {t(title, lang)}
           </span>
           <svg
             viewBox="0 0 24 24"
@@ -602,7 +607,7 @@ export default function RightSidebar({
                                   modules: pd.modules.filter((m) => visibleDomains.some((v) => v.id === m.id)),
                                 }))
                                 .filter((pd) => pd.modules.length > 0)
-                                .map(renderPerfDomain)
+                                .map((pd) => renderPerfDomain(pd, g.id))
                               : members.map(renderDomain)}
                           </div>
                         )}

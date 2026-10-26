@@ -116,11 +116,11 @@ const MAP_LOSS: MapDef = {
   dashedLegendFa: 'مسیر بررسی و بازگشت برای اصلاح', dashedLegendEn: 'Review / rework loop',
 };
 
-/* ————— نقشهٔ ۳: مدیریت ریسک قراردادها و بهبود قرارداد (ماژول d14) ————— */
+/* ————— نقشهٔ ۳: مدیریت ریسک قراردادها (ماژول d14) ————— */
 const MAP_RISK: MapDef = {
   id: 'risk',
-  titleFa: 'فلوچارت مدیریت ریسک قراردادها و بهبود قرارداد',
-  titleEn: 'Contract risk management & improvement workflow',
+  titleFa: 'فلوچارت مدیریت ریسک قراردادها',
+  titleEn: 'Contract risk management workflow',
   subtitleFa: 'شناسایی، اولویت‌بندی ریسک‌ها و مسیر بهبود قرارداد',
   subtitleEn: 'Identify & prioritise contractual risks and the contract-improvement path',
   steps: [

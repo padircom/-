@@ -6,6 +6,7 @@
  * همه‌چیز با مودال داخلی انجام می‌شود.
  */
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
+import PersianDateInput from "../PersianDateInput";
 import {
   buildPayload,
   diffPayload,
@@ -104,6 +105,8 @@ export interface FormDialogProps {
   /** یادداشت بالای فرم، مثلاً «این رکورد تغییر کرده است». */
   notice?: ReactNode;
   wide?: boolean;
+  /** Opt-in Jalali input for modules that require the Persian calendar. */
+  persianDates?: boolean;
 }
 
 export function FormDialog({
@@ -119,6 +122,7 @@ export function FormDialog({
   onClose,
   notice,
   wide,
+  persianDates = false,
 }: FormDialogProps) {
   const tr = (faText: string, enText: string) => (fa ? faText : enText);
   const [values, setValues] = useState<FormValues>(initialValues);
@@ -238,6 +242,16 @@ export function FormDialog({
                   {...common}
                   {...refProps}
                   rows={3}
+                  value={value}
+                  onChange={(event) => setField(field.name, event.target.value)}
+                />
+              );
+            } else if (persianDates && (type === "date" || type === "datetime")) {
+              control = (
+                <PersianDateInput
+                  {...common}
+                  inputRef={isFirst ? (node) => { firstFieldRef.current = node; } : undefined}
+                  includeTime={type === "datetime"}
                   value={value}
                   onChange={(event) => setField(field.name, event.target.value)}
                 />

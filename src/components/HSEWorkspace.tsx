@@ -43,6 +43,8 @@ type Props = {
   hideTabs?: boolean;
   /** سایدبار دامنه‌ای کنار محتوا (همان لایهٔ ۳ سایدبار اصلی). */
   aside?: ReactNode;
+  /** هویت کامل صنعت/پروژه و ماژول در هدر مشترک صفحه. */
+  headerIdentity?: ReactNode;
 };
 type Json = Record<string, any>;
 
@@ -215,7 +217,7 @@ const num = (n: unknown, d = 2): string =>
 
 /* ═════════════════════ کامپوننت اصلی ═════════════════════ */
 
-export default function HSEWorkspace({ lang, onBack, initialTab, initialFieldTab, hideTabs, aside }: Props) {
+export default function HSEWorkspace({ lang, onBack, initialTab, initialFieldTab, hideTabs, aside, headerIdentity }: Props) {
   /* شناسهٔ پروژه از «پروژهٔ جاری» می‌آید (SystemContext) — نه ثابتِ ماژول. */
   const projectId = useCurrentProjectId();
 
@@ -345,36 +347,43 @@ export default function HSEWorkspace({ lang, onBack, initialTab, initialFieldTab
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-3 overflow-hidden" dir={rtl ? "rtl" : "ltr"}>
-      <div className="workspace-columns flex min-h-0 flex-1 gap-3 overflow-hidden">
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-hidden">
       {/* نوار بالا */}
       <div className="glass flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl px-3 py-2.5">
         <button
           onClick={onBack}
           className="glass-row flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-[10.5px] font-light tx2 transition hover:tx1"
         >
-          {rtl ? "→ بازگشت" : "← Back"}
+          <span className="inline-block rotate-180 rtl:rotate-0">→</span>
+          {rtl ? "بازگشت به داشبورد" : "Back to dashboard"}
         </button>
-        <div className="flex min-w-0 flex-1 items-center gap-2">
-          <span className="text-lg">🦺</span>
-          <div className="min-w-0">
-            <div className="truncate text-[12px] font-light tx1">
-              {rtl ? "مدیریت ایمنی، بهداشت و محیط‌زیست" : "Health, Safety & Environment"}
+        {headerIdentity ?? (
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            <span className="text-lg">🦺</span>
+            <div className="min-w-0">
+              <div className="truncate text-[12px] font-light tx1">
+                {rtl ? "مدیریت ایمنی، بهداشت و محیط‌زیست" : "Health, Safety & Environment"}
+              </div>
+              <div className="truncate text-[9.5px] font-light tx3">
+                {rtl ? `دامنهٔ d16 · پروژهٔ ${projectId}` : `Domain d16 · project ${projectId}`}
+              </div>
+              <SystemBadge domainId="d16" lang={lang} className="mt-1" />
             </div>
-            <div className="truncate text-[9.5px] font-light tx3">
-              {rtl ? `دامنهٔ d16 · پروژهٔ ${projectId}` : `Domain d16 · project ${projectId}`}
-            </div>
-            <SystemBadge domainId="d16" lang={lang} className="mt-1" />
           </div>
-        </div>
-        {loading && <span className="text-[10px] font-light tx3">{rtl ? "در حال بارگذاری…" : "Loading…"}</span>}
+        )}
         <button
+          type="button"
           onClick={() => void reload()}
-          className="glass-row shrink-0 rounded-lg px-3 py-2 text-[10px] font-light tx2 transition hover:tx1"
+          disabled={loading}
+          aria-label={rtl ? "بازخوانی" : "Refresh"}
+          title={rtl ? "بازخوانی" : "Refresh"}
+          className="glass-row grid h-8 w-8 shrink-0 place-items-center rounded-lg text-[14px] tx2 transition hover:tx1 disabled:opacity-50"
         >
-          {rtl ? "بازخوانی" : "Refresh"}
+          ↻
         </button>
       </div>
+      <div className="workspace-columns flex min-h-0 flex-1 gap-3 overflow-hidden">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-hidden">
+
 
       {/* شاخص‌های سرصفحه */}
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">

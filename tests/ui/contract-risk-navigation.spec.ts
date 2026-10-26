@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-test('contract risk is a peer process beside contract register and IPC inside d14', async ({ page }) => {
+test('contract risk sections live under its peer sidebar group, with process map separate', async ({ page }) => {
   await page.route('https://api.open-meteo.com/**', (route) => route.abort());
   await page.route('**/api/cnt-risk/**', (route) => route.fulfill({
     status: 200,
@@ -22,9 +22,29 @@ test('contract risk is a peer process beside contract register and IPC inside d1
   await right.getByRole('button', { name: /Enter domain page/ }).click();
 
   const domainNav = page.locator('.workspace-columns > aside');
-  await expect(domainNav.getByText(/Contract Register & BOQ/)).toBeVisible();
-  await expect(domainNav.getByText(/Measurement & Interim Payment/)).toBeVisible();
-  await expect(domainNav.getByText(/Contract Risk Management/)).toBeVisible();
-  await domainNav.getByRole('button', { name: /Contract Risk & Improvement/ }).click();
-  await expect(page.getByRole('heading', { name: 'Contract Risk & Improvement' })).toBeVisible();
+  await expect(domainNav.getByRole('button', { name: 'Contract Management', exact: true })).toBeVisible();
+  const riskSection = domainNav.getByRole('button', { name: 'Contract Risk Management', exact: true });
+  await expect(riskSection).toBeVisible();
+  await expect(riskSection).toHaveAttribute('aria-expanded', 'false');
+  await expect(domainNav.getByRole('button', { name: 'Payment Certificate Management', exact: true })).toBeVisible();
+  await expect(domainNav.getByRole('button', { name: 'Risk control center', exact: true })).toBeHidden();
+  await riskSection.click();
+  await expect(riskSection).toHaveAttribute('aria-expanded', 'true');
+  const riskSubsections = [
+    'Risk control center', 'Contracts & versions', 'Contract clause analysis', 'Contract risk register',
+    'Assessment & ranking matrix', 'Contract obligations & deadlines', 'Contract improvement proposals',
+    'Risk response plan', 'Control effectiveness', 'Claims, delay & loss links', 'Reports & management outputs',
+    'Scoring rules & settings',
+  ];
+  for (const label of riskSubsections) {
+    const subsection = domainNav.getByRole('button', { name: label, exact: true });
+    await expect(subsection).toBeVisible();
+    await subsection.click();
+    await expect(riskSection).toHaveAttribute('aria-expanded', 'true');
+  }
+  await expect(page.getByRole('heading', { name: 'Contract Risk Management' })).toBeVisible();
+  const processMap = page.getByRole('button', { name: /Process map/ });
+  await expect(processMap).toHaveAttribute('aria-pressed', 'false');
+  await processMap.click();
+  await expect(processMap).toHaveAttribute('aria-pressed', 'true');
 });
