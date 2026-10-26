@@ -1973,6 +1973,7 @@ function DomainNavGroups({
   const [expandedD14Section, setExpandedD14Section] = useState<string | "none" | null>(null);
   const [expandedD5Section, setExpandedD5Section] = useState<string | "none" | null>(null);
   const [expandedResourceSection, setExpandedResourceSection] = useState<string | "none" | null>(null);
+  const [expandedHseSection, setExpandedHseSection] = useState<string | "none" | null>(null);
   const pd = performanceDomainOf(dom.id, dom.group);
   if (!pd) return null;
   /* ماژول «مدیریت سامانه و پیکربندی پایه» (d7) فقط مدیر سامانه می‌بیند؛
@@ -2048,14 +2049,17 @@ function DomainNavGroups({
         const isD14Section = m.id === "d14";
         const isD5Section = m.id === "d5";
         const isResourceSection = m.id === "d9" || m.id === "d10";
-        const isAccordionSection = isD14Section || isD5Section || isResourceSection;
+        const isHseSection = m.id === "d16" || m.id === "d17";
+        const isAccordionSection = isD14Section || isD5Section || isResourceSection || isHseSection;
         const isExpanded = isD14Section
           ? (expandedD14Section === null ? activeD14SectionKey === key : expandedD14Section === key)
           : isD5Section
             ? (expandedD5Section === null ? activeD5SectionKey === key : expandedD5Section === key)
             : isResourceSection
               ? (expandedResourceSection === null ? activeResourceSectionKey === key : expandedResourceSection === key)
-              : false;
+              : isHseSection
+                ? (expandedHseSection === null ? isCurrent : expandedHseSection === m.id)
+                : false;
         const sectionBodyId = `domain-nav-${m.id}-${key}`;
         const entry = procs[0];
         const openSection = () => {
@@ -2069,6 +2073,10 @@ function DomainNavGroups({
           }
           if (isResourceSection) {
             setExpandedResourceSection(isExpanded ? "none" : key);
+            return;
+          }
+          if (isHseSection) {
+            setExpandedHseSection(isExpanded ? "none" : m.id);
             return;
           }
           if (!entry?.subs[0]) return;
@@ -2093,7 +2101,7 @@ function DomainNavGroups({
               {!isAccordionSection && <span className="h-px flex-1" style={{ background: "var(--line-soft)" }} aria-hidden="true" />}
               <span className={`inline-flex items-center gap-1 ${isD14Section && key === "risk" ? "max-w-[210px]" : ""}`}>
                 <span aria-hidden="true">{m.icon}</span>
-                {m.id === "d14" || m.id === "d5" || isResourceSection ? (
+                {m.id === "d14" || m.id === "d5" || isResourceSection || isHseSection ? (
                   <button
                     type="button"
                     onClick={openSection}
