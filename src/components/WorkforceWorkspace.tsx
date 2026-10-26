@@ -271,11 +271,6 @@ export default function WorkforceWorkspace({
             <h3 className="text-[12px] font-semibold tx1">
               {rtl ? "مدیریت منابع انسانی و بهره‌وری نیروی کار" : "Human Resources & Workforce Productivity"}
             </h3>
-            <p className="text-[8.5px] font-extralight tx3">
-              {rtl
-                ? "هر ساعت به یک فعالیت شارژ می‌شود · بهره‌وری از پیشرفت تأییدشده · نرخ×ساعت فقط برای هزینه پروژه"
-                : "every hour charged to an activity · productivity from approved progress · rate×hours for project cost only"}
-            </p>
           </div>
           <span className={`rounded-lg px-2 py-1 text-[10px] font-semibold tabular-nums ${Math.abs(mobVar) > 10 ? "bg-rose-400/15 text-rose-300" : "bg-emerald-400/15 text-emerald-300"}`}>
             {rtl ? "انحراف تجهیز" : "Mob var"} {mobVar > 0 ? "+" : ""}{mobVar}%
@@ -285,18 +280,19 @@ export default function WorkforceWorkspace({
           <span className="rounded-lg border b-line-soft px-2 py-1 text-[9px] tx3">{rtl ? "داده نمونه" : "Sample data"}</span>
         </div>
         {alerts.length > 0 && (
-          <div className="mt-2 flex flex-wrap gap-1.5">
+          <ul className="mt-2 space-y-1" aria-label={rtl ? "هشدارهای منابع انسانی" : "Workforce alerts"}>
             {alerts.map((a) => (
-              <span
+              <li
                 key={a.code}
-                className={`rounded-lg px-2 py-0.5 text-[8.5px] ${
-                  a.severity === "critical" ? "bg-rose-400/15 text-rose-300" : a.severity === "high" ? "bg-amber-400/15 text-amber-200" : "border b-line-soft tx3"
+                className={`flex flex-wrap items-baseline gap-x-2 gap-y-0.5 rounded-lg border px-2 py-1 text-[9px] leading-4 ${
+                  a.severity === "critical" ? "border-rose-400/25 bg-rose-400/10 text-rose-200" : a.severity === "high" ? "border-amber-400/25 bg-amber-400/10 text-amber-100" : "b-line-soft tx3"
                 }`}
               >
-                <span dir="ltr">{a.code}</span> · {a.message}
-              </span>
+                <span dir="ltr" className="shrink-0 font-semibold">{a.code}</span>
+                <span className="min-w-0">{a.message}</span>
+              </li>
             ))}
-          </div>
+          </ul>
         )}
       </section>
 
