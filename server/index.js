@@ -250,6 +250,7 @@ import {
   retainageBalance,
   warrantyEnd,
   computeIpc,
+  computeDeductions,
   cumulativeAdjustment,
   ipcNextActions,
   ipcRequiredActor,
@@ -7914,6 +7915,61 @@ app.get("/api/cnt/ipc/:id", cntRequire("cnt.contract.view"), cntProjectAccess("c
   } catch (err) { next(err); }
 });
 
+/* با هر تعدیل/مابه‌التفاوت، سرآیند و کسورات درصدیِ پیش‌نویس را
+ * باهم بازمحاسبه می‌کند؛ مبلغ نهایی از یک محاسبهٔ جزیره‌ای به‌دست نمی‌آید. */
+async function cntRecalculateIpcAmounts(r, ipc, userId, {
+  adjustmentAmount = Number(ipc.AdjustmentAmount) || 0,
+  materialDiffAmount = Number(ipc.MaterialDiffAmount) || 0,
+} = {}) {
+  const [deductionRows, advances] = await Promise.all([
+    r.list("IPC_Deduction", { where: [{ column: "IpcId", op: "eq", value: String(ipc.Id) }], limit: 200 }),
+    r.list("AdvancePaymentSchedule", { where: [
+      { column: "ProjectId", op: "eq", value: String(ipc.ProjectId) },
+      { column: "ContractId", op: "eq", value: String(ipc.ContractId) },
+    ], limit: 500 }),
+  ]);
+  const byType = new Map(deductionRows.map(row => [String(row.DeductionType), row]));
+  const rate = type => Number(byType.get(type)?.RatePct) || 0;
+  const fixed = type => Number(byType.get(type)?.Amount) || 0;
+  const advanceOutstanding = advances.reduce((sum, row) => sum + (Number(row.OutstandingAmount) || 0), 0);
+  const cfg = {
+    insurancePct: rate("insurance"), taxPct: rate("withholding_tax"),
+    retainagePct: rate("retainage"), advanceRecoveryPct: rate("advance_recovery"),
+    ...(advances.length ? { advanceOutstanding } : {}),
+    penaltyAmount: fixed("penalty"), backToBackAmount: fixed("back_to_back"),
+    otherAmount: fixed("other"), otherNoteFa: byType.get("other")?.NoteFa,
+  };
+  const roundCurrency = value => Math.round((Number(value) + Number.EPSILON) * 100) / 100;
+  const subtotal = roundCurrency(Number(ipc.GrossCurrent || 0) + Number(adjustmentAmount || 0) + Number(materialDiffAmount || 0));
+  const deductions = computeDeductions(subtotal, cfg);
+  const byComputedType = new Map(deductions.map(row => [row.DeductionType, row]));
+  for (const existing of deductionRows) {
+    const next = byComputedType.get(String(existing.DeductionType));
+    await r.upsert("IPC_Deduction", { Id: String(existing.Id) }, {
+      BaseAmount: next?.BaseAmount ?? subtotal,
+      RatePct: next?.RatePct ?? existing.RatePct ?? null,
+      Amount: next?.Amount ?? 0,
+      IsStatutory: next?.IsStatutory ?? existing.IsStatutory,
+      NoteFa: next?.NoteFa ?? existing.NoteFa,
+    }, userId);
+  }
+  const totalDeductions = roundCurrency(deductions.reduce((sum, row) => sum + Number(row.Amount || 0), 0));
+  const previousSubtotal = Number(ipc.SubtotalAmount) || 0;
+  const vatPct = previousSubtotal ? (Number(ipc.VatAmount || 0) / previousSubtotal) * 100 : 0;
+  const vatAmount = roundCurrency(subtotal * vatPct / 100);
+  const netPayable = roundCurrency(subtotal - totalDeductions + vatAmount);
+  const updated = {
+    AdjustmentAmount: Number(adjustmentAmount) || 0,
+    MaterialDiffAmount: Number(materialDiffAmount) || 0,
+    SubtotalAmount: subtotal,
+    TotalDeductions: totalDeductions,
+    VatAmount: vatAmount,
+    NetPayable: netPayable,
+  };
+  await r.upsert("InterimPaymentCertificate", { Id: String(ipc.Id) }, updated, userId);
+  return { ...updated, deductions };
+}
+
 /* ── ۱۴٫۴ تعدیل و مابه‌التفاوت (D5) ── */
 
 /* ثبت شاخص در کاتالوگ. انتشار عمداً اقدام جداست: شاخص پیش‌نویس نباید
@@ -8063,71 +8119,54 @@ app.post("/api/cnt/ipc/:id/adjustment", cntRequire("cnt.ipc.prepare"), cntProjec
       });
     }
 
-    /* ایندکس یکتای (IpcId, ChapterCode) مانع تعدیل مضاعف است. */
-    const prior = await r.list("PriceAdjustmentCalculation", {
-      where: [{ column: "IpcId", op: "eq", value: String(ipc.Id) }],
-      limit: 500,
+    /* درج محاسبات و بازحساب سرآیند یک واحد اتمی‌اند؛ خطای هر گام کل تغییر را برمی‌گرداند. */
+    const result = await r.transaction(async tx => {
+      const prior = await tx.list("PriceAdjustmentCalculation", {
+        where: [{ column: "IpcId", op: "eq", value: String(ipc.Id) }], limit: 500,
+      });
+      const seen = new Set(prior.map(row => String(row.ChapterCode)));
+      const saved = [];
+      for (const row of batch.rows) {
+        if (seen.has(row.chapterCode)) continue;
+        const created = await tx.create("PriceAdjustmentCalculation", {
+          ProjectId: projectId, ContractId: String(ipc.ContractId), IpcId: String(ipc.Id),
+          ChapterCode: row.chapterCode, WorkAmount: row.workAmount, BaseIndex: row.baseIndex,
+          PeriodIndex: row.periodIndex, AdjustmentFactor: row.adjustmentFactor,
+          AdjustmentAmount: row.adjustmentAmount, AppliedRatePct: row.appliedRatePct,
+          CalcNoteFa: row.calcNoteFa, Status: "draft",
+        }, userId, "PADJ");
+        saved.push({ id: created.Id ?? created.id, ...row });
+      }
+      const allAdj = await tx.list("PriceAdjustmentCalculation", {
+        where: [{ column: "IpcId", op: "eq", value: String(ipc.Id) }], limit: 500,
+      });
+      const totalAdjustment = allAdj.reduce((sum, row) => sum + (Number(row.AdjustmentAmount) || 0), 0);
+      const totals = await cntRecalculateIpcAmounts(tx, ipc, userId, { adjustmentAmount: totalAdjustment });
+      return { saved, totalAdjustment, totals };
     });
-    const seen = new Set(prior.map((p) => String(p.ChapterCode)));
-
-    const saved = [];
-    for (const row of batch.rows) {
-      if (seen.has(row.chapterCode)) continue;
-      const created = await r.create("PriceAdjustmentCalculation", {
-        ProjectId: projectId,
-        ContractId: String(ipc.ContractId),
-        IpcId: String(ipc.Id),
-        ChapterCode: row.chapterCode,
-        WorkAmount: row.workAmount,
-        BaseIndex: row.baseIndex,
-        PeriodIndex: row.periodIndex,
-        AdjustmentFactor: row.adjustmentFactor,
-        AdjustmentAmount: row.adjustmentAmount,
-        AppliedRatePct: row.appliedRatePct,
-        CalcNoteFa: row.calcNoteFa,
-        Status: "draft",
-      }, userId, "PADJ");
-      saved.push({ id: created.Id ?? created.id, ...row });
-    }
-
-    /* سرآیند صورت‌وضعیت بازمحاسبه می‌شود تا خالص پرداختنی با تعدیل بخواند. */
-    const allAdj = await r.list("PriceAdjustmentCalculation", {
-      where: [{ column: "IpcId", op: "eq", value: String(ipc.Id) }],
-      limit: 500,
-    });
-    const totalAdjustment = allAdj.reduce((s, a) => s + (Number(a.AdjustmentAmount) || 0), 0);
-
-    const totals = computeIpc({
-      lines: lines.filter((l) => String(l.Status) !== "rejected").map((l) => ({
-        BoqItemId: String(l.BoqItemId),
-        PricingBasis: l.PricingBasis,
-        UnitRate: l.UnitRate,
-        prevQty: l.PrevQty, cumQty: l.CumQty,
-        prevPct: l.PrevPct, cumPct: l.CumPct,
-        LumpSumAmount: null, LineAmount: null,
-        QualityGateStatus: l.QualityGateStatus,
-      })),
-      adjustmentAmount: totalAdjustment,
-      materialDiffAmount: Number(ipc.MaterialDiffAmount) || 0,
-      deductions: b.deductions || {},
-    });
-
-    await r.upsert("InterimPaymentCertificate", { Id: String(ipc.Id) }, {
-      AdjustmentAmount: totalAdjustment,
-      SubtotalAmount: totals.subtotal,
-      TotalDeductions: totals.totalDeductions,
-      VatAmount: totals.vatAmount,
-      NetPayable: totals.netPayable,
-    }, userId);
 
     res.status(201).json(cntOk(req, {
-      ipcId: String(ipc.Id),
-      saved,
-      skipped: batch.rows.length - saved.length,
-      totalAdjustment,
-      subtotal: totals.subtotal,
-      netPayable: totals.netPayable,
+      ipcId: String(ipc.Id), saved: result.saved, skipped: batch.rows.length - result.saved.length,
+      totalAdjustment: result.totalAdjustment, subtotal: result.totals.SubtotalAmount, netPayable: result.totals.NetPayable,
     }));
+  } catch (err) { next(err); }
+});
+
+/* دفتر اقلام مابه‌التفاوت برای همان پیمان/صورت‌وضعیت. */
+app.get("/api/cnt/material-diff", cntRequire("cnt.contract.view"), cntProjectAccess("cnt.contract.view"), async (req, res, next) => {
+  try {
+    const projectId = String(req.query.projectId || "");
+    const contractId = String(req.query.contractId || "");
+    if (!projectId || !contractId) return cntBad(req, res, "E-CNT-NO-CONTRACT", "پارامترهای projectId و contractId الزامی‌اند");
+    const where = [
+      { column: "ProjectId", op: "eq", value: projectId },
+      { column: "ContractId", op: "eq", value: contractId },
+    ];
+    if (req.query.ipcId) where.push({ column: "IpcId", op: "eq", value: String(req.query.ipcId) });
+    const r = await repo();
+    const rows = await r.list("MaterialDiffCalc", { where, limit: 5000 });
+    rows.sort((a, b) => String(a.CreatedAt || "").localeCompare(String(b.CreatedAt || "")));
+    res.json(cntOk(req, { count: rows.length, items: rows }));
   } catch (err) { next(err); }
 });
 
@@ -8160,6 +8199,7 @@ app.post("/api/cnt/material-diff", cntRequire("cnt.ipc.prepare"), cntProjectAcce
       { column: "Id", op: "eq", value: String(b.ipcId) },
     ]);
     if (!ipc) return cntBad(req, res, "E-CNT-NOT-FOUND", `صورت‌وضعیت ${b.ipcId} یافت نشد`, 404);
+    if (String(ipc.ContractId) !== String(b.contractId)) return cntBad(req, res, "E-CNT-CONTRACT-MISMATCH", "صورت‌وضعیت به پیمان انتخاب‌شده تعلق ندارد", 409);
     if (isIpcLocked(ipc.WorkflowState)) {
       return cntBad(req, res, "E-CNT-IPC-LOCKED", "صورت‌وضعیت قفل است و مابه‌التفاوت جدید نمی‌پذیرد", 409);
     }
@@ -8181,22 +8221,20 @@ app.post("/api/cnt/material-diff", cntRequire("cnt.ipc.prepare"), cntProjectAcce
       unit: b.unit ? String(b.unit) : null,
     });
 
-    const created = await r.create("MaterialDiffCalc", {
-      ProjectId: projectId,
-      ContractId: String(b.contractId),
-      IpcId: String(b.ipcId),
-      MaterialCode: calc.materialCode,
-      MaterialNameFa: calc.materialNameFa,
-      Quantity: calc.quantity,
-      Unit: calc.unit,
-      BaseRate: calc.baseRate,
-      PeriodRate: calc.periodRate,
-      DiffAmount: calc.diffAmount,
-      EvidenceDocNo: b.evidenceDocNo ? String(b.evidenceDocNo) : null,
-      Status: "draft",
-    }, userId, "MDIF");
-
-    res.status(201).json(cntOk(req, { id: created.Id ?? created.id, ...calc }));
+    const transactionResult = await r.transaction(async tx => {
+      const created = await tx.create("MaterialDiffCalc", {
+        ProjectId: projectId, ContractId: String(b.contractId), IpcId: String(b.ipcId),
+        MaterialCode: calc.materialCode, MaterialNameFa: calc.materialNameFa,
+        Quantity: calc.quantity, Unit: calc.unit, BaseRate: calc.baseRate,
+        PeriodRate: calc.periodRate, DiffAmount: calc.diffAmount,
+        EvidenceDocNo: b.evidenceDocNo ? String(b.evidenceDocNo) : null, Status: "draft",
+      }, userId, "MDIF");
+      const totals = await cntRecalculateIpcAmounts(tx, ipc, userId, {
+        materialDiffAmount: (Number(ipc.MaterialDiffAmount) || 0) + calc.diffAmount,
+      });
+      return { id: created.Id ?? created.id, totals };
+    });
+    res.status(201).json(cntOk(req, { id: transactionResult.id, ...calc, totals: transactionResult.totals }));
   } catch (err) { next(err); }
 });
 
