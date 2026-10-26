@@ -6655,7 +6655,7 @@ app.post("/api/cnt/contracts", cntRequire("cnt.contract.edit"), async (req, res,
 });
 
 /* ── فرم ۲: ثبت ردیف فهرست بها (هر دو حالت ارزش‌گذاری) ── */
-app.post("/api/cnt/boq", cntRequire("cnt.boq.edit"), async (req, res, next) => {
+app.post("/api/cnt/boq", cntRequire("cnt.boq.edit"), cntProjectAccess("cnt.boq.edit"), async (req, res, next) => {
   try {
     const b = engBody(req);
     const projectId = String(req.query.projectId || b.projectId || "");
@@ -6847,7 +6847,7 @@ app.post("/api/cnt/milestone", cntRequire("cnt.boq.edit"), cntProjectAccess("cnt
 });
 
 /* ── فرم ۴: ثبت برگهٔ ریزمتره ── */
-app.post("/api/cnt/measurement", cntRequire("cnt.measurement.record"), async (req, res, next) => {
+app.post("/api/cnt/measurement", cntRequire("cnt.measurement.record"), cntProjectAccess("cnt.measurement.record"), async (req, res, next) => {
   try {
     const b = engBody(req);
     const projectId = String(req.query.projectId || b.projectId || "");
@@ -7616,7 +7616,7 @@ app.get("/api/cnt/ipc/:id", cntRequire("cnt.contract.view"), cntProjectAccess("c
 
 /* ثبت شاخص در کاتالوگ. انتشار عمداً اقدام جداست: شاخص پیش‌نویس نباید
  * ناخواسته مبنای صورت‌وضعیت مصوب شود (G-04). */
-app.post("/api/cnt/index", cntRequire("cnt.contract.edit"), async (req, res, next) => {
+app.post("/api/cnt/index", cntRequire("cnt.contract.edit"), cntProjectAccess("cnt.contract.edit"), async (req, res, next) => {
   try {
     const b = engBody(req);
     const projectId = String(req.query.projectId || b.projectId || "");
@@ -7674,7 +7674,7 @@ app.post("/api/cnt/index", cntRequire("cnt.contract.edit"), async (req, res, nex
   } catch (err) { next(err); }
 });
 
-app.get("/api/cnt/index", cntRequire("cnt.contract.view"), async (req, res, next) => {
+app.get("/api/cnt/index", cntRequire("cnt.contract.view"), cntProjectAccess("cnt.contract.view"), async (req, res, next) => {
   try {
     const projectId = String(req.query.projectId || "");
     if (!projectId) return cntBad(req, res, "E-CNT-NO-PROJECT", "پارامتر projectId الزامی است");
@@ -7830,7 +7830,7 @@ app.post("/api/cnt/ipc/:id/adjustment", cntRequire("cnt.ipc.prepare"), cntProjec
 });
 
 /* ثبت مابه‌التفاوت مصالح — جدا از تعدیل شاخص نگه داشته می‌شود. */
-app.post("/api/cnt/material-diff", cntRequire("cnt.ipc.prepare"), async (req, res, next) => {
+app.post("/api/cnt/material-diff", cntRequire("cnt.ipc.prepare"), cntProjectAccess("cnt.ipc.prepare"), async (req, res, next) => {
   try {
     const b = engBody(req);
     const projectId = String(req.query.projectId || b.projectId || "");
@@ -7900,7 +7900,7 @@ app.post("/api/cnt/material-diff", cntRequire("cnt.ipc.prepare"), async (req, re
 
 /* ── ۱۴٫۵ دفتر سپرده و آزادسازی روی رویداد تحویل (D6 · رفع G-01) ── */
 
-app.get("/api/cnt/retainage", cntRequire("cnt.contract.view"), async (req, res, next) => {
+app.get("/api/cnt/retainage", cntRequire("cnt.contract.view"), cntProjectAccess("cnt.contract.view"), async (req, res, next) => {
   try {
     const projectId = String(req.query.projectId || "");
     const contractId = String(req.query.contractId || "");
@@ -7926,7 +7926,7 @@ app.get("/api/cnt/retainage", cntRequire("cnt.contract.view"), async (req, res, 
 });
 
 /* انباشت سپرده از کسور یک صورت‌وضعیت به دفتر. */
-app.post("/api/cnt/retainage/accrue", cntRequire("cnt.retainage.manage"), async (req, res, next) => {
+app.post("/api/cnt/retainage/accrue", cntRequire("cnt.retainage.manage"), cntProjectAccess("cnt.retainage.manage"), async (req, res, next) => {
   try {
     const b = engBody(req);
     const projectId = String(req.query.projectId || b.projectId || "");
@@ -8001,7 +8001,7 @@ app.post("/api/cnt/retainage/accrue", cntRequire("cnt.retainage.manage"), async 
  * این همان نقطه‌ای است که G-01 را می‌بست: بدون PAC/FAC واقعی، آزادسازی
  * ۵۰/۵۰ قابل پیاده‌سازی نبود. حالا گواهی مدرک محرک است و شمارهٔ آن در
  * دفتر ثبت می‌شود تا در ممیزی ردیابی شود. */
-app.post("/api/cnt/retainage/release", cntRequire("cnt.retainage.manage"), async (req, res, next) => {
+app.post("/api/cnt/retainage/release", cntRequire("cnt.retainage.manage"), cntProjectAccess("cnt.retainage.manage"), async (req, res, next) => {
   try {
     const b = engBody(req);
     const projectId = String(req.query.projectId || b.projectId || "");
@@ -13049,7 +13049,7 @@ function cntScopeOf(req, res) {
 }
 
 /** دفتر کل ضمانت‌نامه‌ها با پوشش‌سنجی و سلامت وثیقه‌ای. */
-app.get("/api/cnt/guarantee", cntRequire("cnt.guarantee.view"), async (req, res, next) => {
+app.get("/api/cnt/guarantee", cntRequire("cnt.guarantee.view"), cntProjectAccess("cnt.guarantee.view"), async (req, res, next) => {
   try {
     const sc = cntScopeOf(req, res);
     if (!sc) return;
@@ -13076,7 +13076,7 @@ app.get("/api/cnt/guarantee", cntRequire("cnt.guarantee.view"), async (req, res,
 });
 
 /** ثبت ضمانت‌نامهٔ تازه. */
-app.post("/api/cnt/guarantee", cntRequire("cnt.guarantee.manage"), async (req, res, next) => {
+app.post("/api/cnt/guarantee", cntRequire("cnt.guarantee.manage"), cntProjectAccess("cnt.guarantee.manage"), async (req, res, next) => {
   try {
     const sc = cntScopeOf(req, res);
     if (!sc) return;
@@ -13140,7 +13140,7 @@ app.post("/api/cnt/guarantee", cntRequire("cnt.guarantee.manage"), async (req, r
 });
 
 /** تمدید ضمانت‌نامه — تاریخ اصلی پاک نمی‌شود. */
-app.post("/api/cnt/guarantee/:id/extend", cntRequire("cnt.guarantee.manage"), async (req, res, next) => {
+app.post("/api/cnt/guarantee/:id/extend", cntRequire("cnt.guarantee.manage"), cntProjectAccess("cnt.guarantee.manage"), async (req, res, next) => {
   try {
     const sc = cntScopeOf(req, res);
     if (!sc) return;
@@ -13179,7 +13179,7 @@ app.post("/api/cnt/guarantee/:id/extend", cntRequire("cnt.guarantee.manage"), as
  * هر دو زیر یک مجوز جداگانه‌اند (`cnt.guarantee.release`) که ثبت‌کننده
  * ندارد: قاعدهٔ SOD-13.
  */
-app.post("/api/cnt/guarantee/:id/close", cntRequire("cnt.guarantee.release"), async (req, res, next) => {
+app.post("/api/cnt/guarantee/:id/close", cntRequire("cnt.guarantee.release"), cntProjectAccess("cnt.guarantee.release"), async (req, res, next) => {
   try {
     const sc = cntScopeOf(req, res);
     if (!sc) return;
@@ -13217,7 +13217,7 @@ app.post("/api/cnt/guarantee/:id/close", cntRequire("cnt.guarantee.release"), as
 });
 
 /** دفتر پیش‌پرداخت با ماندهٔ بازیافت‌نشده. */
-app.get("/api/cnt/advance", cntRequire("cnt.guarantee.view"), async (req, res, next) => {
+app.get("/api/cnt/advance", cntRequire("cnt.guarantee.view"), cntProjectAccess("cnt.guarantee.view"), async (req, res, next) => {
   try {
     const sc = cntScopeOf(req, res);
     if (!sc) return;
@@ -13237,7 +13237,7 @@ app.get("/api/cnt/advance", cntRequire("cnt.guarantee.view"), async (req, res, n
 });
 
 /** ثبت قسط پیش‌پرداخت. */
-app.post("/api/cnt/advance", cntRequire("cnt.advance.manage"), async (req, res, next) => {
+app.post("/api/cnt/advance", cntRequire("cnt.advance.manage"), cntProjectAccess("cnt.advance.manage"), async (req, res, next) => {
   try {
     const sc = cntScopeOf(req, res);
     if (!sc) return;
@@ -13287,7 +13287,7 @@ app.post("/api/cnt/advance", cntRequire("cnt.advance.manage"), async (req, res, 
  * `dryRun` اینجا مهم‌تر از جاهای دیگر است: تهیه‌کنندهٔ صورت‌وضعیت باید
  * پیش از قطعی‌کردن ببیند چقدر کسر می‌شود، بی‌آنکه دفتر را تکان دهد.
  */
-app.post("/api/cnt/advance/recover", cntRequire("cnt.advance.manage"), async (req, res, next) => {
+app.post("/api/cnt/advance/recover", cntRequire("cnt.advance.manage"), cntProjectAccess("cnt.advance.manage"), async (req, res, next) => {
   try {
     const sc = cntScopeOf(req, res);
     if (!sc) return;
@@ -13402,7 +13402,7 @@ async function cntSubIpcBundle(r, projectId, subIpcId) {
 }
 
 /** فهرست صورت‌وضعیت‌های جزء یک پیمان. */
-app.get("/api/cnt/subipc", cntRequire("cnt.subipc.view"), async (req, res, next) => {
+app.get("/api/cnt/subipc", cntRequire("cnt.subipc.view"), cntProjectAccess("cnt.subipc.view"), async (req, res, next) => {
   try {
     const sc = cntScopeOf(req, res);
     if (!sc) return;
@@ -13438,7 +13438,7 @@ app.get("/api/cnt/subipc", cntRequire("cnt.subipc.view"), async (req, res, next)
 });
 
 /** جزئیات یک صورت‌وضعیت جزء با ردیف‌ها، کسور و حکم دروازه. */
-app.get("/api/cnt/subipc/:id", cntRequire("cnt.subipc.view"), async (req, res, next) => {
+app.get("/api/cnt/subipc/:id", cntRequire("cnt.subipc.view"), cntProjectAccess("cnt.subipc.view"), async (req, res, next) => {
   try {
     const projectId = String(req.query.projectId || "");
     if (!projectId) return cntBad(req, res, "E-CNT-NO-PROJECT", "پارامتر projectId الزامی است");
@@ -13460,7 +13460,7 @@ app.get("/api/cnt/subipc/:id", cntRequire("cnt.subipc.view"), async (req, res, n
 });
 
 /** ایجاد صورت‌وضعیت جزء. */
-app.post("/api/cnt/subipc", cntRequire("cnt.subipc.prepare"), async (req, res, next) => {
+app.post("/api/cnt/subipc", cntRequire("cnt.subipc.prepare"), cntProjectAccess("cnt.subipc.prepare"), async (req, res, next) => {
   try {
     const sc = cntScopeOf(req, res);
     if (!sc) return;
@@ -13519,7 +13519,7 @@ app.post("/api/cnt/subipc", cntRequire("cnt.subipc.prepare"), async (req, res, n
  * ورودی کاربر: اگر تهیه‌کننده بتواند خودش عدد مرجع را بنویسد، کل
  * سنجش انحراف بی‌معنا می‌شود.
  */
-app.post("/api/cnt/subipc/:id/line", cntRequire("cnt.subipc.prepare"), async (req, res, next) => {
+app.post("/api/cnt/subipc/:id/line", cntRequire("cnt.subipc.prepare"), cntProjectAccess("cnt.subipc.prepare"), async (req, res, next) => {
   try {
     const projectId = String(req.query.projectId || "");
     if (!projectId) return cntBad(req, res, "E-CNT-NO-PROJECT", "پارامتر projectId الزامی است");
@@ -13610,7 +13610,7 @@ async function cntSyncSubIpcTotals(r, bundle, userId) {
 }
 
 /** ثبت کسر پشت‌به‌پشت. */
-app.post("/api/cnt/subipc/:id/deduction", cntRequire("cnt.backtoback.manage"), async (req, res, next) => {
+app.post("/api/cnt/subipc/:id/deduction", cntRequire("cnt.backtoback.manage"), cntProjectAccess("cnt.backtoback.manage"), async (req, res, next) => {
   try {
     const projectId = String(req.query.projectId || "");
     if (!projectId) return cntBad(req, res, "E-CNT-NO-PROJECT", "پارامتر projectId الزامی است");
@@ -13683,7 +13683,12 @@ app.post("/api/cnt/subipc/:id/transition", async (req, res, next) => {
         error: { code: "E-CNT-AUTH-REQUIRED", message: "شناسهٔ کاربر برای این اقدام الزامی است", traceId: req.requestId },
       });
     }
-    const decision = rbacEvaluate(subject, needed, { projectId: undefined });
+    /* گسترش گارد پروژه (ADR-CNT-IPC-UNIFY فاز ۳ / بند ۷): دامنهٔ پروژه
+     * همین‌جا با projectId واقعی سنجیده می‌شود، نه undefined — وگرنه
+     * کاربری با این مجوز روی پروژهٔ خودش می‌توانست گذار رکورد پیمان
+     * دیگری را هم امتحان کند (فقط فیلتر رکورد جلوی آن را می‌گرفت، نه
+     * موتور مجوز). رفتار همسان با /api/cnt/ipc/:id/action است. */
+    const decision = rbacEvaluate(subject, needed, { projectId });
     if (!decision.allow) {
       return res.status(403).json({
         ok: false,
@@ -14361,7 +14366,7 @@ async function cntFinInputs(r, projectId, contractId) {
  * ارسال نشده، کنترل هزینه باید مغایرت را ببیند. اما هیچ‌کدام از این
  * دو نمی‌توانند ارسال کنند.
  */
-app.get("/api/cnt/fin/reconcile", cntRequire("cnt.fin.view"), async (req, res, next) => {
+app.get("/api/cnt/fin/reconcile", cntRequire("cnt.fin.view"), cntProjectAccess("cnt.fin.view"), async (req, res, next) => {
   try {
     const sc = cntScopeOf(req, res);
     if (!sc) return;
@@ -14388,7 +14393,7 @@ app.get("/api/cnt/fin/reconcile", cntRequire("cnt.fin.view"), async (req, res, n
 });
 
 /** خلاصهٔ مالی پیمان از دید حساب هزینه. */
-app.get("/api/cnt/fin/summary", cntRequire("cnt.fin.view"), async (req, res, next) => {
+app.get("/api/cnt/fin/summary", cntRequire("cnt.fin.view"), cntProjectAccess("cnt.fin.view"), async (req, res, next) => {
   try {
     const sc = cntScopeOf(req, res);
     if (!sc) return;
@@ -14415,7 +14420,7 @@ app.get("/api/cnt/fin/summary", cntRequire("cnt.fin.view"), async (req, res, nex
 });
 
 /** فهرست صورت‌وضعیت‌ها با وضعیت قابلیت ارسال. */
-app.get("/api/cnt/fin/postable", cntRequire("cnt.fin.view"), async (req, res, next) => {
+app.get("/api/cnt/fin/postable", cntRequire("cnt.fin.view"), cntProjectAccess("cnt.fin.view"), async (req, res, next) => {
   try {
     const sc = cntScopeOf(req, res);
     if (!sc) return;
@@ -14459,7 +14464,7 @@ app.get("/api/cnt/fin/postable", cntRequire("cnt.fin.view"), async (req, res, ne
  * پیش‌فرض `dryRun` است: کسی نباید با یک کلیک اشتباه دفتر مالی را
  * تغییر دهد. اعمال دائمی فقط با `apply:true` صریح.
  */
-app.post("/api/cnt/fin/post", cntRequire("cnt.fin.post"), async (req, res, next) => {
+app.post("/api/cnt/fin/post", cntRequire("cnt.fin.post"), cntProjectAccess("cnt.fin.post"), async (req, res, next) => {
   try {
     const sc = cntScopeOf(req, res);
     if (!sc) return;
@@ -14557,7 +14562,7 @@ app.post("/api/cnt/fin/post", cntRequire("cnt.fin.post"), async (req, res, next)
  * حذف نمی‌کنیم، برگشت می‌زنیم: سطر می‌ماند با `Status:"reversed"` و
  * دلیل. دفتری که سطرهایش پاک می‌شود، رد ممیزی ندارد.
  */
-app.post("/api/cnt/fin/reverse", cntRequire("cnt.fin.post"), async (req, res, next) => {
+app.post("/api/cnt/fin/reverse", cntRequire("cnt.fin.post"), cntProjectAccess("cnt.fin.post"), async (req, res, next) => {
   try {
     const sc = cntScopeOf(req, res);
     if (!sc) return;
@@ -14625,7 +14630,7 @@ app.post("/api/cnt/fin/reverse", cntRequire("cnt.fin.post"), async (req, res, ne
 });
 
 /** تعیین حساب هزینهٔ پیمان — پیش‌نیاز هر ارسالی. */
-app.post("/api/cnt/fin/account", cntRequire("cnt.fin.post"), async (req, res, next) => {
+app.post("/api/cnt/fin/account", cntRequire("cnt.fin.post"), cntProjectAccess("cnt.fin.post"), async (req, res, next) => {
   try {
     const sc = cntScopeOf(req, res);
     if (!sc) return;

@@ -99,7 +99,7 @@ export default function SecurityCenter({ lang }: { lang: Lang }) {
 
   /* ── آزمون دسترسی ── */
   const [simUser, setSimUser] = useState("u-pm");
-  const [simPerm, setSimPerm] = useState("fin.ipc.approve");
+  const [simPerm, setSimPerm] = useState("cnt.ipc.approve");
   /* آزمون دسترسی روی «پروژهٔ جاری» شروع می‌شود، نه یک شناسهٔ ثابت:
    * پیش‌فرضِ `c1-p1` باعث می‌شد نتیجهٔ شبیه‌سازی به پروژهٔ دیگری ربط پیدا کند. */
   const [simProject, setSimProject] = useState(() => currentProjectId);

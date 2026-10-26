@@ -215,8 +215,8 @@ test("subjectClearance: مقدار صریح بر استنتاج از نقش مق
 /* ══════════ ۴. مجوزهای کاربر ══════════ */
 
 test("subjectPermissions: منع صریح بر اعطای نقش غالب است", () => {
-  const s = { ...subj("u-pm"), denies: ["fin.ipc.approve"] };
-  assert.ok(!subjectPermissions(s).includes("fin.ipc.approve"));
+  const s = { ...subj("u-pm"), denies: ["cnt.ipc.approve"] };
+  assert.ok(!subjectPermissions(s).includes("cnt.ipc.approve"));
 });
 
 test("subjectPermissions: اعطای موردی به مجموعه افزوده می‌شود", () => {
@@ -226,8 +226,8 @@ test("subjectPermissions: اعطای موردی به مجموعه افزوده �
 
 test("subjectPermissions: کاربر چندنقشی اجتماع مجوزها را می‌گیرد", () => {
   const p = subjectPermissions(subj("u-over"));
-  assert.ok(p.includes("fin.ipc.prepare"), "از cost_controller");
-  assert.ok(p.includes("fin.ipc.approve"), "از project_manager");
+  assert.ok(p.includes("cnt.ipc.prepare"), "از cost_controller");
+  assert.ok(p.includes("cnt.ipc.approve"), "از project_manager");
 });
 
 /* ══════════ ۵. موتور تصمیم ══════════ */
@@ -249,8 +249,8 @@ test("evaluate: حساب غیرفعال همیشه رد می‌شود", () => {
 });
 
 test("evaluate: منع صریح بر مجوز نقش غالب است", () => {
-  const s = { ...subj("u-pm"), denies: ["fin.ipc.approve"] };
-  assert.equal(evaluate(s, "fin.ipc.approve", { projectId: "c1-p1" }).code, "DENY_EXPLICIT");
+  const s = { ...subj("u-pm"), denies: ["cnt.ipc.approve"] };
+  assert.equal(evaluate(s, "cnt.ipc.approve", { projectId: "c1-p1" }).code, "DENY_EXPLICIT");
 });
 
 test("evaluate: دامنه پروژه رعایت می‌شود", () => {
@@ -319,7 +319,7 @@ test("evaluate: تصمیم روی مجوز حساس پرچم ممیزی می‌�
 });
 
 test("can: میان‌بر بولی و کاربر تهی", () => {
-  assert.equal(can(subj("u-client"), "fin.ipc.approve", { projectId: "c1-p1" }), true);
+  assert.equal(can(subj("u-client"), "cnt.ipc.approve", { projectId: "c1-p1" }), true);
   assert.equal(can(null, "core.project.view"), false);
 });
 
@@ -344,21 +344,25 @@ test("SOD: بیست‌وهشت قاعده تعریف شده و شناسه‌ها
    *   انحراف از همان مبنا). */
   /* + P7 CPMS: SOD-29 — درخواست‌دهندهٔ بازرسی ≠ آزادکنندهٔ آن (QC).
    * + P8 PMO: SOD-30 — تحریر منشور ≠ تصویب آن. */
-  assert.equal(SOD_RULES.length, 31);
-  assert.equal(new Set(SOD_RULES.map((r) => r.id)).size, 31);
-  for (const id of ["SOD-01", "SOD-07", "SOD-08", "SOD-10", "SOD-11", "SOD-12", "SOD-13", "SOD-14", "SOD-15", "SOD-21", "SOD-22", "SOD-23", "SOD-24", "SOD-25", "SOD-26", "SOD-27", "SOD-28", "SOD-29", "SOD-30", "SOD-31"]) {
+  /* SOD-01 عمداً حذف شد (ADR-CNT-IPC-UNIFY فاز ۳ / بند ۶): دو طرفش
+   * (fin.ipc.prepare/approve) بازنشسته شدند و دیگر به هیچ نقشی اعطا
+   * نمی‌شوند؛ SOD-11 (cnt.ipc.prepare/approve) جانشین زنده است. */
+  assert.equal(SOD_RULES.length, 30);
+  assert.equal(new Set(SOD_RULES.map((r) => r.id)).size, 30);
+  for (const id of ["SOD-07", "SOD-08", "SOD-10", "SOD-11", "SOD-12", "SOD-13", "SOD-14", "SOD-15", "SOD-21", "SOD-22", "SOD-23", "SOD-24", "SOD-25", "SOD-26", "SOD-27", "SOD-28", "SOD-29", "SOD-30", "SOD-31"]) {
     assert.ok(SOD_RULES.some((r) => r.id === id), `${id} نیست`);
   }
 });
 
 test("SOD: کاربر دو‌نقشی تخلف تهیه/تأیید صورت‌وضعیت را نشان می‌دهد", () => {
   /* سرپرست مالی کارگاه هم‌زمان کنترل هزینه و مدیر پروژه است، پس دو
-     تمرکز خطرناک دارد: تهیه و تأیید صورت‌وضعیت (SOD-01)، و تهیهٔ
-     صورت‌وضعیت پیمان به‌همراه نشاندن آن در دفتر مالی (SOD-15). */
+     تمرکز خطرناک دارد: تهیه و تأیید صورت‌وضعیت پیمان (SOD-11، جانشین
+     SOD-01 که حذف شد)، و تهیهٔ صورت‌وضعیت پیمان به‌همراه نشاندن آن در
+     دفتر مالی (SOD-15). */
   const v = sodViolations(subjectPermissions(subj("u-over")));
   /* P8: cost_controller now prepares contract IPCs while project_manager
      approves them, so the same over-privileged demo user also trips SOD-11. */
-  assert.deepEqual(v.map((x) => x.id).sort(), ["SOD-01", "SOD-11", "SOD-15"]);
+  assert.deepEqual(v.map((x) => x.id).sort(), ["SOD-11", "SOD-15"]);
   for (const x of v) assert.equal(x.severity, "critical");
 });
 
@@ -375,13 +379,13 @@ test("sodInstanceConflict: تهیه‌کننده همان کاربر است", ()
 });
 
 test("evaluate: مدیر پروژه نمی‌تواند صورت‌وضعیتی را که خودش تهیه کرده تأیید کند", () => {
-  const d = evaluate(subj("u-pm"), "fin.ipc.approve", { projectId: "c1-p1", record: { preparedBy: "u-pm" } });
+  const d = evaluate(subj("u-pm"), "cnt.ipc.approve", { projectId: "c1-p1", record: { preparedBy: "u-pm" } });
   assert.equal(d.allow, false);
   assert.equal(d.code, "DENY_SOD");
 });
 
 test("evaluate: همان مدیر پروژه صورت‌وضعیت دیگری را تأیید می‌کند", () => {
-  const d = evaluate(subj("u-pm"), "fin.ipc.approve", { projectId: "c1-p1", record: { preparedBy: "u-cost" } });
+  const d = evaluate(subj("u-pm"), "cnt.ipc.approve", { projectId: "c1-p1", record: { preparedBy: "u-cost" } });
   assert.equal(d.allow, true);
 });
 
@@ -580,7 +584,7 @@ test("scorePosture: نبود HTTPS و پشتیبان نمره را به شدت �
 
 test("scorePosture: تخلف تفکیک وظیفه به‌عنوان یافته گزارش می‌شود", () => {
   const p = scorePosture({ ...goodPosture, subjects: [subj("u-over")] });
-  assert.ok(p.findings.some((f) => f.code === "SEC-SOD-SOD-01" && f.severity === "critical"));
+  assert.ok(p.findings.some((f) => f.code === "SEC-SOD-SOD-11" && f.severity === "critical"));
 });
 
 test("scorePosture: حساب غیرفعال با نقش باقی‌مانده یافته می‌سازد", () => {
@@ -667,7 +671,7 @@ test("سناریو: پیمانکار جزء به هزینه و نرخ دسترس
 
 test("سناریو: کارفرما گزارش ابلاغی منتشر نمی‌کند ولی صورت‌وضعیت تأیید می‌کند", () => {
   assert.equal(can(subj("u-client"), "report.official.publish", { projectId: "c1-p1" }), false);
-  assert.equal(can(subj("u-client"), "fin.ipc.approve", { projectId: "c1-p1" }), true);
+  assert.equal(can(subj("u-client"), "cnt.ipc.approve", { projectId: "c1-p1" }), true);
 });
 
 test("سناریو: مشاور فقط در پروژه‌های ابلاغی خودش تأیید می‌کند", () => {

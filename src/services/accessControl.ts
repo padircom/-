@@ -350,8 +350,11 @@ export const PERMISSION_CATALOG: PermissionDef[] = [
   P("fin.procure.edit", "d5", "ثبت درخواست/سفارش خرید و موجودی", "Edit PR/PO & stock", "confidential", true),
   P("fin.procure.approve", "d5", "تأیید درخواست خرید", "Approve purchase requisition", "restricted", true),
   P("fin.reserve.draw", "d5", "آزادسازی ذخیرهٔ احتیاطی", "Release contingency reserve", "restricted", true),
-  P("fin.ipc.prepare", "d5", "تهیه صورت‌وضعیت", "Prepare payment certificate", "confidential", true),
-  P("fin.ipc.approve", "d5", "تأیید صورت‌وضعیت", "Approve payment certificate", "restricted", true),
+  /* بازنشسته (ADR-CNT-IPC-UNIFY فاز ۳ / بند ۶): خانوادهٔ d14 (`cnt.ipc.*`)
+   * جانشین است. تعریف برای سازگاری تاریخی (حسابرسی/تفویض‌های قدیمی) باقی
+   * می‌ماند ولی دیگر به هیچ نقشی اعطا نمی‌شود و در SOD شرکت ندارد. */
+  P("fin.ipc.prepare", "d5", "تهیه صورت‌وضعیت (منسوخ — به‌جای آن cnt.ipc.prepare)", "Prepare payment certificate (deprecated — use cnt.ipc.prepare)", "confidential", true),
+  P("fin.ipc.approve", "d5", "تأیید صورت‌وضعیت (منسوخ — به‌جای آن cnt.ipc.approve)", "Approve payment certificate (deprecated — use cnt.ipc.approve)", "restricted", true),
   P("fin.rate.view", "d5", "مشاهده نرخ و قیمت واحد", "View unit rates", "restricted"),
   P("fin.invoice.issue", "d5", "صدور فاکتور", "Issue invoice", "restricted", true),
   /* ── d5 خرید و تدارکات — SCM (P5) ── */
@@ -835,6 +838,19 @@ export function permissionDef(code: string): PermissionDef | undefined {
   return PERM_BY_CODE.get(code);
 }
 
+/**
+ * مجوزهای بازنشسته (کد قدیمی → جانشین زنده). تعریف در کاتالوگ برای سازگاری
+ * تاریخی (حسابرسی/تفویض‌های قدیمی) باقی می‌ماند ولی دیگر به هیچ نقشی اعطا
+ * نمی‌شود، پس قاعدهٔ «هر مجوز دست‌کم یک نقش دارد» (`orphanPermissions`)
+ * عمداً این‌ها را استثنا می‌کند — یتیم بودنشان خواسته شده است، نه اشکال.
+ *
+ * ADR-CNT-IPC-UNIFY فاز ۳ / بند ۶: fin.ipc.* به نفع cnt.ipc.* بازنشسته شد.
+ */
+export const DEPRECATED_PERMISSIONS: Record<string, string> = {
+  "fin.ipc.prepare": "cnt.ipc.prepare",
+  "fin.ipc.approve": "cnt.ipc.approve",
+};
+
 export function permissionsOfModule(module: string): PermissionDef[] {
   return PERMISSION_CATALOG.filter((p) => p.module === module);
 }
@@ -956,7 +972,8 @@ export const ROLE_CATALOG: RoleDef[] = [
     inherits: ["viewer"],
     clearance: "confidential",
     party: "contractor",
-    grants: ["eqm.workspace.view", "cnt.rating.view", "cnt.contract.view", "cnt.ipc.prepare", "fin.cost.view", "fin.ipc.prepare", "fin.invoice.issue", "fin.rate.view", "pex.evm.view", "hrm.productivity.view", "core.ai.run",
+    /* fin.ipc.prepare بازنشسته شد — همتای زندهٔ آن cnt.ipc.prepare است که از قبل اینجا هست. */
+    grants: ["eqm.workspace.view", "cnt.rating.view", "cnt.contract.view", "cnt.ipc.prepare", "fin.cost.view", "fin.invoice.issue", "fin.rate.view", "pex.evm.view", "hrm.productivity.view", "core.ai.run",
       /* هزینهٔ نیروی پیمانکاری بخشی از هزینهٔ مستقیم پروژه است و
        * کنترل هزینه باید مبنای آن را ببیند؛ ثبت و تأیید دست او نیست. */
       "hrm.crew.view", "hrm.sub.view", "hrm.analytics.view",
@@ -1153,7 +1170,8 @@ export const ROLE_CATALOG: RoleDef[] = [
       /* تغییر: تصمیم نهایی (تأیید/رد) و بستن با PM مرجع مجاز و SoD
        * (تأییدکننده ≠ آماده‌کنندهٔ درخواست برای تصمیم)؛ اجرا/ابلاغ هم با او. */
       "change.view", "change.approve", "change.implement",
-      "fin.cost.view", "fin.rate.view", "fin.ipc.approve", "fin.procure.approve", "fin.reserve.draw",
+      /* fin.ipc.approve بازنشسته شد — همتای زندهٔ آن cnt.ipc.approve/cnt.ipc.override در ادامهٔ همین نقش هست. */
+      "fin.cost.view", "fin.rate.view", "fin.procure.approve", "fin.reserve.draw",
       "qms.itp.view", "qms.ncr.close",
       "hrm.roster.view", "hrm.timesheet.approve", "hrm.productivity.view",
       /* مدیر پروژه عدد را نهایی می‌کند و دوره را می‌بندد، ولی ارسال به
@@ -1366,7 +1384,8 @@ export const ROLE_CATALOG: RoleDef[] = [
     inherits: ["viewer"],
     clearance: "confidential",
     party: "consultant",
-    grants: ["doc.document.approve", "plan.progress.approve", "qms.itp.view", "qms.inspection.record", "qms.ncr.raise", "fin.ipc.prepare", "cnt.rating.view", "cnt.contract.view", "cnt.ipc.review", "cnt.guarantee.view", "cnt.progress.view", "cnt.kpi.view", "cnt.report.view", "cnt.risk.view",
+    /* fin.ipc.prepare بازنشسته شد — نقش مشاور همیشه «بررسی» بوده (cnt.ipc.review)، نه «تهیه». */
+    grants: ["doc.document.approve", "plan.progress.approve", "qms.itp.view", "qms.inspection.record", "qms.ncr.raise", "cnt.rating.view", "cnt.contract.view", "cnt.ipc.review", "cnt.guarantee.view", "cnt.progress.view", "cnt.kpi.view", "cnt.report.view", "cnt.risk.view",
       "com.punch.record", "com.certificate.view", "ckm.letter.view", "ckm.letter.draft", "gov.gate.review", "eng.mdr.view", "eng.review.code", "eng.crs.resolve", "eng.vpr.review"],
   },
   {
@@ -1377,7 +1396,8 @@ export const ROLE_CATALOG: RoleDef[] = [
     // جداسازی دادهٔ پیمانکار از کارفرما محور جداگانه‌ای است (party) نه سطح دسترسی.
     clearance: "restricted",
     party: "client",
-    grants: ["cnt.rating.approve", "cnt.variation.approve", "cnt.amendment.approve", "fin.cost.view", "fin.ipc.approve", "cnt.rating.view", "cnt.contract.view", "cnt.ipc.approve",
+    /* fin.ipc.approve بازنشسته شد — همتای زندهٔ آن cnt.ipc.approve در همین فهرست هست. */
+    grants: ["cnt.rating.approve", "cnt.variation.approve", "cnt.amendment.approve", "fin.cost.view", "cnt.rating.view", "cnt.contract.view", "cnt.ipc.approve",
       /* آزادسازی و ضبط وثیقه تصمیم کارفرماست: پول از جیب او رفته و
        * برگشتنش هم به تشخیص او. */
       "cnt.guarantee.view", "cnt.guarantee.release", "cnt.progress.view", "cnt.kpi.view",
@@ -1912,13 +1932,9 @@ export const SOD_RULES: SodRule[] = [
       en: "The charter author must not be its approver",
     },
   },
-  {
-    id: "SOD-01",
-    a: "fin.ipc.prepare",
-    b: "fin.ipc.approve",
-    severity: "critical",
-    reason: { fa: "تهیه و تأیید صورت‌وضعیت نباید بر عهدهٔ یک نفر باشد", en: "Preparing and approving a payment certificate must be separated" },
-  },
+  /* SOD-01 (fin.ipc.prepare/fin.ipc.approve) حذف شد: ADR-CNT-IPC-UNIFY فاز
+   * ۳ / بند ۶ — هیچ نقشی دیگر این دو مجوز بازنشسته را ندارد، پس قاعده
+   * هرگز اجرا نمی‌شد؛ SOD-11 (cnt.ipc.prepare/approve) جانشین زنده است. */
   {
     id: "SOD-11",
     a: "cnt.ipc.prepare",
@@ -2641,7 +2657,7 @@ export function roleMatrix(): { role: string; title: Bi; clearance: Classificati
 export function orphanPermissions(): string[] {
   const granted = new Set<string>();
   for (const r of ROLE_CATALOG) for (const p of effectivePermissions(r.code)) granted.add(p);
-  return PERMISSION_CODES.filter((c) => !granted.has(c));
+  return PERMISSION_CODES.filter((c) => !granted.has(c) && !(c in DEPRECATED_PERMISSIONS));
 }
 
 /** مجوزهایی که در نقش‌ها آمده ولی در کاتالوگ نیست — نشانهٔ غلط املایی. */
@@ -2751,7 +2767,7 @@ export const DEMO_DELEGATIONS: Delegation[] = [
     id: "dlg-2",
     fromUserId: "u-pm",
     toUserId: "u-cost",
-    permissions: ["fin.ipc.approve"],
+    permissions: ["cnt.ipc.approve"],
     from: "2026-06-01",
     to: "2026-12-30",
     reason: "تفویض دائم تأیید صورت‌وضعیت",
