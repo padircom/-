@@ -103,7 +103,11 @@ test("کاتالوگ: نسخه موتور و اندازه‌ها", () => {
   /* بخش ۸ (PMO-FORENSIC-SCHEDULE-ENGINE) سه مجوز `sched.recon.*` افزود:
      مشاهده، ثبت/ویرایش و تأیید تکمیل مأموریت بازسازی زمان‌بندی — هم‌تراز
      با تفکیک تحلیل تأخیر (d4). */
-  assert.equal(PERMISSION_CATALOG.length, 448);
+  /* ۴۴۸ → ۴۶۶: هجده مجوز دامنههای تازه (از جمله `p8.*`، `pmo.*`،
+   * `cpm.*`، `dpr.*` و مجوزهای میز کار) پس از نوشتهشدن این number
+   * افزوده شد. شمارش مطلق نگه داشته شد تا کم/زیاد شدن تصادفی کاتالوگ
+   * (مثلاً حذف یک مجوز هنگام refactor) دیده شود — فقط مبنا بهروز شد. */
+  assert.equal(PERMISSION_CATALOG.length, 466);
   /* ۲۸ نقش پیشین + ۷ نقش نت: maintenance_manager، maintenance_planner،
      reliability_engineer، maintenance_engineer، maintenance_technician،
      maintenance_storekeeper و condition_monitoring_analyst. تفکیک وظایف
@@ -119,8 +123,21 @@ test("کاتالوگ: نسخه موتور و اندازه‌ها", () => {
 
 test("کاتالوگ: کد مجوزها یکتا و با قالب domain.resource.action هستند", () => {
   assert.equal(new Set(PERMISSION_CODES).size, PERMISSION_CODES.length);
+  /* ده کد میراثی `dispute.*` / `change.*` (d4) دوبخشیاند و در ۲۶ نقطهٔ
+   * سرور/رابط/نقشها استفاده شدهاند. تغییر نامشان شکستن ABI است، پس
+   * صریحاً مستثنا شدند تا (۱) تست سبز باشد و (۲) هیچ کد دوبخشی تازهای
+   * بیتوجه وارد کاتالوگ نشود. بقیه همچنان باید سهبخشی باشند. */
+  const LEGACY_TWO_PART = new Set([
+    "dispute.view", "dispute.edit", "dispute.review", "dispute.approve",
+    "change.view", "change.edit", "change.analyze", "change.review",
+    "change.approve", "change.implement",
+  ]);
   for (const c of PERMISSION_CODES) {
+    if (LEGACY_TWO_PART.has(c)) continue;
     assert.match(c, /^[a-z]+\.[a-z]+\.[a-z]+$/, `کد نامعتبر: ${c}`);
+  }
+  for (const c of LEGACY_TWO_PART) {
+    assert.ok(PERMISSION_CODES.includes(c), `کد میراثی حذف شده است: ${c}`);
   }
 });
 

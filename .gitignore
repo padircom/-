@@ -112,3 +112,6 @@ server/contractVariationLogic.js
 
 # Generated periodic party evaluation engine (npm run build:vendorrating)
 server/vendorEvaluationLogic.js
+
+# Generated phase-5 CNT IPC files client (npm run build:cntipcfiles)
+server/cntIpcFilesLogic.js

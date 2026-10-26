@@ -7,6 +7,8 @@ import { registerCpmWorkspaceRoutes, CPM_DEDICATED_ROUTES } from "./cpmWorkspace
 import { registerPmoWorkspaceRoutes, PMO_DEDICATED_ROUTES } from "./pmoWorkspaceApi.js";
 import { registerCntIpcRoutes, CNT_IPC_DEDICATED_ROUTES } from "./cntIpcApi.js";
 import { registerCntExcelRoutes, CNT_EXCEL_DEDICATED_ROUTES } from "./cntExcelApi.js";
+/* فاز ۵ ADR-CNT-IPC-UNIFY — گام دوم امضا: امضای دیجیتال X.509. */
+import { loadPkiSigner, verifyPkiSignature, pkiStatus } from "./cntPki.js";
 import { registerReportBuilderRoutes, RPT_DEDICATED_ROUTES } from "./reportBuilderApi.js";
 import { registerItgOutboundRoutes, ITG_OUTBOUND_DEDICATED_ROUTES } from "./itgOutboundApi.js";
 import { registerAiAssistantRoutes, AI_DEDICATED_ROUTES } from "./aiAssistantApi.js";
@@ -337,6 +339,12 @@ import {
   ipcAttestationFa,
   verifyIpcSnapshotChain,
   ipcApprovalGuaranteeGate,
+  /* فاز ۵: امضای دیجیتال X.509 و راستیآزمایی زنجیرهٔ امضاشده. */
+  IPC_PKI_SIGNATURE_METHOD,
+  IPC_PKI_VERSION,
+  ipcPkiCanonical,
+  ipcPkiAttestationFa,
+  verifyIpcPkiSignatures,
 } from "./cntLogic.js";
 
 import {
@@ -7481,7 +7489,7 @@ const CNT_IPC_ACTION_FA = {
 };
 /** SHA-256 متن کانونی — تنها نقطهای که هش سند گرفته میشود. */
 const cntSha256 = (canonical) => crypto.createHash("sha256").update(canonical).digest("hex");
-/** ردیفهای «تأیید ثبتشده» برای برگهٔ رسمی PDF (همان مدل RPT-CNT-IPC). */
+/** ردیفهای «تأیید ثبتشده / امضای دیجیتال» برای برگهٔ رسمی PDF. */
 function cntSignatureLedger(steps) {
   return steps.map((s) => ({
     StepNo: s.StepNo,
@@ -7493,11 +7501,59 @@ function cntSignatureLedger(steps) {
     SnapshotSha256: s.SnapshotSha256 ?? null,
     DocumentSha256: s.DocumentSha256 ?? null,
     AttestationFa: s.AttestationFa ?? null,
-    MethodFa: s.SignatureMethod === IPC_SIGNATURE_METHOD ? "تأیید ثبتشده" : (s.SignatureMethod ?? "—"),
+    MethodFa: s.SignatureMethod === IPC_PKI_SIGNATURE_METHOD ? "امضای دیجیتال X.509"
+      : s.SignatureMethod === IPC_SIGNATURE_METHOD ? "تأیید ثبتشده" : (s.SignatureMethod ?? "—"),
+    /* فاز ۵: حضور امضا روی گام، نه وضعیت پیکربندی فعلی سرور. */
+    PkiApplied: !!s.PkiSignature,
+    PkiKeyId: s.PkiKeyId ?? null,
+    PkiCertSha256: s.PkiCertSha256 ?? null,
+    PkiTrustLevel: s.PkiTrustLevel ?? null,
+    PkiSignedAt: s.PkiSignedAt ?? null,
   }));
 }
+
+/** فهرست یکتای گواهیهای بهکاررفته در گامها، برای چاپ در PDF رسمی. */
+function cntPkiCertificates(steps) {
+  const byFingerprint = new Map();
+  for (const s of steps) {
+    if (!s.PkiSignature || !s.PkiCertPem) continue;
+    let info = {};
+    try { info = JSON.parse(s.PkiCertInfoJson || "{}"); } catch { /* بدنهٔ خراب نباید صدور PDF را بشکند */ }
+    const fingerprint = String(s.PkiCertSha256 ?? "");
+    if (!byFingerprint.has(fingerprint)) byFingerprint.set(fingerprint, {
+      KeyId: s.PkiKeyId ?? info.KeyId ?? "—",
+      Subject: info.Subject ?? "—",
+      Issuer: info.Issuer ?? "—",
+      Serial: info.Serial ?? "—",
+      CertSha256: fingerprint,
+      ValidFrom: info.ValidFrom ?? "—",
+      ValidTo: info.ValidTo ?? "—",
+      TrustLevel: s.PkiTrustLevel ?? info.TrustLevel ?? null,
+      Algorithm: s.PkiAlgorithm ?? info.Algorithm ?? null,
+    });
+  }
+  return [...byFingerprint.values()];
+}
+
 /** آیا نبود ضمانتنامهٔ حسن انجام کار، تصویب را مسدود کند؟ (پیشفرض: هشدار) */
 const cntGuaranteeRequired = () => String(process.env.CNT_IPC_GUARANTEE_REQUIRED ?? "0") === "1";
+
+/* ── فاز ۵ / گام دوم امضا: بارگذاری پیکربندی X.509 بهازای هر درخواست ──
+ * عمداً کش نمیشود: چرخش گواهی بدون راهاندازی مجدد سرور اعمال شود و
+ * خطای پیکربندی همیشه تازه گزارش گردد. هیچ کلید خصوصی لاگ/پاسخ نمیرود. */
+function cntPkiSigner() {
+  return loadPkiSigner(process.env, { now: new Date() });
+}
+/** راستیآزمایی یک گام امضاشده با لنگر اعتماد فعلی سرور. */
+function cntVerifyPkiStep(canonical, step) {
+  return verifyPkiSignature(canonical, step.PkiSignature, step.PkiCertPem, {
+    caPem: process.env.CNT_IPC_PKI_CA ?? null,
+    allowSelfSigned: String(process.env.CNT_IPC_PKI_ALLOW_SELF_SIGNED ?? "0") === "1",
+    /* اعتبار گواهی در لحظهٔ امضا سنجیده میشود، نه زمان بازدید: منقضی
+     * شدن گواهی بعداً نباید امضای معتبر گذشته را باطل جلوه دهد. */
+    now: step.PkiSignedAt ? new Date(step.PkiSignedAt) : new Date(step.ActedAt ?? Date.now()),
+  });
+}
 
 app.post("/api/cnt/ipc/:id/action", async (req, res, next) => {
   try {
@@ -7582,14 +7638,26 @@ app.post("/api/cnt/ipc/:id/action", async (req, res, next) => {
     const now = new Date().toISOString();
     const commentFa = b.commentFa ? String(b.commentFa) : null;
 
-    /* ── فاز ۴ / بند ۲: «امضا» گام اول = تأیید ثبتشده + هش نمایهٔ سند ──
+    /* ── فاز ۴ / بند ۲ + فاز ۵ / گام دوم ──────────────────────────────
      * نمایهٔ سند شامل هدر، ردیفها، کسورات و گامهای تاکنون است؛ هش گام
      * علاوه بر هش سند، هش گام قبل را هم میگیرد (زنجیره). نتیجه در همان
      * رکورد IPC_WorkflowStep مینشیند، پس PDF و ممیزی یک منبع دارند.
-     * PKI عمداً اینجا نیست — مرحلهٔ جداگانهٔ ADR است. */
+     * اگر گواهی X.509 معتبر پیکربندی شده باشد، همان رشتهٔ کانونی گام
+     * (با method=pki-x509) بهصورت نامتقارن امضا هم میشود؛ در غیر این
+     * صورت دقیقاً همان «تأیید ثبتشده»ی فاز ۴ مینشیند و `pkiApplied:false`
+     * صادقانه اعلام میگردد. سازمان میتواند با CNT_IPC_PKI_REQUIRED=1
+     * اقدام بدون امضای واقعی را متوقف کند. */
+    const pki = cntPkiSigner();
+    if (pki.required && !pki.ok) {
+      return cntBad(req, res, "E-CNT-IPC-PKI-UNAVAILABLE",
+        "امضای دیجیتال الزامی است ولی گواهی معتبر پیکربندی نشده است", 503, pki.issuesFa);
+    }
+    const pkiApplied = !!pki.ok;
+    const signatureMethod = pkiApplied ? IPC_PKI_SIGNATURE_METHOD : IPC_SIGNATURE_METHOD;
+    const signatureVersion = pkiApplied ? IPC_PKI_VERSION : IPC_SNAPSHOT_VERSION;
     const documentSha256 = cntSha256(ipcDocumentCanonical({ ipc, lines, deductions, steps: sortedSteps }));
     const prevHash = sortedSteps.length ? (sortedSteps[sortedSteps.length - 1].SnapshotSha256 ?? null) : null;
-    const snapshotSha256 = cntSha256(ipcStepCanonical({
+    const stepCore = {
       documentSha256,
       prevHash,
       stepNo,
@@ -7598,13 +7666,51 @@ app.post("/api/cnt/ipc/:id/action", async (req, res, next) => {
       action,
       actedAt: now,
       commentFa,
-    }));
-    const attestationFa = ipcAttestationFa({
+      method: signatureMethod,
+    };
+    const snapshotSha256 = cntSha256(ipcStepCanonical(stepCore));
+
+    let pkiFields = {};
+    let attestationFa = ipcAttestationFa({
       actorFa: CNT_IPC_ACTOR_FA[actor] ?? actor,
       actionFa: CNT_IPC_ACTION_FA[action] ?? action,
       actedAt: now,
       snapshotSha256,
     });
+    if (pkiApplied) {
+      const info = pki.signer.info;
+      const pkiCanonical = ipcPkiCanonical({
+        ...stepCore,
+        certSha256: info.CertSha256,
+        keyId: info.KeyId,
+        algorithm: pki.signer.algorithm,
+        signedAt: now,
+      });
+      let signatureBase64;
+      try { signatureBase64 = pki.signer.sign(pkiCanonical, new Date(now)); }
+      catch (err) {
+        return cntBad(req, res, "E-CNT-IPC-PKI-SIGN-FAILED",
+          "امضای دیجیتال سند ناموفق بود؛ اقدامی ثبت نشد", 503, [String(err?.message ?? err)]);
+      }
+      attestationFa = ipcPkiAttestationFa({
+        actorFa: CNT_IPC_ACTOR_FA[actor] ?? actor,
+        actionFa: CNT_IPC_ACTION_FA[action] ?? action,
+        signedAt: now,
+        snapshotSha256,
+        certSubject: info.Subject,
+        certSha256: info.CertSha256,
+      });
+      pkiFields = {
+        PkiSignature: signatureBase64,
+        PkiCertPem: pki.signer.certPem,
+        PkiCertSha256: info.CertSha256,
+        PkiKeyId: info.KeyId,
+        PkiAlgorithm: pki.signer.algorithm,
+        PkiSignedAt: now,
+        PkiTrustLevel: pki.trustLevel,
+        PkiCertInfoJson: JSON.stringify(info),
+      };
+    }
 
     await r.create("IPC_WorkflowStep", {
       ProjectId: projectId,
@@ -7618,10 +7724,11 @@ app.post("/api/cnt/ipc/:id/action", async (req, res, next) => {
       SnapshotSha256: snapshotSha256,
       DocumentSha256: documentSha256,
       PrevHash: prevHash,
-      SignatureMethod: IPC_SIGNATURE_METHOD,
-      SignatureVersion: IPC_SNAPSHOT_VERSION,
+      SignatureMethod: signatureMethod,
+      SignatureVersion: signatureVersion,
       AttestationFa: attestationFa,
       GuaranteeCheckJson: guaranteeVerdict ? JSON.stringify(guaranteeVerdict) : null,
+      ...pkiFields,
     }, userId, "IPCW");
 
     const patch = { WorkflowState: move.to };
@@ -7643,19 +7750,92 @@ app.post("/api/cnt/ipc/:id/action", async (req, res, next) => {
       stepNo,
       locked: isIpcLocked(move.to),
       nextActions: ipcNextActions(move.to),
-      /* فاز ۴: گواهی تأیید ثبتشده و هش سند — همان چیزی که PDF رسمی چاپ میکند. */
+      /* فاز ۴ + ۵: گواهی تأیید ثبتشده/امضای دیجیتال و هش سند — همان
+       * چیزی که PDF رسمی چاپ میکند. pkiApplied فقط وقتی true است که
+       * واقعاً امضای نامتقارن معتبر روی گام نشسته باشد. */
       signature: {
-        method: IPC_SIGNATURE_METHOD,
-        version: IPC_SNAPSHOT_VERSION,
+        method: signatureMethod,
+        version: signatureVersion,
         snapshotSha256,
         documentSha256,
         prevHash,
         attestationFa,
-        pkiApplied: false,
+        pkiApplied,
+        ...(pkiApplied ? { certificate: pki.publicInfo } : { pkiReasonFa: pki.issuesFa }),
       },
       guaranteeGate: guaranteeVerdict,
     }));
   } catch (err) { next(err); }
+});
+
+/* ═══════════════ فاز ۵ / گام دوم امضا — راستیآزمایی اختصاصی ═══════════════
+ * چرا مسیر جدا از `GET /api/cnt/ipc/:id`: ممیز/کارفرما باید بتواند بدون
+ * دریافت کل سند، فقط حکم یکپارچگی و زنجیرهٔ اعتماد را بگیرد. پاسخ همیشه
+ * `ok` صادقانهای دارد: اگر گواهی عوض شده یا سند دستکاری شده باشد،
+ * `ok:false` و دلیل فارسی برمیگردد — نه سکوت، نه امضای ظاهری.
+ *
+ * وضعیت پیکربندی هم مسیر جدا دارد (فقط اطلاعات عمومی گواهی؛ هیچ کلید
+ * خصوصی یا گذرواژهای افشا نمیشود). */
+app.get("/api/cnt/ipc/:id/signature/verify", cntRequire("cnt.contract.view"), cntProjectAccess("cnt.contract.view"), async (req, res, next) => {
+  try {
+    const projectId = String(req.query.projectId || "");
+    if (!projectId) return cntBad(req, res, "E-CNT-NO-PROJECT", "پارامتر projectId الزامی است");
+    const r = await repo();
+    const ipc = await r.findOne("InterimPaymentCertificate", [
+      { column: "ProjectId", op: "eq", value: projectId },
+      { column: "Id", op: "eq", value: String(req.params.id) },
+    ]);
+    if (!ipc) return cntBad(req, res, "E-CNT-NOT-FOUND", `صورتوضعیت ${req.params.id} یافت نشد`, 404);
+    const [lines, deductions, steps] = await Promise.all([
+      r.list("IPC_LineItem", { where: [{ column: "IpcId", op: "eq", value: String(ipc.Id) }], limit: 20000 }),
+      r.list("IPC_Deduction", { where: [{ column: "IpcId", op: "eq", value: String(ipc.Id) }], limit: 200 }),
+      r.list("IPC_WorkflowStep", { where: [{ column: "IpcId", op: "eq", value: String(ipc.Id) }], limit: 500 }),
+    ]);
+    steps.sort((a, b2) => (Number(a.StepNo) || 0) - (Number(b2.StepNo) || 0));
+    const chain = verifyIpcSnapshotChain(steps, cntSha256);
+    const pki = verifyIpcPkiSignatures(steps, cntVerifyPkiStep);
+    const documentSha256 = cntSha256(ipcDocumentCanonical({ ipc, lines, deductions, steps }));
+    const issuesFa = [...chain.issuesFa, ...pki.issuesFa];
+    return res.json(cntOk(req, {
+      id: String(ipc.Id),
+      ok: issuesFa.length === 0,
+      documentSha256,
+      chain,
+      pki,
+      certificates: cntPkiCertificates(steps),
+      issuesFa,
+    }));
+  } catch (e) { next(e); }
+});
+
+/* راستیآزمایی **جداافتاده**: ممیزی که فقط PDF و امضای چاپشده را دارد،
+ * باید بتواند بدون دسترسی به پایگاه داده، همان رشتهٔ کانونی و امضا را
+ * بفرستد و حکم بگیرد. CA از پیکربندی سرور میآید، ولی گواهی (PEM)
+ * حتماً از خود امضاکننده/سند میآید تا جایگزینی گواهی آشکار شود. */
+app.post("/api/cnt/ipc/signature/verify", cntRequire("cnt.contract.view"), cntProjectAccess("cnt.contract.view"), async (req, res, next) => {
+  try {
+    const b = engBody(req);
+    const projectId = String(req.query.projectId || b.projectId || "");
+    if (!projectId) return cntBad(req, res, "E-CNT-NO-PROJECT", "پارامتر projectId الزامی است");
+    const canonical = typeof b.canonical === "string" ? b.canonical : "";
+    const signature = typeof b.signature === "string" ? b.signature : "";
+    const certPem = typeof b.certPem === "string" ? b.certPem : "";
+    if (!canonical || !signature || !certPem) {
+      return cntBad(req, res, "E-CNT-IPC-PKI-VERIFY-INPUT",
+        "رشتهٔ کانونی، امضا و گواهی (PEM) همگی الزامیاند", 422);
+    }
+    const verdict = verifyPkiSignature(canonical, signature, certPem, {
+      caPem: process.env.CNT_IPC_PKI_CA ?? null,
+      allowSelfSigned: String(process.env.CNT_IPC_PKI_ALLOW_SELF_SIGNED ?? "0") === "1",
+      ...(b.signedAt ? { now: new Date(String(b.signedAt)) } : {}),
+    });
+    return res.json(cntOk(req, { ...verdict, canonicalSha256: cntSha256(canonical) }));
+  } catch (e) { next(e); }
+});
+
+app.get("/api/cnt/ipc/pki/status", cntRequire("cnt.contract.view"), async (req, res, next) => {
+  try { return res.json(cntOk(req, pkiStatus(process.env, { now: new Date() }))); }
+  catch (e) { next(e); }
 });
 
 /* فهرست صورت‌وضعیت‌های یک پیمان. */
@@ -7720,13 +7900,15 @@ app.get("/api/cnt/ipc/:id", cntRequire("cnt.contract.view"), cntProjectAccess("c
       lines,
       deductions: deductions.map((d) => ({ ...d, typeFa: DEDUCTION_TYPE_FA[d.DeductionType] ?? d.DeductionType })),
       workflow: steps,
-      /* فاز ۴: تأییدهای ثبتشده و نتیجهٔ راستیآزمایی زنجیرهٔ هش. */
+      /* فاز ۴ + ۵: تأییدهای ثبتشده/امضاها و نتیجهٔ راستیآزمایی زنجیره. */
       signatures: cntSignatureLedger(steps),
       snapshot: {
         version: IPC_SNAPSHOT_VERSION,
         documentSha256: cntSha256(ipcDocumentCanonical({ ipc, lines, deductions, steps })),
         chain: verifyIpcSnapshotChain(steps, cntSha256),
-        pkiApplied: false,
+        pkiApplied: steps.some((s) => !!s.PkiSignature),
+        pki: verifyIpcPkiSignatures(steps, cntVerifyPkiStep),
+        certificates: cntPkiCertificates(steps),
       },
     }));
   } catch (err) { next(err); }
@@ -14925,6 +15107,10 @@ async function cntReportPayload(r, sc, contract, code, q = {}) {
       });
       const sortedWf = wf.sort((a, b) => (Number(a.StepNo) || 0) - (Number(b.StepNo) || 0));
       base.signatures = cntSignatureLedger(sortedWf);
+      /* فاز ۵: برگهٔ رسمی فقط وقتی ادعای PKI میکند که دستکم یک گام
+       * واقعاً امضای دیجیتال داشته باشد — نه صرفاً پیکربندی فعلی سرور. */
+      base.pkiApplied = sortedWf.some((s) => !!s.PkiSignature);
+      if (base.pkiApplied) base.pkiCertificates = cntPkiCertificates(sortedWf);
       base.snapshotSha256 = cntSha256(ipcDocumentCanonical({
         ipc, lines: base.ipcLines, deductions: base.deductions, steps: sortedWf,
       }));
@@ -14966,6 +15152,12 @@ async function cntReportPayload(r, sc, contract, code, q = {}) {
   /* فاز ۴: هش نمایهٔ لحظهٔ صدور را کنار报告 برگردان تا PDF و ممیزی
    * بدانند دقیقاً کدام نسخه از سند امضا/چاپ شده است. فقط نسخهٔ رسمی. */
   if (report && base.snapshotSha256) report.snapshotSha256 = base.snapshotSha256;
+  /* فاز ۵: پرچم/گواهیهای PKI را هم به报告 ببر تا مسیر PDF و `/render`
+   * بتوانند ادعای واقعی امضا را ببینند (نه پیکربندی لحظهای سرور). */
+  if (report && base.pkiApplied) {
+    report.pkiApplied = true;
+    report.pkiCertificates = base.pkiCertificates ?? [];
+  }
   return report;
 }
 
@@ -15111,7 +15303,10 @@ app.get("/api/cnt/ipc/:id/pdf", cntRequire("cnt.report.issue"), cntProjectAccess
     if (req.query.format === "json") {
       return res.json(cntOk(req, {
         report: body, letterhead: lh, issues,
-        model: "RPT-CNT-IPC", engine: "server-pdf", signaturePhase: 1, pkiApplied: false,
+        model: "RPT-CNT-IPC", engine: "server-pdf",
+        signaturePhase: body.pkiApplied ? 2 : 1,
+        pkiApplied: !!body.pkiApplied,
+        pkiCertificates: body.pkiCertificates ?? [],
       }));
     }
 

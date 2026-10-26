@@ -1,5 +1,37 @@
 # انتقال به چت جدید — Arena Platform
 تاریخ به‌روزرسانی: 2026-10-26 — **گزارش مرجع جاری: `docs/GAP_ROADMAP.md`؛ بخش‌های پایین تاریخچهٕاند.**
+## نشست ۲۰۲۶-۱۰-۲۶ — CNT-IPC فاز ۵: امضای دیجیتال + رابط اسناد + پاکسازی تستها
+- شاخهٔ نشست: `arena/2f14c1f9-repo` (از سرِ `main` پس از مرج PR #48 فاز ۴).
+- **گام دوم امضا (PKI واقعی):** `server/cntPki.js` گواهی/کلید/CA را از env
+  (`CNT_IPC_PKI_CERT|KEY|CA|KEY_ID|KEY_PASSPHRASE`) میخواند، `X509Certificate`
+  اعتبار/تناظر کلید/زنجیره/EKU را میسنجد. بدون پیکربندی معتبر،
+  `pkiApplied=false` صادقانه برمیگردد؛ `CNT_IPC_PKI_REQUIRED=1` اقدام را
+  ۵۰۳ `E-CNT-IPC-PKI-UNAVAILABLE` میدهد. حالت self-signed فقط با پرچم صریح
+  و برچسب `trustLevel:"self-signed"` (نه `ca-verified`). ستونها + مهاجرت
+  **۰۰۷۹** روی `IPC_WorkflowStep`؛ متن قدیمی «PKI نیست» فقط در نبود امضا چاپ میشود.
+- **مسیرهای تازه:** `GET /api/cnt/ipc/:id/signature/verify`،
+  `POST /api/cnt/ipc/signature/verify` (راستیآزمایی جداافتاده)،
+  `GET /api/cnt/ipc/pki/status`. مستندات کامل: ADR بخش ۶.
+- **رابط اختصاصی:** `src/services/cntIpcFiles.ts` + `src/components/CntIpcFilesPanel.tsx`
+  در بخش «صورتوضعیت» میز کار پیمان: دانلود PDF رسمی/چاپی، خروجی XLSX
+  قالبها و ریزمتره، ورود دومرحلهای (پیشنمایش ← ثبت)، وضعیت PKI و دکمهٔ
+  راستیآزمایی. فقط مسیرهای اختصاصی `/api/cnt/...`؛ باندل تازه
+  `build:cntipcfiles`. بدون دستکاری `src/index.css`/فونت/سایدبار اصلی.
+- **۵ شکست کهنهٔ `main` رفع شد (منبع حقیقت، نه حذف assert):** شمارش d14،
+  کامنت `Status` دوجدول ارزیابی، ستونهای حسابرسی تکراری هشت جدول Pmis
+  (`validateSchema()` خالی شد)، شمارش کاتالوگ RBAC ۴۴۸←۴۶۶ و استثنای
+  صریح ده کد میراثی دوبخشی `dispute.*`/`change.*`.
+- **دروازهها:** `npx tsc --noEmit` ✅ · باندل `server/cntLogic.js` بازتولید
+  و کامیت شد · تستهای تازه: ۱۷ واحد PKI + ۱۳ REST + ۷ واحد کلاینت فایل ·
+  ۲۹۷ تست گروه نخست + ۷۵۰ تست رگرسیون CNT + ۲۴ تست p8/pmo (concurrency=1)
+  + ۳۲ تست همجوار، همگی سبز · دودتست زندهٔ `c1-p1` انجام شد. اجرای کامل
+  `npm test` طبق روال انجام نشد (تست هدفمند).
+- **نکته برای نشست بعد:** فایلهای `database/schema-*.sql` و
+  `src/services/pmisFullSchema.ts` عمداً بازتولید نشدند؛ ژنراتور قدیمی
+  ۲۲۴ جدول میسازد (امروز ۲۳۱) و drift نامربوط میدهد. منبع حقیقت
+  `src/services/persistence.ts` است. مرزهای باز: TSA/RFC 3161، OCSP/CRL،
+  دفتر خارجی هش، HSM و چرخش کلید.
+
 ## نشست ۲۰۲۶-۱۰-۲۶ — CNT-IPC فاز ۴: خروجی و اتصالهای بیرونی (ADR-CNT-IPC-UNIFY بخش ۵)
 - شاخهٔ نشست: `arena/87123c73-repo` (پس از مرج PR #46/#47 فاز ۱ تا ۳ در `main`).
 - **بند ۱ — PDF رسمی:** مسیر اختصاصی `GET /api/cnt/ipc/:id/pdf` خروجی **باینری واقعی**

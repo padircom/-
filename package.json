@@ -70,7 +70,8 @@
     "build:changedoc": "esbuild src/services/changeDocument.ts --bundle --outfile=server/changeDocLogic.js --format=esm --platform=node --target=node18 --banner:js=\"/* GENERATED از src/services/changeDocument.ts — ویرایش دستی ممنوع. بازتولید: npm run build:changedoc */\"",
     "build:cntamend": "esbuild src/services/contractAmendments.ts --bundle --format=esm --platform=node --outfile=server/contractAmendmentLogic.js",
     "build:cntvariation": "esbuild src/services/contractVariations.ts --bundle --format=esm --platform=node --outfile=server/contractVariationLogic.js",
-    "build:vendorrating": "esbuild src/services/vendorEvaluation.ts --bundle --outfile=server/vendorEvaluationLogic.js --format=esm --platform=node --target=node18"
+    "build:vendorrating": "esbuild src/services/vendorEvaluation.ts --bundle --outfile=server/vendorEvaluationLogic.js --format=esm --platform=node --target=node18",
+    "build:cntipcfiles": "esbuild src/services/cntIpcFiles.ts --bundle --format=esm --platform=node --outfile=server/cntIpcFilesLogic.js --target=node18"
   },
   "dependencies": {
     "@types/leaflet": "^1.9.12",
