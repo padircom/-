@@ -256,7 +256,6 @@ export const domains: Domain[] = [
         subs: [
           { id: "d14-p1-s1", title: { fa: "ثبت شناسنامه و الحاقیه‌ها", en: "Contract Master & Amendments" }, activity: { fa: "ثبت مشخصات پیمان، مبلغ اولیه، مدت و الحاقیه‌های بعدی با سطح اختیار تأیید", en: "Register contract terms, original value, duration and subsequent amendments with approval authority" }, source: "Contract Document, Employer", sql: ["ContractMaster", "ContractAmendment", "ApprovalAuthority"], output: "Contract Register", connectsTo: "Cost, Governance", ai: "AI Clause Extractor" },
           { id: "d14-p1-s2", title: { fa: "فهرست بها و مراحل مقطوع", en: "BOQ Items & Lump-Sum Milestones" }, activity: { fa: "بارگذاری ردیف‌های فهرست بها با مقدار و نرخ، یا تعریف مراحل پرداخت مقطوع", en: "Load BOQ lines with quantity and rate, or define lump-sum payment milestones" }, source: "Tender BOQ, Excel", sql: ["ContractBOQ_Item", "LumpSumMilestone"], output: "Priced BOQ", connectsTo: "Cost, Planning", ai: "AI Rate Benchmark" },
-          { id: "d14-p1-risk", title: { fa: "مدیریت ریسک قراردادها و بهبود قرارداد", en: "Contract Risk & Improvement" }, activity: { fa: "شناسایی، امتیازدهی و پایش ریسک‌های قراردادی، تحلیل بندها، تعهدات و پیشنهاد اصلاح قرارداد پیش از تبدیل ریسک به اختلاف، تأخیر یا خسارت", en: "Identify, score and monitor contract risks, analyse clauses, obligations and clause-improvement proposals before risks become disputes, delay or loss" }, source: "Contract, EDMS", sql: ["ContractRiskRegister", "ContractClauseFinding", "ContractImprovement"], output: "Contract Risk Register", connectsTo: "Claims, Delay, EDMS", ai: "ContractClauseAnalysisService" }
         ],
       },
       {
@@ -268,6 +267,13 @@ export const domains: Domain[] = [
               { to: "d5-p7-s2", label: { fa: "مبنای مقداری: برداشتِ احجام در d5", en: "Quantity basis: measurement in d5" } }
             ] },
           { id: "d14-p2-s2", title: { fa: "تهیه و گردش صورت‌وضعیت", en: "IPC Preparation & Workflow" }, activity: { fa: "تولید صورت‌وضعیت از متره تأییدشده و گذر از گام‌های تأیید تا ابلاغ", en: "Generate IPC from approved measurement and route through approval steps" }, source: "Measurement, Contract", sql: ["InterimPaymentCertificate", "IPC_LineItem", "IPC_WorkflowStep"], output: "Certified IPC", connectsTo: "Cost, Governance", ai: "AI Workflow Bottleneck" },
+        ],
+      },
+      {
+        id: "d14-p9",
+        title: { fa: "مدیریت ریسک قراردادها", en: "Contract Risk Management" },
+        subs: [
+          { id: "d14-p9-s1", title: { fa: "ریسک و بهبود قرارداد", en: "Contract Risk & Improvement" }, activity: { fa: "شناسایی، امتیازدهی و پایش ریسک‌های قراردادی، تحلیل بندها، تعهدات و پیشنهاد اصلاح قرارداد؛ با حفظ ارجاع به کد پیمان", en: "Identify, score and monitor contract risks, analyse clauses, obligations and improvement proposals, retaining the contract-code link" }, source: "Contract, EDMS", sql: ["ContractRiskRegister", "ContractClauseFinding", "ContractImprovement"], output: "Contract Risk Register", connectsTo: "Contract Register, Claims, Delay, EDMS", ai: "ContractClauseAnalysisService" },
         ],
       },
       {

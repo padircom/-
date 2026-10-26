@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-test('contract risk remains nested under contract management', async ({ page }) => {
+test('contract risk is a peer process beside contract register and IPC inside d14', async ({ page }) => {
   await page.route('https://api.open-meteo.com/**', (route) => route.abort());
   await page.route('**/api/cnt-risk/**', (route) => route.fulfill({
     status: 200,
@@ -22,7 +22,9 @@ test('contract risk remains nested under contract management', async ({ page }) 
   await right.getByRole('button', { name: /Enter domain page/ }).click();
 
   const domainNav = page.locator('.workspace-columns > aside');
-  await expect(domainNav.getByRole('button', { name: /Contract Risk & Improvement/ })).toBeVisible();
+  await expect(domainNav.getByText(/Contract Register & BOQ/)).toBeVisible();
+  await expect(domainNav.getByText(/Measurement & Interim Payment/)).toBeVisible();
+  await expect(domainNav.getByText(/Contract Risk Management/)).toBeVisible();
   await domainNav.getByRole('button', { name: /Contract Risk & Improvement/ }).click();
   await expect(page.getByRole('heading', { name: 'Contract Risk & Improvement' })).toBeVisible();
 });

@@ -420,7 +420,7 @@ function isIpcProcess(processId: string, subId?: string): boolean {
 }
 
 function contractView(processId?: string, subId?: string): "contract" | "ipc" | "rating" | "risk" {
-  if (subId === "d14-p1-risk") return "risk";
+  if (subId === "d14-p9-s1") return "risk";
   if (processId === "d14-p8") return "rating";
   /* نمای «قالب‌های صورت‌وضعیت» (CNT-1) فقط از میان‌بر خودش باز می‌شود.
    * پیش‌تر کل فرایندهای d14-p2/p4/p5 به پنل قالب می‌رفتند و زیرفرایند
