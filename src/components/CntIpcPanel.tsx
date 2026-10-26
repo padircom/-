@@ -1,3 +1,4 @@
+import PersianDateInput from "./PersianDateInput";
 /**
  * P8 / CNT-1 — قالب‌پذیری صورت‌وضعیت (d14).
  *
@@ -336,8 +337,8 @@ function CertificatesTab({ lang, data, busy, run, client }: { lang: Lang; data: 
               {published.map((t) => <option key={t.Code} value={t.Code}>{t.Code} — {t.TitleFa} (v{t.Version})</option>)}
             </select>
             <input className={inputCls} placeholder={rtl ? "شمارهٔ دوره" : "period no."} dir="ltr" value={period.No} onChange={(ev) => setPeriod((p) => ({ ...p, No: ev.target.value }))} />
-            <input className={inputCls} type="date" dir="ltr" value={period.From} onChange={(ev) => setPeriod((p) => ({ ...p, From: ev.target.value }))} />
-            <input className={inputCls} type="date" dir="ltr" value={period.To} onChange={(ev) => setPeriod((p) => ({ ...p, To: ev.target.value }))} />
+            <PersianDateInput className={inputCls} dir="ltr" value={period.From} onChange={(ev) => setPeriod((p) => ({ ...p, From: ev.target.value }))} />
+            <PersianDateInput className={inputCls} dir="ltr" value={period.To} onChange={(ev) => setPeriod((p) => ({ ...p, To: ev.target.value }))} />
             <select className={inputCls} value={period.Currency} onChange={(ev) => setPeriod((p) => ({ ...p, Currency: ev.target.value }))}>
               {["IRR", "EUR", "USD"].map((c) => <option key={c} value={c}>{c}</option>)}
             </select>

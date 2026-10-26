@@ -1,3 +1,4 @@
+import PersianDateInput from "./PersianDateInput";
 import ContractVariationsPanel from "./ContractVariationsPanel";
 import ContractAmendmentsPanel from "./ContractAmendmentsPanel";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -158,12 +159,14 @@ function Field({
             <option key={o.value} value={o.value}>{o.fa}</option>
           ))}
         </select>
+      ) : spec.kind === "date" ? (
+        <PersianDateInput className={base} value={value} onChange={(e) => onChange(e.target.value)} />
       ) : (
         <input
           className={base}
-          type={spec.kind === "number" ? "number" : spec.kind === "date" ? "date" : "text"}
+          type={spec.kind === "number" ? "number" : "text"}
           value={value}
-          dir={spec.kind === "number" || spec.kind === "date" ? "ltr" : undefined}
+          dir={spec.kind === "number" ? "ltr" : undefined}
           onChange={(e) => onChange(e.target.value)}
         />
       )}
@@ -957,11 +960,11 @@ function IpcSection({
           </label>
           <label className="block">
             <span className="mb-1 block text-[8.5px] font-extralight tx3">از تاریخ *</span>
-            <input className={ipcInputCls} type="date" dir="ltr" value={head.periodFrom} onChange={(e) => setHead((h) => ({ ...h, periodFrom: e.target.value }))} />
+            <PersianDateInput className={ipcInputCls} dir="ltr" value={head.periodFrom} onChange={(e) => setHead((h) => ({ ...h, periodFrom: e.target.value }))} />
           </label>
           <label className="block">
             <span className="mb-1 block text-[8.5px] font-extralight tx3">تا تاریخ *</span>
-            <input className={ipcInputCls} type="date" dir="ltr" value={head.periodTo} onChange={(e) => setHead((h) => ({ ...h, periodTo: e.target.value }))} />
+            <PersianDateInput className={ipcInputCls} dir="ltr" value={head.periodTo} onChange={(e) => setHead((h) => ({ ...h, periodTo: e.target.value }))} />
           </label>
           <label className="block">
             <span className="mb-1 block text-[8.5px] font-extralight tx3">نوع</span>

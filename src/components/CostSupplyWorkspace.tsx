@@ -1,3 +1,4 @@
+import PersianDateInput from "./PersianDateInput";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Lang } from "../data/framework";
 import { ErpSyncAction } from "./ConnectorActions";
@@ -397,7 +398,11 @@ function SettingsPanel({ lang, rtl, ws, canEdit, busy, onSave }: { lang: Lang; r
   const field = (k: keyof typeof f.v, fa: string, en: string, type = "number") => (
     <label className="flex flex-col gap-0.5 text-[8.5px] tx3">
       {rtl ? fa : en}
-      <input type={type} value={String(f.v[k])} onChange={f.set(k)} disabled={!canEdit} className={inputCls} dir="ltr" />
+      {type === "date" ? (
+        <PersianDateInput value={String(f.v[k])} onChange={f.set(k)} disabled={!canEdit} className={inputCls} />
+      ) : (
+        <input type={type} value={String(f.v[k])} onChange={f.set(k)} disabled={!canEdit} className={inputCls} dir="ltr" />
+      )}
     </label>
   );
   const save = () => {
@@ -818,7 +823,7 @@ function Tabs({ rtl, lang, tab, ws, v, perm, busy, client, act }: { rtl: boolean
               <div className="mt-2 flex flex-wrap items-end gap-1.5">
                 <input className={`${inputCls} w-52`} placeholder={rtl ? "طرف حساب" : "party"} value={arF.v.PartyFa} onChange={arF.set("PartyFa")} />
                 <input className={`${inputCls} w-32`} type="number" placeholder={rtl ? "مبلغ (ریال)" : "amount"} value={arF.v.Amount} onChange={arF.set("Amount")} dir="ltr" />
-                <input className={inputCls} type="date" title={rtl ? "سررسید" : "due"} value={arF.v.DueDate} onChange={arF.set("DueDate")} dir="ltr" />
+                <PersianDateInput className={inputCls} title={rtl ? "سررسید" : "due"} value={arF.v.DueDate} onChange={arF.set("DueDate")} dir="ltr" />
                 <button disabled={busy || !arF.v.PartyFa || !arF.v.Amount || !arF.v.DueDate} className={btnPrimary}
                   onClick={async () => { if (await act(() => client.createReceivable({ ...arF.v, Amount: Number(arF.v.Amount) }), rtl ? "مطالبه ثبت شد" : "Receivable added")) arF.reset(); }}>
                   {rtl ? "ثبت مطالبه" : "Add receivable"}
@@ -901,7 +906,7 @@ function Tabs({ rtl, lang, tab, ws, v, perm, busy, client, act }: { rtl: boolean
                 <input className={`${inputCls} w-32`} type="number" placeholder={rtl ? "برآورد" : "estimate"} value={prF.v.EstimatedAmount} onChange={prF.set("EstimatedAmount")} dir="ltr" />
                 <select className={inputCls} value={prF.v.Currency} onChange={prF.set("Currency")} dir="ltr">{currencies.map((c) => <option key={c}>{c}</option>)}</select>
                 <select className={inputCls} value={prF.v.CostAccountCode} onChange={prF.set("CostAccountCode")}><option value="">{rtl ? "حساب…" : "account…"}</option>{accountOptions}</select>
-                <input className={inputCls} type="date" title={rtl ? "تاریخ نیاز" : "need by"} value={prF.v.NeedByDate} onChange={prF.set("NeedByDate")} dir="ltr" />
+                <PersianDateInput className={inputCls} title={rtl ? "تاریخ نیاز" : "need by"} value={prF.v.NeedByDate} onChange={prF.set("NeedByDate")} dir="ltr" />
                 <label className="flex items-center gap-1 text-[9px] tx3"><input type="checkbox" checked={Boolean(prF.v.IsUrgent)} onChange={prF.set("IsUrgent")} />{rtl ? "اضطراری" : "urgent"}</label>
                 <button disabled={busy || !prF.v.TitleFa || !prF.v.Quantity || !prF.v.EstimatedAmount || !prF.v.CostAccountCode} className={btnPrimary}
                   onClick={async () => {
@@ -991,7 +996,7 @@ function Tabs({ rtl, lang, tab, ws, v, perm, busy, client, act }: { rtl: boolean
                 {([["ReceivedQty", "مقدار رسید تجمعی", "received qty"], ["InvoicedQty", "مقدار فاکتور تجمعی", "invoiced qty"], ["InvoiceUnitPrice", "قیمت واحد فاکتور", "invoice unit price"], ["PaidAmount", "پرداخت تجمعی", "paid amount"]] as const).map(([k, fa, en]) => (
                   <label key={k} className="flex flex-col gap-0.5 text-[8.5px] tx3">{rtl ? fa : en}<input className={`${inputCls} w-28`} type="number" value={poEditF.v[k]} onChange={poEditF.set(k)} dir="ltr" /></label>
                 ))}
-                <label className="flex flex-col gap-0.5 text-[8.5px] tx3">{rtl ? "تاریخ تحویل" : "delivered"}<input className={inputCls} type="date" value={poEditF.v.DeliveredDate} onChange={poEditF.set("DeliveredDate")} dir="ltr" /></label>
+                <label className="flex flex-col gap-0.5 text-[8.5px] tx3">{rtl ? "تاریخ تحویل" : "delivered"}<PersianDateInput className={inputCls} value={poEditF.v.DeliveredDate} onChange={poEditF.set("DeliveredDate")} dir="ltr" /></label>
                 <button disabled={busy} className={btnOk}
                   onClick={async () => {
                     const p = ws.pos.find((x) => x.PoNo === poEdit);
@@ -1026,7 +1031,7 @@ function Tabs({ rtl, lang, tab, ws, v, perm, busy, client, act }: { rtl: boolean
                 <input className={`${inputCls} w-28`} type="number" placeholder={rtl ? "قیمت واحد" : "unit price"} value={poF.v.UnitPrice} onChange={poF.set("UnitPrice")} dir="ltr" />
                 <select className={inputCls} value={poF.v.Currency} onChange={poF.set("Currency")} dir="ltr">{currencies.map((c) => <option key={c}>{c}</option>)}</select>
                 <select className={inputCls} value={poF.v.CostAccountCode} onChange={poF.set("CostAccountCode")}><option value="">{rtl ? "حساب…" : "account…"}</option>{accountOptions}</select>
-                <input className={inputCls} type="date" title={rtl ? "تاریخ قول تحویل" : "promised"} value={poF.v.PromisedDate} onChange={poF.set("PromisedDate")} dir="ltr" />
+                <PersianDateInput className={inputCls} title={rtl ? "تاریخ قول تحویل" : "promised"} value={poF.v.PromisedDate} onChange={poF.set("PromisedDate")} dir="ltr" />
                 <button disabled={busy || !poF.v.VendorName || !poF.v.UnitPrice || !poF.v.PromisedDate || !poF.v.Quantity || !poF.v.CostAccountCode} className={btnPrimary}
                   onClick={async () => {
                     if (await act(() => client.createPo({ ...poF.v, PrCode: poF.v.PrCode || null, Quantity: Number(poF.v.Quantity), UnitPrice: Number(poF.v.UnitPrice) }), rtl ? "سفارش خرید صادر شد" : "PO issued", "FIN_PO_ISSUED")) poF.reset();
@@ -1251,7 +1256,7 @@ function ScmTabs({ rtl, tab, scmWs, busy, msg, onClearMsg, client, act }: { rtl:
               <input className={`${inputCls} w-24`} placeholder="VendorCode" value={avlF.VendorCode} onChange={e=>setAvlF({...avlF,VendorCode:e.target.value})} dir="ltr" />
               <input className={`${inputCls} w-24`} placeholder="Discipline" value={avlF.Discipline} onChange={e=>setAvlF({...avlF,Discipline:e.target.value})} dir="ltr" />
               <select className={inputCls} value={avlF.Status} onChange={e=>setAvlF({...avlF,Status:e.target.value})}><option value="approved">approved</option><option value="conditional">conditional</option><option value="blocked">blocked</option></select>
-              <input className={`${inputCls} w-32`} type="date" value={avlF.ApprovedAt} onChange={e=>setAvlF({...avlF,ApprovedAt:e.target.value})} dir="ltr" />
+              <PersianDateInput className={`${inputCls} w-32`} value={avlF.ApprovedAt} onChange={e=>setAvlF({...avlF,ApprovedAt:e.target.value})} dir="ltr" />
               <button disabled={busy||!avlF.VendorCode||!avlF.Discipline} className={btnPrimary} onClick={async()=>{ if(await act(()=>client.createAvl({VendorCode:avlF.VendorCode, Discipline:avlF.Discipline, Status:avlF.Status, ApprovedAt:avlF.ApprovedAt||null}), 'AVL added')) setAvlF({VendorCode:"",Discipline:"",Status:"approved",ApprovedAt:""}); }}>{rtl?"افزودن AVL":"Add AVL"}</button>
             </div>
           </Section>
@@ -1282,7 +1287,7 @@ function ScmTabs({ rtl, tab, scmWs, busy, msg, onClearMsg, client, act }: { rtl:
               <input className={`${inputCls} w-24`} placeholder="KOM-xxx" value={komF.KomNo} onChange={e=>setKomF({...komF,KomNo:e.target.value})} dir="ltr" />
               <input className={`${inputCls} w-24`} placeholder="PO No" value={komF.PoNo} onChange={e=>setKomF({...komF,PoNo:e.target.value})} dir="ltr" />
               <select className={inputCls} value={komF.Type} onChange={e=>setKomF({...komF,Type:e.target.value})}><option value="kom">KOM</option><option value="pim">PIM</option><option value="expediting">expediting</option></select>
-              <input className={`${inputCls} w-28`} type="date" value={komF.MeetingDate} onChange={e=>setKomF({...komF,MeetingDate:e.target.value})} dir="ltr" />
+              <PersianDateInput className={`${inputCls} w-28`} value={komF.MeetingDate} onChange={e=>setKomF({...komF,MeetingDate:e.target.value})} dir="ltr" />
               <button disabled={busy||!komF.KomNo||!komF.MeetingDate} className={btnPrimary} onClick={async()=>{ if(await act(()=>client.createKom({KomNo:komF.KomNo, PoNo:komF.PoNo||null, Type:komF.Type, MeetingDate:komF.MeetingDate}), 'KOM created')) setKomF({KomNo:"",PoNo:"",Type:"kom",MeetingDate:""}); }}>{rtl?"ثبت KOM":"Add KOM"}</button>
             </div>
           </Section>
@@ -1292,7 +1297,7 @@ function ScmTabs({ rtl, tab, scmWs, busy, msg, onClearMsg, client, act }: { rtl:
               <input className={`${inputCls} w-24`} placeholder="PSR-xxx" value={psrF.PsrNo} onChange={e=>setPsrF({...psrF,PsrNo:e.target.value})} dir="ltr" />
               <input className={`${inputCls} w-24`} placeholder="PO No" value={psrF.PoNo} onChange={e=>setPsrF({...psrF,PoNo:e.target.value})} dir="ltr" />
               <input className={`${inputCls} w-16`} type="number" placeholder="%" value={psrF.ProgressPct} onChange={e=>setPsrF({...psrF,ProgressPct:e.target.value})} dir="ltr" />
-              <input className={`${inputCls} w-28`} type="date" value={psrF.ReportDate} onChange={e=>setPsrF({...psrF,ReportDate:e.target.value})} dir="ltr" />
+              <PersianDateInput className={`${inputCls} w-28`} value={psrF.ReportDate} onChange={e=>setPsrF({...psrF,ReportDate:e.target.value})} dir="ltr" />
               <input className={`${inputCls} w-32`} placeholder="status fa" value={psrF.StatusFa} onChange={e=>setPsrF({...psrF,StatusFa:e.target.value})} />
               <button disabled={busy||!psrF.PsrNo||!psrF.ReportDate} className={btnPrimary} onClick={async()=>{ if(await act(()=>client.createPsr({PsrNo:psrF.PsrNo, PoNo:psrF.PoNo||null, ProgressPct:psrF.ProgressPct?Number(psrF.ProgressPct):0, ReportDate:psrF.ReportDate, StatusFa:psrF.StatusFa||null}), 'PSR created')) setPsrF({PsrNo:"",PoNo:"",ProgressPct:"",ReportDate:"",StatusFa:""}); }}>{rtl?"ثبت PSR":"Add PSR"}</button>
             </div>
@@ -1308,8 +1313,8 @@ function ScmTabs({ rtl, tab, scmWs, busy, msg, onClearMsg, client, act }: { rtl:
               <input className={`${inputCls} w-24`} placeholder="INQ-xxx" value={inqF.InquiryNo} onChange={e=>setInqF({...inqF,InquiryNo:e.target.value})} dir="ltr" />
               <input className={`${inputCls} w-24`} placeholder="PKG code" value={inqF.PackageCode} onChange={e=>setInqF({...inqF,PackageCode:e.target.value})} dir="ltr" />
               <input className={`${inputCls} w-32`} placeholder="title" value={inqF.TitleFa} onChange={e=>setInqF({...inqF,TitleFa:e.target.value})} />
-              <input className={`${inputCls} w-28`} type="date" value={inqF.IssueDate} onChange={e=>setInqF({...inqF,IssueDate:e.target.value})} dir="ltr" />
-              <input className={`${inputCls} w-28`} type="date" value={inqF.DueDate} onChange={e=>setInqF({...inqF,DueDate:e.target.value})} dir="ltr" />
+              <PersianDateInput className={`${inputCls} w-28`} value={inqF.IssueDate} onChange={e=>setInqF({...inqF,IssueDate:e.target.value})} dir="ltr" />
+              <PersianDateInput className={`${inputCls} w-28`} value={inqF.DueDate} onChange={e=>setInqF({...inqF,DueDate:e.target.value})} dir="ltr" />
               <button disabled={busy||!inqF.InquiryNo} className={btnPrimary} onClick={async()=>{ if(await act(()=>client.createInquiry({InquiryNo:inqF.InquiryNo, PackageCode:inqF.PackageCode||null, TitleFa:inqF.TitleFa||null, IssueDate:inqF.IssueDate||null, DueDate:inqF.DueDate||null}), 'Inquiry created')) setInqF({InquiryNo:"",PackageCode:"",TitleFa:"",IssueDate:"",DueDate:""}); }}>{rtl?"ثبت استعلام":"Add inquiry"}</button>
             </div>
           </Section>
@@ -1375,7 +1380,7 @@ function ScmTabs({ rtl, tab, scmWs, busy, msg, onClearMsg, client, act }: { rtl:
             <div className="mt-2 flex flex-wrap gap-1.5 rounded-xl border b-line-soft bg-black/10 p-2">
               <input className={`${inputCls} w-24`} placeholder="MRR-xxx" value={mrrF.Code} onChange={e=>setMrrF({...mrrF,Code:e.target.value})} dir="ltr" />
               <input className={`${inputCls} w-24`} placeholder="PO No" value={mrrF.PoNo} onChange={e=>setMrrF({...mrrF,PoNo:e.target.value})} dir="ltr" />
-              <input className={`${inputCls} w-28`} type="date" value={mrrF.ReceivedAt} onChange={e=>setMrrF({...mrrF,ReceivedAt:e.target.value})} dir="ltr" />
+              <PersianDateInput className={`${inputCls} w-28`} value={mrrF.ReceivedAt} onChange={e=>setMrrF({...mrrF,ReceivedAt:e.target.value})} dir="ltr" />
               <input className={`${inputCls} w-16`} type="number" placeholder="Qty" value={mrrF.Quantity} onChange={e=>setMrrF({...mrrF,Quantity:e.target.value})} dir="ltr" />
               <input className={`${inputCls} w-16`} type="number" placeholder="Acc" value={mrrF.AcceptedQty} onChange={e=>setMrrF({...mrrF,AcceptedQty:e.target.value})} dir="ltr" />
               <select className={inputCls} value={mrrF.OpiType} onChange={e=>setMrrF({...mrrF,OpiType:e.target.value})}><option value="none">none</option><option value="over">over</option><option value="short">short</option><option value="damage">damage</option></select>
@@ -1390,7 +1395,7 @@ function ScmTabs({ rtl, tab, scmWs, busy, msg, onClearMsg, client, act }: { rtl:
               <input className={`${inputCls} w-24`} placeholder="INSP-xxx" value={inspF.InspectionNo} onChange={e=>setInspF({...inspF,InspectionNo:e.target.value})} dir="ltr" />
               <input className={`${inputCls} w-24`} placeholder="PO No" value={inspF.PoNo} onChange={e=>setInspF({...inspF,PoNo:e.target.value})} dir="ltr" />
               <select className={inputCls} value={inspF.Type} onChange={e=>setInspF({...inspF,Type:e.target.value})}><option value="factory">factory</option><option value="site">site</option><option value="third_party">third_party</option></select>
-              <input className={`${inputCls} w-28`} type="date" value={inspF.InspectionDate} onChange={e=>setInspF({...inspF,InspectionDate:e.target.value})} dir="ltr" />
+              <PersianDateInput className={`${inputCls} w-28`} value={inspF.InspectionDate} onChange={e=>setInspF({...inspF,InspectionDate:e.target.value})} dir="ltr" />
               <select className={inputCls} value={inspF.Result} onChange={e=>setInspF({...inspF,Result:e.target.value})}><option value="pass">pass</option><option value="fail">fail</option><option value="conditional">conditional</option></select>
               <input className={`${inputCls} w-24`} placeholder="RN-xxx" value={inspF.ReleaseNoteNo} onChange={e=>setInspF({...inspF,ReleaseNoteNo:e.target.value})} dir="ltr" />
               <button disabled={busy||!inspF.InspectionNo||!inspF.InspectionDate} className={btnPrimary} onClick={async()=>{ if(await act(()=>client.createInspection({InspectionNo:inspF.InspectionNo, PoNo:inspF.PoNo||null, Type:inspF.Type, InspectionDate:inspF.InspectionDate, Result:inspF.Result, ReleaseNoteNo:inspF.ReleaseNoteNo||null}), 'Inspection created')) setInspF({InspectionNo:"",PoNo:"",Type:"factory",InspectionDate:"",Result:"pass",ReleaseNoteNo:""}); }}>{rtl?"ثبت بازرسی":"Add insp"}</button>
@@ -1443,7 +1448,7 @@ function ScmTabs({ rtl, tab, scmWs, busy, msg, onClearMsg, client, act }: { rtl:
             <div className="overflow-x-auto"><table className="w-full text-[9.5px]"><thead className="tx3"><tr className="border-b b-line-soft"><Th>MRC No</Th><Th>Required</Th><Th>Status</Th><Th>Lines</Th></tr></thead><tbody>{mrcs.map((m:any)=>{ const ls = mrcLines.filter((l:any)=>l.MrcNo===m.MrcNo); return <tr key={m.MrcNo} className="border-b b-line-soft/50"><td className="px-2 py-1 font-mono tx2" dir="ltr">{m.MrcNo}</td><td className="px-2 py-1 tx3" dir="ltr">{m.RequiredDate??'—'}</td><td className="px-2 py-1 tx3">{m.Status}</td><td className="px-2 py-1 tx3" dir="ltr">{ls.map((l:any)=>`${l.MaterialCode}:${l.Quantity}`).join(', ')||'—'}</td></tr>; })}</tbody></table></div>
             <div className="mt-2 flex flex-wrap gap-1.5 rounded-xl border b-line-soft bg-black/10 p-2">
               <input className={`${inputCls} w-24`} placeholder="MRC-xxx" value={mrcF.MrcNo} onChange={e=>setMrcF({...mrcF,MrcNo:e.target.value})} dir="ltr" />
-              <input className={`${inputCls} w-28`} type="date" value={mrcF.RequiredDate} onChange={e=>setMrcF({...mrcF,RequiredDate:e.target.value})} dir="ltr" />
+              <PersianDateInput className={`${inputCls} w-28`} value={mrcF.RequiredDate} onChange={e=>setMrcF({...mrcF,RequiredDate:e.target.value})} dir="ltr" />
               <input className={`${inputCls} w-20`} placeholder="MAT code" value={mrcF.MaterialCode} onChange={e=>setMrcF({...mrcF,MaterialCode:e.target.value})} dir="ltr" />
               <input className={`${inputCls} w-16`} type="number" placeholder="Qty" value={mrcF.Quantity} onChange={e=>setMrcF({...mrcF,Quantity:e.target.value})} dir="ltr" />
               <button disabled={busy||!mrcF.MrcNo||!mrcF.RequiredDate} className={btnPrimary} onClick={async()=>{ const lines = mrcF.MaterialCode? [{MaterialCode:mrcF.MaterialCode, Quantity:Number(mrcF.Quantity||0)}]: []; if(await act(()=>client.createMrc({MrcNo:mrcF.MrcNo, RequiredDate:mrcF.RequiredDate, Lines:lines}), 'MRC created')) setMrcF({MrcNo:"",RequiredDate:"",MaterialCode:"",Quantity:""}); }}>{rtl?"ثبت MRC":"Add MRC"}</button>
@@ -1457,7 +1462,7 @@ function ScmTabs({ rtl, tab, scmWs, busy, msg, onClearMsg, client, act }: { rtl:
             <div className="mt-2 flex flex-wrap gap-1.5 rounded-xl border b-line-soft bg-black/10 p-2">
               <input className={`${inputCls} w-24`} placeholder="MIV-xxx" value={mivF.MivNo} onChange={e=>setMivF({...mivF,MivNo:e.target.value})} dir="ltr" />
               <input className={`${inputCls} w-20`} placeholder="WH" value={mivF.WarehouseCode} onChange={e=>setMivF({...mivF,WarehouseCode:e.target.value})} dir="ltr" />
-              <input className={`${inputCls} w-28`} type="date" value={mivF.IssuedAt} onChange={e=>setMivF({...mivF,IssuedAt:e.target.value})} dir="ltr" />
+              <PersianDateInput className={`${inputCls} w-28`} value={mivF.IssuedAt} onChange={e=>setMivF({...mivF,IssuedAt:e.target.value})} dir="ltr" />
               <input className={`${inputCls} w-20`} placeholder="MAT" value={mivF.MaterialCode} onChange={e=>setMivF({...mivF,MaterialCode:e.target.value})} dir="ltr" />
               <input className={`${inputCls} w-16`} type="number" placeholder="Qty" value={mivF.Quantity} onChange={e=>setMivF({...mivF,Quantity:e.target.value})} dir="ltr" />
               <button disabled={busy||!mivF.MivNo||!mivF.WarehouseCode||!mivF.IssuedAt} className={btnPrimary} onClick={async()=>{ const lines = mivF.MaterialCode? [{MaterialCode:mivF.MaterialCode, Quantity:Number(mivF.Quantity||0)}]: []; if(await act(()=>client.createMiv({MivNo:mivF.MivNo, WarehouseCode:mivF.WarehouseCode, IssuedAt:mivF.IssuedAt, Lines:lines}), 'MIV created')) setMivF({MivNo:"",WarehouseCode:"",IssuedAt:"",MaterialCode:"",Quantity:""}); }}>{rtl?"ثبت MIV":"Add MIV"}</button>
@@ -1465,7 +1470,7 @@ function ScmTabs({ rtl, tab, scmWs, busy, msg, onClearMsg, client, act }: { rtl:
             <div className="mt-2 flex flex-wrap gap-1.5 rounded-xl border b-line-soft bg-black/10 p-2">
               <input className={`${inputCls} w-24`} placeholder="MRV-xxx" value={mrvF.MrvNo} onChange={e=>setMrvF({...mrvF,MrvNo:e.target.value})} dir="ltr" />
               <input className={`${inputCls} w-20`} placeholder="WH" value={mrvF.WarehouseCode} onChange={e=>setMrvF({...mrvF,WarehouseCode:e.target.value})} dir="ltr" />
-              <input className={`${inputCls} w-28`} type="date" value={mrvF.ReturnedAt} onChange={e=>setMrvF({...mrvF,ReturnedAt:e.target.value})} dir="ltr" />
+              <PersianDateInput className={`${inputCls} w-28`} value={mrvF.ReturnedAt} onChange={e=>setMrvF({...mrvF,ReturnedAt:e.target.value})} dir="ltr" />
               <input className={`${inputCls} w-20`} placeholder="MIV ref" value={mrvF.MivNo} onChange={e=>setMrvF({...mrvF,MivNo:e.target.value})} dir="ltr" />
               <button disabled={busy||!mrvF.MrvNo||!mrvF.WarehouseCode||!mrvF.ReturnedAt} className={btnPrimary} onClick={async()=>{ if(await act(()=>client.createMrv({MrvNo:mrvF.MrvNo, WarehouseCode:mrvF.WarehouseCode, ReturnedAt:mrvF.ReturnedAt, MivNo:mrvF.MivNo||null}), 'MRV created')) setMrvF({MrvNo:"",WarehouseCode:"",ReturnedAt:"",MivNo:""}); }}>{rtl?"ثبت MRV":"Add MRV"}</button>
             </div>
@@ -1478,7 +1483,7 @@ function ScmTabs({ rtl, tab, scmWs, busy, msg, onClearMsg, client, act }: { rtl:
               <input className={`${inputCls} w-20`} placeholder="To WH" value={trfF.ToWarehouse} onChange={e=>setTrfF({...trfF,ToWarehouse:e.target.value})} dir="ltr" />
               <input className={`${inputCls} w-20`} placeholder="MAT" value={trfF.MaterialCode} onChange={e=>setTrfF({...trfF,MaterialCode:e.target.value})} dir="ltr" />
               <input className={`${inputCls} w-16`} type="number" placeholder="Qty" value={trfF.Quantity} onChange={e=>setTrfF({...trfF,Quantity:e.target.value})} dir="ltr" />
-              <input className={`${inputCls} w-28`} type="date" value={trfF.TransferredAt} onChange={e=>setTrfF({...trfF,TransferredAt:e.target.value})} dir="ltr" />
+              <PersianDateInput className={`${inputCls} w-28`} value={trfF.TransferredAt} onChange={e=>setTrfF({...trfF,TransferredAt:e.target.value})} dir="ltr" />
               <button disabled={busy||!trfF.TransferNo||!trfF.FromWarehouse||!trfF.ToWarehouse||!trfF.MaterialCode||!trfF.Quantity||!trfF.TransferredAt} className={btnPrimary} onClick={async()=>{ if(await act(()=>client.createTransfer({TransferNo:trfF.TransferNo, FromWarehouse:trfF.FromWarehouse, ToWarehouse:trfF.ToWarehouse, MaterialCode:trfF.MaterialCode, Quantity:Number(trfF.Quantity), TransferredAt:trfF.TransferredAt}), 'Transfer created')) setTrfF({TransferNo:"",FromWarehouse:"",ToWarehouse:"",MaterialCode:"",Quantity:"",TransferredAt:""}); }}>{rtl?"ثبت انتقال":"Add transfer"}</button>
             </div>
           </Section>

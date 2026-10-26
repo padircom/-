@@ -209,6 +209,7 @@ export function ScmWarehousesPanel({ fa, userId, client, data, loading, error, r
 
   return (
     <CrudResource<ScmWarehouseRow>
+      persianDates
       fa={fa}
       caption={tr("انبارها", "Warehouses")}
       rows={rows}
@@ -257,6 +258,7 @@ export function ScmCatalogPanel({ fa, userId, client, data, loading, error, relo
 
   return (
     <CrudResource<ScmCatalogRow>
+      persianDates
       fa={fa}
       caption={tr("کاتالوگ کالا", "Material catalog")}
       rows={rows}
@@ -305,6 +307,7 @@ export function ScmBalancesPanel({ fa, userId, client, data, loading, error, rel
 
   return (
     <CrudResource<ScmBalanceRow>
+      persianDates
       fa={fa}
       caption={tr("مانده موجودی", "Stock balances")}
       rows={rows}
@@ -363,6 +366,7 @@ export function ScmMrsPanel({ fa, userId, client, data, loading, error, reload }
 
   return (
     <CrudResource<ScmMrRow>
+      persianDates
       fa={fa}
       caption={tr("درخواست‌های مواد (MR)", "Material requests (MR)")}
       rows={rows}
@@ -429,6 +433,7 @@ export function ScmVendorsPanel({ fa, userId, client, data, loading, error, relo
 
   return (
     <CrudResource<ScmVendorRow>
+      persianDates
       fa={fa}
       caption={tr("فروشندگان و تأمین‌کنندگان", "Vendors")}
       rows={rows}
@@ -557,6 +562,7 @@ export function ScmAvlPanel({ fa, userId, client, data, loading, error, reload }
 
   return (
     <CrudResource<ScmAvlRow>
+      persianDates
       fa={fa}
       caption={tr("فهرست تأمین‌کنندگان تأییدشده (AVL)", "Approved vendor list (AVL)")}
       rows={rows}
@@ -634,6 +640,7 @@ export function ScmPackagesPanel({ fa, userId, client, data, loading, error, rel
 
   return (
     <CrudResource<ScmPackageRow>
+      persianDates
       fa={fa}
       caption={tr("بسته‌های خرید", "Procurement packages")}
       rows={rows}
@@ -715,6 +722,7 @@ export function ScmPackageMrLinksPanel({ fa, userId, client, data, loading, erro
 
   return (
     <CrudResource<ScmPackageMrLinkRow>
+      persianDates
       fa={fa}
       caption={tr("پیوند MR به بستهٔ خرید", "Package ↔ MR links")}
       rows={rows}
@@ -797,6 +805,7 @@ export function ScmInquiriesPanel({ fa, userId, client, data, loading, error, re
 
   return (
     <CrudResource<ScmInquiryRow>
+      persianDates
       fa={fa}
       caption={tr("بسته‌های استعلام", "Inquiry packages")}
       rows={rows}
@@ -864,6 +873,7 @@ export function ScmBiddersPanel({ fa, userId, client, data, loading, error, relo
 
   return (
     <CrudResource<ScmBidderRow>
+      persianDates
       fa={fa}
       caption={tr("فهرست مناقصه‌گران (LBL/SBL)", "Bidder lists (LBL/SBL)")}
       rows={rows}
@@ -981,6 +991,7 @@ export function ScmInvitationsPanel({ fa, userId, client, data, loading, error, 
 
   return (
     <CrudResource<ScmInvitationRow>
+      persianDates
       fa={fa}
       caption={tr("دعوت‌نامه‌ها", "Invitations")}
       rows={rows}
@@ -1069,6 +1080,7 @@ export function ScmMrChangesPanel({ fa, userId, client, data, loading, error, re
 
   return (
     <CrudResource<ScmMrChangeRow>
+      persianDates
       fa={fa}
       caption={tr("لاگ تغییرات MR", "MR change log")}
       rows={rows}
@@ -1142,6 +1154,7 @@ export function ScmKomsPanel({ fa, userId, client, data, loading, error, reload 
 
   return (
     <CrudResource<ScmKomRow>
+      persianDates
       fa={fa}
       caption={tr("جلسات KOM/PIM و Expediting", "KOM/PIM & expediting meetings")}
       rows={rows}
@@ -1194,6 +1207,7 @@ export function ScmPsrPanel({ fa, userId, client, data, loading, error, reload }
 
   return (
     <CrudResource<ScmPsrRow>
+      persianDates
       fa={fa}
       caption={tr("گزارش پیشرفت خرید (PSR)", "Procurement status reports (PSR)")}
       rows={rows}
@@ -1252,6 +1266,7 @@ export function ScmProposalsPanel({ fa, userId, client, data, loading, error, re
 
   return (
     <CrudResource<ScmProposalRow>
+      persianDates
       fa={fa}
       caption={tr("پیشنهادهای فنی/بازرگانی", "Technical & commercial proposals")}
       rows={rows}
@@ -1318,6 +1333,7 @@ export function ScmClarificationsPanel({ fa, data, loading, error, reload }: Scm
 
   return (
     <CrudResource<ScmClarificationRow>
+      persianDates
       fa={fa}
       caption={tr("شفاف‌سازی‌ها", "Clarifications")}
       rows={rows}
@@ -1361,6 +1377,7 @@ export function ScmEvaluationsPanel({ fa, userId, client, data, loading, error, 
 
   return (
     <CrudResource<ScmEvaluationRow>
+      persianDates
       fa={fa}
       caption={tr("ارزیابی‌ها (TBE/TBA/CBE)", "Evaluations (TBE/TBA/CBE)")}
       rows={rows}
@@ -1414,6 +1431,7 @@ export function ScmBidReportsPanel({ fa, userId, client, data, loading, error, r
 
   return (
     <CrudResource<ScmBidReportRow>
+      persianDates
       fa={fa}
       caption={tr("گزارش‌های مناقصه (Bid Report)", "Bid reports")}
       rows={rows}
@@ -1466,6 +1484,7 @@ export function ScmMrcsPanel({ fa, userId, client, data, loading, error, reload 
 
   return (
     <CrudResource<ScmMrcRow>
+      persianDates
       fa={fa}
       caption={tr("درخواست‌های مصرف انبار (MRC)", "Material requisitions (MRC)")}
       rows={rows}
@@ -1525,6 +1544,7 @@ export function ScmMrcLinesPanel({ fa, data, loading, error, reload }: ScmPanelP
 
   return (
     <CrudResource<ScmMrcLineRow>
+      persianDates
       fa={fa}
       caption={tr("اقلام MRC", "MRC lines")}
       rows={rows}
@@ -1568,6 +1588,7 @@ export function ScmMivsPanel({ fa, userId, client, data, loading, error, reload 
 
   return (
     <CrudResource<ScmMivRow>
+      persianDates
       fa={fa}
       caption={tr("حواله‌های مصرف (MIV)", "Goods issue notes (MIV)")}
       rows={rows}
@@ -1625,6 +1646,7 @@ export function ScmMivLinesPanel({ fa, data, loading, error, reload }: ScmPanelP
 
   return (
     <CrudResource<ScmMivLineRow>
+      persianDates
       fa={fa}
       caption={tr("اقلام حواله", "Issue lines")}
       rows={rows}
@@ -1665,6 +1687,7 @@ export function ScmMrvsPanel({ fa, userId, client, data, loading, error, reload 
 
   return (
     <CrudResource<ScmMrvRow>
+      persianDates
       fa={fa}
       caption={tr("مرجوعی‌ها (MRV)", "Material return vouchers (MRV)")}
       rows={rows}
@@ -1719,6 +1742,7 @@ export function ScmTransfersPanel({ fa, userId, client, data, loading, error, re
 
   return (
     <CrudResource<ScmTransferRow>
+      persianDates
       fa={fa}
       caption={tr("انتقال بین انبارها", "Stock transfers")}
       rows={rows}
@@ -1785,6 +1809,7 @@ export function ScmMrrsPanel({ fa, userId, client, data, loading, error, reload 
 
   return (
     <CrudResource<ScmMrrRow>
+      persianDates
       fa={fa}
       caption={tr("رسیدهای مواد (MRR/OPI)", "Material receiving (MRR/OPI)")}
       rows={rows}
@@ -1907,6 +1932,7 @@ export function ScmInspectionsPanel({ fa, userId, client, data, loading, error, 
 
   return (
     <CrudResource<ScmInspectionRow>
+      persianDates
       fa={fa}
       caption={tr("بازرسی و Release Note", "Inspections & release notes")}
       rows={rows}
@@ -1961,6 +1987,7 @@ export function ScmShipmentsPanel({ fa, userId, client, data, loading, error, re
 
   return (
     <CrudResource<ScmShipmentRow>
+      persianDates
       fa={fa}
       caption={tr("حمل و ترخیص", "Shipments & customs")}
       rows={rows}

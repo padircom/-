@@ -1,3 +1,4 @@
+import PersianDateInput from "./PersianDateInput";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { type Lang } from "../data/framework";
 import { useAuth } from "../context/AuthContext";
@@ -985,8 +986,7 @@ function TimesheetTab({ rtl, userId }: { rtl: boolean; userId: string }) {
         <div className="mb-2 flex flex-wrap items-center gap-2">
           <label className="flex items-center gap-1.5">
             <span className="text-[8.5px] font-extralight tx4">{rtl ? "تاریخ" : "Date"}</span>
-            <input
-              type="date"
+            <PersianDateInput
               value={workDate}
               onChange={(e) => { setWorkDate(e.target.value); setDetail(null); setSelected(""); }}
               className="rounded-md border b-line-soft bg-transparent px-2 py-1 text-[9.5px] font-light tx1"
@@ -1995,8 +1995,7 @@ function CrewTab({ rtl, userId }: { rtl: boolean; userId: string }) {
         <div className="mb-2 flex flex-wrap items-center gap-2">
           <label className="flex items-center gap-1.5">
             <span className="text-[8.5px] font-extralight tx4">{rtl ? "تاریخ" : "Date"}</span>
-            <input
-              type="date"
+            <PersianDateInput
               value={onDate}
               onChange={(e) => setOnDate(e.target.value)}
               className="rounded-md border b-line-soft bg-transparent px-2 py-1 text-[9.5px] font-light tx1"

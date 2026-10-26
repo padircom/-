@@ -1,3 +1,4 @@
+import PersianDateInput from "./PersianDateInput";
 import { useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import type { Lang } from '../data/framework';
@@ -105,7 +106,7 @@ export default function ContractAmendmentsPanel({ lang, projectId, contractId, o
         <h5 className="mb-2 text-[11px] font-semibold tx1">{editing ? tr('ویرایش پیش‌نویس الحاقیه', 'Edit amendment draft') : tr('ثبت پیش‌نویس الحاقیه', 'New amendment draft')}</h5>
         <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
           {([['Code', tr('کد الحاقیه', 'Amendment code'), 'text', 40], ['TitleFa', tr('موضوع الحاقیه', 'Amendment subject'), 'text', 400], ['EffectiveDate', tr('تاریخ اثر', 'Effective date'), 'date', undefined], ['DocumentRef', tr('مرجع سند پشتیبان', 'Supporting document reference'), 'text', 200], ['AmountDelta', tr('تغییر مبلغ (ریال؛ کاهش منفی)', 'Amount delta (IRR; negative for decrease)'), 'number', undefined], ['DurationDeltaDays', tr('تغییر مدت (روز؛ کاهش منفی)', 'Duration delta (days; negative for decrease)'), 'number', undefined], ['LinkedCrCode', tr('کد تغییر مرتبط (اختیاری)', 'Linked change code (optional)'), 'text', 40]] as const).map(([key, label, type, max]) => <label key={key} className="text-[10px] tx3">
-            {label}<input name={key} type={type} required={!['AmountDelta', 'DurationDeltaDays', 'LinkedCrCode'].includes(key)} maxLength={max} step={key === 'AmountDelta' ? '0.01' : '1'} value={form[key]} onChange={e => setForm(p => ({ ...p, [key]: e.target.value }))} className={inputCls} />
+            {label}{type === 'date' ? <PersianDateInput name={key} required={!['AmountDelta', 'DurationDeltaDays', 'LinkedCrCode'].includes(key)} value={form[key]} onChange={e => setForm(p => ({ ...p, [key]: e.target.value }))} className={inputCls} /> : <input name={key} type={type} required={!['AmountDelta', 'DurationDeltaDays', 'LinkedCrCode'].includes(key)} maxLength={max} step={key === 'AmountDelta' ? '0.01' : '1'} value={form[key]} onChange={e => setForm(p => ({ ...p, [key]: e.target.value }))} className={inputCls} /> }
           </label>)}
           <label className="text-[10px] tx3">{tr('نوع الحاقیه', 'Amendment type')}<select value={form.AmendmentType} onChange={e => setForm(p => ({ ...p, AmendmentType: e.target.value }))} className={inputCls}>
             {Object.entries({ amount: tr('مبلغ', 'Amount'), duration: tr('مدت', 'Duration'), scope: tr('دامنه', 'Scope'), rate: tr('نرخ', 'Rate') }).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
