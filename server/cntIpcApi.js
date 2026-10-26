@@ -16,12 +16,13 @@ import {
   IPC_TEMPLATE_FIELDS,
   normalizeIpcTemplate,
   normalizeIpcInputs,
-  computeIpc,
+  computeTemplateIpc,
   ipcTransition,
   templateTransition,
   cntIpcMetrics,
   todayIso,
   CntValidationError,
+  templateRunningBaseWarningsFa,
 } from "./cntIpcLogic.js";
 
 export const CNT_IPC_TABLES = ["CntIpcTemplate", "CntIpcCertificate"];
@@ -154,7 +155,12 @@ export function registerCntIpcRoutes(app, { repo, subjects, evaluate } = {}) {
     }
     return fallback;
   };
-  const templateView = (row) => ({ ...row, Items: jsonOf(row.ItemsJson, []), Deductions: jsonOf(row.DeductionsJson, []) });
+  const templateView = (row) => {
+    const Deductions = jsonOf(row.DeductionsJson, []);
+    /* هشدار غیرمسدودکننده: مبنای «running» برای قالب‌های تازه منسوخ است
+     * (ADR-CNT-IPC-UNIFY فاز ۳ / بند ۲) — قالب‌های قدیمی همچنان کار می‌کنند. */
+    return { ...row, Items: jsonOf(row.ItemsJson, []), Deductions, DeprecationWarningsFa: templateRunningBaseWarningsFa(Deductions) };
+  };
   const certificateView = (row) => ({
     ...row,
     Inputs: jsonOf(row.InputsJson, []),
@@ -251,8 +257,19 @@ export function registerCntIpcRoutes(app, { repo, subjects, evaluate } = {}) {
     return ok(req, res, templateView(saved));
   }));
 
-  /* ── صورت‌وضعیت دوره ── */
+  /* ── صورت‌وضعیت دوره ──
+   * بند ۳ ADR-CNT-IPC-UNIFY فاز ۳: پس از مهاجرت دادهٔ واقعی با
+   * scripts/migrate-cntipc-to-core.mjs و گزارش اختلافِ صفر، مسیر ثبت/گذار
+   * این جدول با متغیر محیطی CNT_IPC_REGISTRATION_CLOSED=1 بسته و جدول
+   * فقط‌خواندنی می‌شود؛ پیش‌فرض باز است تا تا پیش از مهاجرت واقعی، داده و
+   * آزمون‌های موجود این موتور نشکنند. */
+  function closedIfMigrated() {
+    if (String(process.env.CNT_IPC_REGISTRATION_CLOSED || "") !== "1") return null;
+    throw new CntError(410, "E-CNT-IPC-CLOSED", "ثبت CNT-1 پس از مهاجرت به هستهٔ BOQمحور بسته شده است؛ از صورت‌وضعیت هسته (ContractMaster/InterimPaymentCertificate) استفاده کنید");
+  }
+
   app.post(`${base}/certificates`, need("cnt.ipc.prepare"), route(async (req, res, r, pid) => {
+    closedIfMigrated();
     const body = bodyOf(req);
     rejectForeign(body, ["TemplateCode", "PeriodNo", "PeriodFrom", "PeriodTo", "Currency", "Inputs", "NoteFa"]);
     const templateCode = String(body.TemplateCode || "");
@@ -270,7 +287,7 @@ export function registerCntIpcRoutes(app, { repo, subjects, evaluate } = {}) {
       throw conflict("E-CNT-IPC-DUPLICATE", `صورت‌وضعیت دورهٔ ${periodNo} برای قالب ${templateCode} قبلاً ثبت شده است`);
     }
     const inputs = normalizeIpcInputs(body.Inputs ?? []);
-    const computation = computeIpc(templateView2, inputs);
+    const computation = computeTemplateIpc(templateView2, inputs);
     if (computation.flags.noRows) throw bad("E-CNT-IPC-VALIDATION", "صورت‌وضعیت بدون ردیف محاسبه‌شده معنا ندارد؛ ورودی حداقل یک ردیف لازم دارد");
     if (computation.flags.negativeNet) throw bad("E-CNT-IPC-VALIDATION", "ماندهٔ خالص منفی است؛ مبلغ کسورات بیش از کارکرد است");
     const row = await r.create("CntIpcCertificate", {
@@ -289,6 +306,7 @@ export function registerCntIpcRoutes(app, { repo, subjects, evaluate } = {}) {
   }));
 
   app.post(`${base}/certificates/:id/transition`, route(async (req, res, r, pid) => {
+    closedIfMigrated();
     if (!ID_RE.test(String(req.params.id))) throw bad("E-CNT-IPC-FIELD", "شناسهٔ صورت‌وضعیت نامعتبر است");
     const body = bodyOf(req);
     const action = String(body.action || "");
@@ -309,7 +327,7 @@ export function registerCntIpcRoutes(app, { repo, subjects, evaluate } = {}) {
       if (Number(template.Version ?? 0) !== Number(row.TemplateVersion ?? 0)) {
         throw conflict("E-CNT-IPC-STALE", `نسخهٔ قالب از ${row.TemplateVersion} به ${template.Version} رفته است؛ صورت‌وضعیت را دوباره تهیه کنید`);
       }
-      recomputed = computeIpc(templateView(template), normalizeIpcInputs(jsonOf(row.InputsJson, [])));
+      recomputed = computeTemplateIpc(templateView(template), normalizeIpcInputs(jsonOf(row.InputsJson, [])));
       if (recomputed.flags.noRows) throw conflict("E-CNT-IPC-EMPTY", "صورت‌وضعیت ردیف محاسبه‌شده ندارد؛ دوباره تهیه کنید");
       if (recomputed.netAmount !== Number(row.NetAmount)) {
         throw conflict("E-CNT-IPC-STALE", "مبلغ ذخیره‌شده با محاسبهٔ فعلی نمی‌خواند؛ صورت‌وضعیت را دوباره تهیه کنید");
@@ -340,7 +358,7 @@ export function registerCntIpcRoutes(app, { repo, subjects, evaluate } = {}) {
     const body = bodyOf(req);
     rejectForeign(body, ["TemplateCode", "Inputs"]);
     const template = await publishedTemplateOrFail(r, pid, String(body.TemplateCode || ""));
-    const computation = computeIpc(templateView(template), normalizeIpcInputs(body.Inputs ?? []));
+    const computation = computeTemplateIpc(templateView(template), normalizeIpcInputs(body.Inputs ?? []));
     /* قالب و نسخه‌اش هم برگردانده می‌شود: پیش‌نمایش باید بگوید با کدام نسخه
        محاسبه شده و همان نسخه مبنای سند ذخیره‌شده خواهد بود. */
     return ok(req, res, { computation, template: templateView(template), asOf: todayIso() });

@@ -7048,6 +7048,116 @@ app.get("/api/cnt/boq/rollup", async (req, res, next) => {
  * ردیف‌های فهرست بها، کارکرد تجمعی دورهٔ قبل، و ماندهٔ پیش‌پرداخت از سه
  * جای مختلف می‌آیند. اگر هرکدام جدا خوانده شود، محاسبه با دادهٔ ناهمگام
  * انجام می‌شود. */
+/**
+ * دروازهٔ کیفی ردیف صورت‌وضعیت — سمت سرور (ADR-CNT-IPC-UNIFY فاز ۳ / بند ۱).
+ *
+ * قبلاً `qualityGateStatus` هر ردیفِ ادعا مستقیماً از کلاینت خوانده می‌شد؛
+ * یعنی هر کلاینتی می‌توانست با فرستادن «passed» دروازه را دور بزند. حالا
+ * این مقدار از ریزمتره و وضعیت تازهٔ بازرسی/عدم‌انطباق *همان لحظه* مشتق
+ * می‌شود، نه از چیزی که در لحظهٔ ثبت ریزمتره معتبر بود — یک عدم‌انطباق که
+ * بعد از ثبت ریزمتره باز شده باید همین‌جا صورت‌وضعیت را ببندد.
+ *
+ * زنجیرهٔ ردیابی: `MeasurementSheet.InspectionRecordCode` (ثبت‌شده در مسیر
+ * ریزمتره) → `InspectionRecord.ActivityId` → عدم انطباق باز روی همان فعالیت.
+ * ریزمتره‌ای که هرگز به بازرسی گره نخورده (مسیر ثبت ریزمتره اختیاری است و
+ * دروازه را فقط با activityId/inspectionRecordCode/ncrCode اجرا می‌کند)
+ * اینجا هم همان رفتار را دارد: بدون مدرکِ مخالف، مسدود نمی‌شود — نه اینکه
+ * بدون مدرک رد شود.
+ *
+ * دورزدن فقط با مجوز `cnt.ipc.override` و دلیل الزامی ممکن است؛ نتیجه در
+ * `IPC_LineItem.OverrideBy` / `OverrideReasonFa` ثبت می‌شود.
+ */
+async function cntIpcLineGate(r, req, projectId, boqItemId, claimLine) {
+  const wantsOverride = Boolean(claimLine?.override);
+  let override = null;
+  if (wantsOverride) {
+    const subject = req.cntSubject ?? engSubject(req);
+    const verdict = subject ? rbacEvaluate(subject, "cnt.ipc.override", { projectId }) : { allow: false };
+    if (!verdict.allow) {
+      return {
+        error: {
+          code: "E-CNT-OVERRIDE-FORBIDDEN",
+          message: "دور زدن دروازهٔ کیفی نیازمند مجوز cnt.ipc.override است",
+          status: 403,
+        },
+      };
+    }
+    if (!claimLine.overrideReasonFa) {
+      return {
+        error: {
+          code: "CNT-OVERRIDE-REASON-REQUIRED",
+          message: `دلیل دور زدن دروازهٔ کیفی ردیف «${boqItemId}» الزامی است`,
+          status: 422,
+        },
+      };
+    }
+    override = { by: String(req.headers["x-user-id"] || "system"), reasonFa: String(claimLine.overrideReasonFa) };
+  }
+
+  const sheets = await r
+    .list("MeasurementSheet", {
+      where: [
+        { column: "ProjectId", op: "eq", value: projectId },
+        { column: "BoqItemId", op: "eq", value: boqItemId },
+      ],
+      limit: 2000,
+    })
+    .catch(() => []);
+  const latestWithIr = sheets
+    .filter((s) => s.InspectionRecordCode)
+    .sort((a, b2) => (Number(b2.SheetNo) || 0) - (Number(a.SheetNo) || 0))[0];
+  const inspectionRecordCode = latestWithIr ? String(latestWithIr.InspectionRecordCode) : null;
+
+  if (!inspectionRecordCode) {
+    if (override) {
+      return {
+        gate: {
+          status: "overridden",
+          passed: true,
+          code: "CNT-GATE-OVERRIDE",
+          messageFa: `دروازهٔ کیفی با مجوز ${override.by} دور زده شد: ${override.reasonFa}`,
+        },
+        override,
+      };
+    }
+    return {
+      gate: {
+        status: "passed",
+        passed: true,
+        code: null,
+        messageFa: "ریزمترهٔ گره‌خورده به بازرسی برای این ردیف ثبت نشده؛ دروازه اجرا نشد",
+      },
+      override: null,
+    };
+  }
+
+  const inspection = await r
+    .findOne("InspectionRecord", [
+      { column: "ProjectId", op: "eq", value: projectId },
+      { column: "Code", op: "eq", value: inspectionRecordCode },
+    ])
+    .catch(() => null);
+  const activityId = inspection?.ActivityId ? String(inspection.ActivityId) : null;
+
+  let openNcrActivityIds = [];
+  if (activityId) {
+    const ncrs = await r
+      .list("Ncr", { where: [{ column: "ProjectId", op: "eq", value: projectId }], limit: 20000 })
+      .catch(() => []);
+    const isOpen = (n) => n.Status && !["closed", "verified", "cancelled"].includes(String(n.Status));
+    openNcrActivityIds = ncrs.filter(isOpen).map((n) => n.ActivityId).filter(Boolean);
+  }
+
+  const gate = qualityGate({
+    activityId,
+    inspectionRecordCode,
+    inspections: inspection ? [{ Code: String(inspection.Code), ActivityId: activityId, Outcome: inspection.Outcome }] : [],
+    openNcrActivityIds,
+    override,
+  });
+  return { gate, override: gate.status === "overridden" ? override : null };
+}
+
 async function cntIpcContext(r, projectId, contractId, excludeIpcId) {
   const [contract, boq, allIpcs, advances] = await Promise.all([
     r.findOne("ContractMaster", [
@@ -7121,10 +7231,16 @@ app.post("/api/cnt/ipc/preview", cntRequire("cnt.ipc.prepare"), cntProjectAccess
 
     const claims = Array.isArray(b.lines) ? b.lines : [];
     const lines = [];
+    const gatesByBoq = {};
     for (const claim of claims) {
       const item = ctx.boq.find((x) => String(x.Id) === String(claim.boqItemId));
       if (!item) continue;
       const prev = ctx.prevByBoq.get(String(item.Id)) ?? { qty: 0, pct: 0 };
+      /* qualityGateStatus دیگر از کلاینت خوانده نمی‌شود — از ریزمتره/بازرسی
+       * همین لحظه مشتق می‌شود (ADR-CNT-IPC-UNIFY فاز ۳ / بند ۱). */
+      const resolved = await cntIpcLineGate(r, req, projectId, String(item.Id), claim);
+      if (resolved.error) return cntBad(req, res, resolved.error.code, resolved.error.message, resolved.error.status);
+      gatesByBoq[String(item.Id)] = resolved.gate;
       lines.push({
         BoqItemId: String(item.Id),
         PricingBasis: item.PricingBasis,
@@ -7135,7 +7251,7 @@ app.post("/api/cnt/ipc/preview", cntRequire("cnt.ipc.prepare"), cntProjectAccess
         cumQty: claim.cumQty,
         prevPct: prev.pct,
         cumPct: claim.cumPct,
-        QualityGateStatus: claim.qualityGateStatus || "passed",
+        QualityGateStatus: resolved.gate.status,
         Status: claim.status,
       });
     }
@@ -7167,6 +7283,7 @@ app.post("/api/cnt/ipc/preview", cntRequire("cnt.ipc.prepare"), cntProjectAccess
       ...totals,
       ceiling,
       advanceOutstanding: ctx.advanceOutstanding,
+      qualityGates: gatesByBoq,
     }));
   } catch (err) { next(err); }
 });
@@ -7212,8 +7329,13 @@ app.post("/api/cnt/ipc", cntRequire("cnt.ipc.prepare"), cntProjectAccess("cnt.ip
       const item = ctx.boq.find((x) => String(x.Id) === String(claim.boqItemId));
       if (!item) { unknown.push(String(claim.boqItemId)); continue; }
       const prev = ctx.prevByBoq.get(String(item.Id)) ?? { qty: 0, pct: 0 };
+      /* qualityGateStatus دیگر از کلاینت خوانده نمی‌شود — از ریزمتره/بازرسی
+       * همین لحظه مشتق می‌شود (ADR-CNT-IPC-UNIFY فاز ۳ / بند ۱). */
+      const resolved = await cntIpcLineGate(r, req, projectId, String(item.Id), claim);
+      if (resolved.error) return cntBad(req, res, resolved.error.code, resolved.error.message, resolved.error.status);
       lines.push({
         _item: item,
+        _override: resolved.override,
         BoqItemId: String(item.Id),
         PricingBasis: item.PricingBasis,
         UnitRate: item.UnitRate,
@@ -7223,7 +7345,7 @@ app.post("/api/cnt/ipc", cntRequire("cnt.ipc.prepare"), cntProjectAccess("cnt.ip
         cumQty: claim.cumQty,
         prevPct: prev.pct,
         cumPct: claim.cumPct,
-        QualityGateStatus: claim.qualityGateStatus || "passed",
+        QualityGateStatus: resolved.gate.status,
         Status: claim.status,
       });
     }
@@ -7291,6 +7413,8 @@ app.post("/api/cnt/ipc", cntRequire("cnt.ipc.prepare"), cntProjectAccess("cnt.ip
         EarnedCurrent: line.included ? line.earnedCurrent : 0,
         EarnedCumulative: line.included ? line.earnedCumulative : 0,
         QualityGateStatus: src?.QualityGateStatus || "passed",
+        OverrideBy: src?._override?.by ?? null,
+        OverrideReasonFa: src?._override?.reasonFa ?? null,
         Status: line.included ? "claimed" : "rejected",
       }, userId, "IPCL");
     }

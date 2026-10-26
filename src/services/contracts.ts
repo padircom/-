@@ -634,9 +634,7 @@ export const RATE_STATUS_FA: Record<string, string> = {
 export const IPC_WORKFLOW_FA: Record<string, string> = {
   draft: "پیش‌نویس",
   contractor_submitted: "ارسال پیمانکار",
-  consultant_review: "بررسی مشاور",
   consultant_approved: "تأیید مشاور",
-  employer_review: "بررسی کارفرما",
   approved: "مصوب",
   rejected: "رد شده",
   paid: "پرداخت‌شده",
@@ -652,12 +650,19 @@ export const GUARANTEE_TYPE_FA: Record<string, string> = {
 
 /* ══════════════════════ ۱۰. موتور صورت‌وضعیت (D4) ══════════════════════ */
 
+/**
+ * `consultant_review` و `employer_review` در این نام‌فضا عمداً حذف شدند
+ * (ADR-CNT-IPC-UNIFY فاز ۳ / بند ۵): در ماشین حالت واقعی زیر، هیچ گذاری
+ * به یا از این دو حالت وجود نداشت — فقط در این نوع و در `IPC_WORKFLOW_FA`
+ * تعریف شده بودند بدون آنکه هرگز رخ دهند. تأیید/بررسی مشاور و کارفرما در
+ * عمل آنی است (همان اقدام `approve` هم بررسی و هم تأیید را ثبت می‌کند)،
+ * پس حالت میانیِ «در حال بررسی» واقعیتی در گردش ندارد. نگه‌داشتن تعریفِ
+ * بلااستفاده باعث می‌شد مصرف‌کننده‌ای تصور کند این حالت‌ها قابل‌دریافت‌اند.
+ */
 export type IpcWorkflowState =
   | "draft"
   | "contractor_submitted"
-  | "consultant_review"
   | "consultant_approved"
-  | "employer_review"
   | "approved"
   | "rejected"
   | "paid";

@@ -102,9 +102,20 @@ export const DEDUCTION_KIND_LABEL: Record<string, { fa: string; en: string }> = 
 };
 export const DEDUCTION_BASE_LABEL: Record<string, { fa: string; en: string }> = {
   gross: { fa: "مبلغ ناخالص", en: "Gross" },
-  running: { fa: "ماندهٔ جاری", en: "Running balance" },
+  /** منسوخ برای قالب‌های تازه (ADR-CNT-IPC-UNIFY فاز ۳ / بند ۲): مبنای زنجیره‌ای،
+   * ردیابی و مهاجرت را دشوار می‌کند؛ قالب‌های موجود کار می‌کنند اما قالب‌های
+   * جدید باید «مبلغ ناخالص» یا «یک ردیف مشخص» را ترجیح دهند. */
+  running: { fa: "ماندهٔ جاری (منسوخ برای قالب‌های تازه — به‌جای آن «مبلغ ناخالص» یا «یک ردیف مشخص» را برگزینید)", en: "Running balance (deprecated for new templates — prefer Gross or Specific row)" },
   item: { fa: "یک ردیف مشخص", en: "Specific row" },
 };
+
+/** کسوراتی از یک قالب که از مبنای منسوخِ «زنجیره‌ای» استفاده می‌کنند (ADR فاز ۳ / بند ۲).
+ * برای اعلام هشدار غیرمسدودکننده به کاربر هنگام ساخت/ویرایش قالب تازه. */
+export function templateRunningBaseWarningsFa(deductions: Pick<IpcDeduction, "Code" | "TitleFa" | "Base">[]): string[] {
+  return deductions
+    .filter((d) => d.Base === "running")
+    .map((d) => `کسر «${d.TitleFa}» (${d.Code}) از مبنای منسوخ «ماندهٔ جاری» استفاده می‌کند؛ برای قالب‌های تازه «مبلغ ناخالص» یا «یک ردیف مشخص» توصیه می‌شود.`);
+}
 export const IPC_STATUS_LABEL: Record<string, { fa: string; en: string }> = {
   draft: { fa: "پیش‌نویس", en: "Draft" },
   submitted: { fa: "ارسال‌شده", en: "Submitted" },
@@ -216,8 +227,15 @@ export function normalizeIpcInputs(value: unknown): IpcRowInput[] {
 /**
  * محاسبهٔ کامل: هر ردیف بر پایهٔ نوع خودش، سپس کسورات به ترتیب قالب.
  * «ماندهٔ جاری» = ناخالص منهای کسوراتِ قبلی؛ «ردیف مشخص» = مبلغ همان ردیف.
+ *
+ * نام‌گذاری (ADR-CNT-IPC-UNIFY فاز ۳ / بند ۱): این تابع قبلاً `computeIpc`
+ * نام داشت و با `computeIpc` موتور BOQمحور (`src/services/contracts.ts`)
+ * هم‌نام بود — دو موتور مستقل با امضای متفاوت و قاعدهٔ متفاوت کسور. برای
+ * پایان‌دادن به این هم‌نامی گمراه‌کننده، نسخهٔ قالب‌محور به
+ * `computeTemplateIpc` تغییرنام گرفت؛ موتور BOQمحور هستهٔ واحد صورت‌وضعیت
+ * است (نک: ADR) و همین هسته `computeIpc` می‌ماند.
  */
-export function computeIpc(template: { Items: IpcTemplateItem[]; Deductions: IpcDeduction[] }, inputs: IpcRowInput[]): IpcComputation {
+export function computeTemplateIpc(template: { Items: IpcTemplateItem[]; Deductions: IpcDeduction[] }, inputs: IpcRowInput[]): IpcComputation {
   const byCode = new Map(inputs.map((r) => [r.ItemCode, r]));
   if (byCode.size !== inputs.length) bad("ردیف تکراری در ورودی صورت‌وضعیت");
   const known = new Set(template.Items.map((i) => i.Code));
@@ -346,7 +364,125 @@ export function cntIpcMetrics(input: {
   };
 }
 
-/* ═══════════════════════ ۴. شکل دادهٔ میز کار ═══════════════════════ */
+/* ═══════════ ۴. نگاشت سند قالب به هستهٔ BOQمحور (ADR-CNT-IPC-UNIFY فاز ۳) ═══════════
+ *
+ * `CntIpcCertificate` سند مستقلی نمی‌ماند؛ خروجیِ همان محاسبهٔ قالب
+ * (`computeTemplateIpc`) به شکل سند هستهٔ BOQمحور نگاشت می‌شود — دقیقاً
+ * همان سه جدولی که موتور BOQمحور مصرف می‌کند: `InterimPaymentCertificate`
+ * (سرجمع)، `IPC_LineItem` (ردیف) و `IPC_Deduction` (کسر). این نگاشت فقط
+ * *شکل* داده را عوض می‌کند؛ هیچ عددی دوباره محاسبه نمی‌شود — مبلغ هر ردیف
+ * و `BaseAmount` هر کسور همان مقداری است که در لحظهٔ محاسبهٔ قالب معتبر
+ * بود، تا مبنای زنجیره‌ای `running` بدون تغییر عدد قابل ممیزی بماند.
+ *
+ * ردیف آزاد قالب به هیچ ردیف واقعی فهرست‌بها وصل نیست؛ به‌جای حدس زدن یک
+ * ردیف نامرتبط، `BoqItemId` مصنوعی و ردیابی‌پذیر با پیشوند `cntipc-item:`
+ * ساخته می‌شود — هرگز نباید با ردیف فهرست‌بهای واقعی یا ریزمترهٔ آن
+ * اشتباه گرفته شود؛ دروازهٔ کیفی برای این ردیف‌ها هرگز اجرا نشده (قالب
+ * اصلاً مفهوم دروازهٔ کیفی نداشت)، پس صادقانه «passed» ثبت می‌شود، نه
+ * نتیجهٔ یک بازرسی واقعی.
+ */
+
+/** کسر قالب → نوع کسر هسته؛ نگاشت یک‌به‌یک، بدون حدس. */
+export const DEDUCTION_KIND_TO_CORE: Record<string, "withholding_tax" | "retainage" | "advance_recovery" | "other"> = {
+  retention: "retainage",
+  advance: "advance_recovery",
+  tax: "withholding_tax",
+  other: "other",
+};
+
+/** وضعیت سند قالب → وضعیت گردش هستهٔ BOQمحور (ADR فاز ۳ / بند ۳).
+ * `returned` به `draft` برمی‌گردد: در هستهٔ BOQمحور بازگشت برای اصلاح هم
+ * مقصدش `draft` است (`return_for_correction` در `src/services/contracts.ts`)،
+ * پس همان قاعده برای سند مهاجرت‌شده هم صادق است. */
+export const CERTIFICATE_STATE_TO_CORE: Record<string, "draft" | "contractor_submitted" | "approved"> = {
+  draft: "draft",
+  submitted: "contractor_submitted",
+  approved: "approved",
+  returned: "draft",
+};
+
+export type MappedCoreLine = {
+  BoqItemId: string;
+  PricingBasis: "unit_price" | "lump_sum";
+  CurrentQty: number | null;
+  UnitRate: number | null;
+  EarnedCurrent: number;
+  QualityGateStatus: "passed";
+  Status: "claimed";
+  NoteFa: string;
+};
+export type MappedCoreDeduction = {
+  DeductionType: "withholding_tax" | "retainage" | "advance_recovery" | "other";
+  BaseAmount: number;
+  RatePct: number | null;
+  Amount: number;
+  IsStatutory: boolean;
+  NoteFa: string;
+};
+export type MappedCoreIpcHeader = {
+  PeriodFrom: string;
+  PeriodTo: string;
+  Currency: string;
+  GrossCurrent: number;
+  SubtotalAmount: number;
+  TotalDeductions: number;
+  NetPayable: number;
+  WorkflowState: "draft" | "contractor_submitted" | "approved";
+  LegacyRef: string;
+};
+export type MappedTemplateIpc = { header: MappedCoreIpcHeader; lines: MappedCoreLine[]; deductions: MappedCoreDeduction[] };
+
+/**
+ * نگاشت خالص (بدون I/O): `SerialNo`/`PeriodCode` عمداً اینجا تعیین
+ * نمی‌شوند — این دو به شمارهٔ سریال‌های واقعیِ همان پیمان در لحظهٔ
+ * مهاجرت وابسته‌اند (`nextIpcSerial` روی دادهٔ واقعی مخزن)، که مسئولیت
+ * فراخوانندهٔ دارای دسترسی به مخزن است (اسکریپت مهاجرت)، نه این تابع خالص.
+ */
+export function mapTemplateIpcToCore(input: {
+  certificateId: string;
+  status: string;
+  periodFrom: string;
+  periodTo: string;
+  currency: string;
+  computation: IpcComputation;
+}): MappedTemplateIpc {
+  const { certificateId, status, periodFrom, periodTo, currency, computation } = input;
+  const lines: MappedCoreLine[] = computation.rows.map((row) => ({
+    BoqItemId: `cntipc-item:${row.Code}`,
+    PricingBasis: row.Basis === "measured" ? "unit_price" : "lump_sum",
+    CurrentQty: row.Basis === "measured" ? row.Quantity : null,
+    UnitRate: row.Basis === "measured" ? row.UnitRate : null,
+    EarnedCurrent: row.Amount,
+    QualityGateStatus: "passed",
+    Status: "claimed",
+    NoteFa: `مهاجرت از قالب CNT-1 — ردیف «${row.TitleFa}» (${BASIS_LABEL[row.Basis]?.fa ?? row.Basis})`,
+  }));
+  const deductions: MappedCoreDeduction[] = computation.deductions.map((d) => ({
+    DeductionType: DEDUCTION_KIND_TO_CORE[d.Kind] ?? "other",
+    BaseAmount: d.BaseAmount,
+    RatePct: d.Mode === "percent" ? d.Rate : null,
+    Amount: d.Amount,
+    IsStatutory: d.Kind === "tax",
+    NoteFa: `مهاجرت از قالب CNT-1 — کسر «${d.TitleFa}» (مبنا: ${DEDUCTION_BASE_LABEL[d.Base]?.fa ?? d.Base})`,
+  }));
+  return {
+    header: {
+      PeriodFrom: periodFrom,
+      PeriodTo: periodTo,
+      Currency: currency,
+      GrossCurrent: computation.grossAmount,
+      SubtotalAmount: computation.grossAmount,
+      TotalDeductions: computation.deductionTotal,
+      NetPayable: computation.netAmount,
+      WorkflowState: CERTIFICATE_STATE_TO_CORE[status] ?? "draft",
+      LegacyRef: `cntipc:${certificateId}`,
+    },
+    lines,
+    deductions,
+  };
+}
+
+/* ═══════════════════════ ۵. شکل دادهٔ میز کار ═══════════════════════ */
 
 export type CntRowMeta = {
   Id: string;

@@ -2661,7 +2661,7 @@ export const SCHEMA: TableDef[] = [
       /* ارزش افزوده افزوده می‌شود نه کسر (ADR-CNT-05). */
       c("VatAmount", "decimal", { precision: 18, scale: 2 }),
       req("NetPayable", "decimal", { precision: 18, scale: 2, default: "0" }),
-      req("WorkflowState", "text", { len: 30, comment: "draft|contractor_submitted|consultant_review|consultant_approved|employer_review|approved|rejected|paid" }),
+      req("WorkflowState", "text", { len: 30, comment: "draft|contractor_submitted|consultant_approved|approved|rejected|paid" }),
       c("SubmittedAt", "date"),
       c("ConsultantApprovedAt", "date"),
       c("EmployerApprovedAt", "date"),
