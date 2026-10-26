@@ -1660,7 +1660,7 @@ export const domains: Domain[] = [
   },
   {
     id: "d18",
-    group: "pg3",
+    group: "support",
     icon: "🛰",
     accent: "#22D3EE",
     title: { fa: "مدیریت موقعیت مکانی پروژه‌ها (GIS)", en: "Project Geo-Location (GIS)" },
