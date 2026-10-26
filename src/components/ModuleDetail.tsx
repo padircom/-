@@ -2269,7 +2269,9 @@ function perfDomainTitle(domainId: string, lang: Lang, fallback: string, groupId
   if (!pd) return fallback;
   const title: Bi = groupId === "pg3" && (domainId === "d16" || domainId === "d17")
     ? { fa: "مدیریت ایمنی و بهداشت", en: "Health & Safety Management" }
-    : pd.title;
+    : groupId === "pg4" && domainId === "d8"
+      ? { fa: "مدیریت کیفیت و بازرسی", en: "Quality & Inspection Management" }
+      : pd.title;
   return lang === "fa"
     ? `حوزهٔ عملکردی: ${t(title, lang)}`
     : `Performance domain: ${t(title, lang)}`;

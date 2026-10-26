@@ -389,7 +389,9 @@ export default function RightSidebar({
     const isOpen = openPerf === pd.id;
     const title = pd.id === "extension" && groupId === "pg3"
       ? { fa: "مدیریت ایمنی و بهداشت", en: "Health & Safety Management" }
-      : pd.title;
+      : pd.id === "extension" && groupId === "pg4"
+        ? { fa: "مدیریت کیفیت و بازرسی", en: "Quality & Inspection Management" }
+        : pd.title;
     const first = pd.modules[0];
     const pdNoData = selCluster ? (moduleDataGaps[first.id] ?? []).includes(selCluster) : false;
     const canEnter = Boolean(selCluster && selProject && !pdNoData);
