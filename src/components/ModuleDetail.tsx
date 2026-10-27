@@ -2291,7 +2291,6 @@ function DomainNavGroups({
                 aria-controls="domain-nav-d6-pmo"
                 className="flex w-full items-center gap-1.5 px-2 pb-0.5 pt-3 text-start text-[9px] font-semibold tracking-wide transition hover:tx1"
                 style={{ color: pmoActive ? m.accent : undefined }}>
-                <span className="h-px flex-1" style={{ background: "var(--line-soft)" }} aria-hidden="true" />
                 <span className="inline-flex items-center gap-1">
                   <span aria-hidden="true">🏢</span>
                   <span>{rtl ? "دفتر مدیریت پروژه" : "Project Management Office"}</span>
