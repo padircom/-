@@ -1996,6 +1996,7 @@ function DomainNavGroups({
   const [expandedHseSection, setExpandedHseSection] = useState<string | "none" | null>(null);
   const [expandedRiskModules, setExpandedRiskModules] = useState<Record<string, boolean>>({});
   const [expandedGovernanceModules, setExpandedGovernanceModules] = useState<Record<string, boolean>>({});
+  const [expandedPmoSection, setExpandedPmoSection] = useState<boolean | null>(null);
   const [expandedProcessRows, setExpandedProcessRows] = useState<Record<string, boolean>>({});
   useEffect(() => setExpandedProcessRows({}), [dom.id]);
   const pd = performanceDomainOf(dom.id, dom.group);
@@ -2076,6 +2077,7 @@ function DomainNavGroups({
         const isHseSection = m.id === "d16" || m.id === "d17";
         const isRiskModuleSection = pd.id === "risk" && (m.id === "d3" || m.id === "d4");
         const isGovernanceModuleSection = pd.id === "governance" && (m.id === "d6" || m.id === "d20");
+        const isPmoSectionExpanded = expandedPmoSection ?? Boolean(pmoActive);
         const isAccordionSection = isD14Section || isD5Section || isResourceSection || isHseSection || isRiskModuleSection || isGovernanceModuleSection;
         const isRightAlignedHeader = isAccordionSection || m.id === "d8";
         const isExpanded = isD14Section
@@ -2267,16 +2269,25 @@ function DomainNavGroups({
             </div>
             {m.id === "d6" && onOpenPmo && isExpanded && (
               <div>
-              <button type="button" onClick={() => onOpenPmo()} aria-pressed={Boolean(pmoActive)}
+              <button type="button"
+                onClick={() => {
+                  const next = !isPmoSectionExpanded;
+                  setExpandedPmoSection(next);
+                  if (next && !pmoActive) onOpenPmo();
+                }}
+                aria-expanded={isPmoSectionExpanded}
+                aria-controls="domain-nav-d6-pmo"
                 className="flex w-full items-center gap-1.5 px-2 pb-0.5 pt-3 text-start text-[9px] font-semibold tracking-wide transition hover:tx1"
                 style={{ color: pmoActive ? m.accent : undefined }}>
                 <span className="h-px flex-1" style={{ background: "var(--line-soft)" }} aria-hidden="true" />
                 <span className="inline-flex items-center gap-1">
                   <span aria-hidden="true">🏢</span>
                   <span>{rtl ? "دفتر مدیریت پروژه" : "Project Management Office"}</span>
+                  <span className="text-[9px] tx4" aria-hidden="true">{isPmoSectionExpanded ? "⌄" : rtl ? "‹" : "›"}</span>
                 </span>
                 <span className="h-px flex-1" style={{ background: "var(--line-soft)" }} aria-hidden="true" />
               </button>
+              <div id="domain-nav-d6-pmo" hidden={!isPmoSectionExpanded}>
               {([
                 ["charter", { fa: "منشور پروژه", en: "Project charter" }],
                 ["forms", { fa: "فرم‌ساز مصوب", en: "Approved forms" }],
@@ -2289,6 +2300,7 @@ function DomainNavGroups({
                   {t(label, lang)}
                 </button>
               ))}
+              </div>
               </div>
             )}
           </div>
