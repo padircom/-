@@ -687,9 +687,8 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
                 <h2 className="truncate text-[19px] font-semibold leading-tight tx1">
                   {isOilfieldProject ? (
                     <>
-                      {oilfieldNamePrefix}{" "}
-                      <span dir="ltr" className="inline-block text-[10px] font-light tx3">{project.code}</span>{" "}
-                      {projectName.slice(oilfieldNamePrefix.length).trimStart()}
+                      {projectName}{" "}
+                      <span dir="ltr" className="inline-block text-[10px] font-light tx3">{project.code}</span>
                     </>
                   ) : (
                     <>
@@ -766,7 +765,7 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
               <span className="text-[16px] font-light tx4">/</span>
               {project && (
                 <h2 className="truncate text-[19px] font-semibold leading-tight tx1">
-                  {isOilfieldProject ? <>{oilfieldNamePrefix}{" "}<span dir="ltr" className="inline-block text-[10px] font-light tx3">{project.code}</span>{" "}{projectName.slice(oilfieldNamePrefix.length).trimStart()}</> : projectName}
+                  {isOilfieldProject ? <>{projectName}{" "}<span dir="ltr" className="inline-block text-[10px] font-light tx3">{project.code}</span></> : projectName}
                 </h2>
               )}
             </div>
