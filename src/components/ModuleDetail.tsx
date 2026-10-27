@@ -1995,6 +1995,7 @@ function DomainNavGroups({
   const [expandedResourceSection, setExpandedResourceSection] = useState<string | "none" | null>(null);
   const [expandedHseSection, setExpandedHseSection] = useState<string | "none" | null>(null);
   const [expandedRiskModules, setExpandedRiskModules] = useState<Record<string, boolean>>({});
+  const [expandedGovernanceModules, setExpandedGovernanceModules] = useState<Record<string, boolean>>({});
   const [expandedProcessRows, setExpandedProcessRows] = useState<Record<string, boolean>>({});
   useEffect(() => setExpandedProcessRows({}), [dom.id]);
   const pd = performanceDomainOf(dom.id, dom.group);
@@ -2074,7 +2075,8 @@ function DomainNavGroups({
         const isResourceSection = m.id === "d9" || m.id === "d10";
         const isHseSection = m.id === "d16" || m.id === "d17";
         const isRiskModuleSection = pd.id === "risk" && (m.id === "d3" || m.id === "d4");
-        const isAccordionSection = isD14Section || isD5Section || isResourceSection || isHseSection || isRiskModuleSection;
+        const isGovernanceModuleSection = pd.id === "governance" && (m.id === "d6" || m.id === "d20");
+        const isAccordionSection = isD14Section || isD5Section || isResourceSection || isHseSection || isRiskModuleSection || isGovernanceModuleSection;
         const isRightAlignedHeader = isAccordionSection || m.id === "d8";
         const isExpanded = isD14Section
           ? (expandedD14Section === null ? activeD14SectionKey === key : expandedD14Section === key)
@@ -2086,7 +2088,9 @@ function DomainNavGroups({
                 ? (expandedHseSection === null ? isCurrent : expandedHseSection === m.id)
                 : isRiskModuleSection
                   ? (expandedRiskModules[m.id] ?? isCurrent)
-                  : false;
+                  : isGovernanceModuleSection
+                    ? (expandedGovernanceModules[m.id] ?? isCurrent)
+                    : false;
         const sectionBodyId = `domain-nav-${m.id}-${key}`;
         const entry = procs[0];
         const openSection = () => {
@@ -2116,6 +2120,10 @@ function DomainNavGroups({
             setExpandedRiskModules((prev) => ({ ...prev, [m.id]: !isExpanded }));
             return;
           }
+          if (isGovernanceModuleSection) {
+            setExpandedGovernanceModules((prev) => ({ ...prev, [m.id]: !isExpanded }));
+            return;
+          }
           if (!entry?.subs[0]) return;
           if (isCurrent) onSelectSub(entry.id, entry.subs[0].id);
           else onOpenModuleSub(m.id, entry.id, entry.subs[0].id);
@@ -2124,7 +2132,8 @@ function DomainNavGroups({
           if (isD14Section) setExpandedD14Section(null);
           if (isResourceSection) setExpandedResourceSection(null);
           if (isRiskModuleSection) setExpandedRiskModules((prev) => ({ ...prev, [m.id]: true }));
-          if (isHseSection || m.id === "d8" || isRiskModuleSection || isD5Section) {
+          if (isGovernanceModuleSection) setExpandedGovernanceModules((prev) => ({ ...prev, [m.id]: true }));
+          if (isHseSection || m.id === "d8" || isRiskModuleSection || isGovernanceModuleSection || isD5Section) {
             setExpandedProcessRows((prev) => ({ ...prev, [`${m.id}:${processId}`]: true }));
           }
           if (isCurrent) onSelectSub(processId, subId);
@@ -2141,7 +2150,7 @@ function DomainNavGroups({
               {!isRightAlignedHeader && <span className="h-px flex-1" style={{ background: "var(--line-soft)" }} aria-hidden="true" />}
               <span className={`inline-flex items-center gap-1 ${isD14Section && key === "risk" ? "max-w-[210px]" : ""}`}>
                 <span aria-hidden="true">{m.icon}</span>
-                {m.id === "d14" || m.id === "d5" || isResourceSection || isHseSection || isRiskModuleSection ? (
+                {m.id === "d14" || m.id === "d5" || isResourceSection || isHseSection || isRiskModuleSection || isGovernanceModuleSection ? (
                   <button
                     type="button"
                     onClick={openSection}
@@ -2172,13 +2181,13 @@ function DomainNavGroups({
             {procs.map((p, i) => {
               const processBodyId = `domain-nav-${m.id}-${p.id}`;
               const processKey = `${m.id}:${p.id}`;
-              const isProcessAccordion = isHseSection || m.id === "d8" || isRiskModuleSection || isD5Section;
+              const isProcessAccordion = isHseSection || m.id === "d8" || isRiskModuleSection || isGovernanceModuleSection || isD5Section;
               const isProcessExpanded = !isProcessAccordion || (
-                expandedProcessRows[processKey] ?? (!(isRiskModuleSection || isD5Section) && isCurrent && Boolean(selectedSubId?.startsWith(`${p.id}-`)))
+                expandedProcessRows[processKey] ?? (!(isRiskModuleSection || isGovernanceModuleSection || isD5Section) && isCurrent && Boolean(selectedSubId?.startsWith(`${p.id}-`)))
               );
               return (
                 <div key={p.id}>
-                  {/* فرایندهای HSE، کیفیت، ریسک و مالی آکاردئونی‌اند تا فهرست سایدبار کوتاه بماند. */}
+                  {/* فرایندهای HSE، کیفیت، ریسک، مالی و حاکمیت آکاردئونی‌اند تا فهرست سایدبار کوتاه بماند. */}
                   {!(isD14Section && key === "risk") && (
                     isProcessAccordion ? (
                       <button
@@ -2244,7 +2253,7 @@ function DomainNavGroups({
               );
             })}
             </div>
-            {m.id === "d6" && onOpenPmo && (
+            {m.id === "d6" && onOpenPmo && isExpanded && (
               <div>
               <button type="button" onClick={() => onOpenPmo()} aria-pressed={Boolean(pmoActive)}
                 className="flex w-full items-center gap-1.5 px-2 pb-0.5 pt-3 text-start text-[9px] font-semibold tracking-wide transition hover:tx1"
