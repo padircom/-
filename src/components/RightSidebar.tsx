@@ -130,7 +130,7 @@ const quickActions: QuickAction[] = [
   { id: "alerts", label: { fa: "هشدارها", en: "Alerts" }, shortLabel: { fa: "هشدار", en: "Alerts" }, alert: "7", icon: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className={iconClass}><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" /></svg>) },
   { id: "calc", label: { fa: "تقویم و محاسبات", en: "Calendar & Calculations" }, shortLabel: { fa: "تقویم+محاسبه", en: "Calendar+Calc" }, icon: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className={iconClass}><rect x="3" y="4" width="18" height="17" rx="2" /><path d="M8 2v4M16 2v4M3 9h18M7 13h2m-2 4h2m4-4h4m-4 4h4" /></svg>) },
   { id: "excellence", label: { fa: "تعالی", en: "Excellence" }, icon: <span className="text-[15px] leading-none">🏅</span> },
-  { id: "support", label: { fa: "پشتیبان", en: "Support" }, shortLabel: { fa: "پشتیبان", en: "Support" }, icon: <span className="text-[15px] leading-none">🧩</span> },
+  { id: "support", label: { fa: "ماژول‌های تخصصی", en: "Specialty Modules" }, shortLabel: { fa: "تخصصی", en: "Specialty" }, icon: <span className="text-[15px] leading-none">🧩</span> },
 ];
 
 const selectClass =

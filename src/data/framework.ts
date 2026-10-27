@@ -38,7 +38,7 @@ export type Process = {
   subs: SubProcess[];
 };
 
-export type SidebarGroupId = "pg1" | "pg2" | "pg3" | "pg4" | "pg5" | "support" | "org";
+export type SidebarGroupId = "pg1" | "pg2" | "pg3" | "pg4" | "pg5" | "support" | "settings" | "org";
 
 export type Domain = {
   id: string;
@@ -80,6 +80,7 @@ export const sidebarGroups: SidebarGroup[] = [
   { id: "pg4", title: { fa: "پایش و کنترل", en: "Monitoring & Controlling" }, short: "MC", color: "#FF9F9F", icon: "🔍" },
   { id: "pg5", title: { fa: "اختتامیه", en: "Closing" }, short: "CL", color: "#C9A7FF", icon: "🏁" },
   { id: "support", title: { fa: "پشتیبان", en: "Supporting" }, navTitle: { fa: "اطلاعات و ذی‌نفعان", en: "Information & Stakeholders" }, short: "SP", color: "#94A3B8", icon: "🧰", pinned: true },
+  { id: "settings", title: { fa: "تنظیمات", en: "Settings" }, short: "SET", color: "#38BDF8", icon: "⚙️" },
   { id: "org", title: { fa: "مدیریت سازمانی", en: "Organizational Management" }, short: "ORG", color: "#FBBF24", icon: "🏢" },
 ];
 
@@ -88,8 +89,8 @@ export const sidebarGroups: SidebarGroup[] = [
    ------------------------------------------------------------
    ساختار سه‌لایه: گروه فرایندی (لایهٔ ۱) ← حوزهٔ عملکردی
    (لایهٔ ۲) ← ماژول (لایهٔ ۳، در سایدبار فرعی صفحهٔ ماژول).
-   ماژول‌هایی که معادل مستقیمی در PMBOK ندارند (کیفیت، HSE،
-   GIS، سامانه، تعالی سازمانی) در «افزونه‌های صنعتی» می‌نشینند.
+   افزونه‌های صنعتی (مانند کیفیت، HSE و GIS) در حوزهٔ افزونه‌ها قرار دارند؛
+   مدیریت سامانه در گروه مستقل «تنظیمات» و تعالی سازمانی در گروه سازمانی است.
    ============================================================ */
 export type PerformanceDomainId =
   | "governance"
@@ -100,7 +101,8 @@ export type PerformanceDomainId =
   | "resources"
   | "risk"
   | "extension"
-  | "excellence";
+  | "excellence"
+  | "settings";
 
 export type PerformanceDomain = {
   id: PerformanceDomainId;
@@ -118,6 +120,7 @@ export const performanceDomains: PerformanceDomain[] = [
   { id: "resources", title: { fa: "منابع", en: "Resources" }, icon: "🔧", color: "#7A4BB8" },
   { id: "risk", title: { fa: "ریسک", en: "Risk" }, icon: "⚠️", color: "#D64A4A" },
   { id: "extension", title: { fa: "افزونه‌های صنعتی", en: "Industry Extensions" }, icon: "🧩", color: "#94A3B8" },
+  { id: "settings", title: { fa: "تنظیمات", en: "Settings" }, icon: "🎛️", color: "#38BDF8" },
   { id: "excellence", title: { fa: "مدیریت تعالی سازمانی", en: "Organisational Excellence" }, icon: "🏅", color: "#FBBF24" },
 ];
 
@@ -137,7 +140,7 @@ export const domainPerformance: Record<string, PerformanceDomainId> = {
   d4: "risk",
   d3: "risk",
   d8: "extension",
-  d7: "extension",
+  d7: "settings",
   d16: "extension",
   d17: "extension",
   d18: "extension",
@@ -172,6 +175,7 @@ export const performanceDomainOrder: Record<string, PerformanceDomainId[]> = {
   pg4: ["finance", "risk", "extension"],
   pg5: ["scope"],
   support: ["stakeholders", "extension"],
+  settings: ["settings"],
   org: ["excellence"],
 };
 
@@ -1601,10 +1605,11 @@ export const domains: Domain[] = [
   },
   {
     id: "d7",
-    group: "support",
-    icon: "⚙️",
+    group: "settings",
+    icon: "🎛️",
     accent: "#38BDF8",
     title: { fa: "مدیریت سامانه و پیکربندی پایه", en: "System Administration & Base Config" },
+    nav: { fa: "مدیریت سامانه", en: "System Management" },
     processes: [
       {
         id: "d7-p1",
