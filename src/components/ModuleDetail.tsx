@@ -1993,7 +1993,7 @@ function DomainNavGroups({
   const [expandedD14Sections, setExpandedD14Sections] = useState<Record<string, boolean> | null>(null);
   const [expandedD5Sections, setExpandedD5Sections] = useState<Record<string, boolean> | null>(null);
   const [expandedResourceSections, setExpandedResourceSections] = useState<Record<string, boolean> | null>(null);
-  const [expandedHseSection, setExpandedHseSection] = useState<string | "none" | null>(null);
+  const [expandedHseSections, setExpandedHseSections] = useState<Record<string, boolean> | null>(null);
   const [expandedRiskModules, setExpandedRiskModules] = useState<Record<string, boolean>>({});
   const [expandedGovernanceModules, setExpandedGovernanceModules] = useState<Record<string, boolean>>({});
   const [expandedPlanningScopeModules, setExpandedPlanningScopeModules] = useState<Record<string, boolean>>({});
@@ -2090,7 +2090,7 @@ function DomainNavGroups({
             : isResourceSection
               ? (expandedResourceSections === null ? activeResourceSectionKey === key : expandedResourceSections[m.id] ?? false)
               : isHseSection
-                ? (expandedHseSection === null ? isCurrent : expandedHseSection === m.id)
+                ? (expandedHseSections === null ? isCurrent : expandedHseSections[m.id] ?? false)
                 : isRiskModuleSection
                   ? (expandedRiskModules[m.id] ?? isCurrent)
                   : isGovernanceModuleSection
@@ -2132,7 +2132,13 @@ function DomainNavGroups({
             return;
           }
           if (isHseSection) {
-            setExpandedHseSection(isExpanded ? "none" : m.id);
+            setExpandedHseSections((prev) => {
+              const current = prev ?? Object.fromEntries(
+                sections.filter((section) => section.module.id === "d16" || section.module.id === "d17")
+                  .map((section) => [section.module.id, section.module.id === dom.id]),
+              );
+              return { ...current, [m.id]: !isExpanded };
+            });
             return;
           }
           if (isRiskModuleSection) {
@@ -2163,6 +2169,13 @@ function DomainNavGroups({
             const current = prev ?? Object.fromEntries(
               sections.filter((section) => section.module.id === "d9" || section.module.id === "d10")
                 .map((section) => [section.module.id, section.module.id === activeResourceSectionKey]),
+            );
+            return { ...current, [m.id]: true };
+          });
+          if (isHseSection) setExpandedHseSections((prev) => {
+            const current = prev ?? Object.fromEntries(
+              sections.filter((section) => section.module.id === "d16" || section.module.id === "d17")
+                .map((section) => [section.module.id, section.module.id === dom.id]),
             );
             return { ...current, [m.id]: true };
           });
