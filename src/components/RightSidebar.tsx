@@ -549,7 +549,7 @@ export default function RightSidebar({
                 type="button"
                 onClick={() => toggleSection("pmis")}
                 aria-expanded={sectionsOpen.pmis}
-                className="sidebar-group-title flex w-full items-center gap-2 px-2 py-2 text-start tx2 transition hover:tx1"
+                className="sidebar-group-title flex w-full items-center gap-2 px-2 py-1.5 text-start tx2 transition hover:tx1"
               >
                 <span className="text-[12px]">📐</span>
                 <span className="min-w-0 flex-1 truncate text-[11px] font-semibold">
@@ -634,7 +634,7 @@ export default function RightSidebar({
                 type="button"
                 onClick={() => toggleSection("mes")}
                 aria-expanded={sectionsOpen.mes}
-                className={`sidebar-group-title flex w-full items-center gap-2 px-2 py-2 text-start transition ${
+                className={`sidebar-group-title flex w-full items-center gap-2 px-2 py-1.5 text-start transition ${
                   activeSystemView.system === "mes" ? "is-active" : "tx2 hover:tx1"
                 }`}
               >
@@ -691,7 +691,7 @@ export default function RightSidebar({
                 type="button"
                 onClick={() => toggleSection("cmms")}
                 aria-expanded={sectionsOpen.cmms}
-                className={`sidebar-group-title flex w-full items-center gap-2 px-2 py-2 text-start transition ${
+                className={`sidebar-group-title flex w-full items-center gap-2 px-2 py-1.5 text-start transition ${
                   activeSystemView.system === "cmms" ? "is-active" : "tx2 hover:tx1"
                 }`}
               >
@@ -748,7 +748,7 @@ export default function RightSidebar({
                 type="button"
                 onClick={() => toggleSection("scm")}
                 aria-expanded={sectionsOpen.scm}
-                className={`sidebar-group-title flex w-full items-center gap-2 px-2 py-2 text-start transition ${
+                className={`sidebar-group-title flex w-full items-center gap-2 px-2 py-1.5 text-start transition ${
                   activeSystemView.system === "scm" ? "is-active" : "tx2 hover:tx1"
                 }`}
               >
@@ -805,7 +805,7 @@ export default function RightSidebar({
                 type="button"
                 onClick={() => toggleSection("iiot")}
                 aria-expanded={sectionsOpen.iiot}
-                className={`sidebar-group-title flex w-full items-center gap-2 px-2 py-2 text-start transition ${
+                className={`sidebar-group-title flex w-full items-center gap-2 px-2 py-1.5 text-start transition ${
                   activeSystemView.system === "iiot" ? "is-active" : "tx2 hover:tx1"
                 }`}
               >
@@ -862,7 +862,7 @@ export default function RightSidebar({
                 type="button"
                 onClick={() => toggleSection("hrm")}
                 aria-expanded={sectionsOpen.hrm}
-                className={`sidebar-group-title flex w-full items-center gap-2 px-2 py-2 text-start transition ${
+                className={`sidebar-group-title flex w-full items-center gap-2 px-2 py-1.5 text-start transition ${
                   activeSystemView.system === "hrm" ? "is-active" : "tx2 hover:tx1"
                 }`}
               >
@@ -919,7 +919,7 @@ export default function RightSidebar({
                 type="button"
                 onClick={() => toggleSection("edms")}
                 aria-expanded={sectionsOpen.edms}
-                className={`sidebar-group-title flex w-full items-center gap-2 px-2 py-2 text-start transition ${
+                className={`sidebar-group-title flex w-full items-center gap-2 px-2 py-1.5 text-start transition ${
                   activeSystemView.system === "edms" ? "is-active" : "tx2 hover:tx1"
                 }`}
               >
@@ -973,7 +973,7 @@ export default function RightSidebar({
                 type="button"
                 onClick={() => toggleSection("org")}
                 aria-expanded={sectionsOpen.org}
-                className={`sidebar-group-title flex w-full items-center gap-2 px-2 py-2 text-start transition ${sectionsOpen.org ? "is-active" : "tx2 hover:tx1"}`}
+                className={`sidebar-group-title flex w-full items-center gap-2 px-2 py-1.5 text-start transition ${sectionsOpen.org ? "is-active" : "tx2 hover:tx1"}`}
               >
                 <span className="text-[12px]">🏢</span>
                 <span className="min-w-0 flex-1 truncate text-[11px] font-semibold">{rtl ? "مدیریت سازمانی" : "Organizational Management"}</span>
