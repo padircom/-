@@ -2182,7 +2182,7 @@ function DomainNavGroups({
                     onClick={openSection}
                     aria-expanded={isAccordionSection ? isExpanded : undefined}
                     aria-controls={isAccordionSection ? sectionBodyId : undefined}
-                    className={`text-start hover:underline ${isD14Section && key === "risk" ? "max-w-[180px] whitespace-normal leading-3" : ""}`}
+                    className={`${isHseSection && rtl ? "text-right" : "text-start"} hover:underline ${isD14Section && key === "risk" ? "max-w-[180px] whitespace-normal leading-3" : ""}`}
                   >
                     {t(title, lang)}
                   </button>
@@ -2374,7 +2374,7 @@ function DomainAside({
                 style={{ background: `${dom.accent}1a`, border: `1px solid ${dom.accent}55`, color: dom.accent }}>
             {perfDomainIcon(dom.id, dom.icon, dom.group)}
           </span>
-          <div className="truncate text-[10.5px] font-normal tx1">
+          <div className="truncate text-start text-[10.5px] font-normal tx1">
             {perfDomainTitle(dom.id, lang, t(dom.title, lang), dom.group)}
           </div>
         </div>
