@@ -4,6 +4,7 @@ import {
   domains,
   sidebarGroups,
   performanceDomainsInGroup,
+  domainPerformance,
   ui,
   t,
   type Bi,
@@ -130,7 +131,7 @@ const quickActions: QuickAction[] = [
   { id: "calendar", label: { fa: "تقویم و کارها", en: "Calendar & Tasks" }, shortLabel: { fa: "تقویم", en: "Calendar" }, icon: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className={iconClass}><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M8 3v4M16 3v4M3 10h18" /></svg>) },
   { id: "calc", label: { fa: "محاسبات", en: "Calculations" }, shortLabel: { fa: "محاسبه", en: "Calc" }, icon: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className={iconClass}><rect x="4" y="3" width="16" height="18" rx="2" /><circle cx="9" cy="11" r="2" /><path d="M13 11h4M13 15h4M13 7h4" /></svg>) },
   { id: "excellence", label: { fa: "تعالی", en: "Excellence" }, icon: <span className="text-[15px] leading-none">🏅</span> },
-  { id: "specialty", label: { fa: "ماژول‌های تخصصی", en: "Specialty Modules" }, shortLabel: { fa: "تخصصی", en: "Specialty" }, icon: <span className="text-[15px] leading-none">🧩</span> },
+  { id: "support", label: { fa: "پشتیبان", en: "Support" }, shortLabel: { fa: "پشتیبان", en: "Support" }, icon: <span className="text-[15px] leading-none">🧩</span> },
 ];
 
 const selectClass =
@@ -165,7 +166,7 @@ export default function RightSidebar({
   const [query, setQuery] = useState("");
   /* لایهٔ ۲: کدام حوزهٔ عملکردی (زیر گروه فرایندی) باز است — فاز نمایشی روی «آغازین». */
   const [openPerf, setOpenPerf] = useState<string | null>(null);
-  const [specialtyQuickOpen, setSpecialtyQuickOpen] = useState(false);
+  const [extensionsQuickOpen, setExtensionsQuickOpen] = useState(false);
   const [taxonomyOverrides, setTaxonomyOverrides] = useState<Record<string, Process[]>>({});
   const [sectionsOpen, setSectionsOpen] = useState<{
     pmis: boolean;
@@ -260,7 +261,7 @@ export default function RightSidebar({
   const visibleDomains = domains
     .filter((d) => d.id !== "d7" || can("system.manage"))
     .map((d) => taxonomyOverrides[d.id] ? { ...d, processes: taxonomyOverrides[d.id] } : d);
-  const specialtyModules = visibleDomains.filter((d) => ["d8", "d16", "d17", "d18"].includes(d.id));
+  const industryExtensionModules = visibleDomains.filter((d) => domainPerformance[d.id] === "extension");
 
   const q = query.trim().toLowerCase();
   const matchesQuery = (d: Domain) => {
@@ -1009,17 +1010,17 @@ export default function RightSidebar({
       </div>
 
       <nav aria-label={rtl ? "دسترسی سریع" : "Quick access"} className="shrink-0 b-line border-t px-3 pb-3 pt-2.5">
-        {specialtyQuickOpen && (
-          <div id="quick-specialty-modules" role="menu" aria-label={rtl ? "ماژول‌های تخصصی" : "Specialty modules"}
+        {extensionsQuickOpen && (
+          <div id="quick-industry-extensions" role="menu" aria-label={rtl ? "افزونه‌های صنعتی" : "Industry extensions"}
             className="mb-2 max-h-56 w-full overflow-y-auto rounded-xl border b-line-soft glass-dark p-2 shadow-xl"
             dir={rtl ? "rtl" : "ltr"}>
-            <p className="mb-1.5 px-2 text-[9px] font-medium tx3">{rtl ? "ورود به ماژول تخصصی" : "Open a specialty module"}</p>
+            <p className="mb-1.5 px-2 text-[9px] font-medium tx3">{rtl ? "افزونه‌های صنعتی" : "Industry extensions"}</p>
             <div className="space-y-0.5">
-              {specialtyModules.map((module) => (
+              {industryExtensionModules.map((module) => (
                 <button key={module.id} type="button" role="menuitem"
                   onClick={() => {
                     const scope = projectScope ?? (selCluster && selProject ? { clusterId: selCluster, projectId: selProject } : null);
-                    setSpecialtyQuickOpen(false);
+                    setExtensionsQuickOpen(false);
                     if (scope) onNavigate({ moduleId: module.id, clusterId: scope.clusterId, projectId: scope.projectId });
                     else onQuickAction("portfolio");
                   }}
@@ -1038,15 +1039,15 @@ export default function RightSidebar({
         </div>
         <div className="grid grid-cols-4 gap-1" dir={rtl ? "rtl" : "ltr"}>
           {quickActions.map((action) => {
-            const active = quickAction === action.id || (action.id === "specialty" && specialtyQuickOpen);
+            const active = quickAction === action.id || (action.id === "support" && extensionsQuickOpen);
             const alert = action.alert ? Number(action.alert).toLocaleString(rtl ? "fa-IR" : "en-US") : undefined;
             return (
               <button key={action.id} type="button" onClick={() => {
-                if (action.id === "specialty") {
-                  setSpecialtyQuickOpen((open) => !open);
+                if (action.id === "support") {
+                  setExtensionsQuickOpen((open) => !open);
                   return;
                 }
-                setSpecialtyQuickOpen(false);
+                setExtensionsQuickOpen(false);
                 if (action.id === "excellence") {
                   const scope = projectScope ?? (selCluster && selProject ? { clusterId: selCluster, projectId: selProject } : null);
                   if (scope) onNavigate({ moduleId: "d19", clusterId: scope.clusterId, projectId: scope.projectId });
@@ -1056,8 +1057,8 @@ export default function RightSidebar({
                 onQuickAction(action.id);
               }}
                 title={t(action.label, lang)} aria-label={t(action.label, lang)} aria-current={active ? "page" : undefined}
-                aria-expanded={action.id === "specialty" ? specialtyQuickOpen : undefined}
-                aria-controls={action.id === "specialty" ? "quick-specialty-modules" : undefined}
+                aria-expanded={action.id === "support" ? extensionsQuickOpen : undefined}
+                aria-controls={action.id === "support" ? "quick-industry-extensions" : undefined}
                 className={`relative flex min-w-0 flex-col items-center justify-center gap-1 rounded-lg px-0.5 py-2 text-center transition ${active ? "row-on accent-t" : "tx3 hover:tx1"}`}
                 style={active ? { boxShadow: "inset 0 -1px 0 var(--accent)" } : undefined}>
                 <span className={action.id === "alerts" ? "text-rose-500" : active ? "accent-t" : ""}>{action.icon}</span>
