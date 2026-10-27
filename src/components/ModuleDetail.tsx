@@ -654,6 +654,9 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
   })();
 
   const [planningTab, setPlanningTab] = useState<PexTab>(d2Tab);
+  const projectName = project ? t(project.name, lang) : "";
+  const oilfieldNamePrefix = "توسعه میدان نفتی";
+  const isOilfieldProject = lang === "fa" && project?.code === "OG-2401" && projectName.startsWith(`${oilfieldNamePrefix} `);
 
   if (dom.id === "d2") {
     return (
@@ -682,7 +685,16 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
               <span className="text-[16px] font-light tx4">/</span>
               {project && (
                 <h2 className="truncate text-[19px] font-semibold leading-tight tx1">
-                  {t(project.name, lang)} <span dir="ltr" className="inline-block text-[10px] font-light tx3">({project.code})</span>
+                  {isOilfieldProject ? (
+                    <>
+                      {projectName}<span dir="ltr" className="inline-block text-[10px] font-light tx3">{project.code}</span>
+                    </>
+                  ) : (
+                    <>
+                      {projectName}{" "}
+                      <span dir="ltr" className="inline-block text-[10px] font-light tx3">({project.code})</span>
+                    </>
+                  )}
                 </h2>
               )}
             </div>
@@ -736,7 +748,7 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
           {target.fromMap && (
             <BackToMapButton rtl={rtl} onClick={() => onNavigate?.({ ...target, moduleId: "d6", processId: undefined, subId: undefined, fromMap: undefined, initialView: "ctl" })} />
           )}
-          {cluster && (
+          {cluster && cluster.id !== "c1" && (
             <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl text-[20px]"
                   style={{ background: `${cluster.color}1f`, border: `1px solid ${cluster.color}55` }}>
               {cluster.icon}
@@ -751,21 +763,19 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
               )}
               <span className="text-[16px] font-light tx4">/</span>
               {project && (
-                <h2 className="truncate text-[19px] font-semibold leading-tight tx1">{t(project.name, lang)}</h2>
+                <h2 className="truncate text-[19px] font-semibold leading-tight tx1">
+                  {isOilfieldProject ? <>{projectName}<span dir="ltr" className="inline-block text-[10px] font-light tx3">{project.code}</span></> : projectName}
+                </h2>
               )}
             </div>
             {project && (
               <p className="mt-1 truncate text-[10px] font-extralight tx3">
-                <span dir="ltr">{project.code}</span> · {t(project.client, lang)} · {t(project.location, lang)}
+                {!isOilfieldProject && <><span dir="ltr">{project.code}</span> · </>}{t(project.client, lang)} · {t(project.location, lang)}
               </p>
             )}
           </div>
           <div className="shrink-0 text-end">
-            <SystemBadge domainId={dom.id} lang={lang} className="mb-1 justify-end" />
             <div className="text-[9px] font-extralight tx3">{t(dom.title, lang)}</div>
-            <div className="text-[11px] font-light tx1">
-              {rtl ? "PMA — فقط Approved" : "PMA — Approved only"}
-            </div>
           </div>
         </div>
         <div className="workspace-columns flex min-h-0 flex-1 gap-3 overflow-hidden">
@@ -1980,10 +1990,14 @@ function DomainNavGroups({
 }) {
   const rtl = lang === "fa";
   const { can } = useAuth();
-  const [expandedD14Section, setExpandedD14Section] = useState<string | "none" | null>(null);
-  const [expandedD5Section, setExpandedD5Section] = useState<string | "none" | null>(null);
-  const [expandedResourceSection, setExpandedResourceSection] = useState<string | "none" | null>(null);
-  const [expandedHseSection, setExpandedHseSection] = useState<string | "none" | null>(null);
+  const [expandedD14Sections, setExpandedD14Sections] = useState<Record<string, boolean> | null>(null);
+  const [expandedD5Sections, setExpandedD5Sections] = useState<Record<string, boolean> | null>(null);
+  const [expandedResourceSections, setExpandedResourceSections] = useState<Record<string, boolean> | null>(null);
+  const [expandedHseSections, setExpandedHseSections] = useState<Record<string, boolean> | null>(null);
+  const [expandedRiskModules, setExpandedRiskModules] = useState<Record<string, boolean>>({});
+  const [expandedGovernanceModules, setExpandedGovernanceModules] = useState<Record<string, boolean>>({});
+  const [expandedPlanningScopeModules, setExpandedPlanningScopeModules] = useState<Record<string, boolean>>({});
+  const [expandedPmoSection, setExpandedPmoSection] = useState<boolean | null>(null);
   const [expandedProcessRows, setExpandedProcessRows] = useState<Record<string, boolean>>({});
   useEffect(() => setExpandedProcessRows({}), [dom.id]);
   const pd = performanceDomainOf(dom.id, dom.group);
@@ -2062,34 +2076,81 @@ function DomainNavGroups({
         const isD5Section = m.id === "d5";
         const isResourceSection = m.id === "d9" || m.id === "d10";
         const isHseSection = m.id === "d16" || m.id === "d17";
-        const isAccordionSection = isD14Section || isD5Section || isResourceSection || isHseSection;
+        const isRiskModuleSection = pd.id === "risk" && (m.id === "d3" || m.id === "d4");
+        const isGovernanceModuleSection = pd.id === "governance" && (m.id === "d6" || m.id === "d20");
+        const isPlanningScopeModuleSection = (pd.id === "schedule" && m.id === "d2")
+          || (pd.id === "scope" && (m.id === "d12" || m.id === "d15"));
+        const isPmoSectionExpanded = expandedPmoSection ?? Boolean(pmoActive);
+        const isAccordionSection = isD14Section || isD5Section || isResourceSection || isHseSection || isRiskModuleSection || isGovernanceModuleSection || isPlanningScopeModuleSection;
         const isRightAlignedHeader = isAccordionSection || m.id === "d8";
         const isExpanded = isD14Section
-          ? (expandedD14Section === null ? activeD14SectionKey === key : expandedD14Section === key)
+          ? (expandedD14Sections === null ? activeD14SectionKey === key : expandedD14Sections[key] ?? false)
           : isD5Section
-            ? (expandedD5Section === null ? activeD5SectionKey === key : expandedD5Section === key)
+            ? (expandedD5Sections === null ? activeD5SectionKey === key : expandedD5Sections[key] ?? false)
             : isResourceSection
-              ? (expandedResourceSection === null ? activeResourceSectionKey === key : expandedResourceSection === key)
+              ? (expandedResourceSections === null ? activeResourceSectionKey === key : expandedResourceSections[m.id] ?? false)
               : isHseSection
-                ? (expandedHseSection === null ? isCurrent : expandedHseSection === m.id)
-                : false;
+                ? (expandedHseSections === null ? isCurrent : expandedHseSections[m.id] ?? false)
+                : isRiskModuleSection
+                  ? (expandedRiskModules[m.id] ?? isCurrent)
+                  : isGovernanceModuleSection
+                    ? (expandedGovernanceModules[m.id] ?? isCurrent)
+                    : isPlanningScopeModuleSection
+                      ? (expandedPlanningScopeModules[m.id] ?? isCurrent)
+                      : false;
         const sectionBodyId = `domain-nav-${m.id}-${key}`;
         const entry = procs[0];
         const openSection = () => {
           if (isD14Section) {
-            setExpandedD14Section(isExpanded ? "none" : key);
+            setExpandedD14Sections((prev) => {
+              const current = prev ?? Object.fromEntries(
+                sections.filter((section) => section.module.id === "d14")
+                  .map((section) => [section.key, section.key === activeD14SectionKey]),
+              );
+              return { ...current, [key]: !isExpanded };
+            });
             return;
           }
           if (isD5Section) {
-            setExpandedD5Section(isExpanded ? "none" : key);
+            setExpandedD5Sections((prev) => {
+              const current = prev ?? Object.fromEntries(
+                sections.filter((section) => section.module.id === "d5")
+                  .map((section) => [section.key, section.key === activeD5SectionKey]),
+              );
+              return { ...current, [key]: !isExpanded };
+            });
             return;
           }
           if (isResourceSection) {
-            setExpandedResourceSection(isExpanded ? "none" : key);
+            setExpandedResourceSections((prev) => {
+              const current = prev ?? Object.fromEntries(
+                sections.filter((section) => section.module.id === "d9" || section.module.id === "d10")
+                  .map((section) => [section.module.id, section.module.id === activeResourceSectionKey]),
+              );
+              return { ...current, [m.id]: !isExpanded };
+            });
             return;
           }
           if (isHseSection) {
-            setExpandedHseSection(isExpanded ? "none" : m.id);
+            setExpandedHseSections((prev) => {
+              const current = prev ?? Object.fromEntries(
+                sections.filter((section) => section.module.id === "d16" || section.module.id === "d17")
+                  .map((section) => [section.module.id, section.module.id === dom.id]),
+              );
+              return { ...current, [m.id]: !isExpanded };
+            });
+            return;
+          }
+          if (isRiskModuleSection) {
+            setExpandedRiskModules((prev) => ({ ...prev, [m.id]: !isExpanded }));
+            return;
+          }
+          if (isGovernanceModuleSection) {
+            setExpandedGovernanceModules((prev) => ({ ...prev, [m.id]: !isExpanded }));
+            return;
+          }
+          if (isPlanningScopeModuleSection) {
+            setExpandedPlanningScopeModules((prev) => ({ ...prev, [m.id]: !isExpanded }));
             return;
           }
           if (!entry?.subs[0]) return;
@@ -2097,10 +2158,31 @@ function DomainNavGroups({
           else onOpenModuleSub(m.id, entry.id, entry.subs[0].id);
         };
         const selectSub = (processId: string, subId: string) => {
-          if (isD14Section) setExpandedD14Section(null);
-          if (isD5Section) setExpandedD5Section(null);
-          if (isResourceSection) setExpandedResourceSection(null);
-          if (isHseSection || m.id === "d8") {
+          if (isD14Section) setExpandedD14Sections((prev) => {
+            const current = prev ?? Object.fromEntries(
+              sections.filter((section) => section.module.id === "d14")
+                .map((section) => [section.key, section.key === activeD14SectionKey]),
+            );
+            return { ...current, [key]: true };
+          });
+          if (isResourceSection) setExpandedResourceSections((prev) => {
+            const current = prev ?? Object.fromEntries(
+              sections.filter((section) => section.module.id === "d9" || section.module.id === "d10")
+                .map((section) => [section.module.id, section.module.id === activeResourceSectionKey]),
+            );
+            return { ...current, [m.id]: true };
+          });
+          if (isHseSection) setExpandedHseSections((prev) => {
+            const current = prev ?? Object.fromEntries(
+              sections.filter((section) => section.module.id === "d16" || section.module.id === "d17")
+                .map((section) => [section.module.id, section.module.id === dom.id]),
+            );
+            return { ...current, [m.id]: true };
+          });
+          if (isRiskModuleSection) setExpandedRiskModules((prev) => ({ ...prev, [m.id]: true }));
+          if (isGovernanceModuleSection) setExpandedGovernanceModules((prev) => ({ ...prev, [m.id]: true }));
+          if (isPlanningScopeModuleSection) setExpandedPlanningScopeModules((prev) => ({ ...prev, [m.id]: true }));
+          if (isHseSection || m.id === "d8" || isRiskModuleSection || isGovernanceModuleSection || isPlanningScopeModuleSection || isResourceSection || isD5Section || isD14Section) {
             setExpandedProcessRows((prev) => ({ ...prev, [`${m.id}:${processId}`]: true }));
           }
           if (isCurrent) onSelectSub(processId, subId);
@@ -2111,19 +2193,19 @@ function DomainNavGroups({
             {/* سرِ دستهٔ ماژول (فعال = رنگ ماژول) — ریتم سایدبار «برنامه‌ریزی و تولید» */}
             <div
               className="flex items-center gap-1.5 px-2 pb-0.5 pt-3 text-[9px] font-semibold tracking-wide"
-              style={{ color: isHseSection ? "#DC2626" : isResourceSection || isCurrent ? m.accent : undefined }}
+              style={{ color: isRiskModuleSection ? "#FF9F9F" : isHseSection ? "#DC2626" : isResourceSection || isCurrent ? m.accent : undefined }}
               role="presentation"
             >
               {!isRightAlignedHeader && <span className="h-px flex-1" style={{ background: "var(--line-soft)" }} aria-hidden="true" />}
               <span className={`inline-flex items-center gap-1 ${isD14Section && key === "risk" ? "max-w-[210px]" : ""}`}>
                 <span aria-hidden="true">{m.icon}</span>
-                {m.id === "d14" || m.id === "d5" || isResourceSection || isHseSection ? (
+                {m.id === "d14" || m.id === "d5" || isResourceSection || isHseSection || isRiskModuleSection || isGovernanceModuleSection || isPlanningScopeModuleSection ? (
                   <button
                     type="button"
                     onClick={openSection}
                     aria-expanded={isAccordionSection ? isExpanded : undefined}
                     aria-controls={isAccordionSection ? sectionBodyId : undefined}
-                    className={`text-start hover:underline ${isD14Section && key === "risk" ? "max-w-[180px] whitespace-normal leading-3" : ""}`}
+                    className={`${isHseSection && rtl ? "text-right" : "text-start"} hover:underline ${isD14Section && key === "risk" ? "max-w-[180px] whitespace-normal leading-3" : ""}`}
                   >
                     {t(title, lang)}
                   </button>
@@ -2148,14 +2230,14 @@ function DomainNavGroups({
             {procs.map((p, i) => {
               const processBodyId = `domain-nav-${m.id}-${p.id}`;
               const processKey = `${m.id}:${p.id}`;
-              const isProcessAccordion = isHseSection || m.id === "d8";
+              const isProcessAccordion = isHseSection || m.id === "d8" || isRiskModuleSection || isGovernanceModuleSection || isPlanningScopeModuleSection || isResourceSection || isD5Section || isD14Section;
               const isProcessExpanded = !isProcessAccordion || (
-                expandedProcessRows[processKey] ?? (isCurrent && Boolean(selectedSubId?.startsWith(`${p.id}-`)))
+                expandedProcessRows[processKey] ?? (!(isRiskModuleSection || isGovernanceModuleSection || isPlanningScopeModuleSection || isResourceSection || isD5Section || isD14Section) && isCurrent && Boolean(selectedSubId?.startsWith(`${p.id}-`)))
               );
               return (
                 <div key={p.id}>
-                  {/* فرایندهای HSE و کیفیت آکاردئونی‌اند تا فهرست سایدبار کوتاه بماند. */}
-                  {!(isD14Section && key === "risk") && (
+                  {/* فرایندهای HSE، کیفیت، ریسک، منابع، مالی، حاکمیت، برنامه‌ریزی و محدوده آکاردئونی‌اند تا فهرست سایدبار کوتاه بماند. */}
+                  {(isProcessAccordion || !(isD14Section && key === "risk")) && (
                     isProcessAccordion ? (
                       <button
                         type="button"
@@ -2220,18 +2302,26 @@ function DomainNavGroups({
               );
             })}
             </div>
-            {m.id === "d6" && onOpenPmo && (
+            {m.id === "d6" && onOpenPmo && isExpanded && (
               <div>
-              <button type="button" onClick={() => onOpenPmo()} aria-pressed={Boolean(pmoActive)}
+              <button type="button"
+                onClick={() => {
+                  const next = !isPmoSectionExpanded;
+                  setExpandedPmoSection(next);
+                  if (next && !pmoActive) onOpenPmo();
+                }}
+                aria-expanded={isPmoSectionExpanded}
+                aria-controls="domain-nav-d6-pmo"
                 className="flex w-full items-center gap-1.5 px-2 pb-0.5 pt-3 text-start text-[9px] font-semibold tracking-wide transition hover:tx1"
                 style={{ color: pmoActive ? m.accent : undefined }}>
-                <span className="h-px flex-1" style={{ background: "var(--line-soft)" }} aria-hidden="true" />
                 <span className="inline-flex items-center gap-1">
                   <span aria-hidden="true">🏢</span>
                   <span>{rtl ? "دفتر مدیریت پروژه" : "Project Management Office"}</span>
+                  <span className="text-[9px] tx4" aria-hidden="true">{isPmoSectionExpanded ? "⌄" : rtl ? "‹" : "›"}</span>
                 </span>
                 <span className="h-px flex-1" style={{ background: "var(--line-soft)" }} aria-hidden="true" />
               </button>
+              <div id="domain-nav-d6-pmo" hidden={!isPmoSectionExpanded}>
               {([
                 ["charter", { fa: "منشور پروژه", en: "Project charter" }],
                 ["forms", { fa: "فرم‌ساز مصوب", en: "Approved forms" }],
@@ -2244,6 +2334,7 @@ function DomainNavGroups({
                   {t(label, lang)}
                 </button>
               ))}
+              </div>
               </div>
             )}
           </div>
@@ -2306,7 +2397,7 @@ function DomainAside({
                 style={{ background: `${dom.accent}1a`, border: `1px solid ${dom.accent}55`, color: dom.accent }}>
             {perfDomainIcon(dom.id, dom.icon, dom.group)}
           </span>
-          <div className="truncate text-[10.5px] font-normal tx1">
+          <div className="truncate text-start text-[10.5px] font-normal tx1">
             {perfDomainTitle(dom.id, lang, t(dom.title, lang), dom.group)}
           </div>
         </div>
