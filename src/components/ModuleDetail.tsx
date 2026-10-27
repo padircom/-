@@ -1996,6 +1996,7 @@ function DomainNavGroups({
   const [expandedHseSection, setExpandedHseSection] = useState<string | "none" | null>(null);
   const [expandedRiskModules, setExpandedRiskModules] = useState<Record<string, boolean>>({});
   const [expandedGovernanceModules, setExpandedGovernanceModules] = useState<Record<string, boolean>>({});
+  const [expandedPlanningScopeModules, setExpandedPlanningScopeModules] = useState<Record<string, boolean>>({});
   const [expandedPmoSection, setExpandedPmoSection] = useState<boolean | null>(null);
   const [expandedProcessRows, setExpandedProcessRows] = useState<Record<string, boolean>>({});
   useEffect(() => setExpandedProcessRows({}), [dom.id]);
@@ -2077,8 +2078,10 @@ function DomainNavGroups({
         const isHseSection = m.id === "d16" || m.id === "d17";
         const isRiskModuleSection = pd.id === "risk" && (m.id === "d3" || m.id === "d4");
         const isGovernanceModuleSection = pd.id === "governance" && (m.id === "d6" || m.id === "d20");
+        const isPlanningScopeModuleSection = (pd.id === "schedule" && m.id === "d2")
+          || (pd.id === "scope" && (m.id === "d12" || m.id === "d15"));
         const isPmoSectionExpanded = expandedPmoSection ?? Boolean(pmoActive);
-        const isAccordionSection = isD14Section || isD5Section || isResourceSection || isHseSection || isRiskModuleSection || isGovernanceModuleSection;
+        const isAccordionSection = isD14Section || isD5Section || isResourceSection || isHseSection || isRiskModuleSection || isGovernanceModuleSection || isPlanningScopeModuleSection;
         const isRightAlignedHeader = isAccordionSection || m.id === "d8";
         const isExpanded = isD14Section
           ? (expandedD14Sections === null ? activeD14SectionKey === key : expandedD14Sections[key] ?? false)
@@ -2092,7 +2095,9 @@ function DomainNavGroups({
                   ? (expandedRiskModules[m.id] ?? isCurrent)
                   : isGovernanceModuleSection
                     ? (expandedGovernanceModules[m.id] ?? isCurrent)
-                    : false;
+                    : isPlanningScopeModuleSection
+                      ? (expandedPlanningScopeModules[m.id] ?? isCurrent)
+                      : false;
         const sectionBodyId = `domain-nav-${m.id}-${key}`;
         const entry = procs[0];
         const openSection = () => {
@@ -2138,6 +2143,10 @@ function DomainNavGroups({
             setExpandedGovernanceModules((prev) => ({ ...prev, [m.id]: !isExpanded }));
             return;
           }
+          if (isPlanningScopeModuleSection) {
+            setExpandedPlanningScopeModules((prev) => ({ ...prev, [m.id]: !isExpanded }));
+            return;
+          }
           if (!entry?.subs[0]) return;
           if (isCurrent) onSelectSub(entry.id, entry.subs[0].id);
           else onOpenModuleSub(m.id, entry.id, entry.subs[0].id);
@@ -2159,7 +2168,8 @@ function DomainNavGroups({
           });
           if (isRiskModuleSection) setExpandedRiskModules((prev) => ({ ...prev, [m.id]: true }));
           if (isGovernanceModuleSection) setExpandedGovernanceModules((prev) => ({ ...prev, [m.id]: true }));
-          if (isHseSection || m.id === "d8" || isRiskModuleSection || isGovernanceModuleSection || isResourceSection || isD5Section || isD14Section) {
+          if (isPlanningScopeModuleSection) setExpandedPlanningScopeModules((prev) => ({ ...prev, [m.id]: true }));
+          if (isHseSection || m.id === "d8" || isRiskModuleSection || isGovernanceModuleSection || isPlanningScopeModuleSection || isResourceSection || isD5Section || isD14Section) {
             setExpandedProcessRows((prev) => ({ ...prev, [`${m.id}:${processId}`]: true }));
           }
           if (isCurrent) onSelectSub(processId, subId);
@@ -2176,7 +2186,7 @@ function DomainNavGroups({
               {!isRightAlignedHeader && <span className="h-px flex-1" style={{ background: "var(--line-soft)" }} aria-hidden="true" />}
               <span className={`inline-flex items-center gap-1 ${isD14Section && key === "risk" ? "max-w-[210px]" : ""}`}>
                 <span aria-hidden="true">{m.icon}</span>
-                {m.id === "d14" || m.id === "d5" || isResourceSection || isHseSection || isRiskModuleSection || isGovernanceModuleSection ? (
+                {m.id === "d14" || m.id === "d5" || isResourceSection || isHseSection || isRiskModuleSection || isGovernanceModuleSection || isPlanningScopeModuleSection ? (
                   <button
                     type="button"
                     onClick={openSection}
@@ -2207,13 +2217,13 @@ function DomainNavGroups({
             {procs.map((p, i) => {
               const processBodyId = `domain-nav-${m.id}-${p.id}`;
               const processKey = `${m.id}:${p.id}`;
-              const isProcessAccordion = isHseSection || m.id === "d8" || isRiskModuleSection || isGovernanceModuleSection || isResourceSection || isD5Section || isD14Section;
+              const isProcessAccordion = isHseSection || m.id === "d8" || isRiskModuleSection || isGovernanceModuleSection || isPlanningScopeModuleSection || isResourceSection || isD5Section || isD14Section;
               const isProcessExpanded = !isProcessAccordion || (
-                expandedProcessRows[processKey] ?? (!(isRiskModuleSection || isGovernanceModuleSection || isResourceSection || isD5Section || isD14Section) && isCurrent && Boolean(selectedSubId?.startsWith(`${p.id}-`)))
+                expandedProcessRows[processKey] ?? (!(isRiskModuleSection || isGovernanceModuleSection || isPlanningScopeModuleSection || isResourceSection || isD5Section || isD14Section) && isCurrent && Boolean(selectedSubId?.startsWith(`${p.id}-`)))
               );
               return (
                 <div key={p.id}>
-                  {/* فرایندهای HSE، کیفیت، ریسک، منابع، مالی و حاکمیت آکاردئونی‌اند تا فهرست سایدبار کوتاه بماند. */}
+                  {/* فرایندهای HSE، کیفیت، ریسک، منابع، مالی، حاکمیت، برنامه‌ریزی و محدوده آکاردئونی‌اند تا فهرست سایدبار کوتاه بماند. */}
                   {(isProcessAccordion || !(isD14Section && key === "risk")) && (
                     isProcessAccordion ? (
                       <button
