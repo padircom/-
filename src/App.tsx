@@ -2,7 +2,6 @@ import { lazy, Suspense, useEffect, useState } from "react";
 import RightSidebar, { type EnterpriseSystemView, type ModuleNavTarget } from "./components/RightSidebar";
 import PmbokRing from "./components/PmbokRing";
 import PortfolioPanel from "./components/PortfolioPanel";
-import CalendarView from "./components/CalendarView";
 import CalcPanel from "./components/CalcPanel";
 import MonitoringWorkspace from "./components/MonitoringWorkspace";
 import ProcessFlowNet from "./components/ProcessFlowNet";
@@ -145,6 +144,7 @@ export default function App() {
   const [lang, setLang] = useState<Lang>("fa");
   const [theme, setTheme] = useState<Theme>("dark");
   const [quickAction, setQuickAction] = useState<string>("home");
+  const [calcPanelMounted, setCalcPanelMounted] = useState(false);
   const [node, setNode] = useState<string | null>(null);
   const [cluster, setCluster] = useState<string | null>("c1");
   const [moduleNav, setModuleNav] = useState<ModuleNavTarget | null>(null);
@@ -215,6 +215,7 @@ export default function App() {
    * MES/CMMS/SCM/IIoT دکمهٔ بازگشت خودشان را دارند، پس سایدبار چارچوب
    * نباید با ناوبری محلی آن‌ها رقابت کند. */
   const showPrimarySidebars = moduleNav === null && activeSystemView.system === "pmis";
+  const showCalcPanel = showPrimarySidebars && quickAction === "calc";
 
   return (
     <div className="app-shell flex h-screen w-screen flex-col overflow-hidden">
@@ -305,6 +306,11 @@ export default function App() {
         * از همان ابتدا تمام عرض را می‌گیرد. */}
       <main className="app-main flex min-h-0 flex-1 gap-3 p-3">
         <section className="flex min-w-0 flex-1 flex-col gap-3 overflow-hidden">
+          {calcPanelMounted && (
+            <div className={showCalcPanel ? "flex min-h-0 min-w-0 flex-1 flex-col" : "hidden"} aria-hidden={!showCalcPanel}>
+              <CalcPanel lang={lang} />
+            </div>
+          )}
           {activeSystemView.system === "mes" ? (
             <Suspense fallback={<div className="glass flex flex-1 items-center justify-center rounded-2xl text-[11px] tx3">…</div>}>
               <ManufacturingWorkspace
@@ -368,10 +374,8 @@ export default function App() {
                 onNavigate={(next) => setModuleNav(next)}
               />
             </Suspense>
-          ) : quickAction === "calendar" ? (
-            <CalendarView lang={lang} />
           ) : quickAction === "calc" ? (
-            <CalcPanel lang={lang} />
+            null
           ) : quickAction === "reports" ? (
             projectScope?.projectId ? <MonitoringWorkspace projectId={projectScope.projectId} lang={lang} /> : <div className="glass rounded-xl p-4 tx2 text-sm">{rtl ? "ابتدا پروژه را از سبد پروژه‌ها انتخاب کنید." : "Select a project from the portfolio first."}</div>
           ) : quickAction === "alerts" ? (
@@ -421,6 +425,7 @@ export default function App() {
             quickAction={quickAction}
             onQuickAction={(id) => {
               setActiveSystemView({ system: "pmis" });
+              if (id === "calc") setCalcPanelMounted(true);
               setQuickAction(id);
               setModuleNav(null);
             }}
