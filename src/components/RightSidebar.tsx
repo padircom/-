@@ -1008,7 +1008,30 @@ export default function RightSidebar({
         )}
       </div>
 
-      <nav aria-label={rtl ? "دسترسی سریع" : "Quick access"} className="relative b-line border-t px-3 pb-3 pt-2.5">
+      <nav aria-label={rtl ? "دسترسی سریع" : "Quick access"} className="shrink-0 b-line border-t px-3 pb-3 pt-2.5">
+        {specialtyQuickOpen && (
+          <div id="quick-specialty-modules" role="menu" aria-label={rtl ? "ماژول‌های تخصصی" : "Specialty modules"}
+            className="mb-2 max-h-56 w-full overflow-y-auto rounded-xl border b-line-soft glass-dark p-2 shadow-xl"
+            dir={rtl ? "rtl" : "ltr"}>
+            <p className="mb-1.5 px-2 text-[9px] font-medium tx3">{rtl ? "ورود به ماژول تخصصی" : "Open a specialty module"}</p>
+            <div className="space-y-0.5">
+              {specialtyModules.map((module) => (
+                <button key={module.id} type="button" role="menuitem"
+                  onClick={() => {
+                    const scope = projectScope ?? (selCluster && selProject ? { clusterId: selCluster, projectId: selProject } : null);
+                    setSpecialtyQuickOpen(false);
+                    if (scope) onNavigate({ moduleId: module.id, clusterId: scope.clusterId, projectId: scope.projectId });
+                    else onQuickAction("portfolio");
+                  }}
+                  className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-start text-[10px] tx2 transition hover:bg-[var(--row-hover)] hover:tx1">
+                  <span className="shrink-0" style={{ color: module.accent }}>{module.icon}</span>
+                  <span className="min-w-0 flex-1 truncate">{t(module.nav ?? module.title, lang)}</span>
+                  <span className="text-[9px] tx4">←</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         <div className="mb-2 flex items-center gap-2 px-1">
           <h3 className="shrink-0 text-[10.5px] font-medium tx1">{rtl ? "دسترسی سریع" : "Quick Access"}</h3>
           <span className="hair h-px flex-1" />
@@ -1044,29 +1067,7 @@ export default function RightSidebar({
             );
           })}
         </div>
-        {specialtyQuickOpen && (
-          <div id="quick-specialty-modules" role="menu" aria-label={rtl ? "ماژول‌های تخصصی" : "Specialty modules"}
-            className="absolute bottom-full end-3 z-50 mb-2 w-[calc(100%-1.5rem)] rounded-xl border b-line-soft glass-dark p-2 shadow-xl"
-            dir={rtl ? "rtl" : "ltr"}>
-            <p className="mb-1.5 px-2 text-[9px] font-medium tx3">{rtl ? "ورود به ماژول تخصصی" : "Open a specialty module"}</p>
-            <div className="space-y-0.5">
-              {specialtyModules.map((module) => (
-                <button key={module.id} type="button" role="menuitem"
-                  onClick={() => {
-                    const scope = projectScope ?? (selCluster && selProject ? { clusterId: selCluster, projectId: selProject } : null);
-                    setSpecialtyQuickOpen(false);
-                    if (scope) onNavigate({ moduleId: module.id, clusterId: scope.clusterId, projectId: scope.projectId });
-                    else onQuickAction("portfolio");
-                  }}
-                  className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-start text-[10px] tx2 transition hover:bg-[var(--row-hover)] hover:tx1">
-                  <span className="shrink-0" style={{ color: module.accent }}>{module.icon}</span>
-                  <span className="min-w-0 flex-1 truncate">{t(module.nav ?? module.title, lang)}</span>
-                  <span className="text-[9px] tx4">←</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
+
       </nav>
     </aside>
     </div>
