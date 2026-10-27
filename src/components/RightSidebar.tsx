@@ -159,10 +159,7 @@ export default function RightSidebar({
   const [selProject, setSelProject] = useState<string>(() => projectScope?.projectId ?? "");
   /* گروه‌های داخلی PMIS هم در هر نشست بسته شروع می‌شوند؛ وضعیت بازشدهٔ
    * قبلی ذخیره/بازیابی نمی‌شود تا رفرش، گروهی را خودکار باز نکند. */
-  const [groupState, setGroupState] = useState<{ open: string | null; supportOpen: boolean }>({
-    open: null,
-    supportOpen: false,
-  });
+  const [openGroup, setOpenGroup] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   /* لایهٔ ۲: کدام حوزهٔ عملکردی (زیر گروه فرایندی) باز است — فاز نمایشی روی «آغازین». */
   const [openPerf, setOpenPerf] = useState<string | null>(null);
@@ -191,9 +188,6 @@ export default function RightSidebar({
   const toggleSection = (key: "pmis" | "org" | "mes" | "cmms" | "scm" | "iiot" | "hrm" | "edms") => {
     setSectionsOpen((prev) => ({ ...prev, [key]: !prev[key] }));
   };
-
-  const openGroup = groupState.open;
-  const supportOpen = groupState.supportOpen;
 
   useEffect(() => {
     if (!projectScope) return;
@@ -244,13 +238,9 @@ export default function RightSidebar({
     setSelProject(projectScope?.projectId ?? "");
   };
 
-  const toggleGroup = (id: string, pinned?: boolean) => {
+  const toggleGroup = (id: string) => {
     onSelectSystemView?.({ system: "pmis" });
-    if (pinned) {
-      setGroupState((s) => ({ ...s, supportOpen: !s.supportOpen }));
-    } else {
-      setGroupState((s) => ({ ...s, open: s.open === id ? null : id }));
-    }
+    setOpenGroup((current) => (current === id ? null : id));
   };
 
   const noData = openDomain && selCluster ? (moduleDataGaps[openDomain] ?? []).includes(selCluster) : false;
@@ -400,7 +390,9 @@ export default function RightSidebar({
         ? { fa: "مدیریت کیفیت و بازرسی", en: "Quality & Inspection Management" }
         : pd.id === "scope" && groupId === "pg5"
           ? { fa: "مدیریت راه‌اندازی", en: "Commissioning Management" }
-          : pd.title;
+          : pd.id === "stakeholders" && groupId === "pg1"
+            ? { fa: "اطلاعات و ذی‌نفعان", en: "Information & Stakeholders" }
+            : pd.title;
     const first = pd.modules[0];
     const pdNoData = selCluster ? (moduleDataGaps[first.id] ?? []).includes(selCluster) : false;
     const canEnter = Boolean(selCluster && selProject && !pdNoData);
@@ -574,12 +566,12 @@ export default function RightSidebar({
                   {sidebarGroups.filter((g) => g.id !== "org").map((g) => {
                     const members = visibleDomains.filter((d) => d.group === g.id);
                     if (!members.length) return null;
-                    const isOpen = g.pinned ? supportOpen : openGroup === g.id;
+                    const isOpen = openGroup === g.id;
                     return (
                       <div key={g.id} className="border-b b-line-soft pb-1 last:border-b-0 last:pb-0">
                         <button
                           type="button"
-                          onClick={() => toggleGroup(g.id, g.pinned)}
+                          onClick={() => toggleGroup(g.id)}
                           aria-expanded={isOpen}
                           className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-start transition hover:bg-[var(--row-hover)]"
                           style={isOpen ? { background: `${g.color}14` } : undefined}

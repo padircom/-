@@ -69,8 +69,6 @@ export type SidebarGroup = {
   /** آیکن گروه فرایندی — همان آیکن‌های بنر استاندارد PMBOK
    * (موشک/کلیپ‌بورد/چرخ‌دنده/ذره‌بین/پرچم) تا سایدبار و بنر یکی باشند. */
   icon: string;
-  /** گروه سنجاق‌شدهٔ انتهای سایدبار (مستقل از آکاردئون فازها). */
-  pinned?: boolean;
 };
 
 export const sidebarGroups: SidebarGroup[] = [
@@ -79,7 +77,6 @@ export const sidebarGroups: SidebarGroup[] = [
   { id: "pg3", title: { fa: "اجرا", en: "Executing" }, short: "EX", color: "#FFD48A", icon: "⚙️" },
   { id: "pg4", title: { fa: "پایش و کنترل", en: "Monitoring & Controlling" }, short: "MC", color: "#FF9F9F", icon: "🔍" },
   { id: "pg5", title: { fa: "اختتامیه", en: "Closing" }, short: "CL", color: "#C9A7FF", icon: "🏁" },
-  { id: "support", title: { fa: "پشتیبان", en: "Supporting" }, navTitle: { fa: "اطلاعات و ذی‌نفعان", en: "Information & Stakeholders" }, short: "SP", color: "#94A3B8", icon: "🧰", pinned: true },
   { id: "org", title: { fa: "مدیریت سازمانی", en: "Organizational Management" }, short: "ORG", color: "#FBBF24", icon: "🏢" },
 ];
 
@@ -168,7 +165,7 @@ export function performanceDomainModules(pdId: PerformanceDomainId): Domain[] {
 /** ترتیب حوزه‌های عملکردی هر گروه فرایندی (نقشهٔ فرایندی).
  *  مثلاً «پایش و کنترل»: مالی ← ریسک ← افزونه‌های صنعتی. */
 export const performanceDomainOrder: Record<string, PerformanceDomainId[]> = {
-  pg1: ["governance"],
+  pg1: ["governance", "stakeholders"],
   pg2: ["schedule", "scope"],
   pg3: ["finance", "resources", "extension"],
   pg4: ["finance", "risk", "extension"],
@@ -344,7 +341,7 @@ export const domains: Domain[] = [
   },
   {
     id: "d1",
-    group: "support",
+    group: "pg1",
     icon: "🗂",
     accent: "#7FB2FF",
     title: { fa: "مدیریت اطلاعات و مستندات پروژه", en: "Project Information & Document Management" },
@@ -1439,7 +1436,7 @@ export const domains: Domain[] = [
     /* ماژول ارتباطات و دانش — مالک گردش مکاتبات، جلسات، ذی‌نفعان و درس‌آموخته.
        مالک فایل مدرک همچنان d1 است و ماتریس اختیار همچنان d6. */
     id: "d11",
-    group: "support",
+    group: "pg1",
     icon: "📡",
     accent: "#A78BFA",
     title: { fa: "مدیریت ارتباطات و دانش", en: "Communications & Knowledge Management" },
