@@ -1991,7 +1991,7 @@ function DomainNavGroups({
   const rtl = lang === "fa";
   const { can } = useAuth();
   const [expandedD14Section, setExpandedD14Section] = useState<string | "none" | null>(null);
-  const [expandedD5Section, setExpandedD5Section] = useState<string | "none" | null>(null);
+  const [expandedD5Sections, setExpandedD5Sections] = useState<Record<string, boolean> | null>(null);
   const [expandedResourceSection, setExpandedResourceSection] = useState<string | "none" | null>(null);
   const [expandedHseSection, setExpandedHseSection] = useState<string | "none" | null>(null);
   const [expandedRiskModules, setExpandedRiskModules] = useState<Record<string, boolean>>({});
@@ -2079,7 +2079,7 @@ function DomainNavGroups({
         const isExpanded = isD14Section
           ? (expandedD14Section === null ? activeD14SectionKey === key : expandedD14Section === key)
           : isD5Section
-            ? (expandedD5Section === null ? activeD5SectionKey === key : expandedD5Section === key)
+            ? (expandedD5Sections === null ? activeD5SectionKey === key : expandedD5Sections[key] ?? false)
             : isResourceSection
               ? (expandedResourceSection === null ? activeResourceSectionKey === key : expandedResourceSection === key)
               : isHseSection
@@ -2095,7 +2095,13 @@ function DomainNavGroups({
             return;
           }
           if (isD5Section) {
-            setExpandedD5Section(isExpanded ? "none" : key);
+            setExpandedD5Sections((prev) => {
+              const current = prev ?? Object.fromEntries(
+                sections.filter((section) => section.module.id === "d5")
+                  .map((section) => [section.key, section.key === activeD5SectionKey]),
+              );
+              return { ...current, [key]: !isExpanded };
+            });
             return;
           }
           if (isResourceSection) {
@@ -2116,7 +2122,6 @@ function DomainNavGroups({
         };
         const selectSub = (processId: string, subId: string) => {
           if (isD14Section) setExpandedD14Section(null);
-          if (isD5Section) setExpandedD5Section(null);
           if (isResourceSection) setExpandedResourceSection(null);
           if (isRiskModuleSection) setExpandedRiskModules((prev) => ({ ...prev, [m.id]: true }));
           if (isHseSection || m.id === "d8" || isRiskModuleSection || isD5Section) {
