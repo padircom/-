@@ -428,11 +428,6 @@ export default function App() {
               if (target.moduleId !== "d7" && target.clusterId && target.projectId) {
                 changeScope(target.clusterId, target.projectId);
               }
-              if (target.moduleId === "d17") {
-                setActiveSystemView({ system: "mes", tab: "overview" });
-                setModuleNav(null);
-                return;
-              }
               setActiveSystemView({ system: "pmis" });
               setModuleNav(target);
               setQuickAction("home");
