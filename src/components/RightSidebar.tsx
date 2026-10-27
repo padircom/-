@@ -613,7 +613,7 @@ export default function RightSidebar({
                                   ...pd,
                                   modules: pd.modules.filter((m) => visibleDomains.some((v) => v.id === m.id)),
                                 }))
-                                .filter((pd) => pd.modules.length > 0)
+                                .filter((pd) => pd.modules.length > 0 && pd.id !== "extension")
                                 .map((pd) => renderPerfDomain(pd, g.id))
                               : members.map(renderDomain)}
                           </div>
