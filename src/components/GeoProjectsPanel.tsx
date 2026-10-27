@@ -21,13 +21,23 @@ import {
    «مدیریت موقعیت مکانی پروژه‌ها (GIS)» — دامنهٔ d18
 
    دو نمایِ مکمّل:
-     · نقشه — Leaflet با کاشیِ OSM/ماهواره (نیاز به دسترسیِ مرورگر به اینترنت)
+     · نقشه — Leaflet با نقشهٔ راه و ماهوارهٔ Esri (نیاز به اینترنت؛ با fallback برداری)
      · برداری — نمودارِ پراکندگیِ آفلاین برای شبکه‌های بسته
    ══════════════════════════════════════════════════════════════════════ */
 
 const W = 760;
 const H = 420;
 const PAD = 36;
+
+type CoordDraft = { lat: string; lon: string };
+
+function coordinateNumber(value: string): number {
+  const latin = value.trim()
+    .replace(/[۰-۹]/g, (digit) => String("۰۱۲۳۴۵۶۷۸۹".indexOf(digit)))
+    .replace(/[٠-٩]/g, (digit) => String("٠١٢٣٤٥٦٧٨٩".indexOf(digit)))
+    .replace(/[٫،,]/g, ".");
+  return latin ? Number(latin) : Number.NaN;
+}
 
 const statusColor: Record<Site["status"], string> = {
   active: "#34D399",
@@ -44,6 +54,7 @@ export default function GeoProjectsPanel({ lang }: { lang: Lang }) {
   const [view, setView] = useState<"map" | "vector">("map");
   const [tilesDown, setTilesDown] = useState(false);
   const [overrides, setOverrides] = useState<Record<string, { lat: number; lon: number }>>(() => loadOverrides());
+  const [coordDrafts, setCoordDrafts] = useState<Record<string, CoordDraft>>({});
   const [editing, setEditing] = useState(false);
   const [tileCfg, setTileCfg] = useState<TileConfig>(() => loadTileConfig());
   const csvRef = useRef<HTMLInputElement | null>(null);
@@ -145,8 +156,7 @@ export default function GeoProjectsPanel({ lang }: { lang: Lang }) {
             }}
             className="rounded-lg border b-line-soft bg-transparent px-1.5 py-1 text-[10px] font-light tx2"
           >
-            <option value="direct">{rtl ? "کاشی: مستقیم" : "Tiles: direct"}</option>
-            <option value="proxy">{rtl ? "کاشی: از سرور" : "Tiles: via server"}</option>
+            <option value="direct">{rtl ? "کاشی: سرویس عمومی" : "Tiles: public service"}</option>
             <option value="internal">{rtl ? "کاشی: سرور داخلی" : "Tiles: internal server"}</option>
           </select>
           {tileCfg.mode === "internal" && (
@@ -212,6 +222,22 @@ export default function GeoProjectsPanel({ lang }: { lang: Lang }) {
               <tbody>
                 {plotted.map((p) => {
                   const ov = overrides[p.id];
+                  const initialDraft: CoordDraft = {
+                    lat: ov ? String(ov.lat) : p.coord ? String(p.coord.lat) : "",
+                    lon: ov ? String(ov.lon) : p.coord ? String(p.coord.lon) : "",
+                  };
+                  const draft = coordDrafts[p.id] ?? initialDraft;
+                  const lat = coordinateNumber(draft.lat);
+                  const lon = coordinateNumber(draft.lon);
+                  const validCoord = draft.lat.trim() !== "" && draft.lon.trim() !== ""
+                    && Number.isFinite(lat) && lat >= -90 && lat <= 90
+                    && Number.isFinite(lon) && lon >= -180 && lon <= 180;
+                  const updateDraft = (field: keyof CoordDraft, value: string) => {
+                    setCoordDrafts((prev) => {
+                      const current = prev[p.id] ?? initialDraft;
+                      return { ...prev, [p.id]: { ...current, [field]: value } };
+                    });
+                  };
                   return (
                     <tr key={p.id} className="border-t border-[var(--line-soft)]">
                       <td className="px-2 py-1 tx2">
@@ -221,39 +247,59 @@ export default function GeoProjectsPanel({ lang }: { lang: Lang }) {
                       <td className="px-2 py-1">
                         <input
                           dir="ltr"
-                          defaultValue={ov ? String(ov.lat) : p.coord ? p.coord.lat.toFixed(4) : ""}
+                          inputMode="decimal"
+                          aria-label={`${p.name} latitude`}
+                          value={draft.lat}
                           placeholder="—"
-                          onBlur={(e) => {
-                            const lat = Number(e.target.value);
-                            const lon = Number(overrides[p.id]?.lon ?? p.coord?.lon);
-                            if (Number.isFinite(lat) && Number.isFinite(lon) && e.target.value.trim()) {
-                              setOverrides((prev) => setOverride(prev, p.id, { lat, lon }));
-                            }
-                          }}
+                          onChange={(e) => updateDraft("lat", e.target.value)}
                           className="w-[90px] rounded border border-[var(--line-soft)] bg-transparent px-1 py-0.5 text-[10px] tx1"
                         />
                       </td>
                       <td className="px-2 py-1">
                         <input
                           dir="ltr"
-                          defaultValue={ov ? String(ov.lon) : p.coord ? p.coord.lon.toFixed(4) : ""}
+                          inputMode="decimal"
+                          aria-label={`${p.name} longitude`}
+                          value={draft.lon}
                           placeholder="—"
-                          onBlur={(e) => {
-                            const lon = Number(e.target.value);
-                            const lat = Number(overrides[p.id]?.lat ?? p.coord?.lat);
-                            if (Number.isFinite(lat) && Number.isFinite(lon) && e.target.value.trim()) {
-                              setOverrides((prev) => setOverride(prev, p.id, { lat, lon }));
-                            }
-                          }}
+                          onChange={(e) => updateDraft("lon", e.target.value)}
                           className="w-[90px] rounded border border-[var(--line-soft)] bg-transparent px-1 py-0.5 text-[10px] tx1"
                         />
                       </td>
                       <td className="px-2 py-1 tx4">
-                        {ov
-                          ? rtl ? "ثبت‌شده (دقیق)" : "Manual (exact)"
-                          : p.coord
-                            ? rtl ? `گَزِتیر (${p.accuracy === "city" ? "شهر" : p.accuracy === "province" ? "استان" : "منطقه"})` : `gazetteer (${p.accuracy})`
-                            : rtl ? "ندارد" : "missing"}
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span>
+                            {ov
+                              ? rtl ? "ثبت‌شده (دقیق)" : "Manual (exact)"
+                              : p.coord
+                                ? rtl ? `گَزِتیر (${p.accuracy === "city" ? "شهر" : p.accuracy === "province" ? "استان" : "منطقه"})` : `gazetteer (${p.accuracy})`
+                                : rtl ? "بدون مختصات" : "Missing"}
+                          </span>
+                          <button
+                            type="button"
+                            disabled={!validCoord}
+                            onClick={() => setOverrides((prev) => setOverride(prev, p.id, { lat, lon }))}
+                            className="rounded border b-line-soft px-1.5 py-0.5 text-[9px] tx2 transition enabled:hover:tx1 disabled:cursor-not-allowed disabled:opacity-40"
+                          >
+                            {rtl ? "ذخیره" : "Save"}
+                          </button>
+                          {ov && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setOverrides((prev) => setOverride(prev, p.id, null));
+                                setCoordDrafts((prev) => {
+                                  const next = { ...prev };
+                                  delete next[p.id];
+                                  return next;
+                                });
+                              }}
+                              className="rounded border b-line-soft px-1.5 py-0.5 text-[9px] tx3 transition hover:tx1"
+                            >
+                              {rtl ? "بازنشانی" : "Reset"}
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -397,8 +443,8 @@ export default function GeoProjectsPanel({ lang }: { lang: Lang }) {
 
       <p className="text-[9px] font-extralight tx4">
         {rtl
-          ? "مختصات مرکز استان/شهر و تقریبی است؛ فاصله با فرمولِ Haversine تا مرجع (تهران) محاسبه می‌شود. نمایِ نقشه از کاشی‌های عمومیِ OSM/Esri استفاده می‌کند و در شبکه‌ی بسته به‌طور خودکار به نمایِ برداری برمی‌گردد."
-          : "Coordinates are province/city centroids (approximate); distance uses the Haversine formula to the origin (Tehran). The map view uses public OSM/Esri tiles and falls back to the vector view on a closed network."}
+          ? "مختصات‌های مرکز استان/شهر تقریبی‌اند؛ مختصات دقیق را از «مختصات واقعی پروژه‌ها» ثبت یا CSV وارد کنید. فاصله تا تهران با Haversine محاسبه می‌شود؛ نقشه از Esri استفاده می‌کند و در صورت قطع کاشی‌ها به نمای برداری برمی‌گردد."
+          : "Province/city centroids are approximate. Enter exact coordinates under Real Coordinates or import a CSV. Distance to Tehran uses Haversine; Esri basemaps are used with a vector fallback if tiles fail."}
       </p>
         </>
       )}

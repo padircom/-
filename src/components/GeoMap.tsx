@@ -8,7 +8,7 @@ import { type PlottedSite, haversineKm } from "../services/geo";
    نقشه‌ی پایه (d18) — Leaflet + کاشی‌های عمومیِ بدون نیاز به کلید
 
    سه لایهٔ پایه:
-     · نقشهٔ راه    — OpenStreetMap
+     · نقشهٔ راه    — Esri World Street Map (پیش‌فرض)
      · ماهواره      — Esri World Imagery
      · روشن         — CARTO Positron (برای گزارش و چاپ)
 
@@ -21,8 +21,10 @@ import { type PlottedSite, haversineKm } from "../services/geo";
 
 const TILES = {
   street: {
-    url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-    attribution: "&copy; OpenStreetMap contributors",
+    // Use Esri's public street basemap by default. The OSM tile endpoint can
+    // return policy-block images in shared previews, which Leaflet treats as tiles.
+    url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}",
+    attribution: "Tiles &copy; Esri, HERE, Garmin, USGS, Intermap, INCREMENT P, NRCAN, Esri Japan, METI, Esri China (Hong Kong), OpenStreetMap contributors, and the GIS User Community",
     label: { fa: "نقشهٔ راه", en: "Street" },
   },
   satellite: {
@@ -39,7 +41,7 @@ const TILES = {
 
 export type TileKey = keyof typeof TILES;
 
-export type TileMode = "direct" | "proxy" | "internal";
+export type TileMode = "direct" | "internal";
 export type TileConfig = { mode: TileMode; internalBase?: string };
 
 const TILE_CFG_KEY = "geo.tile.config.v1";
@@ -48,8 +50,10 @@ export function loadTileConfig(): TileConfig {
   try {
     const raw = localStorage.getItem(TILE_CFG_KEY);
     if (raw) {
-      const c = JSON.parse(raw) as TileConfig;
-      if (c.mode === "direct" || c.mode === "proxy" || c.mode === "internal") return c;
+      const c = JSON.parse(raw) as { mode?: string; internalBase?: string };
+      if (c.mode === "direct" || c.mode === "internal") return c as TileConfig;
+      // Migrate the former proxy option; this app has no tile-proxy endpoint.
+      if (c.mode === "proxy") return { mode: "direct" };
     }
   } catch {
     /* نادیده */
@@ -65,13 +69,11 @@ export function saveTileConfig(c: TileConfig): void {
   }
 }
 
-/** URL کاشی بر اساس حالت: مستقیم (مرورگر)، پروکسیِ سرور برنامه، یا سرورِ داخلی. */
+/** URL کاشی بر اساس سرویس عمومی یا قالب آدرسِ سرور داخلی. */
 function tileUrlFor(k: TileKey, cfg: TileConfig): string {
-  if (cfg.mode === "proxy") return `/tiles/${k}/{z}/{x}/{y}.png`;
   if (cfg.mode === "internal") {
     const base = (cfg.internalBase || "").trim();
-    if (!base) return `/tiles/${k}/{z}/{x}/{y}.png`;
-    return base.replace(/\{s\}/g, "a").replace(/\{r\}/g, "");
+    if (base) return base.replace(/\{s\}/g, "a").replace(/\{r\}/g, "");
   }
   return TILES[k].url;
 }
@@ -126,11 +128,26 @@ export default function GeoMap({
       preferCanvas: true,
     });
 
-    (Object.keys(TILES) as TileKey[]).forEach((k, i) => {
+    let failures = 0;
+    let loaded = 0;
+    const fallbackTimer = window.setTimeout(() => {
+      if (loaded === 0) onTileFailure?.();
+    }, 8000);
+    const onErr = () => {
+      failures += 1;
+      if (failures >= 4) onTileFailure?.();
+    };
+    const onLoad = () => {
+      loaded += 1;
+      window.clearTimeout(fallbackTimer);
+    };
+    // Register before adding the first layer so early errors cannot be missed.
+    map.on("tileerror", onErr);
+    map.on("tileload", onLoad);
+
+    (Object.keys(TILES) as TileKey[]).forEach((k) => {
       const t = TILES[k];
-      const layer = L.tileLayer(tileUrlFor(k, config), { attribution: t.attribution, maxZoom: 18 });
-      baseRef.current[k] = layer;
-      if (i === 0) layer.addTo(map);
+      baseRef.current[k] = L.tileLayer(tileUrlFor(k, config), { attribution: t.attribution, maxZoom: 18 });
     });
 
     L.control
@@ -147,13 +164,8 @@ export default function GeoMap({
 
     L.control.scale({ imperial: false, position: "bottomleft" }).addTo(map);
 
-    /* اگر کاشی‌ها در دسترس نباشند → اطلاع به والد برای بازگشت به برداری */
-    let failures = 0;
-    const onErr = () => {
-      failures += 1;
-      if (failures >= 4) onTileFailure?.();
-    };
-    map.on("tileerror", onErr);
+    /* فعال‌سازی لایهٔ راه پس از ثبت listenerها؛ در قطع شبکه به برداری برمی‌گردیم. */
+    baseRef.current.street.addTo(map);
 
     markerLayer.current = L.layerGroup().addTo(map);
     measureLayer.current = L.layerGroup().addTo(map);
@@ -161,7 +173,9 @@ export default function GeoMap({
     setReady(true);
 
     return () => {
+      window.clearTimeout(fallbackTimer);
       map.off("tileerror", onErr);
+      map.off("tileload", onLoad);
       map.remove();
       mapRef.current = null;
       markerLayer.current = null;

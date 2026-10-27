@@ -1702,13 +1702,13 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
               {project && (<h2 className="truncate text-[19px] font-semibold leading-tight tx1">{projectTitleWithCode ?? t(project.name, lang)}</h2>)}
             </div>
             <p className="mt-1 truncate text-[10px] font-extralight tx3">
-              {rtl ? "GEO — مختصات مرکز استان/شهر و تقریبی است؛ فاصله با Haversine" : "GEO — province/city centroids; distance via Haversine"}
+              {rtl ? "GEO — مختصات مرجع تقریبی است؛ ثبت مختصات دقیق و محاسبه فاصله فعال است" : "GEO — approximate centroids with exact coordinate editing and distance tools"}
             </p>
           </div>
           <div className="shrink-0 text-end">
             <SystemBadge domainId={dom.id} lang={lang} className="mb-1 justify-end" />
             <div className="text-[11px] font-medium tx2">{t(dom.title, lang)}</div>
-            <div className="text-[11px] font-light tx1">{rtl ? "بدون وابستگی به سرویس نقشه" : "no map-tile dependency"}</div>
+            <div className="text-[11px] font-light tx1">{rtl ? "نقشهٔ زنده با پشتیبانِ برداری" : "Live map with vector fallback"}</div>
           </div>
         </div>
         <div className="workspace-columns flex min-h-0 flex-1 gap-3 overflow-hidden">
