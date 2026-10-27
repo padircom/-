@@ -2119,7 +2119,7 @@ function DomainNavGroups({
           if (isD5Section) setExpandedD5Section(null);
           if (isResourceSection) setExpandedResourceSection(null);
           if (isRiskModuleSection) setExpandedRiskModules((prev) => ({ ...prev, [m.id]: true }));
-          if (isHseSection || m.id === "d8" || isRiskModuleSection) {
+          if (isHseSection || m.id === "d8" || isRiskModuleSection || isD5Section) {
             setExpandedProcessRows((prev) => ({ ...prev, [`${m.id}:${processId}`]: true }));
           }
           if (isCurrent) onSelectSub(processId, subId);
@@ -2167,13 +2167,13 @@ function DomainNavGroups({
             {procs.map((p, i) => {
               const processBodyId = `domain-nav-${m.id}-${p.id}`;
               const processKey = `${m.id}:${p.id}`;
-              const isProcessAccordion = isHseSection || m.id === "d8" || isRiskModuleSection;
+              const isProcessAccordion = isHseSection || m.id === "d8" || isRiskModuleSection || isD5Section;
               const isProcessExpanded = !isProcessAccordion || (
-                expandedProcessRows[processKey] ?? (!isRiskModuleSection && isCurrent && Boolean(selectedSubId?.startsWith(`${p.id}-`)))
+                expandedProcessRows[processKey] ?? (!(isRiskModuleSection || isD5Section) && isCurrent && Boolean(selectedSubId?.startsWith(`${p.id}-`)))
               );
               return (
                 <div key={p.id}>
-                  {/* فرایندهای HSE، کیفیت و ماژول‌های ریسک آکاردئونی‌اند تا فهرست سایدبار کوتاه بماند. */}
+                  {/* فرایندهای HSE، کیفیت، ریسک و مالی آکاردئونی‌اند تا فهرست سایدبار کوتاه بماند. */}
                   {!(isD14Section && key === "risk") && (
                     isProcessAccordion ? (
                       <button
