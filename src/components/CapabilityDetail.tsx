@@ -361,8 +361,7 @@ export default function CapabilityDetail({
               <h2 className="truncate text-[19px] font-semibold leading-tight tx1">
                 {placeCodeAfterOilfieldPrefix ? (
                   <>
-                    {projectName}{" "}
-                    <span dir="ltr" className="inline-block text-[10px] font-light tx3">{project.code}</span>
+                    {projectName}<span dir="ltr" className="inline-block text-[10px] font-light tx3">{project.code}</span>
                   </>
                 ) : projectName}
               </h2>
