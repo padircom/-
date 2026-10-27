@@ -114,7 +114,7 @@ const EDMS_SIDEBAR_ITEMS: Array<{ id: EdmsTabId; icon: string; label: Bi }> = [
   { id: "kms", icon: "🧠", label: { fa: "مدیریت دانش و ویکی (KMS)", en: "Knowledge Management & Wiki" } },
 ];
 
-type QuickAction = { id: string; label: Bi; alert?: string; icon: ReactNode };
+type QuickAction = { id: string; label: Bi; shortLabel?: Bi; alert?: string; icon: ReactNode };
 
 const iconClass = "h-4 w-4";
 
@@ -124,13 +124,13 @@ const moduleDataGaps: Record<string, string[]> = {
 
 const quickActions: QuickAction[] = [
   { id: "home", label: { fa: "خانه", en: "Home" }, icon: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className={iconClass}><path d="M4 11.5 12 4l8 7.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1z" /></svg>) },
-  { id: "portfolio", label: { fa: "پورتفولیو", en: "Portfolio" }, icon: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className={iconClass}><rect x="3" y="7" width="18" height="13" rx="2" /><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M3 12h18" /></svg>) },
-  { id: "reports", label: { fa: "گزارش عملکرد", en: "Reports" }, icon: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" className={iconClass}><path d="M5 20V10M10 20V4M15 20v-7M20 20V7" /></svg>) },
-  { id: "alerts", label: { fa: "هشدارها", en: "Alerts" }, alert: "7", icon: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className={iconClass}><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" /></svg>) },
-  { id: "calendar", label: { fa: "تقویم و کارها", en: "Calendar & Tasks" }, icon: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className={iconClass}><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M8 3v4M16 3v4M3 10h18" /></svg>) },
-  { id: "calc", label: { fa: "محاسبات", en: "Calculations" }, icon: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className={iconClass}><rect x="4" y="3" width="16" height="18" rx="2" /><circle cx="9" cy="11" r="2" /><path d="M13 11h4M13 15h4M13 7h4" /></svg>) },
+  { id: "portfolio", label: { fa: "پورتفولیو", en: "Portfolio" }, shortLabel: { fa: "پروژه‌ها", en: "Portfolio" }, icon: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className={iconClass}><rect x="3" y="7" width="18" height="13" rx="2" /><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M3 12h18" /></svg>) },
+  { id: "reports", label: { fa: "گزارش عملکرد", en: "Reports" }, shortLabel: { fa: "گزارش", en: "Reports" }, icon: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" className={iconClass}><path d="M5 20V10M10 20V4M15 20v-7M20 20V7" /></svg>) },
+  { id: "alerts", label: { fa: "هشدارها", en: "Alerts" }, shortLabel: { fa: "هشدار", en: "Alerts" }, alert: "7", icon: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className={iconClass}><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" /></svg>) },
+  { id: "calendar", label: { fa: "تقویم و کارها", en: "Calendar & Tasks" }, shortLabel: { fa: "تقویم", en: "Calendar" }, icon: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className={iconClass}><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M8 3v4M16 3v4M3 10h18" /></svg>) },
+  { id: "calc", label: { fa: "محاسبات", en: "Calculations" }, shortLabel: { fa: "محاسبه", en: "Calc" }, icon: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className={iconClass}><rect x="4" y="3" width="16" height="18" rx="2" /><circle cx="9" cy="11" r="2" /><path d="M13 11h4M13 15h4M13 7h4" /></svg>) },
   { id: "excellence", label: { fa: "تعالی", en: "Excellence" }, icon: <span className="text-[15px] leading-none">🏅</span> },
-  { id: "specialty", label: { fa: "ماژول‌های تخصصی", en: "Specialty Modules" }, icon: <span className="text-[15px] leading-none">🧩</span> },
+  { id: "specialty", label: { fa: "ماژول‌های تخصصی", en: "Specialty Modules" }, shortLabel: { fa: "تخصصی", en: "Specialty" }, icon: <span className="text-[15px] leading-none">🧩</span> },
 ];
 
 const selectClass =
@@ -1061,7 +1061,7 @@ export default function RightSidebar({
                 className={`relative flex min-w-0 flex-col items-center justify-center gap-1 rounded-lg px-0.5 py-2 text-center transition ${active ? "row-on accent-t" : "tx3 hover:tx1"}`}
                 style={active ? { boxShadow: "inset 0 -1px 0 var(--accent)" } : undefined}>
                 <span className={action.id === "alerts" ? "text-rose-500" : active ? "accent-t" : ""}>{action.icon}</span>
-                <span className={`w-full truncate text-[7.2px] font-light leading-3 ${action.id === "alerts" ? "text-rose-500" : ""}`}>{t(action.label, lang)}</span>
+                <span className={`w-full truncate text-[9px] font-normal leading-3 ${action.id === "alerts" ? "text-rose-500" : ""}`}>{t(action.shortLabel ?? action.label, lang)}</span>
                 {alert && (<span className="absolute end-0.5 top-0.5 min-w-3 rounded-full bg-rose-500 px-0.5 text-[7px] font-medium leading-3 text-white">{alert}</span>)}
               </button>
             );
