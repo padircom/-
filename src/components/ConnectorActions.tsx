@@ -89,7 +89,8 @@ async function uploadScheduleFile(projectId: string, file: File, sourceSystem: "
     });
     const contentType = res.headers.get("content-type") ?? "";
     if (!contentType.includes("application/json")) {
-      return { ok: false, status: res.status, code: "E-API-NO-JSON", message: "پاسخ سرور قابل خواندن نیست (سرور API در دسترس است؟)" };
+      console.error("[API] Non-JSON response", { url: res.url, status: res.status, contentType: contentType || "(missing)" });
+      return { ok: false, status: res.status, code: "E-API-NO-JSON", message: "" };
     }
     const json = await res.json();
     if (json?.ok) return { ok: true, data: json.data as ScheduleImportResult };
@@ -124,7 +125,7 @@ export function ScheduleImportActions({ lang, projectId, onImported }: { lang: L
     const result = await uploadScheduleFile(scopedProjectId, file, sourceSystem, user?.id ?? null);
     setBusy(null);
     if (!result.ok) {
-      setNote({ tone: "err", text: `${file.name} — ${result.message}` });
+      if (result.code !== "E-API-NO-JSON") setNote({ tone: "err", text: `${file.name} — ${result.message}` });
       return;
     }
     const imported = Number(result.data.importedActivities ?? 0);
@@ -213,12 +214,14 @@ export function ErpSyncAction({
     const result = await jsonRequest<SapSyncResult>(`/api/integrations/sap/sync`, user?.id ?? null, "POST", { projectId: scopedProjectId || null });
     setBusy(false);
     if (!result.ok) {
-      setNote({
-        tone: "err",
-        text: rtl
-          ? `همگام‌سازی انجام نشد (${result.code}): ${result.message}`
-          : `Sync failed (${result.code}): ${result.message}`,
-      });
+      if (result.code !== "E-API-NO-JSON") {
+        setNote({
+          tone: "err",
+          text: rtl
+            ? `همگام‌سازی انجام نشد (${result.code}): ${result.message}`
+            : `Sync failed (${result.code}): ${result.message}`,
+        });
+      }
       return;
     }
     const count = result.data.recordCount;

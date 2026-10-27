@@ -482,6 +482,12 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
   const dom = domains.find((d) => d.id === target.moduleId);
   const cluster = clusters.find((c) => c.id === target.clusterId);
   const project = (projectsByCluster[target.clusterId] ?? []).find((p) => p.id === target.projectId);
+  const projectName = project ? t(project.name, lang) : "";
+  const oilfieldNamePrefix = "توسعه میدان نفتی";
+  const isOilfieldProject = lang === "fa" && project?.code === "OG-2401" && projectName.startsWith(`${oilfieldNamePrefix} `);
+  const projectTitleWithCode = isOilfieldProject && project ? (
+    <>{projectName}{" "}<span dir="ltr" className="inline-block text-[10px] font-light tx3">({project.code})</span></>
+  ) : null;
   const [selected, setSelected] = useState<{ pId: string; sId: string } | null>(
     target.processId && target.subId ? { pId: target.processId, sId: target.subId } : null
   );
@@ -490,13 +496,15 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
   const [taxonomyProcesses, setTaxonomyProcesses] = useState<Process[] | null>(null);
   const [taxonomyEditorOpen, setTaxonomyEditorOpen] = useState(false);
   const [taxonomyCanEdit, setTaxonomyCanEdit] = useState(false);
+  const mayViewProcessTree = Boolean(dom && target.projectId && can("project.view", target.projectId));
+  const mayEditProcessTree = Boolean(target.projectId && can("gov.process.edit", target.projectId));
 
   useEffect(() => {
     let alive = true;
     setTaxonomyProcesses(null);
     /* خواندن درخت برای همهٔ بینندگان مجاز است؛ ویرایش همچنان به مجوز
      * کلاینت و تأیید مستقل سرور نیاز دارد. */
-    if (!dom || !EDITABLE_TAXONOMY_DOMAINS.includes(dom.id) || !target.projectId || !can("project.view", target.projectId)) {
+    if (!dom || !EDITABLE_TAXONOMY_DOMAINS.includes(dom.id) || !target.projectId || !mayViewProcessTree) {
       setTaxonomyCanEdit(false);
       return () => { alive = false; };
     }
@@ -504,10 +512,10 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
       const result = await loadProcessTreeFull(target.projectId, dom.id, user?.id);
       if (!alive || !result) return;
       setTaxonomyProcesses(result.processes);
-      setTaxonomyCanEdit(result.canEdit === true && can("gov.process.edit", target.projectId));
+      setTaxonomyCanEdit(result.canEdit === true && mayEditProcessTree);
     })();
     return () => { alive = false; };
-  }, [dom?.id, target.projectId, user?.id, can]);
+  }, [dom?.id, target.projectId, user?.id, mayViewProcessTree, mayEditProcessTree]);
 
   useEffect(() => {
     const destination = target.moduleId === "d2" && target.subId ? LEGACY_HSE_SUBS[target.subId] : undefined;
@@ -591,12 +599,6 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
             <span className="inline-block rotate-180 rtl:rotate-0">→</span>
             {rtl ? "بازگشت به داشبورد" : "Back to dashboard"}
           </button>
-          {cluster && (
-            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl text-[20px]"
-                  style={{ background: `${cluster.color}1f`, border: `1px solid ${cluster.color}55` }}>
-              {cluster.icon}
-            </span>
-          )}
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
               {cluster && (
@@ -606,21 +608,17 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
               )}
               <span className="text-[16px] font-light tx4">/</span>
               {project && (
-                <h2 className="truncate text-[19px] font-semibold leading-tight tx1">{t(project.name, lang)}</h2>
+                <h2 className="truncate text-[19px] font-semibold leading-tight tx1">{projectTitleWithCode ?? t(project.name, lang)}</h2>
               )}
             </div>
             {project && (
               <p className="mt-1 truncate text-[10px] font-extralight tx3">
-                <span dir="ltr">{project.code}</span> · {t(project.client, lang)} · {t(project.location, lang)}
+                {!isOilfieldProject && <><span dir="ltr">{project.code}</span> · </>}{t(project.client, lang)} · {t(project.location, lang)}
               </p>
             )}
           </div>
           <div className="shrink-0 text-end">
-            <SystemBadge domainId={dom.id} lang={lang} className="mb-1 justify-end" />
-            <div className="text-[9px] font-extralight tx3">{t(dom.title, lang)}</div>
-            <div className="text-[11px] font-light tx1">
-              {rtl ? "PIM / EDMS — Excel ظرف است" : "PIM / EDMS — Excel is a vessel"}
-            </div>
+            <div className="text-[11px] font-medium tx2">{t(dom.title, lang)}</div>
           </div>
         </div>
 
@@ -654,9 +652,6 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
   })();
 
   const [planningTab, setPlanningTab] = useState<PexTab>(d2Tab);
-  const projectName = project ? t(project.name, lang) : "";
-  const oilfieldNamePrefix = "توسعه میدان نفتی";
-  const isOilfieldProject = lang === "fa" && project?.code === "OG-2401" && projectName.startsWith(`${oilfieldNamePrefix} `);
 
   if (dom.id === "d2") {
     return (
@@ -687,7 +682,7 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
                 <h2 className="truncate text-[19px] font-semibold leading-tight tx1">
                   {isOilfieldProject ? (
                     <>
-                      {projectName}<span dir="ltr" className="inline-block text-[10px] font-light tx3">{project.code}</span>
+                      {projectName}{" "}<span dir="ltr" className="inline-block text-[10px] font-light tx3">({project.code})</span>
                     </>
                   ) : (
                     <>
@@ -704,7 +699,7 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
               </p>
             )}
           </div>
-          <div className="shrink-0 text-end text-[11px] font-light tx1">
+          <div className="shrink-0 text-end text-[11px] font-medium tx2">
             {t(dom.nav ?? dom.title, lang)}
           </div>
         </div>
@@ -764,7 +759,7 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
               <span className="text-[16px] font-light tx4">/</span>
               {project && (
                 <h2 className="truncate text-[19px] font-semibold leading-tight tx1">
-                  {isOilfieldProject ? <>{projectName}<span dir="ltr" className="inline-block text-[10px] font-light tx3">{project.code}</span></> : projectName}
+                  {isOilfieldProject ? <>{projectName}{" "}<span dir="ltr" className="inline-block text-[10px] font-light tx3">({project.code})</span></> : projectName}
                 </h2>
               )}
             </div>
@@ -775,7 +770,7 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
             )}
           </div>
           <div className="shrink-0 text-end">
-            <div className="text-[9px] font-extralight tx3">{t(dom.title, lang)}</div>
+            <div className="text-[11px] font-medium tx2">{t(dom.title, lang)}</div>
           </div>
         </div>
         <div className="workspace-columns flex min-h-0 flex-1 gap-3 overflow-hidden">
@@ -831,18 +826,18 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
               )}
               <span className="text-[16px] font-light tx4">/</span>
               {project && (
-                <h2 className="truncate text-[19px] font-semibold leading-tight tx1">{t(project.name, lang)}</h2>
+                <h2 className="truncate text-[19px] font-semibold leading-tight tx1">{projectTitleWithCode ?? t(project.name, lang)}</h2>
               )}
             </div>
             {project && (
               <p className="mt-1 truncate text-[10px] font-extralight tx3">
-                <span dir="ltr">{project.code}</span> · {t(project.client, lang)} · {t(project.location, lang)}
+                {!isOilfieldProject && <><span dir="ltr">{project.code}</span> · </>}{t(project.client, lang)} · {t(project.location, lang)}
               </p>
             )}
           </div>
           <div className="shrink-0 text-end">
             <SystemBadge domainId={dom.id} lang={lang} className="mb-1 justify-end" />
-            <div className="text-[9px] font-extralight tx3">{t(dom.title, lang)}</div>
+            <div className="text-[11px] font-medium tx2">{t(dom.title, lang)}</div>
             <div className="text-[11px] font-light tx1">
               {rtl ? "d4 — ارجاع؛ بدون بازنویسی اعداد" : "d4 — reference only; no number rewrite"}
             </div>
@@ -928,7 +923,7 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
               <span className="text-[16px] font-light tx4">/</span>
               {project && (
                 <h2 className="truncate text-[19px] font-semibold leading-tight tx1">
-                  <span dir="ltr" className="inline-block text-[10px] font-light tx3">{project.code}</span> {t(project.name, lang)}
+                  {projectTitleWithCode ?? <><span dir="ltr" className="inline-block text-[10px] font-light tx3">{project.code}</span> {t(project.name, lang)}</>}
                 </h2>
               )}
             </div>
@@ -939,7 +934,7 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
             )}
           </div>
           <div className="shrink-0 text-end">
-            <div className="text-[11px] font-light tx1">{t(dom.title, lang)}</div>
+            <div className="text-[11px] font-medium tx2">{t(dom.title, lang)}</div>
           </div>
         </div>
         <div className="workspace-columns flex min-h-0 flex-1 gap-3 overflow-hidden">
@@ -999,7 +994,7 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
             </p>
           )}
         </div>
-        <div className="shrink-0 text-end text-[11px] font-light tx1">
+        <div className="shrink-0 text-end text-[11px] font-medium tx2">
           {rtl ? "مدیریت مهندسی و طراحی" : "Engineering & Design Management"}
         </div>
       </>
@@ -1032,7 +1027,7 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
                 <span className="text-[16px] font-light tx4">/</span>
                 {project && (
                   <h2 className="truncate text-[19px] font-semibold leading-tight tx1">
-                    <span dir="ltr" className="inline-block text-[10px] font-light tx3">{project.code}</span> {t(project.name, lang)}
+                    {projectTitleWithCode ?? <><span dir="ltr" className="inline-block text-[10px] font-light tx3">{project.code}</span> {t(project.name, lang)}</>}
                   </h2>
                 )}
               </div>
@@ -1043,7 +1038,7 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
               )}
             </div>
             <div className="shrink-0 text-end">
-              <div className="text-[11px] font-light tx1">{t(dom.title, lang)}</div>
+              <div className="text-[11px] font-medium tx2">{t(dom.title, lang)}</div>
             </div>
           </>
         }
@@ -1110,7 +1105,7 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
               </p>
             )}
           </div>
-          <div className="shrink-0 text-end text-[11px] font-light tx1">
+          <div className="shrink-0 text-end text-[11px] font-medium tx2">
             {t(dom.nav ?? dom.title, lang)}
           </div>
         </div>
@@ -1186,7 +1181,7 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
             )}
           </div>
           <div className="shrink-0 text-end">
-            <div className="text-[9px] font-extralight" style={{ color: dom.accent }}>{t(dom.title, lang)}</div>
+            <div className="text-[11px] font-medium tx2">{t(dom.title, lang)}</div>
             <div className="text-[11px] font-light tx1">
               {rtl ? "EQM — مالک ساعت ماشین؛ نرخ و هزینه در FIN" : "EQM — owns machine hours; rates & cost live in FIN"}
             </div>
@@ -1260,7 +1255,7 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
             )}
           </div>
           <div className="shrink-0 text-end">
-            <div className="text-[9px] font-extralight" style={{ color: dom.accent }}>{t(dom.title, lang)}</div>
+            <div className="text-[11px] font-medium tx2">{t(dom.title, lang)}</div>
           </div>
         </div>
         <div className="workspace-columns flex min-h-0 flex-1 gap-3 overflow-hidden">
@@ -1312,18 +1307,18 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
               )}
               <span className="text-[16px] font-light tx4">/</span>
               {project && (
-                <h2 className="truncate text-[19px] font-semibold leading-tight tx1">{t(project.name, lang)}</h2>
+                <h2 className="truncate text-[19px] font-semibold leading-tight tx1">{projectTitleWithCode ?? t(project.name, lang)}</h2>
               )}
             </div>
             {project && (
               <p className="mt-1 truncate text-[10px] font-extralight tx3">
-                <span dir="ltr">{project.code}</span> · {t(project.client, lang)} · {t(project.location, lang)}
+                {!isOilfieldProject && <><span dir="ltr">{project.code}</span> · </>}{t(project.client, lang)} · {t(project.location, lang)}
               </p>
             )}
           </div>
           <div className="shrink-0 text-end">
             <SystemBadge domainId={dom.id} lang={lang} className="mb-1 justify-end" />
-            <div className="text-[9px] font-extralight tx3">{t(dom.title, lang)}</div>
+            <div className="text-[11px] font-medium tx2">{t(dom.title, lang)}</div>
             <div className="text-[11px] font-light tx1">
               {rtl ? "CKM — اعلان قراردادی مهلت‌دار است؛ مصوبه بدون مالک و موعد پذیرفته نمی‌شود" : "CKM — notices are time-barred; no action without an owner and a due date"}
             </div>
@@ -1363,7 +1358,7 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
             <span className="inline-block rotate-180 rtl:rotate-0">→</span>
             {rtl ? "بازگشت به داشبورد" : "Back to dashboard"}
           </button>
-          {cluster && (
+          {cluster && cluster.id !== "c1" && (
             <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl text-[20px]"
                   style={{ background: `${cluster.color}1f`, border: `1px solid ${cluster.color}55` }}>
               {cluster.icon}
@@ -1378,21 +1373,19 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
               )}
               <span className="text-[16px] font-light tx4">/</span>
               {project && (
-                <h2 className="truncate text-[19px] font-semibold leading-tight tx1">{t(project.name, lang)}</h2>
+                <h2 className="truncate text-[19px] font-semibold leading-tight tx1">
+                  {isOilfieldProject ? <>{projectName}{" "}<span dir="ltr" className="inline-block text-[10px] font-light tx3">({project.code})</span></> : t(project.name, lang)}
+                </h2>
               )}
             </div>
             {project && (
               <p className="mt-1 truncate text-[10px] font-extralight tx3">
-                <span dir="ltr">{project.code}</span> · {t(project.client, lang)} · {t(project.location, lang)}
+                {!isOilfieldProject && <><span dir="ltr">{project.code}</span> · </>}{t(project.client, lang)} · {t(project.location, lang)}
               </p>
             )}
           </div>
           <div className="shrink-0 text-end">
-            <SystemBadge domainId={dom.id} lang={lang} className="mb-1 justify-end" />
-            <div className="text-[9px] font-extralight tx3">{t(dom.title, lang)}</div>
-            <div className="text-[11px] font-light tx1">
-              {rtl ? "CSU — تفکیک سیستمی، بسته آزمون و گواهی تحویل — دادهٔ واقعی" : "CSU — systemization, test packs & certificates — live data"}
-            </div>
+            <div className="text-[11px] font-medium tx2">{t(dom.title, lang)}</div>
           </div>
         </div>
         <div className="workspace-columns flex min-h-0 flex-1 gap-3 overflow-hidden">
@@ -1449,7 +1442,7 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
             )}
           </div>
           <div className="shrink-0 text-end">
-            <div className="text-[9px] font-extralight tx3">{t(dom.title, lang)}</div>
+            <div className="text-[11px] font-medium tx2">{t(dom.title, lang)}</div>
           </div>
         </div>
         <div className="workspace-columns flex min-h-0 flex-1 gap-3 overflow-hidden">
@@ -1521,7 +1514,7 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
           </button>
           )}
           </div>
-          <div className="shrink-0 text-end text-[11px] font-light tx1">
+          <div className="shrink-0 text-end text-[11px] font-medium tx2">
             {d6View === "pmo" && !d6Guide ? (rtl ? "دفتر مدیریت پروژه" : "Project Management Office") : t(dom.nav ?? dom.title, lang)}
           </div>
         </div>
@@ -1630,7 +1623,7 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
               ✎ {rtl ? "ویرایش فرایندها" : "Edit processes"}
             </button>
           )}
-          <div className="shrink-0 text-end text-[11px] font-light tx1">
+          <div className="shrink-0 text-end text-[11px] font-medium tx2">
             {t(dom.nav ?? dom.title, lang)}
           </div>
         </div>
@@ -1706,7 +1699,7 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
                   {t(cluster.title, lang)}
                 </h1>
               )}
-              {project && (<h2 className="truncate text-[19px] font-semibold leading-tight tx1">{t(project.name, lang)}</h2>)}
+              {project && (<h2 className="truncate text-[19px] font-semibold leading-tight tx1">{projectTitleWithCode ?? t(project.name, lang)}</h2>)}
             </div>
             <p className="mt-1 truncate text-[10px] font-extralight tx3">
               {rtl ? "GEO — مختصات مرکز استان/شهر و تقریبی است؛ فاصله با Haversine" : "GEO — province/city centroids; distance via Haversine"}
@@ -1714,7 +1707,7 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
           </div>
           <div className="shrink-0 text-end">
             <SystemBadge domainId={dom.id} lang={lang} className="mb-1 justify-end" />
-            <div className="text-[9px] font-extralight tx3">{t(dom.title, lang)}</div>
+            <div className="text-[11px] font-medium tx2">{t(dom.title, lang)}</div>
             <div className="text-[11px] font-light tx1">{rtl ? "بدون وابستگی به سرویس نقشه" : "no map-tile dependency"}</div>
           </div>
         </div>
@@ -1824,7 +1817,7 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
               <span className="text-[16px] font-light tx4">/</span>
               {project && (
                 <h2 className="truncate text-[19px] font-semibold leading-tight tx1">
-                  <span dir="ltr" className="inline-block text-[10px] font-light tx3">{project.code}</span> {t(project.name, lang)}
+                  {projectTitleWithCode ?? <><span dir="ltr" className="inline-block text-[10px] font-light tx3">{project.code}</span> {t(project.name, lang)}</>}
                 </h2>
               )}
             </div>
@@ -1835,7 +1828,7 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
             )}
           </div>
           <div className="shrink-0 text-end">
-            <div className="text-[11px] font-light tx1">{t(dom.title, lang)}</div>
+            <div className="text-[11px] font-medium tx2">{t(dom.title, lang)}</div>
           </div>
         </div>
         <div className="workspace-columns flex min-h-0 flex-1 gap-3 overflow-hidden">
@@ -1910,19 +1903,19 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
             )}
             <span className="text-[16px] font-light tx4">/</span>
             {project && (
-              <h2 className="truncate text-[19px] font-semibold leading-tight tx1">{t(project.name, lang)}</h2>
+              <h2 className="truncate text-[19px] font-semibold leading-tight tx1">{projectTitleWithCode ?? t(project.name, lang)}</h2>
             )}
           </div>
           {project && (
             <p className="mt-1 truncate text-[10px] font-extralight tx3">
-              <span dir="ltr">{project.code}</span> · {t(project.client, lang)} · {t(project.location, lang)}
+              {!isOilfieldProject && <><span dir="ltr">{project.code}</span> · </>}{t(project.client, lang)} · {t(project.location, lang)}
             </p>
           )}
         </div>
 
         <div className="shrink-0 text-end">
           <SystemBadge domainId={dom.id} lang={lang} className="mb-1 justify-end" />
-          <div className="text-[9px] font-extralight tx3">{t(dom.title, lang)}</div>
+          <div className="text-[11px] font-medium tx2">{t(dom.title, lang)}</div>
           <div className="text-[11px] font-light tx1">
             {rtl ? "فرآیندها و زیرفرآیندها" : "Processes & Sub-processes"}
           </div>
@@ -1997,6 +1990,7 @@ function DomainNavGroups({
   const [expandedRiskModules, setExpandedRiskModules] = useState<Record<string, boolean>>({});
   const [expandedGovernanceModules, setExpandedGovernanceModules] = useState<Record<string, boolean>>({});
   const [expandedPlanningScopeModules, setExpandedPlanningScopeModules] = useState<Record<string, boolean>>({});
+  const [expandedStakeholderModules, setExpandedStakeholderModules] = useState<Record<string, boolean>>({});
   const [expandedPmoSection, setExpandedPmoSection] = useState<boolean | null>(null);
   const [expandedProcessRows, setExpandedProcessRows] = useState<Record<string, boolean>>({});
   useEffect(() => setExpandedProcessRows({}), [dom.id]);
@@ -2080,9 +2074,12 @@ function DomainNavGroups({
         const isGovernanceModuleSection = pd.id === "governance" && (m.id === "d6" || m.id === "d20");
         const isPlanningScopeModuleSection = (pd.id === "schedule" && m.id === "d2")
           || (pd.id === "scope" && (m.id === "d12" || m.id === "d15"));
+        const isStakeholderSection = pd.id === "stakeholders" && (m.id === "d1" || m.id === "d11");
+        const isExcellenceSection = m.id === "d19";
+        const moduleAccent = isStakeholderSection ? "#7FB2FF" : m.accent;
         const isPmoSectionExpanded = expandedPmoSection ?? Boolean(pmoActive);
-        const isAccordionSection = isD14Section || isD5Section || isResourceSection || isHseSection || isRiskModuleSection || isGovernanceModuleSection || isPlanningScopeModuleSection;
-        const isRightAlignedHeader = isAccordionSection || m.id === "d8";
+        const isAccordionSection = isD14Section || isD5Section || isResourceSection || isHseSection || isRiskModuleSection || isGovernanceModuleSection || isPlanningScopeModuleSection || isStakeholderSection;
+        const isRightAlignedHeader = isAccordionSection || m.id === "d8" || isExcellenceSection;
         const isExpanded = isD14Section
           ? (expandedD14Sections === null ? activeD14SectionKey === key : expandedD14Sections[key] ?? false)
           : isD5Section
@@ -2097,7 +2094,9 @@ function DomainNavGroups({
                     ? (expandedGovernanceModules[m.id] ?? isCurrent)
                     : isPlanningScopeModuleSection
                       ? (expandedPlanningScopeModules[m.id] ?? isCurrent)
-                      : false;
+                      : isStakeholderSection
+                        ? (expandedStakeholderModules[m.id] ?? isCurrent)
+                        : false;
         const sectionBodyId = `domain-nav-${m.id}-${key}`;
         const entry = procs[0];
         const openSection = () => {
@@ -2153,6 +2152,10 @@ function DomainNavGroups({
             setExpandedPlanningScopeModules((prev) => ({ ...prev, [m.id]: !isExpanded }));
             return;
           }
+          if (isStakeholderSection) {
+            setExpandedStakeholderModules((prev) => ({ ...prev, [m.id]: !isExpanded }));
+            return;
+          }
           if (!entry?.subs[0]) return;
           if (isCurrent) onSelectSub(entry.id, entry.subs[0].id);
           else onOpenModuleSub(m.id, entry.id, entry.subs[0].id);
@@ -2182,6 +2185,23 @@ function DomainNavGroups({
           if (isRiskModuleSection) setExpandedRiskModules((prev) => ({ ...prev, [m.id]: true }));
           if (isGovernanceModuleSection) setExpandedGovernanceModules((prev) => ({ ...prev, [m.id]: true }));
           if (isPlanningScopeModuleSection) setExpandedPlanningScopeModules((prev) => ({ ...prev, [m.id]: true }));
+          if (isStakeholderSection) {
+            const previousProcess = selectedSubId
+              ? activeProcesses.find((process) => process.subs.some((sub) => sub.id === selectedSubId))
+              : undefined;
+            const previousProcessKey = previousProcess ? `${dom.id}:${previousProcess.id}` : undefined;
+            // Preserve the current module's implicit default-open state before switching to its sibling.
+            setExpandedStakeholderModules((prev) => ({
+              ...prev,
+              [dom.id]: prev[dom.id] ?? true,
+              [m.id]: true,
+            }));
+            setExpandedProcessRows((prev) => ({
+              ...prev,
+              ...(previousProcessKey ? { [previousProcessKey]: prev[previousProcessKey] ?? true } : {}),
+              [`${m.id}:${processId}`]: true,
+            }));
+          }
           if (isHseSection || m.id === "d8" || isRiskModuleSection || isGovernanceModuleSection || isPlanningScopeModuleSection || isResourceSection || isD5Section || isD14Section) {
             setExpandedProcessRows((prev) => ({ ...prev, [`${m.id}:${processId}`]: true }));
           }
@@ -2192,14 +2212,14 @@ function DomainNavGroups({
           <div key={key}>
             {/* سرِ دستهٔ ماژول (فعال = رنگ ماژول) — ریتم سایدبار «برنامه‌ریزی و تولید» */}
             <div
-              className="flex items-center gap-1.5 px-2 pb-0.5 pt-3 text-[9px] font-semibold tracking-wide"
-              style={{ color: isRiskModuleSection ? "#FF9F9F" : isHseSection ? "#DC2626" : isResourceSection || isCurrent ? m.accent : undefined }}
+              className={`flex items-center gap-1.5 text-[9px] font-semibold tracking-wide ${isExcellenceSection ? "px-1.5 pb-0 pt-2" : "px-2 pb-0.5 pt-3"}`}
+              style={{ color: isRiskModuleSection ? "#FF9F9F" : isHseSection ? "#DC2626" : isStakeholderSection || isResourceSection || isCurrent ? moduleAccent : undefined }}
               role="presentation"
             >
               {!isRightAlignedHeader && <span className="h-px flex-1" style={{ background: "var(--line-soft)" }} aria-hidden="true" />}
               <span className={`inline-flex items-center gap-1 ${isD14Section && key === "risk" ? "max-w-[210px]" : ""}`}>
                 <span aria-hidden="true">{m.icon}</span>
-                {m.id === "d14" || m.id === "d5" || isResourceSection || isHseSection || isRiskModuleSection || isGovernanceModuleSection || isPlanningScopeModuleSection ? (
+                {m.id === "d14" || m.id === "d5" || isResourceSection || isHseSection || isRiskModuleSection || isGovernanceModuleSection || isPlanningScopeModuleSection || isStakeholderSection ? (
                   <button
                     type="button"
                     onClick={openSection}
@@ -2222,7 +2242,7 @@ function DomainNavGroups({
                 onClick={() => selectSub("d14-p2", D14_IPC_TEMPLATES_SUB_ID)}
                 className={`group flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-start transition hover:bg-[var(--row-hover)] ${isCurrent && selectedSubId === D14_IPC_TEMPLATES_SUB_ID ? "row-on" : ""}`}
               >
-                <span className="shrink-0 text-[11px] leading-none" style={{ color: m.accent }} aria-hidden="true">▤</span>
+                <span className="shrink-0 text-[11px] leading-none" style={{ color: moduleAccent }} aria-hidden="true">▤</span>
                 <span className="min-w-0 flex-1 truncate text-[10px] font-normal tx1">{rtl ? "قالب‌های صورت‌وضعیت" : "IPC templates"}</span>
               </button>
             )}
@@ -2230,9 +2250,9 @@ function DomainNavGroups({
             {procs.map((p, i) => {
               const processBodyId = `domain-nav-${m.id}-${p.id}`;
               const processKey = `${m.id}:${p.id}`;
-              const isProcessAccordion = isHseSection || m.id === "d8" || isRiskModuleSection || isGovernanceModuleSection || isPlanningScopeModuleSection || isResourceSection || isD5Section || isD14Section;
+              const isProcessAccordion = isHseSection || m.id === "d8" || isRiskModuleSection || isGovernanceModuleSection || isPlanningScopeModuleSection || isStakeholderSection || isExcellenceSection || isResourceSection || isD5Section || isD14Section;
               const isProcessExpanded = !isProcessAccordion || (
-                expandedProcessRows[processKey] ?? (!(isRiskModuleSection || isGovernanceModuleSection || isPlanningScopeModuleSection || isResourceSection || isD5Section || isD14Section) && isCurrent && Boolean(selectedSubId?.startsWith(`${p.id}-`)))
+                expandedProcessRows[processKey] ?? (!(isRiskModuleSection || isGovernanceModuleSection || isPlanningScopeModuleSection || isStakeholderSection || isExcellenceSection || isResourceSection || isD5Section || isD14Section) && isCurrent && Boolean(selectedSubId?.startsWith(`${p.id}-`)))
               );
               return (
                 <div key={p.id}>
@@ -2244,10 +2264,10 @@ function DomainNavGroups({
                         onClick={() => setExpandedProcessRows((prev) => ({ ...prev, [processKey]: !isProcessExpanded }))}
                         aria-expanded={isProcessExpanded}
                         aria-controls={processBodyId}
-                        className="group flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-start transition hover:bg-[var(--row-hover)]"
+                        className={`group flex w-full items-center gap-2 rounded-lg text-start transition hover:bg-[var(--row-hover)] ${isExcellenceSection ? "px-1.5 py-1" : "px-2 py-1.5"}`}
                       >
                         <span className="text-[8px] font-light tabular-nums tx4">{(i + 1).toLocaleString(rtl ? "fa-IR" : "en-US")}</span>
-                        <span className="shrink-0 text-[11px] leading-none" style={{ color: m.accent }} aria-hidden="true">▪</span>
+                        <span className="shrink-0 text-[11px] leading-none" style={{ color: moduleAccent }} aria-hidden="true">▪</span>
                         <span className="min-w-0 flex-1 truncate text-[10px] font-normal tx1">{t(p.title, lang)}</span>
                         <svg
                           viewBox="0 0 24 24"
@@ -2265,7 +2285,7 @@ function DomainNavGroups({
                     ) : (
                       <div className="group flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-start transition hover:bg-[var(--row-hover)]">
                         {!isD14Section && <span className="text-[8px] font-light tabular-nums tx4">{(i + 1).toLocaleString(rtl ? "fa-IR" : "en-US")}</span>}
-                        <span className="shrink-0 text-[11px] leading-none" style={{ color: m.accent }} aria-hidden="true">▪</span>
+                        <span className="shrink-0 text-[11px] leading-none" style={{ color: moduleAccent }} aria-hidden="true">▪</span>
                         <span className="min-w-0 flex-1 truncate text-[10px] font-normal tx1">{t(p.title, lang)}</span>
                       </div>
                     )
@@ -2281,11 +2301,11 @@ function DomainNavGroups({
                             key={s.id}
                             type="button"
                             onClick={() => selectSub(p.id, s.id)}
-                            className={`group flex w-full items-center gap-2 rounded-lg py-1.5 pe-2 ps-7 text-start transition hover:bg-[var(--row-hover)] ${
+                            className={`group flex w-full items-center gap-2 rounded-lg text-start transition hover:bg-[var(--row-hover)] ${isExcellenceSection ? "py-1 pe-1.5 ps-5" : "py-1.5 pe-2 ps-7"} ${
                               isCurrent && selectedSubId === s.id ? "row-on" : ""
                             }`}
                           >
-                            <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: m.accent }} />
+                            <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: moduleAccent }} />
                             <span className="min-w-0 flex-1 truncate text-[10px] font-light tx1">{t(s.title, lang)}</span>
                             {showSql && sqlTables.length > 0 && (
                               <span className="flex shrink-0 flex-wrap gap-1">
@@ -2313,7 +2333,7 @@ function DomainNavGroups({
                 aria-expanded={isPmoSectionExpanded}
                 aria-controls="domain-nav-d6-pmo"
                 className="flex w-full items-center gap-1.5 px-2 pb-0.5 pt-3 text-start text-[9px] font-semibold tracking-wide transition hover:tx1"
-                style={{ color: pmoActive ? m.accent : undefined }}>
+                style={{ color: pmoActive ? moduleAccent : undefined }}>
                 <span className="inline-flex items-center gap-1">
                   <span aria-hidden="true">🏢</span>
                   <span>{rtl ? "دفتر مدیریت پروژه" : "Project Management Office"}</span>
@@ -2330,7 +2350,7 @@ function DomainNavGroups({
                 <button key={tab} type="button" onClick={() => onOpenPmo(tab)}
                   aria-pressed={Boolean(pmoActive && activePmoTab === tab)}
                   className={`flex w-full items-center gap-2 rounded-lg py-1.5 pe-2 ps-7 text-start text-[10px] font-light tx1 transition hover:bg-[var(--row-hover)] ${pmoActive && activePmoTab === tab ? "row-on" : ""}`}>
-                  <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: m.accent }} />
+                  <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: moduleAccent }} />
                   {t(label, lang)}
                 </button>
               ))}
@@ -2391,7 +2411,7 @@ function DomainAside({
   const rtl = lang === "fa";
   return (
     <aside dir={rtl ? "rtl" : "ltr"} className="glass-dark flex w-[300px] shrink-0 flex-col overflow-hidden rounded-2xl">
-      <div className="b-line border-b px-3 py-2.5">
+      <div className={`b-line border-b px-3 ${dom.id === "d19" ? "py-1.5" : "py-2.5"}`}>
         <div className="flex items-center gap-2">
           <span className="grid h-6 w-6 place-items-center rounded-md text-[12px]"
                 style={{ background: `${dom.accent}1a`, border: `1px solid ${dom.accent}55`, color: dom.accent }}>
@@ -2402,7 +2422,7 @@ function DomainAside({
           </div>
         </div>
       </div>
-      <div className="thin-scroll flex-1 overflow-y-auto p-2 space-y-1">
+      <div className={`thin-scroll flex-1 overflow-y-auto ${dom.id === "d19" ? "p-1.5 space-y-0.5" : "p-2 space-y-1"}`}>
         <DomainNavGroups
           lang={lang}
           dom={dom}
@@ -2432,19 +2452,20 @@ export default function ModuleDetail(props: Props) {
   const [reloadKey, setReloadKey] = useState(0);
 
   const legacyEditor = dom?.id === "d6" || dom?.id === "d20";
+  const mayEditProcessTree = Boolean(target.projectId && can("gov.process.edit", target.projectId));
   const mayEdit = tree?.canEdit === true;
 
   /* GOV-1: پاسخ سرور تعیین می‌کند دکمهٔ ویرایش دیده شود یا نه. */
   useEffect(() => {
     let alive = true;
     setTree(null);
-    if (!dom || !EDITABLE_TAXONOMY_DOMAINS.includes(dom.id) || !target.projectId || !can("gov.process.edit", target.projectId)) return () => { alive = false; };
+    if (!dom || !EDITABLE_TAXONOMY_DOMAINS.includes(dom.id) || !target.projectId || !mayEditProcessTree) return () => { alive = false; };
     (async () => {
       const result = await loadProcessTreeFull(target.projectId, dom.id, user?.id);
       if (alive) setTree(result);
     })();
     return () => { alive = false; };
-  }, [dom?.id, target.projectId, user?.id, reloadKey, can]);
+  }, [dom?.id, target.projectId, user?.id, reloadKey, mayEditProcessTree]);
 
   const onSaved = (next: Process[]) => {
     setOpen(false);

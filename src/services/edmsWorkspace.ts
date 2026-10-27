@@ -264,7 +264,8 @@ export class EdmsClient {
       });
       const ct = res.headers.get('content-type') ?? '';
       if (!ct.includes('application/json')) {
-        return { ok: false, status: res.status, code: 'E-API-NO-JSON', message: 'پاسخ سرور قابل خواندن نیست' };
+        console.error('[API] Non-JSON response', { url: res.url, status: res.status, contentType: ct || '(missing)' });
+        return { ok: false, status: res.status, code: 'E-API-NO-JSON', message: '' };
       }
       const json = await res.json();
       if (json?.ok) return { ok: true, data: json.data as any };

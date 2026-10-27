@@ -38,7 +38,7 @@ export type Process = {
   subs: SubProcess[];
 };
 
-export type SidebarGroupId = "pg1" | "pg2" | "pg3" | "pg4" | "pg5" | "support";
+export type SidebarGroupId = "pg1" | "pg2" | "pg3" | "pg4" | "pg5" | "support" | "org";
 
 export type Domain = {
   id: string;
@@ -78,6 +78,7 @@ export const sidebarGroups: SidebarGroup[] = [
   { id: "pg4", title: { fa: "پایش و کنترل", en: "Monitoring & Controlling" }, short: "MC", color: "#FF9F9F", icon: "🔍" },
   { id: "pg5", title: { fa: "اختتامیه", en: "Closing" }, short: "CL", color: "#C9A7FF", icon: "🏁" },
   { id: "support", title: { fa: "پشتیبان", en: "Supporting" }, short: "SP", color: "#94A3B8", icon: "🧰", pinned: true },
+  { id: "org", title: { fa: "مدیریت سازمانی", en: "Organizational Management" }, short: "ORG", color: "#FBBF24", icon: "🏢" },
 ];
 
 /* ============================================================
@@ -96,7 +97,8 @@ export type PerformanceDomainId =
   | "stakeholders"
   | "resources"
   | "risk"
-  | "extension";
+  | "extension"
+  | "excellence";
 
 export type PerformanceDomain = {
   id: PerformanceDomainId;
@@ -114,6 +116,7 @@ export const performanceDomains: PerformanceDomain[] = [
   { id: "resources", title: { fa: "منابع", en: "Resources" }, icon: "🔧", color: "#7A4BB8" },
   { id: "risk", title: { fa: "ریسک", en: "Risk" }, icon: "⚠️", color: "#D64A4A" },
   { id: "extension", title: { fa: "افزونه‌های صنعتی", en: "Industry Extensions" }, icon: "🧩", color: "#94A3B8" },
+  { id: "excellence", title: { fa: "مدیریت تعالی سازمانی", en: "Organisational Excellence" }, icon: "🏅", color: "#FBBF24" },
 ];
 
 /** نگاشت ماژول (دامنه) ← حوزهٔ عملکردی PMBOK. */
@@ -136,7 +139,7 @@ export const domainPerformance: Record<string, PerformanceDomainId> = {
   d16: "extension",
   d17: "extension",
   d18: "extension",
-  d19: "extension",
+  d19: "excellence",
 };
 
 /** برچسب حوزه می‌تواند با گروه فرایندی فرق کند؛ d5 در پایش/کنترل هزینه و تدارکات است. */
@@ -167,6 +170,7 @@ export const performanceDomainOrder: Record<string, PerformanceDomainId[]> = {
   pg4: ["finance", "risk", "extension"],
   pg5: ["scope"],
   support: ["stakeholders", "extension"],
+  org: ["excellence"],
 };
 
 /** حوزه‌های عملکردی موجود در یک گروه فرایندی، با ماژول‌های هر حوزه.
@@ -1678,7 +1682,7 @@ export const domains: Domain[] = [
   },
   {
     id: "d19",
-    group: "support",
+    group: "org",
     icon: "🏅",
     accent: "#FBBF24",
     title: { fa: "مدیریت تعالی سازمانی (EFQM)", en: "Organisational Excellence (EFQM)" },

@@ -129,6 +129,8 @@ const quickActions: QuickAction[] = [
   { id: "alerts", label: { fa: "هشدارها", en: "Alerts" }, alert: "7", icon: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className={iconClass}><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" /></svg>) },
   { id: "calendar", label: { fa: "تقویم و کارها", en: "Calendar & Tasks" }, icon: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className={iconClass}><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M8 3v4M16 3v4M3 10h18" /></svg>) },
   { id: "calc", label: { fa: "محاسبات", en: "Calculations" }, icon: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className={iconClass}><rect x="4" y="3" width="16" height="18" rx="2" /><circle cx="9" cy="11" r="2" /><path d="M13 11h4M13 15h4M13 7h4" /></svg>) },
+  { id: "excellence", label: { fa: "تعالی", en: "Excellence" }, icon: <span className="text-[15px] leading-none">🏅</span> },
+  { id: "specialty", label: { fa: "ماژول‌های تخصصی", en: "Specialty Modules" }, icon: <span className="text-[15px] leading-none">🧩</span> },
 ];
 
 const selectClass =
@@ -163,9 +165,11 @@ export default function RightSidebar({
   const [query, setQuery] = useState("");
   /* لایهٔ ۲: کدام حوزهٔ عملکردی (زیر گروه فرایندی) باز است — فاز نمایشی روی «آغازین». */
   const [openPerf, setOpenPerf] = useState<string | null>(null);
+  const [specialtyQuickOpen, setSpecialtyQuickOpen] = useState(false);
   const [taxonomyOverrides, setTaxonomyOverrides] = useState<Record<string, Process[]>>({});
   const [sectionsOpen, setSectionsOpen] = useState<{
     pmis: boolean;
+    org: boolean;
     mes: boolean;
     cmms: boolean;
     scm: boolean;
@@ -174,6 +178,7 @@ export default function RightSidebar({
     edms: boolean;
   }>({
     pmis: false,
+    org: false,
     mes: false,
     cmms: false,
     scm: false,
@@ -182,7 +187,7 @@ export default function RightSidebar({
     edms: false,
   });
 
-  const toggleSection = (key: "pmis" | "mes" | "cmms" | "scm" | "iiot" | "hrm" | "edms") => {
+  const toggleSection = (key: "pmis" | "org" | "mes" | "cmms" | "scm" | "iiot" | "hrm" | "edms") => {
     setSectionsOpen((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
@@ -255,6 +260,7 @@ export default function RightSidebar({
   const visibleDomains = domains
     .filter((d) => d.id !== "d7" || can("system.manage"))
     .map((d) => taxonomyOverrides[d.id] ? { ...d, processes: taxonomyOverrides[d.id] } : d);
+  const specialtyModules = visibleDomains.filter((d) => ["d8", "d16", "d17", "d18"].includes(d.id));
 
   const q = query.trim().toLowerCase();
   const matchesQuery = (d: Domain) => {
@@ -391,7 +397,9 @@ export default function RightSidebar({
       ? { fa: "مدیریت ایمنی و بهداشت", en: "Health & Safety Management" }
       : pd.id === "extension" && groupId === "pg4"
         ? { fa: "مدیریت کیفیت و بازرسی", en: "Quality & Inspection Management" }
-        : pd.title;
+        : pd.id === "scope" && groupId === "pg5"
+          ? { fa: "مدیریت راه‌اندازی", en: "Commissioning Management" }
+          : pd.title;
     const first = pd.modules[0];
     const pdNoData = selCluster ? (moduleDataGaps[first.id] ?? []).includes(selCluster) : false;
     const canEnter = Boolean(selCluster && selProject && !pdNoData);
@@ -541,9 +549,7 @@ export default function RightSidebar({
                 type="button"
                 onClick={() => toggleSection("pmis")}
                 aria-expanded={sectionsOpen.pmis}
-                className={`sidebar-group-title flex w-full items-center gap-2 px-2 py-2 text-start transition ${
-                  activeSystemView.system === "pmis" ? "is-active" : "tx2 hover:tx1"
-                }`}
+                className="sidebar-group-title flex w-full items-center gap-2 px-2 py-2 text-start tx2 transition hover:tx1"
               >
                 <span className="text-[12px]">📐</span>
                 <span className="min-w-0 flex-1 truncate text-[11px] font-semibold">
@@ -564,7 +570,7 @@ export default function RightSidebar({
 
               {sectionsOpen.pmis && (
                 <div className="fade-rise space-y-1 border-s-2 border-sky-500/30 ps-2 pt-0.5">
-                  {sidebarGroups.map((g) => {
+                  {sidebarGroups.filter((g) => g.id !== "org").map((g) => {
                     const members = visibleDomains.filter((d) => d.group === g.id);
                     if (!members.length) return null;
                     const isOpen = g.pinned ? supportOpen : openGroup === g.id;
@@ -617,8 +623,6 @@ export default function RightSidebar({
                 </div>
               )}
             </section>
-
-            {/* ── خط جداکنندهٔ بصری (Divider) بین بخش ۱ و ۲ ── */}
             <div role="separator" aria-orientation="horizontal" className="my-2 flex items-center gap-2 px-1">
               <span className="hair h-px flex-1" />
               <span className="hair h-px flex-1" />
@@ -959,22 +963,78 @@ export default function RightSidebar({
                 </div>
               )}
             </section>
+            {/* تعالی سازمانی خارج از گروه‌های PMIS و در سطح سازمان ارائه می‌شود. */}
+            <div role="separator" aria-orientation="horizontal" className="my-2 flex items-center gap-2 px-1">
+              <span className="hair h-px flex-1" />
+              <span className="hair h-px flex-1" />
+            </div>
+            <section className="space-y-1">
+              <button
+                type="button"
+                onClick={() => toggleSection("org")}
+                aria-expanded={sectionsOpen.org}
+                className={`sidebar-group-title flex w-full items-center gap-2 px-2 py-2 text-start transition ${sectionsOpen.org ? "is-active" : "tx2 hover:tx1"}`}
+              >
+                <span className="text-[12px]">🏢</span>
+                <span className="min-w-0 flex-1 truncate text-[11px] font-semibold">{rtl ? "مدیریت سازمانی" : "Organizational Management"}</span>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={`h-3 w-3 shrink-0 tx4 transition-transform ${sectionsOpen.org ? "rotate-180" : ""}`}>
+                  <path d="m6 9 6 6 6-6" />
+                </svg>
+              </button>
+              {sectionsOpen.org && (
+                <div className="fade-rise space-y-0.5 border-s-2 border-amber-400/30 ps-2 pt-0.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const scope = projectScope ?? (selCluster && selProject ? { clusterId: selCluster, projectId: selProject } : null);
+                      if (scope) onNavigate({ moduleId: "d19", clusterId: scope.clusterId, projectId: scope.projectId });
+                      else onQuickAction("portfolio");
+                    }}
+                    className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-start text-[10.5px] transition tx2 hover:bg-[var(--row-hover)] hover:tx1"
+                  >
+                    <span className="text-[11px]">🏅</span>
+                    <span className="min-w-0 flex-1 truncate">{rtl ? "مدیریت تعالی سازمانی" : "Organizational Excellence"}</span>
+                    <span className="text-[9px] tx4">←</span>
+                  </button>
+                </div>
+              )}
+            </section>
+            <div role="separator" aria-orientation="horizontal" className="my-2 flex items-center gap-2 px-1">
+              <span className="hair h-px flex-1" />
+              <span className="hair h-px flex-1" />
+            </div>
+
           </>
         )}
       </div>
 
-      <nav aria-label={rtl ? "دسترسی سریع" : "Quick access"} className="b-line border-t px-3 pb-3 pt-2.5">
+      <nav aria-label={rtl ? "دسترسی سریع" : "Quick access"} className="relative b-line border-t px-3 pb-3 pt-2.5">
         <div className="mb-2 flex items-center gap-2 px-1">
           <h3 className="shrink-0 text-[10.5px] font-medium tx1">{rtl ? "دسترسی سریع" : "Quick Access"}</h3>
           <span className="hair h-px flex-1" />
         </div>
-        <div className="grid grid-cols-6 gap-1" dir={rtl ? "rtl" : "ltr"}>
+        <div className="grid grid-cols-4 gap-1" dir={rtl ? "rtl" : "ltr"}>
           {quickActions.map((action) => {
-            const active = quickAction === action.id;
+            const active = quickAction === action.id || (action.id === "specialty" && specialtyQuickOpen);
             const alert = action.alert ? Number(action.alert).toLocaleString(rtl ? "fa-IR" : "en-US") : undefined;
             return (
-              <button key={action.id} type="button" onClick={() => onQuickAction(action.id)}
+              <button key={action.id} type="button" onClick={() => {
+                if (action.id === "specialty") {
+                  setSpecialtyQuickOpen((open) => !open);
+                  return;
+                }
+                setSpecialtyQuickOpen(false);
+                if (action.id === "excellence") {
+                  const scope = projectScope ?? (selCluster && selProject ? { clusterId: selCluster, projectId: selProject } : null);
+                  if (scope) onNavigate({ moduleId: "d19", clusterId: scope.clusterId, projectId: scope.projectId });
+                  else onQuickAction("portfolio");
+                  return;
+                }
+                onQuickAction(action.id);
+              }}
                 title={t(action.label, lang)} aria-label={t(action.label, lang)} aria-current={active ? "page" : undefined}
+                aria-expanded={action.id === "specialty" ? specialtyQuickOpen : undefined}
+                aria-controls={action.id === "specialty" ? "quick-specialty-modules" : undefined}
                 className={`relative flex min-w-0 flex-col items-center justify-center gap-1 rounded-lg px-0.5 py-2 text-center transition ${active ? "row-on accent-t" : "tx3 hover:tx1"}`}
                 style={active ? { boxShadow: "inset 0 -1px 0 var(--accent)" } : undefined}>
                 <span className={action.id === "alerts" ? "text-rose-500" : active ? "accent-t" : ""}>{action.icon}</span>
@@ -984,6 +1044,29 @@ export default function RightSidebar({
             );
           })}
         </div>
+        {specialtyQuickOpen && (
+          <div id="quick-specialty-modules" role="menu" aria-label={rtl ? "ماژول‌های تخصصی" : "Specialty modules"}
+            className="absolute bottom-full end-3 z-50 mb-2 w-[calc(100%-1.5rem)] rounded-xl border b-line-soft glass-dark p-2 shadow-xl"
+            dir={rtl ? "rtl" : "ltr"}>
+            <p className="mb-1.5 px-2 text-[9px] font-medium tx3">{rtl ? "ورود به ماژول تخصصی" : "Open a specialty module"}</p>
+            <div className="space-y-0.5">
+              {specialtyModules.map((module) => (
+                <button key={module.id} type="button" role="menuitem"
+                  onClick={() => {
+                    const scope = projectScope ?? (selCluster && selProject ? { clusterId: selCluster, projectId: selProject } : null);
+                    setSpecialtyQuickOpen(false);
+                    if (scope) onNavigate({ moduleId: module.id, clusterId: scope.clusterId, projectId: scope.projectId });
+                    else onQuickAction("portfolio");
+                  }}
+                  className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-start text-[10px] tx2 transition hover:bg-[var(--row-hover)] hover:tx1">
+                  <span className="shrink-0" style={{ color: module.accent }}>{module.icon}</span>
+                  <span className="min-w-0 flex-1 truncate">{t(module.nav ?? module.title, lang)}</span>
+                  <span className="text-[9px] tx4">←</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </nav>
     </aside>
     </div>
