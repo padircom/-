@@ -1990,7 +1990,7 @@ function DomainNavGroups({
 }) {
   const rtl = lang === "fa";
   const { can } = useAuth();
-  const [expandedD14Section, setExpandedD14Section] = useState<string | "none" | null>(null);
+  const [expandedD14Sections, setExpandedD14Sections] = useState<Record<string, boolean> | null>(null);
   const [expandedD5Sections, setExpandedD5Sections] = useState<Record<string, boolean> | null>(null);
   const [expandedResourceSection, setExpandedResourceSection] = useState<string | "none" | null>(null);
   const [expandedHseSection, setExpandedHseSection] = useState<string | "none" | null>(null);
@@ -2079,7 +2079,7 @@ function DomainNavGroups({
         const isAccordionSection = isD14Section || isD5Section || isResourceSection || isHseSection || isRiskModuleSection || isGovernanceModuleSection;
         const isRightAlignedHeader = isAccordionSection || m.id === "d8";
         const isExpanded = isD14Section
-          ? (expandedD14Section === null ? activeD14SectionKey === key : expandedD14Section === key)
+          ? (expandedD14Sections === null ? activeD14SectionKey === key : expandedD14Sections[key] ?? false)
           : isD5Section
             ? (expandedD5Sections === null ? activeD5SectionKey === key : expandedD5Sections[key] ?? false)
             : isResourceSection
@@ -2095,7 +2095,13 @@ function DomainNavGroups({
         const entry = procs[0];
         const openSection = () => {
           if (isD14Section) {
-            setExpandedD14Section(isExpanded ? "none" : key);
+            setExpandedD14Sections((prev) => {
+              const current = prev ?? Object.fromEntries(
+                sections.filter((section) => section.module.id === "d14")
+                  .map((section) => [section.key, section.key === activeD14SectionKey]),
+              );
+              return { ...current, [key]: !isExpanded };
+            });
             return;
           }
           if (isD5Section) {
@@ -2129,11 +2135,17 @@ function DomainNavGroups({
           else onOpenModuleSub(m.id, entry.id, entry.subs[0].id);
         };
         const selectSub = (processId: string, subId: string) => {
-          if (isD14Section) setExpandedD14Section(null);
+          if (isD14Section) setExpandedD14Sections((prev) => {
+            const current = prev ?? Object.fromEntries(
+              sections.filter((section) => section.module.id === "d14")
+                .map((section) => [section.key, section.key === activeD14SectionKey]),
+            );
+            return { ...current, [key]: true };
+          });
           if (isResourceSection) setExpandedResourceSection(null);
           if (isRiskModuleSection) setExpandedRiskModules((prev) => ({ ...prev, [m.id]: true }));
           if (isGovernanceModuleSection) setExpandedGovernanceModules((prev) => ({ ...prev, [m.id]: true }));
-          if (isHseSection || m.id === "d8" || isRiskModuleSection || isGovernanceModuleSection || isD5Section) {
+          if (isHseSection || m.id === "d8" || isRiskModuleSection || isGovernanceModuleSection || isD5Section || isD14Section) {
             setExpandedProcessRows((prev) => ({ ...prev, [`${m.id}:${processId}`]: true }));
           }
           if (isCurrent) onSelectSub(processId, subId);
@@ -2181,14 +2193,14 @@ function DomainNavGroups({
             {procs.map((p, i) => {
               const processBodyId = `domain-nav-${m.id}-${p.id}`;
               const processKey = `${m.id}:${p.id}`;
-              const isProcessAccordion = isHseSection || m.id === "d8" || isRiskModuleSection || isGovernanceModuleSection || isD5Section;
+              const isProcessAccordion = isHseSection || m.id === "d8" || isRiskModuleSection || isGovernanceModuleSection || isD5Section || isD14Section;
               const isProcessExpanded = !isProcessAccordion || (
-                expandedProcessRows[processKey] ?? (!(isRiskModuleSection || isGovernanceModuleSection || isD5Section) && isCurrent && Boolean(selectedSubId?.startsWith(`${p.id}-`)))
+                expandedProcessRows[processKey] ?? (!(isRiskModuleSection || isGovernanceModuleSection || isD5Section || isD14Section) && isCurrent && Boolean(selectedSubId?.startsWith(`${p.id}-`)))
               );
               return (
                 <div key={p.id}>
                   {/* فرایندهای HSE، کیفیت، ریسک، مالی و حاکمیت آکاردئونی‌اند تا فهرست سایدبار کوتاه بماند. */}
-                  {!(isD14Section && key === "risk") && (
+                  {(isProcessAccordion || !(isD14Section && key === "risk")) && (
                     isProcessAccordion ? (
                       <button
                         type="button"
