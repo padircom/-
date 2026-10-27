@@ -138,7 +138,7 @@ function LiveCom({
   userId: string | null;
 }) {
   const fa = lang === 'fa';
-  const t = (a: string, b: string) => (fa ? a : b);
+  const t = useCallback((a: string, b: string) => (fa ? a : b), [fa]);
   const client = useMemo(() => new ComClient(projectId, userId), [projectId, userId]);
 
   const [tab, setTab] = useState<ComTab>(() => initialTab ?? (subId ? SUB_TO_TAB[subId] ?? 'overview' : 'overview'));
@@ -164,6 +164,12 @@ function LiveCom({
   const [cold, setCold] = useState<ColdClearancePayload | null>(null);
   const [selPackId, setSelPackId] = useState<string>('');
   const [selSheetId, setSelSheetId] = useState<string>('');
+  const selSystemIdRef = useRef(selSystemId);
+  const selPackIdRef = useRef(selPackId);
+  const selSheetIdRef = useRef(selSheetId);
+  selSystemIdRef.current = selSystemId;
+  selPackIdRef.current = selPackId;
+  selSheetIdRef.current = selSheetId;
 
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -215,7 +221,7 @@ function LiveCom({
       if (pr.ok) setPrecomm(pr.data); else setPrecomm(null);
       if (tg.ok) setTags(tg.data); else setTags(null);
 
-      if (s.data.items.length && !selSystemId) {
+      if (s.data.items.length && !selSystemIdRef.current) {
         const first = s.data.items[0].Id;
         setSelSystemId(first);
         setBndForm(v => ({ ...v, systemId: first }));
@@ -223,13 +229,13 @@ function LiveCom({
         setPackForm(v => ({ ...v, systemId: first }));
         setTagForm(v => ({ ...v, systemId: first }));
       }
-      if (pk.ok && pk.data.items.length && !selPackId) {
+      if (pk.ok && pk.data.items.length && !selPackIdRef.current) {
         const fp = pk.data.items[0].Id;
         setSelPackId(fp);
         setSheetForm(v => ({ ...v, packId: fp }));
         setClearForm(v => ({ ...v, packId: fp }));
       }
-      if (sh.ok && sh.data.items.length && !selSheetId) {
+      if (sh.ok && sh.data.items.length && !selSheetIdRef.current) {
         const fs = sh.data.items[0].Id;
         setSelSheetId(fs);
         setReadForm(v => ({ ...v, sheetId: fs }));
@@ -241,7 +247,7 @@ function LiveCom({
     } finally {
       if (seq === gen.current) setLoading(false);
     }
-  }, [client, selSystemId, selPackId, selSheetId, t]);
+  }, [client, t]);
 
   useEffect(() => {
     void loadAll();
@@ -305,16 +311,6 @@ function LiveCom({
 
   return (
     <div dir={fa ? 'rtl' : 'ltr'} className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-1">
-      <header className="glass-dark rounded-xl p-3 flex flex-wrap items-center gap-3">
-        <div className="flex-1">
-          <h3 className="tx1 font-semibold text-[13px]">{t('راه‌اندازی و تحویل OPERCOM — دادهٔ واقعی پروژه', 'Commissioning OPERCOM — live project data')}</h3>
-          <p className="text-[10px] tx3" dir="ltr">{projectId} · {systems?.count ?? 0} Systems · {tags?.count ?? 0} Tags · {packs?.count ?? 0} Packs · {sheets?.count ?? 0} Sheets</p>
-          {plan?.summary && <p className="text-[10px] tx3 mt-1">{t(`Systemization Readiness: ${plan.summary.readinessPct}% — Without boundary: ${plan.summary.withoutBoundary} — Without milestone: ${plan.summary.withoutMilestone}`, `آمادگی تفکیک: ${plan.summary.readinessPct}% — بدون مرز: ${plan.summary.withoutBoundary} — بدون تاریخ هدف: ${plan.summary.withoutMilestone}`)}</p>}
-          <p className="text-[9px] tx4 mt-1">{t('OPERCOM Flow: Systemization → Tag Register → Boundary → Test Pack → Check Sheet A (Cold) → Cold Clearance → MC → Check Sheet B (Hot) → RFSU → PAC → FAC | Punch Cat A blocks MC, B blocks PAC, C blocks FAC', 'گردش OPERCOM: تفکیک → بانک تگ → مرزبندی → بسته آزمون → برگه سرد A → پاکسازی سرد → MC → برگه گرم B → RFSU → PAC → FAC | پانچ A مانع MC، B مانع PAC، C مانع FAC')}</p>
-        </div>
-        <button className={btnGhost} disabled={loading || busy} onClick={() => void loadAll()}>{t('تازه‌سازی', 'Refresh')}</button>
-      </header>
-
       {!hideTabs && (
         <nav className="flex flex-wrap gap-1.5">
           {TABS.map(tabDef => (
@@ -332,7 +328,11 @@ function LiveCom({
       {/* overview OPERCOM */}
       {tab === 'overview' && (
         <div className="grid gap-3">
-          <Section title={t('OPERCOM — گردش استاندارد راه‌اندازی', 'OPERCOM — Standard Commissioning Flow')} note={t('واژگان مطابق OPERCOM: System → Subsystem → Tag → Boundary → Test Pack → Check Sheet A/B → Punch → Certificate', 'OPERCOM vocab: System → Subsystem → Tag → Boundary → Test Pack → Check Sheet A/B → Punch → Certificate')}>
+          <Section
+            title={t('OPERCOM — گردش استاندارد راه‌اندازی', 'OPERCOM — Standard Commissioning Flow')}
+            note={t('واژگان مطابق OPERCOM: System → Subsystem → Tag → Boundary → Test Pack → Check Sheet A/B → Punch → Certificate', 'OPERCOM vocab: System → Subsystem → Tag → Boundary → Test Pack → Check Sheet A/B → Punch → Certificate')}
+            action={<button className={btnGhost} disabled={loading || busy} onClick={() => void loadAll()}>{t('تازه‌سازی', 'Refresh')}</button>}
+          >
             <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-[11px] tx2">
               <div className="rounded-lg border b-line-soft p-2">1️⃣ Systemization & Tag Register<br/><span className="tx3 text-[10px]">درخت سیستم‌ها + بانک تگ (Tag No یکتا)</span></div>
               <div className="rounded-lg border b-line-soft p-2">2️⃣ Boundary & Milestone<br/><span className="tx3 text-[10px]">مرزبندی WBS/Activity/PID + تاریخ هدف MC/RFSU/PAC/FAC</span></div>

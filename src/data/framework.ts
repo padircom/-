@@ -38,7 +38,7 @@ export type Process = {
   subs: SubProcess[];
 };
 
-export type SidebarGroupId = "pg1" | "pg2" | "pg3" | "pg4" | "pg5" | "support";
+export type SidebarGroupId = "pg1" | "pg2" | "pg3" | "pg4" | "pg5" | "support" | "settings" | "org";
 
 export type Domain = {
   id: string;
@@ -62,13 +62,13 @@ export type Domain = {
 export type SidebarGroup = {
   id: SidebarGroupId;
   title: Bi;
+  /** عنوان نمایشی جایگزین فقط برای ناوبری؛ عنوان PMBOK و حلقه ثابت می‌ماند. */
+  navTitle?: Bi;
   short: string;
   color: string;
   /** آیکن گروه فرایندی — همان آیکن‌های بنر استاندارد PMBOK
    * (موشک/کلیپ‌بورد/چرخ‌دنده/ذره‌بین/پرچم) تا سایدبار و بنر یکی باشند. */
   icon: string;
-  /** گروه سنجاق‌شدهٔ انتهای سایدبار (مستقل از آکاردئون فازها). */
-  pinned?: boolean;
 };
 
 export const sidebarGroups: SidebarGroup[] = [
@@ -77,7 +77,7 @@ export const sidebarGroups: SidebarGroup[] = [
   { id: "pg3", title: { fa: "اجرا", en: "Executing" }, short: "EX", color: "#FFD48A", icon: "⚙️" },
   { id: "pg4", title: { fa: "پایش و کنترل", en: "Monitoring & Controlling" }, short: "MC", color: "#FF9F9F", icon: "🔍" },
   { id: "pg5", title: { fa: "اختتامیه", en: "Closing" }, short: "CL", color: "#C9A7FF", icon: "🏁" },
-  { id: "support", title: { fa: "پشتیبان", en: "Supporting" }, short: "SP", color: "#94A3B8", icon: "🧰", pinned: true },
+  { id: "org", title: { fa: "مدیریت سازمانی", en: "Organizational Management" }, short: "ORG", color: "#FBBF24", icon: "🏢" },
 ];
 
 /* ============================================================
@@ -85,8 +85,8 @@ export const sidebarGroups: SidebarGroup[] = [
    ------------------------------------------------------------
    ساختار سه‌لایه: گروه فرایندی (لایهٔ ۱) ← حوزهٔ عملکردی
    (لایهٔ ۲) ← ماژول (لایهٔ ۳، در سایدبار فرعی صفحهٔ ماژول).
-   ماژول‌هایی که معادل مستقیمی در PMBOK ندارند (کیفیت، HSE،
-   GIS، سامانه، تعالی سازمانی) در «افزونه‌های صنعتی» می‌نشینند.
+   افزونه‌های صنعتی (مانند کیفیت، HSE و GIS) در حوزهٔ افزونه‌ها قرار دارند؛
+   مدیریت سامانه در گروه مستقل «تنظیمات» و تعالی سازمانی در گروه سازمانی است.
    ============================================================ */
 export type PerformanceDomainId =
   | "governance"
@@ -96,7 +96,9 @@ export type PerformanceDomainId =
   | "stakeholders"
   | "resources"
   | "risk"
-  | "extension";
+  | "extension"
+  | "excellence"
+  | "settings";
 
 export type PerformanceDomain = {
   id: PerformanceDomainId;
@@ -114,6 +116,8 @@ export const performanceDomains: PerformanceDomain[] = [
   { id: "resources", title: { fa: "منابع", en: "Resources" }, icon: "🔧", color: "#7A4BB8" },
   { id: "risk", title: { fa: "ریسک", en: "Risk" }, icon: "⚠️", color: "#D64A4A" },
   { id: "extension", title: { fa: "افزونه‌های صنعتی", en: "Industry Extensions" }, icon: "🧩", color: "#94A3B8" },
+  { id: "settings", title: { fa: "تنظیمات", en: "Settings" }, icon: "🎛️", color: "#38BDF8" },
+  { id: "excellence", title: { fa: "مدیریت تعالی سازمانی", en: "Organisational Excellence" }, icon: "🏅", color: "#FBBF24" },
 ];
 
 /** نگاشت ماژول (دامنه) ← حوزهٔ عملکردی PMBOK. */
@@ -132,11 +136,11 @@ export const domainPerformance: Record<string, PerformanceDomainId> = {
   d4: "risk",
   d3: "risk",
   d8: "extension",
-  d7: "extension",
+  d7: "settings",
   d16: "extension",
   d17: "extension",
   d18: "extension",
-  d19: "extension",
+  d19: "excellence",
 };
 
 /** برچسب حوزه می‌تواند با گروه فرایندی فرق کند؛ d5 در پایش/کنترل هزینه و تدارکات است. */
@@ -161,12 +165,14 @@ export function performanceDomainModules(pdId: PerformanceDomainId): Domain[] {
 /** ترتیب حوزه‌های عملکردی هر گروه فرایندی (نقشهٔ فرایندی).
  *  مثلاً «پایش و کنترل»: مالی ← ریسک ← افزونه‌های صنعتی. */
 export const performanceDomainOrder: Record<string, PerformanceDomainId[]> = {
-  pg1: ["governance"],
+  pg1: ["governance", "stakeholders"],
   pg2: ["schedule", "scope"],
   pg3: ["finance", "resources", "extension"],
   pg4: ["finance", "risk", "extension"],
   pg5: ["scope"],
   support: ["stakeholders", "extension"],
+  settings: ["settings"],
+  org: ["excellence"],
 };
 
 /** حوزه‌های عملکردی موجود در یک گروه فرایندی، با ماژول‌های هر حوزه.
@@ -335,7 +341,7 @@ export const domains: Domain[] = [
   },
   {
     id: "d1",
-    group: "support",
+    group: "pg1",
     icon: "🗂",
     accent: "#7FB2FF",
     title: { fa: "مدیریت اطلاعات و مستندات پروژه", en: "Project Information & Document Management" },
@@ -1430,7 +1436,7 @@ export const domains: Domain[] = [
     /* ماژول ارتباطات و دانش — مالک گردش مکاتبات، جلسات، ذی‌نفعان و درس‌آموخته.
        مالک فایل مدرک همچنان d1 است و ماتریس اختیار همچنان d6. */
     id: "d11",
-    group: "support",
+    group: "pg1",
     icon: "📡",
     accent: "#A78BFA",
     title: { fa: "مدیریت ارتباطات و دانش", en: "Communications & Knowledge Management" },
@@ -1595,10 +1601,11 @@ export const domains: Domain[] = [
   },
   {
     id: "d7",
-    group: "support",
-    icon: "⚙️",
+    group: "settings",
+    icon: "🎛️",
     accent: "#38BDF8",
     title: { fa: "مدیریت سامانه و پیکربندی پایه", en: "System Administration & Base Config" },
+    nav: { fa: "مدیریت سامانه", en: "System Management" },
     processes: [
       {
         id: "d7-p1",
@@ -1678,7 +1685,7 @@ export const domains: Domain[] = [
   },
   {
     id: "d19",
-    group: "support",
+    group: "org",
     icon: "🏅",
     accent: "#FBBF24",
     title: { fa: "مدیریت تعالی سازمانی (EFQM)", en: "Organisational Excellence (EFQM)" },

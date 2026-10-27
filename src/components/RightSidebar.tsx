@@ -4,6 +4,7 @@ import {
   domains,
   sidebarGroups,
   performanceDomainsInGroup,
+  domainPerformance,
   ui,
   t,
   type Bi,
@@ -114,7 +115,7 @@ const EDMS_SIDEBAR_ITEMS: Array<{ id: EdmsTabId; icon: string; label: Bi }> = [
   { id: "kms", icon: "🧠", label: { fa: "مدیریت دانش و ویکی (KMS)", en: "Knowledge Management & Wiki" } },
 ];
 
-type QuickAction = { id: string; label: Bi; alert?: string; icon: ReactNode };
+type QuickAction = { id: string; label: Bi; shortLabel?: Bi; alert?: string; icon: ReactNode };
 
 const iconClass = "h-4 w-4";
 
@@ -124,11 +125,13 @@ const moduleDataGaps: Record<string, string[]> = {
 
 const quickActions: QuickAction[] = [
   { id: "home", label: { fa: "خانه", en: "Home" }, icon: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className={iconClass}><path d="M4 11.5 12 4l8 7.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1z" /></svg>) },
-  { id: "portfolio", label: { fa: "پورتفولیو", en: "Portfolio" }, icon: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className={iconClass}><rect x="3" y="7" width="18" height="13" rx="2" /><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M3 12h18" /></svg>) },
-  { id: "reports", label: { fa: "گزارش عملکرد", en: "Reports" }, icon: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" className={iconClass}><path d="M5 20V10M10 20V4M15 20v-7M20 20V7" /></svg>) },
-  { id: "alerts", label: { fa: "هشدارها", en: "Alerts" }, alert: "7", icon: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className={iconClass}><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" /></svg>) },
-  { id: "calendar", label: { fa: "تقویم و کارها", en: "Calendar & Tasks" }, icon: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className={iconClass}><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M8 3v4M16 3v4M3 10h18" /></svg>) },
-  { id: "calc", label: { fa: "محاسبات", en: "Calculations" }, icon: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className={iconClass}><rect x="4" y="3" width="16" height="18" rx="2" /><circle cx="9" cy="11" r="2" /><path d="M13 11h4M13 15h4M13 7h4" /></svg>) },
+  { id: "portfolio", label: { fa: "پورتفولیو", en: "Portfolio" }, shortLabel: { fa: "پروژه‌ها", en: "Portfolio" }, icon: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className={iconClass}><rect x="3" y="7" width="18" height="13" rx="2" /><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M3 12h18" /></svg>) },
+  { id: "reports", label: { fa: "گزارش عملکرد", en: "Reports" }, shortLabel: { fa: "گزارش", en: "Reports" }, icon: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" className={iconClass}><path d="M5 20V10M10 20V4M15 20v-7M20 20V7" /></svg>) },
+  { id: "alerts", label: { fa: "هشدارها", en: "Alerts" }, shortLabel: { fa: "هشدار", en: "Alerts" }, alert: "7", icon: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className={iconClass}><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" /></svg>) },
+  { id: "calc", label: { fa: "تقویم و محاسبات", en: "Calendar & Calculations" }, shortLabel: { fa: "تقویم+محاسبه", en: "Calendar+Calc" }, icon: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className={iconClass}><rect x="3" y="4" width="18" height="17" rx="2" /><path d="M8 2v4M16 2v4M3 9h18M7 13h2m-2 4h2m4-4h4m-4 4h4" /></svg>) },
+  { id: "settings", label: { fa: "تنظیمات", en: "Settings" }, icon: <span className="text-[15px] leading-none">🎛️</span> },
+  { id: "excellence", label: { fa: "تعالی", en: "Excellence" }, icon: <span className="text-[15px] leading-none">🏅</span> },
+  { id: "support", label: { fa: "ماژول‌های تخصصی", en: "Specialty Modules" }, shortLabel: { fa: "تخصصی", en: "Specialty" }, icon: <span className="text-[15px] leading-none">🧩</span> },
 ];
 
 const selectClass =
@@ -156,16 +159,15 @@ export default function RightSidebar({
   const [selProject, setSelProject] = useState<string>(() => projectScope?.projectId ?? "");
   /* گروه‌های داخلی PMIS هم در هر نشست بسته شروع می‌شوند؛ وضعیت بازشدهٔ
    * قبلی ذخیره/بازیابی نمی‌شود تا رفرش، گروهی را خودکار باز نکند. */
-  const [groupState, setGroupState] = useState<{ open: string | null; supportOpen: boolean }>({
-    open: null,
-    supportOpen: false,
-  });
+  const [openGroup, setOpenGroup] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   /* لایهٔ ۲: کدام حوزهٔ عملکردی (زیر گروه فرایندی) باز است — فاز نمایشی روی «آغازین». */
   const [openPerf, setOpenPerf] = useState<string | null>(null);
+  const [extensionsQuickOpen, setExtensionsQuickOpen] = useState(false);
   const [taxonomyOverrides, setTaxonomyOverrides] = useState<Record<string, Process[]>>({});
   const [sectionsOpen, setSectionsOpen] = useState<{
     pmis: boolean;
+    org: boolean;
     mes: boolean;
     cmms: boolean;
     scm: boolean;
@@ -174,6 +176,7 @@ export default function RightSidebar({
     edms: boolean;
   }>({
     pmis: false,
+    org: false,
     mes: false,
     cmms: false,
     scm: false,
@@ -182,12 +185,9 @@ export default function RightSidebar({
     edms: false,
   });
 
-  const toggleSection = (key: "pmis" | "mes" | "cmms" | "scm" | "iiot" | "hrm" | "edms") => {
+  const toggleSection = (key: "pmis" | "org" | "mes" | "cmms" | "scm" | "iiot" | "hrm" | "edms") => {
     setSectionsOpen((prev) => ({ ...prev, [key]: !prev[key] }));
   };
-
-  const openGroup = groupState.open;
-  const supportOpen = groupState.supportOpen;
 
   useEffect(() => {
     if (!projectScope) return;
@@ -238,13 +238,9 @@ export default function RightSidebar({
     setSelProject(projectScope?.projectId ?? "");
   };
 
-  const toggleGroup = (id: string, pinned?: boolean) => {
+  const toggleGroup = (id: string) => {
     onSelectSystemView?.({ system: "pmis" });
-    if (pinned) {
-      setGroupState((s) => ({ ...s, supportOpen: !s.supportOpen }));
-    } else {
-      setGroupState((s) => ({ ...s, open: s.open === id ? null : id }));
-    }
+    setOpenGroup((current) => (current === id ? null : id));
   };
 
   const noData = openDomain && selCluster ? (moduleDataGaps[openDomain] ?? []).includes(selCluster) : false;
@@ -255,6 +251,7 @@ export default function RightSidebar({
   const visibleDomains = domains
     .filter((d) => d.id !== "d7" || can("system.manage"))
     .map((d) => taxonomyOverrides[d.id] ? { ...d, processes: taxonomyOverrides[d.id] } : d);
+  const industryExtensionModules = visibleDomains.filter((d) => domainPerformance[d.id] === "extension");
 
   const q = query.trim().toLowerCase();
   const matchesQuery = (d: Domain) => {
@@ -391,7 +388,11 @@ export default function RightSidebar({
       ? { fa: "مدیریت ایمنی و بهداشت", en: "Health & Safety Management" }
       : pd.id === "extension" && groupId === "pg4"
         ? { fa: "مدیریت کیفیت و بازرسی", en: "Quality & Inspection Management" }
-        : pd.title;
+        : pd.id === "scope" && groupId === "pg5"
+          ? { fa: "مدیریت راه‌اندازی", en: "Commissioning Management" }
+          : pd.id === "stakeholders" && groupId === "pg1"
+            ? { fa: "اطلاعات و ذی‌نفعان", en: "Information & Stakeholders" }
+            : pd.title;
     const first = pd.modules[0];
     const pdNoData = selCluster ? (moduleDataGaps[first.id] ?? []).includes(selCluster) : false;
     const canEnter = Boolean(selCluster && selProject && !pdNoData);
@@ -541,9 +542,7 @@ export default function RightSidebar({
                 type="button"
                 onClick={() => toggleSection("pmis")}
                 aria-expanded={sectionsOpen.pmis}
-                className={`sidebar-group-title flex w-full items-center gap-2 px-2 py-2 text-start transition ${
-                  activeSystemView.system === "pmis" ? "is-active" : "tx2 hover:tx1"
-                }`}
+                className="sidebar-group-title flex w-full items-center gap-2 px-2 py-1.5 text-start tx2 transition hover:tx1"
               >
                 <span className="text-[12px]">📐</span>
                 <span className="min-w-0 flex-1 truncate text-[11px] font-semibold">
@@ -564,22 +563,22 @@ export default function RightSidebar({
 
               {sectionsOpen.pmis && (
                 <div className="fade-rise space-y-1 border-s-2 border-sky-500/30 ps-2 pt-0.5">
-                  {sidebarGroups.map((g) => {
+                  {sidebarGroups.filter((g) => g.id !== "org").map((g) => {
                     const members = visibleDomains.filter((d) => d.group === g.id);
                     if (!members.length) return null;
-                    const isOpen = g.pinned ? supportOpen : openGroup === g.id;
+                    const isOpen = openGroup === g.id;
                     return (
                       <div key={g.id} className="border-b b-line-soft pb-1 last:border-b-0 last:pb-0">
                         <button
                           type="button"
-                          onClick={() => toggleGroup(g.id, g.pinned)}
+                          onClick={() => toggleGroup(g.id)}
                           aria-expanded={isOpen}
                           className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-start transition hover:bg-[var(--row-hover)]"
                           style={isOpen ? { background: `${g.color}14` } : undefined}
                         >
                           <span className="shrink-0 text-[12px] leading-none">{g.icon}</span>
                           <span className="min-w-0 flex-1 truncate text-[10.5px] font-medium" style={{ color: g.color }}>
-                            {t(g.title, lang)}
+                            {t(g.navTitle ?? g.title, lang)}
                           </span>
                           <svg
                             viewBox="0 0 24 24"
@@ -606,7 +605,7 @@ export default function RightSidebar({
                                   ...pd,
                                   modules: pd.modules.filter((m) => visibleDomains.some((v) => v.id === m.id)),
                                 }))
-                                .filter((pd) => pd.modules.length > 0)
+                                .filter((pd) => pd.modules.length > 0 && pd.id !== "extension")
                                 .map((pd) => renderPerfDomain(pd, g.id))
                               : members.map(renderDomain)}
                           </div>
@@ -617,8 +616,6 @@ export default function RightSidebar({
                 </div>
               )}
             </section>
-
-            {/* ── خط جداکنندهٔ بصری (Divider) بین بخش ۱ و ۲ ── */}
             <div role="separator" aria-orientation="horizontal" className="my-2 flex items-center gap-2 px-1">
               <span className="hair h-px flex-1" />
               <span className="hair h-px flex-1" />
@@ -630,7 +627,7 @@ export default function RightSidebar({
                 type="button"
                 onClick={() => toggleSection("mes")}
                 aria-expanded={sectionsOpen.mes}
-                className={`sidebar-group-title flex w-full items-center gap-2 px-2 py-2 text-start transition ${
+                className={`sidebar-group-title flex w-full items-center gap-2 px-2 py-1.5 text-start transition ${
                   activeSystemView.system === "mes" ? "is-active" : "tx2 hover:tx1"
                 }`}
               >
@@ -687,7 +684,7 @@ export default function RightSidebar({
                 type="button"
                 onClick={() => toggleSection("cmms")}
                 aria-expanded={sectionsOpen.cmms}
-                className={`sidebar-group-title flex w-full items-center gap-2 px-2 py-2 text-start transition ${
+                className={`sidebar-group-title flex w-full items-center gap-2 px-2 py-1.5 text-start transition ${
                   activeSystemView.system === "cmms" ? "is-active" : "tx2 hover:tx1"
                 }`}
               >
@@ -744,7 +741,7 @@ export default function RightSidebar({
                 type="button"
                 onClick={() => toggleSection("scm")}
                 aria-expanded={sectionsOpen.scm}
-                className={`sidebar-group-title flex w-full items-center gap-2 px-2 py-2 text-start transition ${
+                className={`sidebar-group-title flex w-full items-center gap-2 px-2 py-1.5 text-start transition ${
                   activeSystemView.system === "scm" ? "is-active" : "tx2 hover:tx1"
                 }`}
               >
@@ -801,7 +798,7 @@ export default function RightSidebar({
                 type="button"
                 onClick={() => toggleSection("iiot")}
                 aria-expanded={sectionsOpen.iiot}
-                className={`sidebar-group-title flex w-full items-center gap-2 px-2 py-2 text-start transition ${
+                className={`sidebar-group-title flex w-full items-center gap-2 px-2 py-1.5 text-start transition ${
                   activeSystemView.system === "iiot" ? "is-active" : "tx2 hover:tx1"
                 }`}
               >
@@ -858,7 +855,7 @@ export default function RightSidebar({
                 type="button"
                 onClick={() => toggleSection("hrm")}
                 aria-expanded={sectionsOpen.hrm}
-                className={`sidebar-group-title flex w-full items-center gap-2 px-2 py-2 text-start transition ${
+                className={`sidebar-group-title flex w-full items-center gap-2 px-2 py-1.5 text-start transition ${
                   activeSystemView.system === "hrm" ? "is-active" : "tx2 hover:tx1"
                 }`}
               >
@@ -915,7 +912,7 @@ export default function RightSidebar({
                 type="button"
                 onClick={() => toggleSection("edms")}
                 aria-expanded={sectionsOpen.edms}
-                className={`sidebar-group-title flex w-full items-center gap-2 px-2 py-2 text-start transition ${
+                className={`sidebar-group-title flex w-full items-center gap-2 px-2 py-1.5 text-start transition ${
                   activeSystemView.system === "edms" ? "is-active" : "tx2 hover:tx1"
                 }`}
               >
@@ -959,31 +956,116 @@ export default function RightSidebar({
                 </div>
               )}
             </section>
+            {/* تعالی سازمانی خارج از گروه‌های PMIS و در سطح سازمان ارائه می‌شود. */}
+            <div role="separator" aria-orientation="horizontal" className="my-2 flex items-center gap-2 px-1">
+              <span className="hair h-px flex-1" />
+              <span className="hair h-px flex-1" />
+            </div>
+            <section className="space-y-1">
+              <button
+                type="button"
+                onClick={() => toggleSection("org")}
+                aria-expanded={sectionsOpen.org}
+                className={`sidebar-group-title flex w-full items-center gap-2 px-2 py-1.5 text-start transition ${sectionsOpen.org ? "is-active" : "tx2 hover:tx1"}`}
+              >
+                <span className="text-[12px]">🏢</span>
+                <span className="min-w-0 flex-1 truncate text-[11px] font-semibold">{rtl ? "مدیریت سازمانی" : "Organizational Management"}</span>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={`h-3 w-3 shrink-0 tx4 transition-transform ${sectionsOpen.org ? "rotate-180" : ""}`}>
+                  <path d="m6 9 6 6 6-6" />
+                </svg>
+              </button>
+              {sectionsOpen.org && (
+                <div className="fade-rise space-y-0.5 border-s-2 border-amber-400/30 ps-2 pt-0.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const scope = projectScope ?? (selCluster && selProject ? { clusterId: selCluster, projectId: selProject } : null);
+                      if (scope) onNavigate({ moduleId: "d19", clusterId: scope.clusterId, projectId: scope.projectId });
+                      else onQuickAction("portfolio");
+                    }}
+                    className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-start text-[10.5px] transition tx2 hover:bg-[var(--row-hover)] hover:tx1"
+                  >
+                    <span className="text-[11px]">🏅</span>
+                    <span className="min-w-0 flex-1 truncate">{rtl ? "مدیریت تعالی سازمانی" : "Organizational Excellence"}</span>
+                    <span className="text-[9px] tx4">←</span>
+                  </button>
+                </div>
+              )}
+            </section>
+            <div role="separator" aria-orientation="horizontal" className="my-2 flex items-center gap-2 px-1">
+              <span className="hair h-px flex-1" />
+              <span className="hair h-px flex-1" />
+            </div>
+
           </>
         )}
       </div>
 
-      <nav aria-label={rtl ? "دسترسی سریع" : "Quick access"} className="b-line border-t px-3 pb-3 pt-2.5">
+      <nav aria-label={rtl ? "دسترسی سریع" : "Quick access"} className="shrink-0 b-line border-t px-3 pb-3 pt-2.5">
+        {extensionsQuickOpen && (
+          <div id="quick-industry-extensions" role="menu" aria-label={rtl ? "افزونه‌های صنعتی" : "Industry extensions"}
+            className="mb-2 max-h-56 w-full overflow-y-auto rounded-xl border b-line-soft glass-dark p-2 shadow-xl"
+            dir={rtl ? "rtl" : "ltr"}>
+            <p className="mb-1.5 px-2 text-[9px] font-medium tx3">{rtl ? "افزونه‌های صنعتی" : "Industry extensions"}</p>
+            <div className="space-y-0.5">
+              {industryExtensionModules.map((module) => (
+                <button key={module.id} type="button" role="menuitem"
+                  onClick={() => {
+                    const scope = projectScope ?? (selCluster && selProject ? { clusterId: selCluster, projectId: selProject } : null);
+                    setExtensionsQuickOpen(false);
+                    if (scope) onNavigate({ moduleId: module.id, clusterId: scope.clusterId, projectId: scope.projectId });
+                    else onQuickAction("portfolio");
+                  }}
+                  className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-start text-[10px] tx2 transition hover:bg-[var(--row-hover)] hover:tx1">
+                  <span className="shrink-0" style={{ color: module.accent }}>{module.icon}</span>
+                  <span className="min-w-0 flex-1 truncate">{t(module.nav ?? module.title, lang)}</span>
+                  <span className="text-[9px] tx4">←</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         <div className="mb-2 flex items-center gap-2 px-1">
           <h3 className="shrink-0 text-[10.5px] font-medium tx1">{rtl ? "دسترسی سریع" : "Quick Access"}</h3>
           <span className="hair h-px flex-1" />
         </div>
-        <div className="grid grid-cols-6 gap-1" dir={rtl ? "rtl" : "ltr"}>
-          {quickActions.map((action) => {
-            const active = quickAction === action.id;
+        <div className="grid grid-cols-4 gap-1" dir={rtl ? "rtl" : "ltr"}>
+          {quickActions.filter((action) => action.id !== "settings" || can("system.manage")).map((action) => {
+            const active = quickAction === action.id || (action.id === "support" && extensionsQuickOpen);
             const alert = action.alert ? Number(action.alert).toLocaleString(rtl ? "fa-IR" : "en-US") : undefined;
             return (
-              <button key={action.id} type="button" onClick={() => onQuickAction(action.id)}
+              <button key={action.id} type="button" onClick={() => {
+                if (action.id === "support") {
+                  setExtensionsQuickOpen((open) => !open);
+                  return;
+                }
+                setExtensionsQuickOpen(false);
+                if (action.id === "settings") {
+                  onSelectSystemView?.({ system: "pmis" });
+                  onNavigate({ moduleId: "d7", clusterId: "", projectId: "" });
+                  return;
+                }
+                if (action.id === "excellence") {
+                  const scope = projectScope ?? (selCluster && selProject ? { clusterId: selCluster, projectId: selProject } : null);
+                  if (scope) onNavigate({ moduleId: "d19", clusterId: scope.clusterId, projectId: scope.projectId });
+                  else onQuickAction("portfolio");
+                  return;
+                }
+                onQuickAction(action.id);
+              }}
                 title={t(action.label, lang)} aria-label={t(action.label, lang)} aria-current={active ? "page" : undefined}
+                aria-expanded={action.id === "support" ? extensionsQuickOpen : undefined}
+                aria-controls={action.id === "support" ? "quick-industry-extensions" : undefined}
                 className={`relative flex min-w-0 flex-col items-center justify-center gap-1 rounded-lg px-0.5 py-2 text-center transition ${active ? "row-on accent-t" : "tx3 hover:tx1"}`}
                 style={active ? { boxShadow: "inset 0 -1px 0 var(--accent)" } : undefined}>
                 <span className={action.id === "alerts" ? "text-rose-500" : active ? "accent-t" : ""}>{action.icon}</span>
-                <span className={`w-full truncate text-[7.2px] font-light leading-3 ${action.id === "alerts" ? "text-rose-500" : ""}`}>{t(action.label, lang)}</span>
+                <span className={`w-full truncate text-[9px] font-normal leading-3 ${action.id === "alerts" ? "text-rose-500" : ""}`}>{t(action.shortLabel ?? action.label, lang)}</span>
                 {alert && (<span className="absolute end-0.5 top-0.5 min-w-3 rounded-full bg-rose-500 px-0.5 text-[7px] font-medium leading-3 text-white">{alert}</span>)}
               </button>
             );
           })}
         </div>
+
       </nav>
     </aside>
     </div>

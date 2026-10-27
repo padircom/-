@@ -16,8 +16,12 @@ async function request<T>(url: string, userId: string, body?: Row): Promise<ApiR
       ...(body ? { body: JSON.stringify(body) } : {}),
     });
     const json = await response.json().catch(() => null);
+    if (json === null) {
+      console.error("[API] Non-JSON response", { url: response.url, status: response.status, contentType: response.headers.get("content-type") || "(missing)" });
+      return { ok: false, status: response.status, code: "E-API-NO-JSON", message: "" };
+    }
     if (response.ok && json?.ok) return { ok: true, data: json.data as T };
-    return { ok: false, status: response.status, code: String(json?.error?.code ?? "E-API"), message: String(json?.error?.message ?? "پاسخ سرور قابل خواندن نیست") };
+    return { ok: false, status: response.status, code: String(json?.error?.code ?? "E-API"), message: String(json?.error?.message ?? "خطای API") };
   } catch {
     return { ok: false, status: 0, code: "E-NETWORK", message: "اتصال به سرور برقرار نشد" };
   }
@@ -88,7 +92,7 @@ export default function CntAdjustmentPanel({ projectId, contractId, userId, lang
       publishedAt: status === "published" ? new Date().toISOString().slice(0, 10) : undefined, status,
     });
     setBusy(false);
-    if (!result.ok) { setMessage({ error: true, text: `${result.code}: ${result.message}` }); return; }
+    if (!result.ok) { if (result.code !== "E-API-NO-JSON") setMessage({ error: true, text: `${result.code}: ${result.message}` }); return; }
     setMessage({ error: false, text: en ? `Index ${status} saved.` : `شاخص ${status === "published" ? "منتشر" : "ذخیره"} شد.` });
     await load();
   };
@@ -100,7 +104,7 @@ export default function CntAdjustmentPanel({ projectId, contractId, userId, lang
       indexPeriod: calculationPeriod.trim(), baseIndexPeriod: basePeriod.trim(), appliedRatePct: Number(appliedRatePct), ...(dryRun ? { dryRun: true } : {}),
     });
     setBusy(false);
-    if (!result.ok) { setMessage({ error: true, text: `${result.code}: ${result.message}` }); if (!dryRun) setPreview(null); return; }
+    if (!result.ok) { if (result.code !== "E-API-NO-JSON") setMessage({ error: true, text: `${result.code}: ${result.message}` }); if (!dryRun) setPreview(null); return; }
     setPreview(result.data);
     if (!dryRun) {
       setMessage({ error: false, text: en ? `Adjustment posted: ${Number(result.data.totalAdjustment ?? 0).toLocaleString()} (saved ${result.data.saved?.length ?? 0}, skipped ${result.data.skipped ?? 0}).` : `تعدیل ثبت شد: ${Number(result.data.totalAdjustment ?? 0).toLocaleString("fa-IR")} · ثبت ${result.data.saved?.length ?? 0} · تکراری ${result.data.skipped ?? 0}` });
@@ -117,7 +121,7 @@ export default function CntAdjustmentPanel({ projectId, contractId, userId, lang
       quantity: Number(material.quantity), unit: material.unit.trim() || undefined, baseRate: Number(material.baseRate), periodRate: Number(material.periodRate), evidenceDocNo: material.evidence.trim() || undefined,
     });
     setBusy(false);
-    if (!result.ok) { setMessage({ error: true, text: `${result.code}: ${result.message}` }); return; }
+    if (!result.ok) { if (result.code !== "E-API-NO-JSON") setMessage({ error: true, text: `${result.code}: ${result.message}` }); return; }
     setMessage({ error: false, text: en ? `Differential recorded: ${Number(result.data.diffAmount).toLocaleString()}.` : `مابه‌التفاوت ${Number(result.data.diffAmount).toLocaleString("fa-IR")} ریال ثبت شد.` });
     setMaterialRows(rows => [...rows, { Id: result.data.id, IpcId: ipcId, MaterialCode: result.data.materialCode, MaterialNameFa: result.data.materialNameFa, Quantity: result.data.quantity, Unit: result.data.unit, BaseRate: result.data.baseRate, PeriodRate: result.data.periodRate, DiffAmount: result.data.diffAmount, EvidenceDocNo: material.evidence, Status: "draft" }]);
     setMaterial({ code: "", name: "", quantity: "", unit: "", baseRate: "", periodRate: "", evidence: "" });

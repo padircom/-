@@ -1,7 +1,7 @@
 /**
  * درخواست JSON مشترک کلاینت‌های REST میز کارها (d5، d11، …).
  * مسیر همیشه نسبی (`/api/...`) است تا از پراکسی Vite عبور کند؛ هرگز localhost.
- * پاسخ خطا به پیام فارسی سرور تبدیل می‌شود تا کاربر دلیل واقعی را ببیند.
+ * پاسخ غیر JSON برای نمایش مزاحم نیست: جزئیات در کنسول ثبت می‌شود و پیام خام در UI نشان داده نمی‌شود.
  */
 export type ApiResult<T> =
   | { ok: true; data: T }
@@ -20,7 +20,8 @@ export async function jsonRequest<T>(url: string, userId: string | null, method:
     });
     const ct = res.headers.get("content-type") ?? "";
     if (!ct.includes("application/json")) {
-      return { ok: false, status: res.status, code: "E-API-NO-JSON", message: "پاسخ سرور قابل خواندن نیست (سرور API در دسترس است؟)" };
+      console.error("[API] Non-JSON response", { url, status: res.status, contentType: ct || "(missing)" });
+      return { ok: false, status: res.status, code: "E-API-NO-JSON", message: "" };
     }
     const json = await res.json();
     if (json?.ok) return { ok: true, data: json.data as T };

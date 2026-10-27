@@ -208,7 +208,7 @@ export default function CommunicationWorkspace({
       setLoadErr(null);
     } else {
       setWs(null);
-      setLoadErr({ status: r.status, message: r.message });
+      setLoadErr(r.code === "E-API-NO-JSON" ? null : { status: r.status, message: r.message });
     }
     setLoading(false);
   }, [client]);

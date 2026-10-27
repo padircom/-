@@ -35,12 +35,15 @@ const btnPrimary = `${btnCls} border-sky-400/40 bg-sky-400/10 text-sky-200 hover
 const btnOk = `${btnCls} border-emerald-400/40 bg-emerald-400/10 text-emerald-200 hover:bg-emerald-400/20`;
 const btnGhost = `${btnCls} border b-line-soft tx2 hover:bg-white/5`;
 
-function Section({ title, note, children }: { title: string; note?: string; children: React.ReactNode }) {
+function Section({ title, note, children, action }: { title: string; note?: React.ReactNode; children: React.ReactNode; action?: React.ReactNode }) {
   return (
     <section className="glass-dark rounded-2xl p-3 space-y-3">
-      <div>
-        <h4 className="text-[12px] font-semibold tx1">{title}</h4>
-        {note && <p className="text-[10px] tx3 mt-1">{note}</p>}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="min-w-0">
+          <h4 className="text-[12px] font-semibold tx1">{title}</h4>
+          {note && <p className="text-[10px] tx3 mt-1">{note}</p>}
+        </div>
+        {action}
       </div>
       {children}
     </section>
@@ -87,7 +90,7 @@ function LiveEdms({
   userId: string | null;
 }) {
   const fa = lang === 'fa';
-  const t = (a: string, b: string) => (fa ? a : b);
+  const t = useCallback((a: string, b: string) => (fa ? a : b), [fa]);
   const client = useMemo(() => (projectId ? new EdmsClient(projectId, userId) : null), [projectId, userId]);
 
   const [tab, setTab] = useState<EdmsTab>(initialTab);
@@ -107,6 +110,8 @@ function LiveEdms({
   const [subData, setSubData] = useState<EdmsSubReviewList | null>(null);
   const [selDocId, setSelDocId] = useState<string>('');
   const [selDocNo, setSelDocNo] = useState<string>('');
+  const selDocIdRef = useRef(selDocId);
+  selDocIdRef.current = selDocId;
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -139,8 +144,9 @@ function LiveEdms({
       if (seq !== gen.current) return;
       if (!r.ok) throw new Error(r.message);
       setDocsData(r.data);
-      if (r.data.items.length && !selDocId) {
+      if (r.data.items.length && !selDocIdRef.current) {
         const first = r.data.items[0];
+        selDocIdRef.current = first.Id;
         setSelDocId(first.Id);
         setSelDocNo(first.DocNo);
         setHoldForm(f => ({ ...f, documentId: first.Id }));
@@ -156,7 +162,7 @@ function LiveEdms({
     } finally {
       if (seq === gen.current) setLoading(false);
     }
-  }, [client, selDocId, t]);
+  }, [client, t]);
 
   const loadFiles = useCallback(async (docId: string) => {
     if (!client || !docId) { setFilesData(null); return; }
@@ -259,6 +265,15 @@ function LiveEdms({
     return { total, approved, withFile, withoutFile: total - withFile, versions };
   }, [docsData]);
 
+  const refreshKpis = async () => {
+    await Promise.all([
+      loadDocs(),
+      loadHolds(),
+      loadDeps(selDocId || undefined),
+      loadReadiness(selDocId),
+    ]);
+  };
+
   const act = async (fn: () => Promise<{ ok: boolean; message?: string }>, okText: string) => {
     setBusy(true);
     setMsg(null);
@@ -283,14 +298,6 @@ function LiveEdms({
 
   return (
     <div dir={fa ? 'rtl' : 'ltr'} className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-1">
-      <header className="glass-dark rounded-xl p-3 flex flex-wrap items-center gap-3">
-        <div className="flex-1">
-          <h3 className="tx1 font-semibold text-[13px]">{t('اسناد — فایل + Hold + پیش‌نیاز + نظر/Conclusion (EDM-1..4)', 'EDMS — file + Hold + prereq + comments')}</h3>
-          <p className="text-[10px] tx3" dir="ltr">{projectId} · {kpis.total} docs · {kpis.versions} vers · {kpis.withFile} with file · {holdsData?.summary.open ?? 0} open holds · {depsData?.count ?? 0} deps · {readiness ? (readiness.canIssue ? 'Can Issue' : `${readiness.blockers.length} blockers`) : ''}</p>
-        </div>
-        <button className={btnGhost} disabled={loading || busy} onClick={() => void loadDocs()}>{t('تازه‌سازی', 'Refresh')}</button>
-      </header>
-
       {!hideTabs && (
         <nav className="flex flex-wrap gap-1.5">
           {TABS.map(tb => (
@@ -307,13 +314,19 @@ function LiveEdms({
 
       {tab === 'overview' && (
         <div className="grid gap-3">
-          <Section title={t('KPI اسناد و Hold و پیش‌نیاز', 'Docs & Hold & Prereq KPI')}>
-            <div className="grid grid-cols-2 lg:grid-cols-5 gap-2">
+          <Section
+            title={t('KPI اسناد و Hold و پیش‌نیاز', 'Docs & Hold & Prereq KPI')}
+            note={<span>{t('پروژه:', 'Project:')} <span dir="ltr" className="inline-block">{projectId}</span></span>}
+            action={<button className={btnGhost} disabled={loading || busy} onClick={() => void refreshKpis()}>{t('تازه‌سازی', 'Refresh')}</button>}
+          >
+            <div className="grid grid-cols-2 lg:grid-cols-7 gap-2">
               <Kpi label={t('کل مدارک', 'Total docs')} value={String(kpis.total)} />
               <Kpi label={t('تأییدشده', 'Approved')} value={String(kpis.approved)} />
               <Kpi label={t('دارای فایل', 'With file')} value={String(kpis.withFile)} />
+              <Kpi label={t('نسخه‌ها', 'Versions')} value={String(kpis.versions)} />
               <Kpi label={t('Hold باز', 'Open holds')} value={String(holdsData?.summary.open ?? 0)} />
               <Kpi label={t('وابستگی‌ها', 'Deps')} value={String(depsData?.count ?? 0)} />
+              <Kpi label={t('موانع صدور', 'Issue blockers')} value={readiness ? String(readiness.blockers.length) : '—'} />
             </div>
           </Section>
           <Section title={t('آمادگی صدور مدرک انتخاب‌شده', 'Readiness of selected doc')} note={t('قفل صدور: Hold باز یا پیش‌نیاز الزامی تأییدنشده', 'Gate: open Hold or mandatory prereq not approved')}>
