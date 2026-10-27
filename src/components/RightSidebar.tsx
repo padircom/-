@@ -585,7 +585,7 @@ export default function RightSidebar({
                         >
                           <span className="shrink-0 text-[12px] leading-none">{g.icon}</span>
                           <span className="min-w-0 flex-1 truncate text-[10.5px] font-medium" style={{ color: g.color }}>
-                            {t(g.title, lang)}
+                            {t(g.navTitle ?? g.title, lang)}
                           </span>
                           <svg
                             viewBox="0 0 24 24"

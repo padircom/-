@@ -62,6 +62,8 @@ export type Domain = {
 export type SidebarGroup = {
   id: SidebarGroupId;
   title: Bi;
+  /** عنوان نمایشی جایگزین فقط برای ناوبری؛ عنوان PMBOK و حلقه ثابت می‌ماند. */
+  navTitle?: Bi;
   short: string;
   color: string;
   /** آیکن گروه فرایندی — همان آیکن‌های بنر استاندارد PMBOK
@@ -77,7 +79,7 @@ export const sidebarGroups: SidebarGroup[] = [
   { id: "pg3", title: { fa: "اجرا", en: "Executing" }, short: "EX", color: "#FFD48A", icon: "⚙️" },
   { id: "pg4", title: { fa: "پایش و کنترل", en: "Monitoring & Controlling" }, short: "MC", color: "#FF9F9F", icon: "🔍" },
   { id: "pg5", title: { fa: "اختتامیه", en: "Closing" }, short: "CL", color: "#C9A7FF", icon: "🏁" },
-  { id: "support", title: { fa: "پشتیبان", en: "Supporting" }, short: "SP", color: "#94A3B8", icon: "🧰", pinned: true },
+  { id: "support", title: { fa: "پشتیبان", en: "Supporting" }, navTitle: { fa: "اطلاعات و ذی‌نفعان", en: "Information & Stakeholders" }, short: "SP", color: "#94A3B8", icon: "🧰", pinned: true },
   { id: "org", title: { fa: "مدیریت سازمانی", en: "Organizational Management" }, short: "ORG", color: "#FBBF24", icon: "🏢" },
 ];
 
