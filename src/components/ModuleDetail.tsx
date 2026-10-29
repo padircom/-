@@ -11,6 +11,7 @@ import {
 } from "../data/framework";
 import { useSystem } from "../context/SystemContext";
 import { roleLabel, useAuth } from "../context/AuthContext";
+import { DEMO_SUBJECTS, can as rbacCan } from "../services/accessControl";
 import type { ModuleNavTarget } from "./RightSidebar";
 import CapabilityDetail from "./CapabilityDetail";
 import AdminWorkspace from "./AdminWorkspace";
@@ -26,9 +27,12 @@ import ContractsPanel from "./ContractsPanel";
 import ContractRiskWorkspace, { type ContractRiskSection } from "./ContractRiskWorkspace";
 import CostSupplyWorkspace, { type FinTab } from "./CostSupplyWorkspace";
 import QualityWorkspace, { type QmsTab } from "./QualityWorkspace";
-import WorkforceWorkspace, { type HrmTab } from "./WorkforceWorkspace";
+import WorkforceWorkspace from "./WorkforceWorkspace";
+import { eqmTabForSub, hrmTargetForSub, isNotImplementedSub, isTcoSub } from "../services/resourceNav";
+import { D3_PAGE_SUBS, d3ScopeNote, d3TabForSub } from "../services/performanceNav";
+import { D5_PAGE_SUBS, d5ScmProcesses, d5ScmSubLocked, d5SectionForSub, d5TabForSub, d5ViewForSub } from "../services/costSupplyNav";
 import CommunicationWorkspace, { type CkmTab } from "./CommunicationWorkspace";
-import MachineryWorkspace, { type EqmTab } from "./MachineryWorkspace";
+import MachineryWorkspace from "./MachineryWorkspace";
 import ManufacturingWorkspace from "./ManufacturingWorkspace";
 import CommissioningWorkspace, { type ComTab } from "./CommissioningWorkspace";
 import EngineeringWorkspace from "./EngineeringWorkspace";
@@ -107,45 +111,6 @@ const FIELD_HSE_TAB_BY_SUB: Record<string, HseFieldTab> = {
   "d16-p7-s5": "healthenv", "d16-p7-s6": "actions",
 };
 
-const D3_PAGE_SUBS: Record<string, { id: string; title: Bi; tab: PmaTab; sql: string[] }[]> = {
-  "d3-p1": [
-    { id: "d3-p1-phi", title: { fa: "شاخص سلامت PHI", en: "PHI Health" }, tab: "phi", sql: ["pma_health_snapshot"] },
-  ],
-  "d3-p2": [
-    { id: "d3-p2-wpd", title: { fa: "برداشت WPD", en: "WPD Harvester" }, tab: "wpd", sql: ["pma_wpd"] },
-    { id: "d3-p2-fc", title: { fa: "پیش‌بینی ۵×۴", en: "Forecast 5×4" }, tab: "forecast", sql: ["pma_forecast"] },
-  ],
-  "d3-p4": [
-    { id: "d3-p4-ews", title: { fa: "EWS سه لایه", en: "EWS 3-layer" }, tab: "ews", sql: ["pma_alert_rule"] },
-  ],
-  "d3-p6": [
-    /* داشبورد مدیر پروژه از حوزهٔ برنامه‌ریزی به اینجا منتقل شد.
-     *
-     * آنجا میان ابزارهای ساخت برنامه نشسته بود، در حالی که کاری که
-     * می‌کند گزارش وضعیت است نه ساختن زمان‌بندی. حوزهٔ پایش از قبل
-     * همان تب `dash` را داشت، پس این انتقال جای ورودی را عوض می‌کند
-     * نه اینکه نمای تازه‌ای بسازد. */
-    { id: "d3-p6-dash", title: { fa: "داشبورد مدیر پروژه", en: "PM Dashboard" }, tab: "dash", sql: ["pma_dash_config"] },
-    { id: "d3-p6-14", title: { fa: "۱۴ نوع گزارش", en: "14 report types" }, tab: "reports", sql: ["pma_report_def"] },
-    { id: "d3-p6-exec", title: { fa: "گزارش یک‌صفحه EXEC", en: "RPT-EXEC" }, tab: "exec", sql: ["pma_report_instance"] },
-  ],
-};
-
-const D3_TAB_BY_SUB: Record<string, PmaTab> = {
-  "d3-p1-s1": "kpi",
-  "d3-p1-phi": "phi",
-  "d3-p2-s1": "evm",
-  "d3-p2-wpd": "wpd",
-  "d3-p2-fc": "forecast",
-  "d3-p3-s1": "var",
-  "d3-p4-s1": "ews",
-  "d3-p4-ews": "ews",
-  "d3-p5-s1": "action",
-  "d3-p6-s1": "dash",
-  "d3-p6-14": "reports",
-  "d3-p6-exec": "exec",
-  "d3-p6-dash": "dash",
-};
 
 const D4_PAGE_SUBS: Record<string, { id: string; title: Bi; tab: D4Tab; sql: string[] }[]> = {
   "d4-p1": [
@@ -271,16 +236,6 @@ const D8_TAB_BY_SUB: Record<string, QmsTab> = {
   "d8-p6-dos": "handover",
 };
 
-const D10_TAB_BY_SUB: Record<string, HrmTab> = {
-  "d10-p1-s1": "planning",
-  "d10-p1-s2": "planning",
-  "d10-p1-s3": "planning",
-  "d10-p2-s1": "timesheet",
-  "d10-p3-s1": "productivity",
-  "d10-p4-s1": "crew",
-  "d10-p5-s1": "onboarding",
-  "d10-p6-s1": "analytics",
-};
 
 /* هر فرایند d16 دقیقاً یک تب دارد؛ زیرمرحله‌ها همان تب را باز می‌کنند. */
 const D16_TAB_BY_PROCESS: Record<string, HseTab> = {
@@ -293,21 +248,6 @@ const D16_TAB_BY_PROCESS: Record<string, HseTab> = {
   "d16-p7": "field",
 };
 
-const D9_TAB_BY_SUB: Record<string, EqmTab> = {
-  "d9-p1-s1": "fleet",
-  "d9-p1-s2": "fleet",
-  "d9-p2-s1": "meter",
-  "d9-p3-s1": "rental",
-  "d9-p4-s1": "maintenance",
-  "d9-p4-s2": "maintenance",
-  "d9-p4-s3": "maintenance",
-  "d9-p5-s1": "productivity",
-  "d9-p5-s2": "productivity",
-  "d9-p5-s3": "rental",
-  "d9-p6-s1": "dispatch",
-  "d9-p7-s1": "fuel",
-  "d9-p8-s1": "parts",
-};
 
 const D11_TAB_BY_SUB: Record<string, CkmTab> = {
   "d11-p1-s1": "correspondence",
@@ -333,61 +273,6 @@ const D15_TAB_BY_SUB: Record<string, ComTab> = {
   "d15-p5-s2": "overview",
   "d15-p6-s1": "overview",
   "d15-p6-s2": "overview",
-};
-
-/** Extra submodules only on the d5 inner page — main sidebar untouched. */
-const D5_PAGE_SUBS: Record<string, { id: string; title: Bi; tab: FinTab; sql: string[] }[]> = {
-  "d5-p1": [
-    { id: "d5-p1-cbs", title: { fa: "ساختار شکست هزینه و PMB", en: "CBS & PMB" }, tab: "cost", sql: ["fin_cbs_node", "fin_pmb_period"] },
-    { id: "d5-p1-res", title: { fa: "ذخیره احتیاطی و اختیار برداشت", en: "Reserve & DoA" }, tab: "cost", sql: ["fin_reserve_ledger"] },
-  ],
-  "d5-p2": [
-    { id: "d5-p2-evm", title: { fa: "EVM و پنج روش EAC", en: "EVM & five EACs" }, tab: "control", sql: ["fin_evm_snapshot"] },
-    { id: "d5-p2-snap", title: { fa: "Snapshot تغییرناپذیر و نسخه فرمول", en: "Immutable snapshots" }, tab: "control", sql: ["fin_evm_snapshot"] },
-  ],
-  "d5-p3": [
-    { id: "d5-p3-age", title: { fa: "سن مطالبات و سرمایه در گردش", en: "AR aging & working capital" }, tab: "cash", sql: ["fin_receivable", "fin_payable"] },
-    { id: "d5-p3-ipc", title: { fa: "صورت‌وضعیت و کسورات", en: "Progress invoice" }, tab: "cash", sql: ["fin_progress_invoice"] },
-  ],
-  "d5-p4": [
-    { id: "d5-p4-mrp", title: { fa: "پیشنهاد تجدید سفارش و تاریخ نیاز کالا", en: "Reorder suggestions & material need date" }, tab: "pr", sql: ["fin_mrp_run"] },
-    { id: "d5-p4-bud", title: { fa: "کنترل بودجه و مسیر تأیید", en: "Budget check & approval route" }, tab: "pr", sql: ["fin_pr_line"] },
-  ],
-  "d5-p5": [
-    { id: "d5-p5-com", title: { fa: "زنجیره تعهد و عملکرد تأمین‌کننده", en: "Commitment & vendor scoring" }, tab: "po", sql: ["fin_commitment", "fin_vendor_score"] },
-    { id: "d5-p5-3wm", title: { fa: "تطابق سه‌جانبه پیش از پرداخت", en: "3-way match gate" }, tab: "po", sql: ["fin_invoice_match"] },
-  ],
-  "d5-p6": [
-    { id: "d5-p6-rop", title: { fa: "نقطه سفارش، EOQ و طبقه‌بندی ABC", en: "ROP, EOQ & ABC" }, tab: "inventory", sql: ["fin_stock_balance"] },
-    { id: "d5-p6-trc", title: { fa: "ردیابی بچ و گردش انبار", en: "Batch traceability & flow" }, tab: "inventory", sql: ["fin_grn", "fin_issuance"] },
-  ],
-};
-
-const D5_TAB_BY_SUB: Record<string, FinTab> = {
-  "d5-p1-s1": "cost",
-  "d5-p1-cbs": "cost",
-  "d5-p1-res": "cost",
-  "d5-p2-s1": "control",
-  "d5-p2-evm": "control",
-  "d5-p2-snap": "control",
-  "d5-p3-s1": "cash",
-  "d5-p3-age": "cash",
-  "d5-p3-ipc": "cash",
-  "d5-p4-s1": "pr",
-  "d5-p4-mrp": "pr",
-  "d5-p4-bud": "pr",
-  "d5-p5-s1": "po",
-  "d5-p5-com": "po",
-  "d5-p5-3wm": "po",
-  "d5-p6-s1": "inventory",
-  "d5-p6-rop": "inventory",
-  "d5-p6-trc": "inventory",
-  "d5-p7-s1": "quantities",
-  "d5-p7-s2": "quantities",
-  "d5-p8-s1": "balance",
-  "d5-p8-s2": "balance",
-  "d5-p9-s1": "pnl",
-  "d5-p9-s2": "pnl",
 };
 
 const D17_TAB_BY_SUB: Record<string, HseFieldTab> = {
@@ -728,8 +613,7 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
 
   const d3Tab = ((): PmaTab => {
     const sid = selected?.sId ?? target.subId;
-    if (sid && D3_TAB_BY_SUB[sid]) return D3_TAB_BY_SUB[sid];
-    return "dash";
+    return d3TabForSub(sid) ?? "dash";
   })();
 
   if (dom.id === "d3") {
@@ -775,6 +659,14 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
         </div>
         <div className="workspace-columns flex min-h-0 flex-1 gap-3 overflow-hidden">
           <div dir={rtl ? "rtl" : "ltr"} className="glass flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl p-3">
+            {(() => {
+              const note = d3ScopeNote(selected?.sId ?? target.subId);
+              return note ? (
+                <p role="status" className="mb-3 shrink-0 rounded-xl border b-line-soft px-3 py-2 text-[10.5px] font-light tx2">
+                  {rtl ? note.fa : note.en}
+                </p>
+              ) : null;
+            })()}
             <PmaWorkspace projectId={target.projectId} lang={lang} initialTab={d3Tab} hideTabs />
           </div>
           <DomainAside
@@ -885,11 +777,18 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
   /* MFG/MES: دسترسی به فضای کاری سامانهٔ مستقل تولید کارگاهی (Standalone MES)
      در کنار نمای ماشین‌آلات (d9)، بدون تغییر فایل حفاظت‌شدهٔ framework.ts. */
   const [d9View, setD9View] = useState<"eqm" | "mfg">("eqm");
+  /* انتخاب هر زیرماژول سایدبار (حتی از ماژول دیگر) نما را از MES به EQM برمی‌گرداند؛
+     وگرنه با باز بودن MES کلیک روی زیرماژول هیچ اثر دیدنی نداشت. */
+  const d9SubKey = selected?.sId ?? target.subId;
+  /* شمارندهٔ کلیک زیرماژول d5: کلیک دوباره روی همان ردیف هم به بخشش اسکرول کند. */
+  const [d5Nonce, setD5Nonce] = useState(0);
+  /* همان برای d10: کلیک دوباره روی زیرماژول، نمای داخلی را به حالت آن زیرماژول برمی‌گرداند. */
+  const [d10Nonce, setD10Nonce] = useState(0);
+  useEffect(() => { setD9View("eqm"); }, [d9SubKey, dom.id]);
 
   const d5Tab = ((): FinTab => {
     const sid = selected?.sId ?? target.subId;
-    if (sid && D5_TAB_BY_SUB[sid]) return D5_TAB_BY_SUB[sid];
-    return "cost";
+    return d5TabForSub(sid) ?? "cost";
   })();
 
   const d8Tab = ((): QmsTab => {
@@ -958,17 +857,8 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
     );
   }
 
-  const d10Tab = ((): HrmTab => {
-    const sid = selected?.sId ?? target.subId;
-    if (sid && D10_TAB_BY_SUB[sid]) return D10_TAB_BY_SUB[sid];
-    return "planning";
-  })();
-
-  const d9Tab = ((): EqmTab => {
-    const sid = selected?.sId ?? target.subId;
-    if (sid && D9_TAB_BY_SUB[sid]) return D9_TAB_BY_SUB[sid];
-    return "fleet";
-  })();
+  const d10Target = hrmTargetForSub(selected?.sId ?? target.subId);
+  const d9Tab = eqmTabForSub(selected?.sId ?? target.subId);
 
   /* ماژول مهندسی و طراحی — کامپوننت خودش نوار بازگشت و تب‌ها را دارد. */
   if (dom.id === "d12") {
@@ -1209,7 +1099,16 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
             {d9View === "mfg" ? (
               <ManufacturingWorkspace lang={lang} />
             ) : (
-              <MachineryWorkspace projectId={target.projectId} lang={lang} initialTab={d9Tab} hideTabs />
+              <>
+                {isNotImplementedSub(d9SubKey) && (
+                  <p role="status" className="mb-3 shrink-0 rounded-xl border b-line-soft px-3 py-2 text-[10.5px] font-light tx2">
+                    {rtl
+                      ? "این بخش در این نسخه پیاده‌سازی نشده است. نزدیک‌ترین تب مرتبط در پایین نمایش داده می‌شود."
+                      : "This section is not implemented in this release. The closest related tab is shown below."}
+                  </p>
+                )}
+                <MachineryWorkspace projectId={target.projectId} lang={lang} initialTab={d9Tab} hideTabs showTco={isTcoSub(d9SubKey)} />
+              </>
             )}
           </div>
           <DomainAside
@@ -1219,6 +1118,7 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
               selectedSubId={selected?.sId}
               onSelectSub={(pId, sId) => {
                 audit("OPEN_SUBPROCESS", { projectId: target.projectId, entity: dom.id, entityId: sId });
+                setD9View("eqm");
                 setSelected({ pId, sId })
               }}
               onOpenModuleSub={(moduleId, pId, sId) => onNavigate?.({ ...target, moduleId, processId: pId, subId: sId })}
@@ -1260,7 +1160,7 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
         </div>
         <div className="workspace-columns flex min-h-0 flex-1 gap-3 overflow-hidden">
           <div dir={rtl ? "rtl" : "ltr"} className="glass flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl p-3">
-            <WorkforceWorkspace lang={lang} initialTab={d10Tab} hideTabs />
+            <WorkforceWorkspace lang={lang} initialTab={d10Target.tab} initialView={d10Target.view} selectionNonce={d10Nonce} hideTabs />
           </div>
           <DomainAside
               lang={lang}
@@ -1269,6 +1169,7 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
               selectedSubId={selected?.sId}
               onSelectSub={(pId, sId) => {
                 audit("OPEN_SUBPROCESS", { projectId: target.projectId, entity: dom.id, entityId: sId });
+                setD10Nonce((n) => n + 1);
                 setSelected({ pId, sId })
               }}
               onOpenModuleSub={(moduleId, pId, sId) => onNavigate?.({ ...target, moduleId, processId: pId, subId: sId })}
@@ -1447,7 +1348,7 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
         </div>
         <div className="workspace-columns flex min-h-0 flex-1 gap-3 overflow-hidden">
           <div dir={rtl ? "rtl" : "ltr"} className="glass flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl p-3">
-            <CostSupplyWorkspace lang={lang} initialTab={d5Tab} hideTabs hideHeader />
+            <CostSupplyWorkspace lang={lang} initialTab={d5Tab} hideTabs hideHeader focusSection={d5SectionForSub(selected?.sId ?? target.subId)} focusNonce={d5Nonce} panelView={d5ViewForSub(selected?.sId ?? target.subId)} />
           </div>
           <DomainAside
             lang={lang}
@@ -1457,6 +1358,7 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
             extraSubs={D5_PAGE_SUBS}
             onSelectSub={(pId, sId) => {
               audit("OPEN_SUBPROCESS", { projectId: target.projectId, entity: dom.id, entityId: sId });
+              setD5Nonce((n) => n + 1);
               setSelected({ pId, sId });
             }}
             onOpenModuleSub={(moduleId, pId, sId) => onNavigate?.({ ...target, moduleId, processId: pId, subId: sId })}
@@ -1982,7 +1884,9 @@ function DomainNavGroups({
   onOpenModuleSub: (moduleId: string, processId: string, subId: string) => void;
 }) {
   const rtl = lang === "fa";
-  const { can } = useAuth();
+  const { can, user: navUser } = useAuth();
+  /* مجوزهای ریزِ SCM در accessControl هستند (نه AuthContext)؛ مثل CostSupplyWorkspace. */
+  const navSubject = DEMO_SUBJECTS.find((x) => x.id === navUser?.id) ?? null;
   const [expandedD14Sections, setExpandedD14Sections] = useState<Record<string, boolean> | null>(null);
   const [expandedD5Sections, setExpandedD5Sections] = useState<Record<string, boolean> | null>(null);
   const [expandedResourceSections, setExpandedResourceSections] = useState<Record<string, boolean> | null>(null);
@@ -2016,14 +1920,15 @@ function DomainNavGroups({
       ].map(({ processIds, ...section }) => ({
         ...section,
         module: m,
-        processes: processes.filter((p) => processIds.includes(p.id)).map((p) => p.id !== "d5-p8" ? p : ({
+        /* شش تب تأمین/لجستیک (p10…p15) در framework نیستند؛ اینجا به بخش خودشان اضافه می‌شوند. */
+        processes: [...processes.filter((p) => processIds.includes(p.id)).map((p) => p.id !== "d5-p8" ? p : ({
           ...p,
           title: { fa: "گزارش تراز مصالح و انحراف مصرف پروژه", en: "Project material balance & consumption variance report" },
           subs: p.subs.map((sub) => sub.id !== "d5-p8-s2" ? sub : ({
             ...sub,
             title: { fa: "گزارش انحراف مصرف و ضایعات پروژه", en: "Project consumption variance & waste report" },
           })),
-        })),
+        })), ...d5ScmProcesses(section.key)],
       }));
     }
     if (m.id !== "d14") return [{ module: m, key: m.id, title: m.nav ?? m.title, processes }];
@@ -2296,17 +2201,41 @@ function DomainNavGroups({
                       .filter((s, i, arr) => arr.findIndex((x) => x.id === s.id) === i)
                       .map((s) => {
                         const sqlTables = (s as { sql?: string[] }).sql ?? [];
+                        const scope = m.id === "d3" ? d3ScopeNote(s.id) : undefined;
+                        const noAccess = m.id === "d5" && d5ScmSubLocked(s.id, (perm) => rbacCan(navSubject, perm));
                         return (
                           <button
                             key={s.id}
                             type="button"
                             onClick={() => selectSub(p.id, s.id)}
+                            title={noAccess ? (rtl ? "بدون دسترسی: مجوز «مشاهده بسته خرید» لازم است" : "No access: the “View procurement packages” permission is required") : undefined}
                             className={`group flex w-full items-center gap-2 rounded-lg text-start transition hover:bg-[var(--row-hover)] ${isExcellenceSection ? "py-1 pe-1.5 ps-5" : "py-1.5 pe-2 ps-7"} ${
                               isCurrent && selectedSubId === s.id ? "row-on" : ""
-                            }`}
+                            } ${noAccess ? "opacity-50" : ""}`}
                           >
                             <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: moduleAccent }} />
-                            <span className="min-w-0 flex-1 truncate text-[10px] font-light tx1">{t(s.title, lang)}</span>
+                            <span className={`min-w-0 flex-1 truncate text-[10px] font-light ${isNotImplementedSub(s.id) || scope?.level === "missing" ? "tx3" : "tx1"}`}>{t(s.title, lang)}</span>
+                            {isNotImplementedSub(s.id) && (
+                              <span
+                                className="shrink-0 rounded border b-line-soft px-1 py-[1px] text-[8px] font-light tx3"
+                                title={rtl ? "در این نسخه پیاده‌سازی نشده" : "Not implemented in this release"}
+                              >
+                                {rtl ? "پیاده‌سازی نشده" : "Not implemented"}
+                              </span>
+                            )}
+                            {scope && (
+                              <span
+                                className="shrink-0 rounded border b-line-soft px-1 py-[1px] text-[8px] font-light tx3"
+                                title={rtl ? scope.fa : scope.en}
+                              >
+                                {scope.level === "missing" ? (rtl ? "پیاده‌سازی نشده" : "Not implemented") : (rtl ? "محدود" : "Limited")}
+                              </span>
+                            )}
+                            {noAccess && (
+                              <span className="shrink-0 rounded border b-line-soft px-1 py-[1px] text-[8px] font-light tx3">
+                                {rtl ? "بدون دسترسی" : "No access"}
+                              </span>
+                            )}
                             {showSql && sqlTables.length > 0 && (
                               <span className="flex shrink-0 flex-wrap gap-1">
                                 {sqlTables.map((tbl) => (

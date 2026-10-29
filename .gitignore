@@ -18,6 +18,11 @@ server/pexModelBundle.js
 server/hrmLogic.js
 server/ckmLogic.js
 server/rptLogic.js
+server/resNavLogic.js
+server/csNavLogic.js
+server/stockSourceLogic.js
+server/perfNavLogic.js
+server/perfKpiLogic.js
 server/rbacLogic.js
 server/schedReconLogic.js
 server/schedReconDocLogic.js
