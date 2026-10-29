@@ -18,6 +18,7 @@ server/pexModelBundle.js
 server/hrmLogic.js
 server/ckmLogic.js
 server/rptLogic.js
+server/resNavLogic.js
 server/rbacLogic.js
 server/schedReconLogic.js
 server/schedReconDocLogic.js

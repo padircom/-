@@ -25,6 +25,7 @@ import {
 } from "../services/workforce";
 
 /* شش تب = دقیقاً شش زیرماژول ماژول منابع انسانی */
+export type HrmView = "obs" | "plan" | "mob";
 export type HrmTab = "planning" | "timesheet" | "productivity" | "crew" | "onboarding" | "analytics";
 
 const TABS: { id: HrmTab; fa: string; en: string; icon: string; proc: string; deliverable: string }[] = [
@@ -153,22 +154,26 @@ function Th({ children }: { children: React.ReactNode }) {
 export default function WorkforceWorkspace({
   lang,
   initialTab = "planning",
+  initialView = "obs",
   hideTabs = false,
 }: {
   lang: Lang;
   initialTab?: HrmTab;
+  /** نمای داخلی تب «برنامه‌ریزی»؛ از زیرماژول انتخاب‌شدهٔ سایدبار می‌آید. */
+  initialView?: HrmView;
   hideTabs?: boolean;
 }) {
   const rtl = lang === "fa";
   const { user } = useAuth();
   const userId = user?.id ?? "";
   const [tab, setTab] = useState<HrmTab>(initialTab);
-  const [view, setView] = useState<"obs" | "plan" | "mob">("obs");
+  const [view, setView] = useState<HrmView>(initialView);
   const [obs] = useState<ObsNode[]>(SAMPLE_OBS);
   const [mob, setMob] = useState<MobilizationRequest[]>(SAMPLE_MOB);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [selectedNode, setSelectedNode] = useState<string>("O-6");
   useEffect(() => setTab(initialTab), [initialTab]);
+  useEffect(() => setView(initialView), [initialView]);
 
   const fmt = (n: number) => n.toLocaleString(rtl ? "fa-IR" : "en-US");
 

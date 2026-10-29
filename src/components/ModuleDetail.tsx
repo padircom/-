@@ -26,9 +26,10 @@ import ContractsPanel from "./ContractsPanel";
 import ContractRiskWorkspace, { type ContractRiskSection } from "./ContractRiskWorkspace";
 import CostSupplyWorkspace, { type FinTab } from "./CostSupplyWorkspace";
 import QualityWorkspace, { type QmsTab } from "./QualityWorkspace";
-import WorkforceWorkspace, { type HrmTab } from "./WorkforceWorkspace";
+import WorkforceWorkspace from "./WorkforceWorkspace";
+import { eqmTabForSub, hrmTargetForSub, isNotImplementedSub } from "../services/resourceNav";
 import CommunicationWorkspace, { type CkmTab } from "./CommunicationWorkspace";
-import MachineryWorkspace, { type EqmTab } from "./MachineryWorkspace";
+import MachineryWorkspace from "./MachineryWorkspace";
 import ManufacturingWorkspace from "./ManufacturingWorkspace";
 import CommissioningWorkspace, { type ComTab } from "./CommissioningWorkspace";
 import EngineeringWorkspace from "./EngineeringWorkspace";
@@ -271,16 +272,6 @@ const D8_TAB_BY_SUB: Record<string, QmsTab> = {
   "d8-p6-dos": "handover",
 };
 
-const D10_TAB_BY_SUB: Record<string, HrmTab> = {
-  "d10-p1-s1": "planning",
-  "d10-p1-s2": "planning",
-  "d10-p1-s3": "planning",
-  "d10-p2-s1": "timesheet",
-  "d10-p3-s1": "productivity",
-  "d10-p4-s1": "crew",
-  "d10-p5-s1": "onboarding",
-  "d10-p6-s1": "analytics",
-};
 
 /* هر فرایند d16 دقیقاً یک تب دارد؛ زیرمرحله‌ها همان تب را باز می‌کنند. */
 const D16_TAB_BY_PROCESS: Record<string, HseTab> = {
@@ -293,21 +284,6 @@ const D16_TAB_BY_PROCESS: Record<string, HseTab> = {
   "d16-p7": "field",
 };
 
-const D9_TAB_BY_SUB: Record<string, EqmTab> = {
-  "d9-p1-s1": "fleet",
-  "d9-p1-s2": "fleet",
-  "d9-p2-s1": "meter",
-  "d9-p3-s1": "rental",
-  "d9-p4-s1": "maintenance",
-  "d9-p4-s2": "maintenance",
-  "d9-p4-s3": "maintenance",
-  "d9-p5-s1": "productivity",
-  "d9-p5-s2": "productivity",
-  "d9-p5-s3": "rental",
-  "d9-p6-s1": "dispatch",
-  "d9-p7-s1": "fuel",
-  "d9-p8-s1": "parts",
-};
 
 const D11_TAB_BY_SUB: Record<string, CkmTab> = {
   "d11-p1-s1": "correspondence",
@@ -885,6 +861,10 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
   /* MFG/MES: دسترسی به فضای کاری سامانهٔ مستقل تولید کارگاهی (Standalone MES)
      در کنار نمای ماشین‌آلات (d9)، بدون تغییر فایل حفاظت‌شدهٔ framework.ts. */
   const [d9View, setD9View] = useState<"eqm" | "mfg">("eqm");
+  /* انتخاب هر زیرماژول سایدبار (حتی از ماژول دیگر) نما را از MES به EQM برمی‌گرداند؛
+     وگرنه با باز بودن MES کلیک روی زیرماژول هیچ اثر دیدنی نداشت. */
+  const d9SubKey = selected?.sId ?? target.subId;
+  useEffect(() => { setD9View("eqm"); }, [d9SubKey, dom.id]);
 
   const d5Tab = ((): FinTab => {
     const sid = selected?.sId ?? target.subId;
@@ -958,17 +938,8 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
     );
   }
 
-  const d10Tab = ((): HrmTab => {
-    const sid = selected?.sId ?? target.subId;
-    if (sid && D10_TAB_BY_SUB[sid]) return D10_TAB_BY_SUB[sid];
-    return "planning";
-  })();
-
-  const d9Tab = ((): EqmTab => {
-    const sid = selected?.sId ?? target.subId;
-    if (sid && D9_TAB_BY_SUB[sid]) return D9_TAB_BY_SUB[sid];
-    return "fleet";
-  })();
+  const d10Target = hrmTargetForSub(selected?.sId ?? target.subId);
+  const d9Tab = eqmTabForSub(selected?.sId ?? target.subId);
 
   /* ماژول مهندسی و طراحی — کامپوننت خودش نوار بازگشت و تب‌ها را دارد. */
   if (dom.id === "d12") {
@@ -1209,7 +1180,16 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
             {d9View === "mfg" ? (
               <ManufacturingWorkspace lang={lang} />
             ) : (
-              <MachineryWorkspace projectId={target.projectId} lang={lang} initialTab={d9Tab} hideTabs />
+              <>
+                {isNotImplementedSub(d9SubKey) && (
+                  <p role="status" className="mb-3 shrink-0 rounded-xl border b-line-soft px-3 py-2 text-[10.5px] font-light tx2">
+                    {rtl
+                      ? "این بخش در این نسخه پیاده‌سازی نشده است. نزدیک‌ترین تب مرتبط در پایین نمایش داده می‌شود."
+                      : "This section is not implemented in this release. The closest related tab is shown below."}
+                  </p>
+                )}
+                <MachineryWorkspace projectId={target.projectId} lang={lang} initialTab={d9Tab} hideTabs />
+              </>
             )}
           </div>
           <DomainAside
@@ -1219,6 +1199,7 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
               selectedSubId={selected?.sId}
               onSelectSub={(pId, sId) => {
                 audit("OPEN_SUBPROCESS", { projectId: target.projectId, entity: dom.id, entityId: sId });
+                setD9View("eqm");
                 setSelected({ pId, sId })
               }}
               onOpenModuleSub={(moduleId, pId, sId) => onNavigate?.({ ...target, moduleId, processId: pId, subId: sId })}
@@ -1260,7 +1241,7 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
         </div>
         <div className="workspace-columns flex min-h-0 flex-1 gap-3 overflow-hidden">
           <div dir={rtl ? "rtl" : "ltr"} className="glass flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl p-3">
-            <WorkforceWorkspace lang={lang} initialTab={d10Tab} hideTabs />
+            <WorkforceWorkspace lang={lang} initialTab={d10Target.tab} initialView={d10Target.view} hideTabs />
           </div>
           <DomainAside
               lang={lang}
@@ -2306,7 +2287,15 @@ function DomainNavGroups({
                             }`}
                           >
                             <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: moduleAccent }} />
-                            <span className="min-w-0 flex-1 truncate text-[10px] font-light tx1">{t(s.title, lang)}</span>
+                            <span className={`min-w-0 flex-1 truncate text-[10px] font-light ${isNotImplementedSub(s.id) ? "tx3" : "tx1"}`}>{t(s.title, lang)}</span>
+                            {isNotImplementedSub(s.id) && (
+                              <span
+                                className="shrink-0 rounded border b-line-soft px-1 py-[1px] text-[8px] font-light tx3"
+                                title={rtl ? "در این نسخه پیاده‌سازی نشده" : "Not implemented in this release"}
+                              >
+                                {rtl ? "پیاده‌سازی نشده" : "Not implemented"}
+                              </span>
+                            )}
                             {showSql && sqlTables.length > 0 && (
                               <span className="flex shrink-0 flex-wrap gap-1">
                                 {sqlTables.map((tbl) => (

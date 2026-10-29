@@ -14,7 +14,7 @@
  * این کامپوننت فقط نمایش است؛ هیچ API، داده یا منطق دامنه‌ای ندارد.
  */
 
-import { Fragment } from "react";
+import { Fragment, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import type { Lang } from "../data/framework";
 
@@ -29,7 +29,8 @@ export type ModuleNavItem<T extends string = string> = {
   trailing?: ReactNode;
   /**
    * عنوان دستهٔ سایدبار داخلی (اختیاری). هرجا مقدارش نسبت به آیتم قبلی
-   * عوض شود، یک سربند دسته چاپ می‌شود؛ ماژول‌هایی که دسته نمی‌گذارند
+   * عوض شود، یک سربند دسته چاپ می‌شود (راست‌چین در فارسی، با خط پس از عنوان،
+   * مثل سایدبار «حاکمیت»)؛ ماژول‌هایی که دسته نمی‌گذارند
    * (MES/SCM/…) همان فهرست تخت قبلی را می‌بینند.
    */
   group?: string;
@@ -115,6 +116,12 @@ export type ModuleWorkspaceShellProps<T extends string = string> = {
   navItems: ModuleNavItem<T>[];
   activeId: T;
   onSelect: (id: T) => void;
+  /**
+   * اگر true باشد، هر دستهٔ سایدبار آکاردئونی است (مثل سایدبار «حاکمیت»):
+   * همه‌ی دسته‌ها در ابتدا بسته‌اند و با کلیک روی سربند باز/بسته می‌شوند.
+   * پیش‌فرض false است تا ماژول‌های دیگر همان فهرست باز قبلی را ببینند.
+   */
+  collapsibleGroups?: boolean;
 
   /** عنوان بخش فعال، نمایش‌داده‌شده در بالای پنل اصلی. */
   panelTitle?: string;
@@ -145,6 +152,7 @@ export default function ModuleWorkspaceShell<T extends string>({
   navItems,
   activeId,
   onSelect,
+  collapsibleGroups = false,
   panelTitle,
   panelIcon,
   panelDesc,
@@ -158,6 +166,9 @@ export default function ModuleWorkspaceShell<T extends string>({
   const homeLabel = fa ? "نمای اصلی" : "Hub";
   const backText = backLabel ?? (fa ? "بازگشت به نمای اصلی" : "Back to Hub");
   const titleStyle: CSSProperties = { color: accent };
+  /* دسته‌های بازشده؛ پیش‌فرض همه بسته. */
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
+  const activeGroup = navItems.find((n) => n.id === activeId)?.group;
 
   return (
     <div dir={dirValue} className={`flex min-h-0 flex-1 flex-col gap-3 overflow-hidden ${className}`}>
@@ -239,18 +250,36 @@ export default function ModuleWorkspaceShell<T extends string>({
             </div>
           </div>
 
-          <div className="thin-scroll flex-1 space-y-1 overflow-y-auto p-2">
+          <div className="thin-scroll flex-1 space-y-0.5 overflow-y-auto p-1.5">
             {navItems.map((item, index) => {
               const active = item.id === activeId;
-              /* سربند دسته: فقط وقتی این آیتم دسته دارد و دسته‌اش با قبلی فرق می‌کند. */
-              const groupHeader = item.group && item.group !== navItems[index - 1]?.group ? (
+              const groupStart = Boolean(item.group) && item.group !== navItems[index - 1]?.group;
+              const grouped = collapsibleGroups && Boolean(item.group);
+              const isOpen = !grouped || Boolean(openGroups[item.group as string]);
+              const bodyId = grouped ? `module-nav-group-${index}` : undefined;
+              /* سربند دسته: فقط وقتی این آیتم دسته دارد و دسته‌اش با قبلی فرق می‌کند.
+               * راست‌چین (در فارسی) و بدون خط پیش از عنوان — مثل سایدبار «حاکمیت». */
+              const groupHeader = groupStart ? (
                 <div
                   key={`group:${item.group}`}
-                  className="flex items-center gap-1.5 px-2 pb-0.5 pt-3 text-[9px] font-semibold tracking-wide tx3 first:pt-1"
+                  className="flex items-center gap-1.5 px-1.5 pb-0 pt-2 text-[9px] font-semibold tracking-wide tx3 first:pt-1"
+                  style={grouped && item.group === activeGroup ? { color: accent } : undefined}
                   role="presentation"
                 >
-                  <span className="h-px flex-1" style={{ background: "var(--line-soft)" }} aria-hidden="true" />
-                  <span>{item.group}</span>
+                  {grouped ? (
+                    <button
+                      type="button"
+                      aria-expanded={isOpen}
+                      aria-controls={bodyId}
+                      onClick={() => setOpenGroups((prev) => ({ ...prev, [item.group as string]: !prev[item.group as string] }))}
+                      className="inline-flex items-center gap-1 text-start hover:underline"
+                    >
+                      <span>{item.group}</span>
+                      <span className="text-[9px] tx4" aria-hidden="true">{isOpen ? "⌄" : fa ? "‹" : "›"}</span>
+                    </button>
+                  ) : (
+                    <span>{item.group}</span>
+                  )}
                   <span className="h-px flex-1" style={{ background: "var(--line-soft)" }} aria-hidden="true" />
                 </div>
               ) : null;
@@ -259,11 +288,12 @@ export default function ModuleWorkspaceShell<T extends string>({
                 {groupHeader}
                 <button
                   type="button"
+                  hidden={!isOpen}
                   disabled={item.disabled}
                   title={item.disabled ? item.disabledHint : undefined}
                   aria-current={active ? "page" : undefined}
                   onClick={() => onSelect(item.id)}
-                  className={`group flex w-full items-center gap-2 rounded-lg px-2 py-2 text-start transition glass-row hover:-translate-y-px disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:translate-y-0 ${active ? "row-on" : ""}`}
+                  className={`group ${isOpen ? "flex" : ""} w-full items-center gap-2 rounded-lg py-1.5 pe-2 ${grouped ? "ps-5" : "ps-2"} text-start transition glass-row hover:-translate-y-px disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:translate-y-0 ${active ? "row-on" : ""}`}
                 >
                   <span className="text-[8px] font-light tabular-nums tx4">
                     {(index + 1).toLocaleString(fa ? "fa-IR" : "en-US")}

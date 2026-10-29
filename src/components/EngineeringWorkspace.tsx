@@ -644,6 +644,7 @@ export default function EngineeringWorkspace({ lang, onBack, headerIdentity }: P
       }))}
       activeId={tab}
       onSelect={(next) => setTab(next)}
+      collapsibleGroups
       panelTitle={activeTab ? (rtl ? activeTab.fa : activeTab.en) : undefined}
       panelIcon={activeTab?.icon}
     >
