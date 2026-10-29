@@ -29,6 +29,7 @@ import CostSupplyWorkspace, { type FinTab } from "./CostSupplyWorkspace";
 import QualityWorkspace, { type QmsTab } from "./QualityWorkspace";
 import WorkforceWorkspace from "./WorkforceWorkspace";
 import { eqmTabForSub, hrmTargetForSub, isNotImplementedSub, isTcoSub } from "../services/resourceNav";
+import { D3_PAGE_SUBS, d3ScopeNote, d3TabForSub } from "../services/performanceNav";
 import { D5_PAGE_SUBS, d5ScmProcesses, d5ScmSubLocked, d5SectionForSub, d5TabForSub, d5ViewForSub } from "../services/costSupplyNav";
 import CommunicationWorkspace, { type CkmTab } from "./CommunicationWorkspace";
 import MachineryWorkspace from "./MachineryWorkspace";
@@ -110,45 +111,6 @@ const FIELD_HSE_TAB_BY_SUB: Record<string, HseFieldTab> = {
   "d16-p7-s5": "healthenv", "d16-p7-s6": "actions",
 };
 
-const D3_PAGE_SUBS: Record<string, { id: string; title: Bi; tab: PmaTab; sql: string[] }[]> = {
-  "d3-p1": [
-    { id: "d3-p1-phi", title: { fa: "شاخص سلامت PHI", en: "PHI Health" }, tab: "phi", sql: ["pma_health_snapshot"] },
-  ],
-  "d3-p2": [
-    { id: "d3-p2-wpd", title: { fa: "برداشت WPD", en: "WPD Harvester" }, tab: "wpd", sql: ["pma_wpd"] },
-    { id: "d3-p2-fc", title: { fa: "پیش‌بینی ۵×۴", en: "Forecast 5×4" }, tab: "forecast", sql: ["pma_forecast"] },
-  ],
-  "d3-p4": [
-    { id: "d3-p4-ews", title: { fa: "EWS سه لایه", en: "EWS 3-layer" }, tab: "ews", sql: ["pma_alert_rule"] },
-  ],
-  "d3-p6": [
-    /* داشبورد مدیر پروژه از حوزهٔ برنامه‌ریزی به اینجا منتقل شد.
-     *
-     * آنجا میان ابزارهای ساخت برنامه نشسته بود، در حالی که کاری که
-     * می‌کند گزارش وضعیت است نه ساختن زمان‌بندی. حوزهٔ پایش از قبل
-     * همان تب `dash` را داشت، پس این انتقال جای ورودی را عوض می‌کند
-     * نه اینکه نمای تازه‌ای بسازد. */
-    { id: "d3-p6-dash", title: { fa: "داشبورد مدیر پروژه", en: "PM Dashboard" }, tab: "dash", sql: ["pma_dash_config"] },
-    { id: "d3-p6-14", title: { fa: "۱۴ نوع گزارش", en: "14 report types" }, tab: "reports", sql: ["pma_report_def"] },
-    { id: "d3-p6-exec", title: { fa: "گزارش یک‌صفحه EXEC", en: "RPT-EXEC" }, tab: "exec", sql: ["pma_report_instance"] },
-  ],
-};
-
-const D3_TAB_BY_SUB: Record<string, PmaTab> = {
-  "d3-p1-s1": "kpi",
-  "d3-p1-phi": "phi",
-  "d3-p2-s1": "evm",
-  "d3-p2-wpd": "wpd",
-  "d3-p2-fc": "forecast",
-  "d3-p3-s1": "var",
-  "d3-p4-s1": "ews",
-  "d3-p4-ews": "ews",
-  "d3-p5-s1": "action",
-  "d3-p6-s1": "dash",
-  "d3-p6-14": "reports",
-  "d3-p6-exec": "exec",
-  "d3-p6-dash": "dash",
-};
 
 const D4_PAGE_SUBS: Record<string, { id: string; title: Bi; tab: D4Tab; sql: string[] }[]> = {
   "d4-p1": [
@@ -651,8 +613,7 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
 
   const d3Tab = ((): PmaTab => {
     const sid = selected?.sId ?? target.subId;
-    if (sid && D3_TAB_BY_SUB[sid]) return D3_TAB_BY_SUB[sid];
-    return "dash";
+    return d3TabForSub(sid) ?? "dash";
   })();
 
   if (dom.id === "d3") {
@@ -698,6 +659,14 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
         </div>
         <div className="workspace-columns flex min-h-0 flex-1 gap-3 overflow-hidden">
           <div dir={rtl ? "rtl" : "ltr"} className="glass flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl p-3">
+            {(() => {
+              const note = d3ScopeNote(selected?.sId ?? target.subId);
+              return note ? (
+                <p role="status" className="mb-3 shrink-0 rounded-xl border b-line-soft px-3 py-2 text-[10.5px] font-light tx2">
+                  {rtl ? note.fa : note.en}
+                </p>
+              ) : null;
+            })()}
             <PmaWorkspace projectId={target.projectId} lang={lang} initialTab={d3Tab} hideTabs />
           </div>
           <DomainAside
@@ -2232,6 +2201,7 @@ function DomainNavGroups({
                       .filter((s, i, arr) => arr.findIndex((x) => x.id === s.id) === i)
                       .map((s) => {
                         const sqlTables = (s as { sql?: string[] }).sql ?? [];
+                        const scope = m.id === "d3" ? d3ScopeNote(s.id) : undefined;
                         const noAccess = m.id === "d5" && d5ScmSubLocked(s.id, (perm) => rbacCan(navSubject, perm));
                         return (
                           <button
@@ -2244,13 +2214,21 @@ function DomainNavGroups({
                             } ${noAccess ? "opacity-50" : ""}`}
                           >
                             <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: moduleAccent }} />
-                            <span className={`min-w-0 flex-1 truncate text-[10px] font-light ${isNotImplementedSub(s.id) ? "tx3" : "tx1"}`}>{t(s.title, lang)}</span>
+                            <span className={`min-w-0 flex-1 truncate text-[10px] font-light ${isNotImplementedSub(s.id) || scope?.level === "missing" ? "tx3" : "tx1"}`}>{t(s.title, lang)}</span>
                             {isNotImplementedSub(s.id) && (
                               <span
                                 className="shrink-0 rounded border b-line-soft px-1 py-[1px] text-[8px] font-light tx3"
                                 title={rtl ? "در این نسخه پیاده‌سازی نشده" : "Not implemented in this release"}
                               >
                                 {rtl ? "پیاده‌سازی نشده" : "Not implemented"}
+                              </span>
+                            )}
+                            {scope && (
+                              <span
+                                className="shrink-0 rounded border b-line-soft px-1 py-[1px] text-[8px] font-light tx3"
+                                title={rtl ? scope.fa : scope.en}
+                              >
+                                {scope.level === "missing" ? (rtl ? "پیاده‌سازی نشده" : "Not implemented") : (rtl ? "محدود" : "Limited")}
                               </span>
                             )}
                             {noAccess && (

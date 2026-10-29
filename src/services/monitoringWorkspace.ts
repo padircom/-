@@ -59,6 +59,9 @@ export function evmPoint(row: MonitorRow, today: string) {
     formulaVersion: typeof row.FormulaVersion === 'string' ? row.FormulaVersion : null,
   };
 }
+/** آستانهٔ هشدار شاخص‌های EVM؛ هم قاعدهٔ هشدار سرور و هم رنگ‌بندی شاخص‌ها در رابط از همین‌جا می‌آید. */
+export const SPI_ALERT_THRESHOLD = 0.95;
+export const CPI_ALERT_THRESHOLD = 1;
 export type MonitoringItem = { table: string; id: string; code: string; title: string; dueDate: string | null; status: string; critical: boolean; approvedPct: number | null };
 const flag = (v: unknown) => v === true || v === 1 || v === '1';
 export function buildMonitoring(sources: MonitorSource[], today: string, horizonDays: number) {
@@ -101,8 +104,8 @@ export function buildMonitoring(sources: MonitorSource[], today: string, horizon
   const alerts: { table: string; code: string; message: string; count: number | null }[] = [];
   for (const k of summaries) if (k.table !== 'Activity' && k.value !== null && k.value > 0) alerts.push({ table: k.table, code: 'OPEN_' + k.table, message: k.label, count: k.value });
   if (lookahead.some(a => a.status === 'overdue')) alerts.push({ table: 'Activity', code: 'SCHEDULE_OVERDUE', message: 'فعالیت با پایان برنامه‌ای گذشته و بدون اتمام ثبت‌شده', count: lookahead.filter(a => a.status === 'overdue').length });
-  if (evm.latest?.spi !== null && evm.latest?.spi !== undefined && evm.latest.spi < 0.95) alerts.push({ table: 'EvmSnapshot', code: 'SPI_BELOW_095', message: 'SPI کمتر از ۰٫۹۵ در آخرین تصویر ثبت‌شده', count: null });
-  if (evm.latest?.cpi !== null && evm.latest?.cpi !== undefined && evm.latest.cpi < 1) alerts.push({ table: 'EvmSnapshot', code: 'CPI_BELOW_1', message: 'CPI کمتر از یک در آخرین تصویر ثبت‌شده', count: null });
+  if (evm.latest?.spi !== null && evm.latest?.spi !== undefined && evm.latest.spi < SPI_ALERT_THRESHOLD) alerts.push({ table: 'EvmSnapshot', code: 'SPI_BELOW_095', message: 'SPI کمتر از ۰٫۹۵ در آخرین تصویر ثبت‌شده', count: null });
+  if (evm.latest?.cpi !== null && evm.latest?.cpi !== undefined && evm.latest.cpi < CPI_ALERT_THRESHOLD) alerts.push({ table: 'EvmSnapshot', code: 'CPI_BELOW_1', message: 'CPI کمتر از یک در آخرین تصویر ثبت‌شده', count: null });
   return { today, horizonDays, until, summaries, evm, lookahead, actions, alerts,
     sources: sources.map(s => ({ table: s.table, state: s.state, rowCount: usable(s.table) ? s.rows.length : null,
       lastUpdatedAt: usable(s.table) ? s.rows.flatMap(r => [r.UpdatedAt, r.CreatedAt]).map(v => v instanceof Date && Number.isFinite(v.getTime()) ? v.toISOString() : v).filter((v): v is string => typeof v === 'string' && Number.isFinite(Date.parse(v))).sort().slice(-1)[0] ?? null : null })),
