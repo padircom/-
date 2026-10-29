@@ -23,6 +23,7 @@ import {
   type ObsNode,
   type PlanLine,
 } from "../services/workforce";
+import SampleDataNotice from "./SampleDataNotice";
 
 /* شش تب = دقیقاً شش زیرماژول ماژول منابع انسانی */
 export type HrmView = "obs" | "plan" | "mob";
@@ -155,12 +156,15 @@ export default function WorkforceWorkspace({
   lang,
   initialTab = "planning",
   initialView = "obs",
+  selectionNonce = 0,
   hideTabs = false,
 }: {
   lang: Lang;
   initialTab?: HrmTab;
   /** نمای داخلی تب «برنامه‌ریزی»؛ از زیرماژول انتخاب‌شدهٔ سایدبار می‌آید. */
   initialView?: HrmView;
+  /** با هر کلیک روی زیرماژول زیاد می‌شود تا کلیک دوباره روی همان ردیف، تب و نما را به حالت زیرماژول برگرداند. */
+  selectionNonce?: number;
   hideTabs?: boolean;
 }) {
   const rtl = lang === "fa";
@@ -172,8 +176,10 @@ export default function WorkforceWorkspace({
   const [mob, setMob] = useState<MobilizationRequest[]>(SAMPLE_MOB);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [selectedNode, setSelectedNode] = useState<string>("O-6");
-  useEffect(() => setTab(initialTab), [initialTab]);
-  useEffect(() => setView(initialView), [initialView]);
+  useEffect(() => {
+    setTab(initialTab);
+    setView(initialView);
+  }, [initialTab, initialView, selectionNonce]);
 
   const fmt = (n: number) => n.toLocaleString(rtl ? "fa-IR" : "en-US");
 
@@ -321,6 +327,7 @@ export default function WorkforceWorkspace({
         {/* ═══ تب ۱: برنامه‌ریزی نیرو، OBS و تجهیز ═══ */}
         {tab === "planning" && (
           <>
+            <SampleDataNotice rtl={rtl} detail={rtl ? "چارت سازمانی، برنامهٔ نیرو و تجهیز از دادهٔ نمونهٔ پروژه OG-2401 می‌آیند." : "Org chart, manpower plan and mobilization use OG-2401 sample data."} />
             <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
               <Kpi label={rtl ? "نیروی فعال" : "Active headcount"} value={fmt(currentPeriod.actualHC)} hint={`${rtl ? "برنامه" : "plan"} ${fmt(currentPeriod.planHC)}`} />
               <Kpi

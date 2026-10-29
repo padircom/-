@@ -8,6 +8,7 @@ import {
   quantityLines,
   quantityTotals,
 } from "../services/quantities";
+import SampleDataNotice from "./SampleDataNotice";
 
 /* ══════════════════════════════════════════════════════════════════════
    دو تبِ تازهٔ میز کارِ مالی (d5):
@@ -59,6 +60,7 @@ export default function QuantityBalancePanel({ lang, mode }: { lang: Lang; mode:
   if (mode === "quantities") {
     return (
       <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden" dir={rtl ? "rtl" : "ltr"}>
+        <SampleDataNotice rtl={rtl} />
         <div className="grid grid-cols-2 gap-2 xl:grid-cols-4">
           <Card
             label={rtl ? "پیشرفت فیزیکی وزنی" : "Weighted physical progress"}
@@ -139,6 +141,7 @@ export default function QuantityBalancePanel({ lang, mode }: { lang: Lang; mode:
   /* ───── نمای بالانس مصالح ───── */
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden" dir={rtl ? "rtl" : "ltr"}>
+      <SampleDataNotice rtl={rtl} />
       <div className="grid grid-cols-2 gap-2 xl:grid-cols-4">
         <Card
           label={rtl ? "مصرف کلِ دوره" : "Total issues"}

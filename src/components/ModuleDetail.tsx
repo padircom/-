@@ -812,6 +812,8 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
   const d9SubKey = selected?.sId ?? target.subId;
   /* شمارندهٔ کلیک زیرماژول d5: کلیک دوباره روی همان ردیف هم به بخشش اسکرول کند. */
   const [d5Nonce, setD5Nonce] = useState(0);
+  /* همان برای d10: کلیک دوباره روی زیرماژول، نمای داخلی را به حالت آن زیرماژول برمی‌گرداند. */
+  const [d10Nonce, setD10Nonce] = useState(0);
   useEffect(() => { setD9View("eqm"); }, [d9SubKey, dom.id]);
 
   const d5Tab = ((): FinTab => {
@@ -1188,7 +1190,7 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
         </div>
         <div className="workspace-columns flex min-h-0 flex-1 gap-3 overflow-hidden">
           <div dir={rtl ? "rtl" : "ltr"} className="glass flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl p-3">
-            <WorkforceWorkspace lang={lang} initialTab={d10Target.tab} initialView={d10Target.view} hideTabs />
+            <WorkforceWorkspace lang={lang} initialTab={d10Target.tab} initialView={d10Target.view} selectionNonce={d10Nonce} hideTabs />
           </div>
           <DomainAside
               lang={lang}
@@ -1197,6 +1199,7 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
               selectedSubId={selected?.sId}
               onSelectSub={(pId, sId) => {
                 audit("OPEN_SUBPROCESS", { projectId: target.projectId, entity: dom.id, entityId: sId });
+                setD10Nonce((n) => n + 1);
                 setSelected({ pId, sId })
               }}
               onOpenModuleSub={(moduleId, pId, sId) => onNavigate?.({ ...target, moduleId, processId: pId, subId: sId })}

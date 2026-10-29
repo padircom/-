@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { type Lang } from "../data/framework";
 import { PL_SEED, profitLoss } from "../services/profitability";
+import SampleDataNotice from "./SampleDataNotice";
 
 /* ══════════════════════════════════════════════════════════════════════
    تب «سود و زیان پروژه» (d5-p9)
@@ -27,6 +28,7 @@ export default function ProfitLossPanel({ lang }: { lang: Lang }) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden" dir={rtl ? "rtl" : "ltr"}>
+      <SampleDataNotice rtl={rtl} />
       <div className="grid grid-cols-2 gap-2 xl:grid-cols-4">
         <Cell label={rtl ? "سود ناخالص تا امروز" : "Gross profit to date"} value={money(pl.grossProfit)} tone={tone(pl.grossProfit)} hint={pct(pl.grossMarginPct)} />
         <Cell label={rtl ? "حاشیهٔ تحقق‌یافته" : "Earned margin"} value={pct(pl.earnedMarginPct)} hint={rtl ? "متناسب با پیشرفت" : "progress-weighted"} />

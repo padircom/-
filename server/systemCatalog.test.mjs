@@ -69,7 +69,10 @@ test("NAM-2: برند واحد — سربرگ، عنوان مرورگر و بن�
     en: "Enterprise ERP, Project & Operations Platform",
   });
   assert.deepEqual(mod.ui.hubTitle, mod.PLATFORM_BRAND.name, "سربرگ باید از کاتالوگ خوانده شود");
-  assert.deepEqual(mod.ui.frameworkTitle, mod.PLATFORM_BRAND.name, "عنوان چارچوب باید از کاتالوگ خوانده شود");
+  /* عنوان چارچوب (لوگوتایپ بالای جست‌وجوی سایدبار) عمداً عنوان کوتاه برند است، نه عنوان بلند؛
+     منبعش همچنان کاتالوگ است (توضیح در framework.ts → ui.frameworkTitle). */
+  assert.deepEqual(mod.ui.frameworkTitle, mod.PLATFORM_BRAND.shortName, "عنوان چارچوب باید از کاتالوگ خوانده شود");
+  assert.equal(mod.PLATFORM_BRAND.shortName.en, "Arena Enterprise");
   const html = readFileSync(path.join(root, "index.html"), "utf8");
   assert.match(html, /<title>Arena Enterprise \| سامانه جامع مدیریت یکپارچه سازمان، پروژه و عملیات صنعتی<\/title>/);
   assert.doesNotMatch(html, /PM Control Platform/);
