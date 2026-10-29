@@ -28,6 +28,7 @@ import CostSupplyWorkspace, { type FinTab } from "./CostSupplyWorkspace";
 import QualityWorkspace, { type QmsTab } from "./QualityWorkspace";
 import WorkforceWorkspace from "./WorkforceWorkspace";
 import { eqmTabForSub, hrmTargetForSub, isNotImplementedSub } from "../services/resourceNav";
+import { D5_SCM_TAB_BY_SUB, d5ScmProcesses } from "../services/costSupplyNav";
 import CommunicationWorkspace, { type CkmTab } from "./CommunicationWorkspace";
 import MachineryWorkspace from "./MachineryWorkspace";
 import ManufacturingWorkspace from "./ManufacturingWorkspace";
@@ -869,6 +870,7 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
   const d5Tab = ((): FinTab => {
     const sid = selected?.sId ?? target.subId;
     if (sid && D5_TAB_BY_SUB[sid]) return D5_TAB_BY_SUB[sid];
+    if (sid && D5_SCM_TAB_BY_SUB[sid]) return D5_SCM_TAB_BY_SUB[sid];
     return "cost";
   })();
 
@@ -1997,14 +1999,15 @@ function DomainNavGroups({
       ].map(({ processIds, ...section }) => ({
         ...section,
         module: m,
-        processes: processes.filter((p) => processIds.includes(p.id)).map((p) => p.id !== "d5-p8" ? p : ({
+        /* شش تب تأمین/لجستیک (p10…p15) در framework نیستند؛ اینجا به بخش خودشان اضافه می‌شوند. */
+        processes: [...processes.filter((p) => processIds.includes(p.id)).map((p) => p.id !== "d5-p8" ? p : ({
           ...p,
           title: { fa: "گزارش تراز مصالح و انحراف مصرف پروژه", en: "Project material balance & consumption variance report" },
           subs: p.subs.map((sub) => sub.id !== "d5-p8-s2" ? sub : ({
             ...sub,
             title: { fa: "گزارش انحراف مصرف و ضایعات پروژه", en: "Project consumption variance & waste report" },
           })),
-        })),
+        })), ...d5ScmProcesses(section.key)],
       }));
     }
     if (m.id !== "d14") return [{ module: m, key: m.id, title: m.nav ?? m.title, processes }];
