@@ -11,6 +11,7 @@ import {
 } from "../data/framework";
 import { useSystem } from "../context/SystemContext";
 import { roleLabel, useAuth } from "../context/AuthContext";
+import { DEMO_SUBJECTS, can as rbacCan } from "../services/accessControl";
 import type { ModuleNavTarget } from "./RightSidebar";
 import CapabilityDetail from "./CapabilityDetail";
 import AdminWorkspace from "./AdminWorkspace";
@@ -28,7 +29,7 @@ import CostSupplyWorkspace, { type FinTab } from "./CostSupplyWorkspace";
 import QualityWorkspace, { type QmsTab } from "./QualityWorkspace";
 import WorkforceWorkspace from "./WorkforceWorkspace";
 import { eqmTabForSub, hrmTargetForSub, isNotImplementedSub, isTcoSub } from "../services/resourceNav";
-import { D5_PAGE_SUBS, d5ScmProcesses, d5SectionForSub, d5TabForSub, d5ViewForSub } from "../services/costSupplyNav";
+import { D5_PAGE_SUBS, d5ScmProcesses, d5ScmSubLocked, d5SectionForSub, d5TabForSub, d5ViewForSub } from "../services/costSupplyNav";
 import CommunicationWorkspace, { type CkmTab } from "./CommunicationWorkspace";
 import MachineryWorkspace from "./MachineryWorkspace";
 import ManufacturingWorkspace from "./ManufacturingWorkspace";
@@ -1914,7 +1915,9 @@ function DomainNavGroups({
   onOpenModuleSub: (moduleId: string, processId: string, subId: string) => void;
 }) {
   const rtl = lang === "fa";
-  const { can } = useAuth();
+  const { can, user: navUser } = useAuth();
+  /* مجوزهای ریزِ SCM در accessControl هستند (نه AuthContext)؛ مثل CostSupplyWorkspace. */
+  const navSubject = DEMO_SUBJECTS.find((x) => x.id === navUser?.id) ?? null;
   const [expandedD14Sections, setExpandedD14Sections] = useState<Record<string, boolean> | null>(null);
   const [expandedD5Sections, setExpandedD5Sections] = useState<Record<string, boolean> | null>(null);
   const [expandedResourceSections, setExpandedResourceSections] = useState<Record<string, boolean> | null>(null);
@@ -2229,14 +2232,16 @@ function DomainNavGroups({
                       .filter((s, i, arr) => arr.findIndex((x) => x.id === s.id) === i)
                       .map((s) => {
                         const sqlTables = (s as { sql?: string[] }).sql ?? [];
+                        const noAccess = m.id === "d5" && d5ScmSubLocked(s.id, (perm) => rbacCan(navSubject, perm));
                         return (
                           <button
                             key={s.id}
                             type="button"
                             onClick={() => selectSub(p.id, s.id)}
+                            title={noAccess ? (rtl ? "بدون دسترسی: مجوز «مشاهده بسته خرید» لازم است" : "No access: the “View procurement packages” permission is required") : undefined}
                             className={`group flex w-full items-center gap-2 rounded-lg text-start transition hover:bg-[var(--row-hover)] ${isExcellenceSection ? "py-1 pe-1.5 ps-5" : "py-1.5 pe-2 ps-7"} ${
                               isCurrent && selectedSubId === s.id ? "row-on" : ""
-                            }`}
+                            } ${noAccess ? "opacity-50" : ""}`}
                           >
                             <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: moduleAccent }} />
                             <span className={`min-w-0 flex-1 truncate text-[10px] font-light ${isNotImplementedSub(s.id) ? "tx3" : "tx1"}`}>{t(s.title, lang)}</span>
@@ -2246,6 +2251,11 @@ function DomainNavGroups({
                                 title={rtl ? "در این نسخه پیاده‌سازی نشده" : "Not implemented in this release"}
                               >
                                 {rtl ? "پیاده‌سازی نشده" : "Not implemented"}
+                              </span>
+                            )}
+                            {noAccess && (
+                              <span className="shrink-0 rounded border b-line-soft px-1 py-[1px] text-[8px] font-light tx3">
+                                {rtl ? "بدون دسترسی" : "No access"}
                               </span>
                             )}
                             {showSql && sqlTables.length > 0 && (

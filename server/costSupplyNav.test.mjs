@@ -6,6 +6,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
   D5_DETAIL_VIEW_SUBS,
+  D5_SCM_VIEW_PERMISSION,
+  d5ScmSubLocked,
   D5_SCM_NAV,
   D5_SCM_TAB_BY_SUB,
   D5_SECTION_ANCHORS,
@@ -107,4 +109,24 @@ test("پنل‌های p7 تا p9 هر دو نما را پشتیبانی می‌�
   for (const src of panels) assert.match(src, /view === "detail"/);
   const md = readFileSync(new URL("../src/components/ModuleDetail.tsx", import.meta.url), "utf8");
   assert.match(md, /panelView=\{d5ViewForSub\(/);
+});
+
+test("ردیف‌های SCM بدون مجوز scm.package.view کم‌رنگ می‌شوند؛ بقیهٔ ردیف‌ها هرگز", () => {
+  const none = () => false;
+  const all = () => true;
+  for (const e of D5_SCM_NAV) {
+    assert.equal(d5ScmSubLocked(e.subId, none), true, e.subId);
+    assert.equal(d5ScmSubLocked(e.subId, all), false, e.subId);
+  }
+  /* فقط همان یک مجوز پرسیده می‌شود. */
+  const asked = [];
+  d5ScmSubLocked("d5-p10-s1", (p) => { asked.push(p); return true; });
+  assert.deepEqual(asked, [D5_SCM_VIEW_PERMISSION]);
+  /* ردیف‌های رسمی و افزودهٔ d5 و ورودی نامعتبر قفل نمی‌شوند. */
+  for (const id of ["d5-p1-s1", "d5-p1-cbs", "d5-p7-s2", "d5-p9-s2", undefined, "nope"]) {
+    assert.equal(d5ScmSubLocked(id, none), false, String(id));
+  }
+  /* مجوز واقعاً در کاتالوگ دسترسی تعریف شده است. */
+  const ac = readFileSync(new URL("../src/services/accessControl.ts", import.meta.url), "utf8");
+  assert.ok(ac.includes(`P("${D5_SCM_VIEW_PERMISSION}"`));
 });

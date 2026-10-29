@@ -52,6 +52,18 @@ export const D5_SCM_TAB_BY_SUB: Record<string, FinTab> = Object.fromEntries(
   D5_SCM_NAV.map((e) => [e.subId, e.tab]),
 );
 
+/**
+ * مجوزِ لازم برای هر شش تب SCM در d5: همهٔ آن‌ها از مسیر `workspace` SCM می‌خوانند
+ * و آن مسیر `scm.package.view` می‌خواهد. بدون آن، ردیف کم‌رنگ می‌شود (پنهان نمی‌شود).
+ */
+export const D5_SCM_VIEW_PERMISSION = "scm.package.view";
+
+/** آیا این زیرماژول یکی از ردیف‌های SCM است و کاربر مجوز دیدنش را ندارد؟ */
+export function d5ScmSubLocked(subId: string | undefined, can: (permission: string) => boolean): boolean {
+  if (!subId || !(subId in D5_SCM_TAB_BY_SUB)) return false;
+  return !can(D5_SCM_VIEW_PERMISSION);
+}
+
 /** فرایندهای افزودهٔ یک بخش سایدبار (هر فرایند یک زیرماژول دارد). */
 export function d5ScmProcesses(section: string): Process[] {
   return D5_SCM_NAV.filter((e) => e.section === section).map((e) => ({
