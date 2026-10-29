@@ -12,6 +12,7 @@ import { buildFinView, type FinView, type PrStatus } from "../services/finWorksp
 import { FinClient, type FinResult, type FinWorkspacePayload } from "../services/finApi";
 import { ScmClient, type ScmWorkspacePayload } from "../services/scmApi";
 import QuantityBalancePanel from "./QuantityBalancePanel";
+import { mergeScmStock, type StockMerge } from "../services/stockSource";
 import ProfitLossPanel from "./ProfitLossPanel";
 
 /* ═══════════════ میز کار هزینه، تأمین و لجستیک (d5) ═══════════════
@@ -250,7 +251,12 @@ export default function CostSupplyWorkspace({
     return false;
   };
 
-  const view = useMemo(() => (ws ? buildFinView(ws) : null), [ws]);
+  /* موجودی کالایی که در SCM ثبت شده از SCM می‌آید (مالک موجودی عملیاتی)؛ بقیه از StockItem. */
+  const stockMerge = useMemo(() => (ws ? mergeScmStock(ws.stock, scmWs?.balances ?? []) : null), [ws, scmWs]);
+  const view = useMemo(
+    () => (ws ? buildFinView(stockMerge ? { ...ws, stock: stockMerge.stock as typeof ws.stock } : ws) : null),
+    [ws, stockMerge],
+  );
 
   /* ─────────── وضعیت‌های بدون داده ─────────── */
   const header = (v: FinView | null) => (
@@ -362,7 +368,7 @@ export default function CostSupplyWorkspace({
           </EmptyState>
         ) : (
           <>
-            <Tabs rtl={rtl} lang={lang} tab={tab} ws={ws} v={view} perm={perm} busy={busy} client={client} act={act} />
+            <Tabs rtl={rtl} lang={lang} tab={tab} ws={ws} v={view} stockMerge={stockMerge} perm={perm} busy={busy} client={client} act={act} />
             {(tab.startsWith("scm-")) && (
               <ScmTabs rtl={rtl} tab={tab} scmWs={scmWs} busy={scmBusy} msg={scmMsg} onClearMsg={()=>setScmMsg(null)} client={scmClient} act={scmAct} />
             )}
@@ -515,7 +521,7 @@ function AccountForm({ rtl, ws, busy, onCreate }: { rtl: boolean; ws: FinWorkspa
 type Perm = { post: boolean; budget: boolean; procure: boolean; approve: boolean; reserve: boolean };
 type Act = (fn: () => Promise<FinResult<unknown>>, okText: string, auditCode?: string) => Promise<boolean>;
 
-function Tabs({ rtl, lang, tab, ws, v, perm, busy, client, act }: { rtl: boolean; lang: Lang; tab: FinTab; ws: FinWorkspacePayload; v: FinView; perm: Perm; busy: boolean; client: FinClient; act: Act }) {
+function Tabs({ rtl, lang, tab, ws, v, stockMerge, perm, busy, client, act }: { rtl: boolean; lang: Lang; tab: FinTab; ws: FinWorkspacePayload; v: FinView; stockMerge: StockMerge<FinWorkspacePayload["stock"][number]> | null; perm: Perm; busy: boolean; client: FinClient; act: Act }) {
   const currencies = Object.keys(v.settings.Rates);
   const accountOptions = ws.accounts.map((a) => <option key={a.Code} value={a.Code}>{a.Code} · {a.TitleFa}</option>);
   const sev = varianceSeverity(v.evKnown && v.evm.cpi ? (v.evm.cpi - 1) * 100 : 0);
@@ -1106,7 +1112,7 @@ function Tabs({ rtl, lang, tab, ws, v, perm, busy, client, act }: { rtl: boolean
             <Kpi label={rtl ? "اقلام کلاس A" : "Class A items"} value={String(Object.values(v.abc).filter((x) => x === "A").length)} />
           </div>
 
-          <Section anchor="d5s-inventory-control" title={rtl ? "کنترل موجودی — ذخیره ایمنی، نقطه سفارش و EOQ" : "Inventory control"} note={rtl ? "موجودی را مستقیم ویرایش کنید؛ اسناد رسمی انبار در فاز P6" : "edit on-hand directly; formal warehouse docs in P6"}>
+          <Section anchor="d5s-inventory-control" title={rtl ? "کنترل موجودی — ذخیره ایمنی، نقطه سفارش و EOQ" : "Inventory control"} note={rtl ? "کالای دارای موجودی در انبار SCM فقط‌خواندنی است؛ بقیه را مستقیم ویرایش کنید" : "items stocked in SCM warehouses are read-only; edit the rest directly"}>
             <div className="overflow-x-auto">
               <table className="w-full text-[9.5px]">
                 <thead className="tx3">
@@ -1114,13 +1120,34 @@ function Tabs({ rtl, lang, tab, ws, v, perm, busy, client, act }: { rtl: boolean
                 </thead>
                 <tbody>
                   {v.stock.map((s) => (
-                    <StockRowView key={s.row.Code} rtl={rtl} s={s} abc={v.abc[s.row.Code]} canEdit={perm.procure} busy={busy}
+                    <StockRowView key={s.row.Code} rtl={rtl} s={s} abc={v.abc[s.row.Code]} canEdit={perm.procure} managed={stockMerge?.scmManaged.has(s.row.Code) ?? false} busy={busy}
                       onSave={(onHand) => act(() => client.updateStock(s.row.Code, { OnHand: onHand }), rtl ? `موجودی ${s.row.Code} به‌روز شد` : `Stock ${s.row.Code} updated`)}
                       onDelete={() => act(() => client.deleteStock(s.row.Code), rtl ? `کالای ${s.row.Code} حذف شد` : `Deleted ${s.row.Code}`)} />
                   ))}
                 </tbody>
               </table>
             </div>
+            {stockMerge && (stockMerge.scmManaged.size > 0 || stockMerge.scmOnly.length > 0) && (
+              <div role="note" className="mt-2 rounded-xl border b-line-soft bg-black/10 p-2 text-[9px] tx3">
+                {rtl
+                  ? `${stockMerge.scmManaged.size.toLocaleString("fa-IR")} کالا موجودی‌اش را از انبارهای SCM می‌گیرد (جمع همهٔ انبارها).`
+                  : `${stockMerge.scmManaged.size} item(s) take on-hand from SCM warehouses (sum of all warehouses).`}
+                {stockMerge.mismatches.length > 0 && (
+                  <span className="text-amber-200">
+                    {rtl
+                      ? ` ${stockMerge.mismatches.length.toLocaleString("fa-IR")} مورد با مقدار قبلیِ ثبت‌شده در d5 اختلاف دارد: ${stockMerge.mismatches.map((m) => m.code).join("، ")}.`
+                      : ` ${stockMerge.mismatches.length} differ from the value previously stored in d5: ${stockMerge.mismatches.map((m) => m.code).join(", ")}.`}
+                  </span>
+                )}
+                {stockMerge.scmOnly.length > 0 && (
+                  <span>
+                    {rtl
+                      ? ` ${stockMerge.scmOnly.length.toLocaleString("fa-IR")} کالا فقط در SCM موجودی دارد و چون مصرف/لیدتایم ندارد در این جدول نیست.`
+                      : ` ${stockMerge.scmOnly.length} item(s) exist only in SCM and are not listed here (no usage/lead-time parameters).`}
+                  </span>
+                )}
+              </div>
+            )}
             {perm.procure && (
               <div className="mt-2 flex flex-wrap items-end gap-1.5 rounded-xl border b-line-soft bg-black/10 p-2">
                 <span className="w-full text-[9px] tx3">{rtl ? "افزودن کالا" : "Add stock item"}</span>
@@ -1145,7 +1172,7 @@ function Tabs({ rtl, lang, tab, ws, v, perm, busy, client, act }: { rtl: boolean
             <div className="grid gap-2 md:grid-cols-3">
               {[
                 { fa: "POهای در انتظار رسید کامل", en: "POs awaiting full receipt", v: String(ws.pos.filter((p) => p.Status === "issued" || p.Status === "acknowledged" || p.Status === "partially_received").length), icon: "📥" },
-                { fa: "اقلام در راه", en: "Items on order", v: String(ws.stock.filter((s) => Number(s.OnOrder ?? 0) > 0).length), icon: "🚚" },
+                { fa: "اقلام در راه", en: "Items on order", v: String(v.stock.filter((s) => Number(s.row.OnOrder ?? 0) > 0).length), icon: "🚚" },
                 { fa: "پیشنهاد تجدید سفارش", en: "Reorder suggestions", v: String(v.mrp.length), icon: "🔁" },
               ].map((c) => (
                 <div key={c.en} className="rounded-xl border b-line-soft bg-black/15 p-2">
@@ -1552,8 +1579,8 @@ function LinkMrForm({ rtl, busy, packages, mrs, client, act, inputCls, btnPrimar
   );
 }
 
-function StockRowView({ rtl, s, abc, canEdit, busy, onSave, onDelete }: {
-  rtl: boolean; s: FinView["stock"][number]; abc: string | undefined; canEdit: boolean; busy: boolean;
+function StockRowView({ rtl, s, abc, canEdit, managed, busy, onSave, onDelete }: {
+  rtl: boolean; s: FinView["stock"][number]; abc: string | undefined; canEdit: boolean; managed: boolean; busy: boolean;
   onSave: (onHand: number) => Promise<boolean>; onDelete: () => Promise<boolean>;
 }) {
   const [draft, setDraft] = useState<string | null>(null);
@@ -1563,10 +1590,15 @@ function StockRowView({ rtl, s, abc, canEdit, busy, onSave, onDelete }: {
       <td className="px-2 py-1 font-mono tx2" dir="ltr">{r.Code}</td>
       <td className="px-2 py-1 tx1">{r.NameFa} <span className="tx4">{r.Unit ?? ""}</span></td>
       <td className="px-2 py-1 tabular-nums tx1" dir="ltr">
-        {canEdit ? (
+        {canEdit && !managed ? (
           <input className={`${inputCls} w-20`} type="number" min={0} value={draft ?? String(r.OnHand)} onChange={(e) => setDraft(e.target.value)}
             onBlur={async () => { if (draft !== null && Number(draft) !== Number(r.OnHand)) await onSave(Number(draft)); setDraft(null); }} />
-        ) : qty(r.OnHand)}
+        ) : (
+          <span title={managed ? (rtl ? "از انبارهای SCM می‌آید" : "from SCM warehouses") : undefined}>
+            {qty(r.OnHand)}
+            {managed && <span className="ms-1 rounded border b-line-soft px-1 text-[8px] tx3">SCM</span>}
+          </span>
+        )}
       </td>
       <td className="px-2 py-1 tabular-nums tx3" dir="ltr">{qty(r.OnOrder ?? 0)}</td>
       <td className="px-2 py-1 tabular-nums tx3" dir="ltr">{Math.round(s.ss)}</td>
@@ -1586,7 +1618,7 @@ function StockRowView({ rtl, s, abc, canEdit, busy, onSave, onDelete }: {
         )}
       </td>
       <td className="px-2 py-1">
-        {canEdit && Number(r.OnHand) === 0 && <button onClick={() => void onDelete()} disabled={busy} className="text-[9px] text-rose-300 hover:text-rose-200">✕</button>}
+        {canEdit && !managed && Number(r.OnHand) === 0 && <button onClick={() => void onDelete()} disabled={busy} className="text-[9px] text-rose-300 hover:text-rose-200">✕</button>}
       </td>
     </tr>
   );
