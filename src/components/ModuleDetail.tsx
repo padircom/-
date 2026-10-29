@@ -28,7 +28,7 @@ import CostSupplyWorkspace, { type FinTab } from "./CostSupplyWorkspace";
 import QualityWorkspace, { type QmsTab } from "./QualityWorkspace";
 import WorkforceWorkspace from "./WorkforceWorkspace";
 import { eqmTabForSub, hrmTargetForSub, isNotImplementedSub } from "../services/resourceNav";
-import { D5_SCM_TAB_BY_SUB, d5ScmProcesses } from "../services/costSupplyNav";
+import { D5_PAGE_SUBS, d5ScmProcesses, d5SectionForSub, d5TabForSub } from "../services/costSupplyNav";
 import CommunicationWorkspace, { type CkmTab } from "./CommunicationWorkspace";
 import MachineryWorkspace from "./MachineryWorkspace";
 import ManufacturingWorkspace from "./ManufacturingWorkspace";
@@ -310,61 +310,6 @@ const D15_TAB_BY_SUB: Record<string, ComTab> = {
   "d15-p5-s2": "overview",
   "d15-p6-s1": "overview",
   "d15-p6-s2": "overview",
-};
-
-/** Extra submodules only on the d5 inner page — main sidebar untouched. */
-const D5_PAGE_SUBS: Record<string, { id: string; title: Bi; tab: FinTab; sql: string[] }[]> = {
-  "d5-p1": [
-    { id: "d5-p1-cbs", title: { fa: "ساختار شکست هزینه و PMB", en: "CBS & PMB" }, tab: "cost", sql: ["fin_cbs_node", "fin_pmb_period"] },
-    { id: "d5-p1-res", title: { fa: "ذخیره احتیاطی و اختیار برداشت", en: "Reserve & DoA" }, tab: "cost", sql: ["fin_reserve_ledger"] },
-  ],
-  "d5-p2": [
-    { id: "d5-p2-evm", title: { fa: "EVM و پنج روش EAC", en: "EVM & five EACs" }, tab: "control", sql: ["fin_evm_snapshot"] },
-    { id: "d5-p2-snap", title: { fa: "Snapshot تغییرناپذیر و نسخه فرمول", en: "Immutable snapshots" }, tab: "control", sql: ["fin_evm_snapshot"] },
-  ],
-  "d5-p3": [
-    { id: "d5-p3-age", title: { fa: "سن مطالبات و سرمایه در گردش", en: "AR aging & working capital" }, tab: "cash", sql: ["fin_receivable", "fin_payable"] },
-    { id: "d5-p3-ipc", title: { fa: "صورت‌وضعیت و کسورات", en: "Progress invoice" }, tab: "cash", sql: ["fin_progress_invoice"] },
-  ],
-  "d5-p4": [
-    { id: "d5-p4-mrp", title: { fa: "پیشنهاد تجدید سفارش و تاریخ نیاز کالا", en: "Reorder suggestions & material need date" }, tab: "pr", sql: ["fin_mrp_run"] },
-    { id: "d5-p4-bud", title: { fa: "کنترل بودجه و مسیر تأیید", en: "Budget check & approval route" }, tab: "pr", sql: ["fin_pr_line"] },
-  ],
-  "d5-p5": [
-    { id: "d5-p5-com", title: { fa: "زنجیره تعهد و عملکرد تأمین‌کننده", en: "Commitment & vendor scoring" }, tab: "po", sql: ["fin_commitment", "fin_vendor_score"] },
-    { id: "d5-p5-3wm", title: { fa: "تطابق سه‌جانبه پیش از پرداخت", en: "3-way match gate" }, tab: "po", sql: ["fin_invoice_match"] },
-  ],
-  "d5-p6": [
-    { id: "d5-p6-rop", title: { fa: "نقطه سفارش، EOQ و طبقه‌بندی ABC", en: "ROP, EOQ & ABC" }, tab: "inventory", sql: ["fin_stock_balance"] },
-    { id: "d5-p6-trc", title: { fa: "ردیابی بچ و گردش انبار", en: "Batch traceability & flow" }, tab: "inventory", sql: ["fin_grn", "fin_issuance"] },
-  ],
-};
-
-const D5_TAB_BY_SUB: Record<string, FinTab> = {
-  "d5-p1-s1": "cost",
-  "d5-p1-cbs": "cost",
-  "d5-p1-res": "cost",
-  "d5-p2-s1": "control",
-  "d5-p2-evm": "control",
-  "d5-p2-snap": "control",
-  "d5-p3-s1": "cash",
-  "d5-p3-age": "cash",
-  "d5-p3-ipc": "cash",
-  "d5-p4-s1": "pr",
-  "d5-p4-mrp": "pr",
-  "d5-p4-bud": "pr",
-  "d5-p5-s1": "po",
-  "d5-p5-com": "po",
-  "d5-p5-3wm": "po",
-  "d5-p6-s1": "inventory",
-  "d5-p6-rop": "inventory",
-  "d5-p6-trc": "inventory",
-  "d5-p7-s1": "quantities",
-  "d5-p7-s2": "quantities",
-  "d5-p8-s1": "balance",
-  "d5-p8-s2": "balance",
-  "d5-p9-s1": "pnl",
-  "d5-p9-s2": "pnl",
 };
 
 const D17_TAB_BY_SUB: Record<string, HseFieldTab> = {
@@ -865,13 +810,13 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
   /* انتخاب هر زیرماژول سایدبار (حتی از ماژول دیگر) نما را از MES به EQM برمی‌گرداند؛
      وگرنه با باز بودن MES کلیک روی زیرماژول هیچ اثر دیدنی نداشت. */
   const d9SubKey = selected?.sId ?? target.subId;
+  /* شمارندهٔ کلیک زیرماژول d5: کلیک دوباره روی همان ردیف هم به بخشش اسکرول کند. */
+  const [d5Nonce, setD5Nonce] = useState(0);
   useEffect(() => { setD9View("eqm"); }, [d9SubKey, dom.id]);
 
   const d5Tab = ((): FinTab => {
     const sid = selected?.sId ?? target.subId;
-    if (sid && D5_TAB_BY_SUB[sid]) return D5_TAB_BY_SUB[sid];
-    if (sid && D5_SCM_TAB_BY_SUB[sid]) return D5_SCM_TAB_BY_SUB[sid];
-    return "cost";
+    return d5TabForSub(sid) ?? "cost";
   })();
 
   const d8Tab = ((): QmsTab => {
@@ -1430,7 +1375,7 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
         </div>
         <div className="workspace-columns flex min-h-0 flex-1 gap-3 overflow-hidden">
           <div dir={rtl ? "rtl" : "ltr"} className="glass flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl p-3">
-            <CostSupplyWorkspace lang={lang} initialTab={d5Tab} hideTabs hideHeader />
+            <CostSupplyWorkspace lang={lang} initialTab={d5Tab} hideTabs hideHeader focusSection={d5SectionForSub(selected?.sId ?? target.subId)} focusNonce={d5Nonce} />
           </div>
           <DomainAside
             lang={lang}
@@ -1440,6 +1385,7 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
             extraSubs={D5_PAGE_SUBS}
             onSelectSub={(pId, sId) => {
               audit("OPEN_SUBPROCESS", { projectId: target.projectId, entity: dom.id, entityId: sId });
+              setD5Nonce((n) => n + 1);
               setSelected({ pId, sId });
             }}
             onOpenModuleSub={(moduleId, pId, sId) => onNavigate?.({ ...target, moduleId, processId: pId, subId: sId })}

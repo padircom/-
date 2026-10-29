@@ -1,5 +1,5 @@
 import PersianDateInput from "./PersianDateInput";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Lang } from "../data/framework";
 import { ErpSyncAction } from "./ConnectorActions";
 import { logAudit } from "../services/auditLogger";
@@ -74,9 +74,9 @@ function Kpi({ label, value, hint, tone = "tx1" }: { label: string; value: strin
   );
 }
 
-function Section({ title, note, children }: { title: string; note?: string; children: React.ReactNode }) {
+function Section({ title, note, anchor, children }: { title: string; note?: string; anchor?: string; children: React.ReactNode }) {
   return (
-    <section className="glass-dark rounded-2xl p-3">
+    <section className="glass-dark rounded-2xl p-3" data-d5-section={anchor}>
       <div className="mb-2 flex flex-wrap items-baseline gap-2">
         <h4 className="text-[11px] font-semibold tx1">{title}</h4>
         {note && <span className="text-[8.5px] font-extralight tx3">{note}</span>}
@@ -131,11 +131,17 @@ export default function CostSupplyWorkspace({
   initialTab = "cost",
   hideTabs = false,
   hideHeader = false,
+  focusSection,
+  focusNonce = 0,
 }: {
   lang: Lang;
   initialTab?: FinTab;
   hideTabs?: boolean;
   hideHeader?: boolean;
+  /** بخش مقصد داخل تب (`top` یا شناسهٔ بدون پیشوند `d5s-`)؛ از زیرماژول سایدبار می‌آید. */
+  focusSection?: string;
+  /** با هر کلیک روی زیرماژول زیاد می‌شود تا کلیک دوباره روی همان ردیف هم اسکرول کند. */
+  focusNonce?: number;
 }) {
   /* شناسهٔ پروژه از «پروژهٔ جاری» می‌آید (SystemContext) — نه ثابتِ ماژول. */
   const projectId = useCurrentProjectId();
@@ -169,6 +175,31 @@ export default function CostSupplyWorkspace({
   const [msg, setMsg] = useState<{ tone: "ok" | "err"; text: string } | null>(null);
   const [scmMsg, setScmMsg] = useState<{ tone: "ok" | "err"; text: string } | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+
+  /* اسکرول به بخش زیرماژولِ انتخاب‌شده. اگر بخش هنوز رندر نشده (داده در راه است)
+   * کلید «انجام‌شده» ثبت نمی‌شود و با رسیدن داده دوباره تلاش می‌کنیم. */
+  const scrollBoxRef = useRef<HTMLDivElement>(null);
+  const focusDoneRef = useRef("");
+  useEffect(() => {
+    if (!focusSection) return;
+    const key = `${tab}|${focusSection}|${focusNonce}`;
+    if (focusDoneRef.current === key) return;
+    const box = scrollBoxRef.current;
+    if (!box) return;
+    if (focusSection === "top") {
+      box.scrollTo({ top: 0, behavior: "smooth" });
+      focusDoneRef.current = key;
+      return;
+    }
+    const el = box.querySelector<HTMLElement>(`[data-d5-section="d5s-${focusSection}"]`);
+    if (!el) return;
+    focusDoneRef.current = key;
+    const top = el.getBoundingClientRect().top - box.getBoundingClientRect().top + box.scrollTop - 4;
+    box.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
+    el.classList.add("ring-1", "ring-sky-400/60");
+    const timer = window.setTimeout(() => el.classList.remove("ring-1", "ring-sky-400/60"), 1600);
+    return () => window.clearTimeout(timer);
+  }, [tab, focusSection, focusNonce, loading, ws, scmWs]);
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -358,7 +389,7 @@ export default function CostSupplyWorkspace({
           وضعیت اتصال فقط داخل تنظیمات نشان داده می‌شود و هشدار تنها پس از اقدام است. */}
       {!hideHeader && !tab.startsWith("scm-") && <ErpSyncAction lang={lang} />}
       {tabsNav}
-      <div className="thin-scroll min-h-0 flex-1 space-y-3 overflow-y-auto pe-1">{body}</div>
+      <div ref={scrollBoxRef} className="thin-scroll min-h-0 flex-1 space-y-3 overflow-y-auto pe-1">{body}</div>
     </div>
   );
 }
@@ -535,7 +566,7 @@ function Tabs({ rtl, lang, tab, ws, v, perm, busy, client, act }: { rtl: boolean
             <Kpi label={rtl ? "نرخ دلار مبنا" : "USD rate"} value={v.settings.Rates.USD ? v.settings.Rates.USD.toLocaleString("en-US") : "—"} hint={rtl ? "از تنظیمات" : "from settings"} />
           </div>
 
-          <Section title={rtl ? "ساختار شکست هزینه (CBS) — جمع چندسطحی" : "Cost Breakdown Structure"} note={rtl ? "تعهد و واقعی از دفتر مشترک (d5 + EQP + HRM)" : "committed & actual from shared ledger"}>
+          <Section anchor="d5s-cbs" title={rtl ? "ساختار شکست هزینه (CBS) — جمع چندسطحی" : "Cost Breakdown Structure"} note={rtl ? "تعهد و واقعی از دفتر مشترک (d5 + EQP + HRM)" : "committed & actual from shared ledger"}>
             <div className="overflow-x-auto">
               <table className="w-full text-[9.5px]">
                 <thead className="tx3">
@@ -603,7 +634,7 @@ function Tabs({ rtl, lang, tab, ws, v, perm, busy, client, act }: { rtl: boolean
             </div>
           </Section>
 
-          <Section title={rtl ? "ذخیره احتیاطی — آزادسازی فقط با اختیار (DoA)" : "Reserve — DoA guarded"} note={rtl ? "جابه‌جایی بودجه از حساب ذخیره به حساب مقصد، با دلیل و ثبت" : "budget transfer with reason"}>
+          <Section anchor="d5s-reserve" title={rtl ? "ذخیره احتیاطی — آزادسازی فقط با اختیار (DoA)" : "Reserve — DoA guarded"} note={rtl ? "جابه‌جایی بودجه از حساب ذخیره به حساب مقصد، با دلیل و ثبت" : "budget transfer with reason"}>
             {perm.reserve ? (
               <div className="flex flex-wrap items-end gap-1.5">
                 <input className={`${inputCls} w-32`} type="number" placeholder={rtl ? "مبلغ (ریال)" : "amount"} value={reserveF.v.amount} onChange={reserveF.set("amount")} dir="ltr" />
@@ -661,7 +692,7 @@ function Tabs({ rtl, lang, tab, ws, v, perm, busy, client, act }: { rtl: boolean
           </div>
 
           {v.evKnown && (
-            <Section title={rtl ? "پنج روش برآورد هزینه نهایی (EAC)" : "Five EAC methods"} note={`TCPI(BAC) ${v.evm.tcpiBac?.toFixed(3) ?? "—"}`}>
+            <Section anchor="d5s-eac" title={rtl ? "پنج روش برآورد هزینه نهایی (EAC)" : "Five EAC methods"} note={`TCPI(BAC) ${v.evm.tcpiBac?.toFixed(3) ?? "—"}`}>
               <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
                 <Kpi label="AC + (BAC−EV)" value={fmtB(v.evm.eac.ate ?? 0, rtl)} hint={rtl ? "روند غیرتکراری" : "atypical"} />
                 <Kpi label="BAC / CPI" value={fmtB(v.evm.eac.cpi ?? 0, rtl)} hint={rtl ? "روند تکراری" : "typical"} />
@@ -693,7 +724,7 @@ function Tabs({ rtl, lang, tab, ws, v, perm, busy, client, act }: { rtl: boolean
             </Section>
           )}
 
-          <Section title={rtl ? "Snapshot تغییرناپذیر EVM" : "Immutable EVM snapshots"} note={rtl ? "سرور از دادهٔ ذخیره‌شده می‌سازد، با هش مهر می‌کند؛ هر تاریخ داده یک بار" : "server-built, hashed, one per data date"}>
+          <Section anchor="d5s-snapshots" title={rtl ? "Snapshot تغییرناپذیر EVM" : "Immutable EVM snapshots"} note={rtl ? "سرور از دادهٔ ذخیره‌شده می‌سازد، با هش مهر می‌کند؛ هر تاریخ داده یک بار" : "server-built, hashed, one per data date"}>
             {perm.post && (
               <button onClick={() => void act(() => client.snapshot(), rtl ? `Snapshot تاریخ ${v.settings.DataDate} ثبت شد` : "Snapshot frozen", "EVM_SNAPSHOT")} disabled={busy || !v.evKnown} className={`${btnPrimary} mb-2`}>
                 {rtl ? `ثبت Snapshot تاریخ ${v.settings.DataDate}` : `Freeze snapshot at ${v.settings.DataDate}`}
@@ -719,7 +750,7 @@ function Tabs({ rtl, lang, tab, ws, v, perm, busy, client, act }: { rtl: boolean
             )}
           </Section>
 
-          <Section title={rtl ? "هزینه‌های واقعی ثبت‌شده در d5" : "Actual cost transactions (d5)"} note={rtl ? "فاکتور PO خودکار ثبت می‌شود؛ تبدیل به ارز پایه با نرخ لحظهٔ ثبت" : "PO invoices auto-post; FX at posting rate"}>
+          <Section anchor="d5s-actuals" title={rtl ? "هزینه‌های واقعی ثبت‌شده در d5" : "Actual cost transactions (d5)"} note={rtl ? "فاکتور PO خودکار ثبت می‌شود؛ تبدیل به ارز پایه با نرخ لحظهٔ ثبت" : "PO invoices auto-post; FX at posting rate"}>
             <div className="overflow-x-auto">
               <table className="w-full text-[9.5px]">
                 <thead className="tx3">
@@ -775,14 +806,14 @@ function Tabs({ rtl, lang, tab, ws, v, perm, busy, client, act }: { rtl: boolean
             <Kpi label="IRR" value={pct(v.cash.irrAnnual)} hint={`payback ${v.cash.paybackPeriods?.toFixed(1) ?? "—"}`} />
           </div>
 
-          <Section title={rtl ? "منحنی نقدینگی — مانده تجمعی" : "Cash curve — cumulative"} note={rtl ? `خروجی گذشته = هزینهٔ ثبت‌شده؛ آینده = PMB · ورودی = PMB با تأخیر ${v.settings.CollectionLagPeriods} دوره و حاشیهٔ ${v.settings.BillingMarkupPct}٪ (فرض قابل‌تنظیم)` : "past = posted cost; future = PMB; inflow = lagged PMB + markup (editable)"}>
+          <Section anchor="d5s-cash-curve" title={rtl ? "منحنی نقدینگی — مانده تجمعی" : "Cash curve — cumulative"} note={rtl ? `خروجی گذشته = هزینهٔ ثبت‌شده؛ آینده = PMB · ورودی = PMB با تأخیر ${v.settings.CollectionLagPeriods} دوره و حاشیهٔ ${v.settings.BillingMarkupPct}٪ (فرض قابل‌تنظیم)` : "past = posted cost; future = PMB; inflow = lagged PMB + markup (editable)"}>
             <Bars values={v.cash.netCum.map((x) => Math.abs(x))} colors={v.cash.netCum.map((x) => (x < 0 ? "rgba(244,63,94,0.55)" : "rgba(52,211,153,0.55)"))} />
             <div className="mt-1 text-[8.5px] tx4" dir="ltr">
               min {fmtB(v.cash.netCum.length ? Math.min(...v.cash.netCum) : null, rtl)} · max {fmtB(v.cash.netCum.length ? Math.max(...v.cash.netCum) : null, rtl)}
             </div>
           </Section>
 
-          <Section title={rtl ? "سن مطالبات (AR Aging)" : "AR aging"} note={rtl ? "تأخیر = تاریخ داده − سررسید" : "overdue = data date − due"}>
+          <Section anchor="d5s-ar-aging" title={rtl ? "سن مطالبات (AR Aging)" : "AR aging"} note={rtl ? "تأخیر = تاریخ داده − سررسید" : "overdue = data date − due"}>
             <div className="overflow-x-auto">
               <table className="w-full text-[9.5px]">
                 <thead className="tx3">
@@ -832,7 +863,7 @@ function Tabs({ rtl, lang, tab, ws, v, perm, busy, client, act }: { rtl: boolean
             )}
           </Section>
 
-          <Section title={rtl ? "ماشین‌حساب صورت‌وضعیت (خالص پرداختنی)" : "Progress invoice calculator"} note={rtl ? `حسن انجام ${v.settings.RetentionPct}٪ · استهلاک پیش‌پرداخت ${v.settings.AdvanceRecoveryPct}٪ · کسور ${v.settings.LegalDeductionPct}٪ (از تنظیمات) — صورت‌وضعیت رسمی در ماژول پیمان` : "percentages from settings; official IPCs live in the contracts module"}>
+          <Section anchor="d5s-ipc-calc" title={rtl ? "ماشین‌حساب صورت‌وضعیت (خالص پرداختنی)" : "Progress invoice calculator"} note={rtl ? `حسن انجام ${v.settings.RetentionPct}٪ · استهلاک پیش‌پرداخت ${v.settings.AdvanceRecoveryPct}٪ · کسور ${v.settings.LegalDeductionPct}٪ (از تنظیمات) — صورت‌وضعیت رسمی در ماژول پیمان` : "percentages from settings; official IPCs live in the contracts module"}>
             <input className={`${inputCls} mb-2 w-44`} type="number" placeholder={rtl ? "مبلغ ناخالص (ریال)" : "gross (IRR)"} value={ipcGross} onChange={(e) => setIpcGross(e.target.value)} dir="ltr" />
             {(() => {
               const ipc = progressInvoice(Number(ipcGross) || 0, v.settings.RetentionPct, v.settings.AdvanceRecoveryPct, v.settings.LegalDeductionPct);
@@ -860,7 +891,7 @@ function Tabs({ rtl, lang, tab, ws, v, perm, busy, client, act }: { rtl: boolean
             <Kpi label={rtl ? "بودجهٔ متعهدنشده" : "Uncommitted budget"} value={fmtB(v.uncommitted, rtl)} />
           </div>
 
-          <Section title={rtl ? "کنترل بودجه پیش از تأیید PR" : "Budget verification before PR approval"} note={rtl ? "در دسترس = Σبودجه − تعهد − واقعیِ زیردرخت CBS؛ فراتر از بودجه = رد مگر با override و دلیل" : "available = subtree budget − committed − actual"}>
+          <Section anchor="d5s-budget-check" title={rtl ? "کنترل بودجه پیش از تأیید PR" : "Budget verification before PR approval"} note={rtl ? "در دسترس = Σبودجه − تعهد − واقعیِ زیردرخت CBS؛ فراتر از بودجه = رد مگر با override و دلیل" : "available = subtree budget − committed − actual"}>
             <div className="overflow-x-auto">
               <table className="w-full text-[9.5px]">
                 <thead className="tx3">
@@ -918,7 +949,7 @@ function Tabs({ rtl, lang, tab, ws, v, perm, busy, client, act }: { rtl: boolean
             )}
           </Section>
 
-          <Section title={rtl ? "پیشنهاد تجدید سفارش — درخواست خرید" : "Reorder suggestions — purchase requisitions"} note={rtl ? `کسری = نیاز ${v.settings.MrpHorizonDays} روزه (مصرف میانگین) + ذخیره ایمنی − موجودی − در راه` : `shortage over ${v.settings.MrpHorizonDays}-day horizon`}>
+          <Section anchor="d5s-reorder" title={rtl ? "پیشنهاد تجدید سفارش — درخواست خرید" : "Reorder suggestions — purchase requisitions"} note={rtl ? `کسری = نیاز ${v.settings.MrpHorizonDays} روزه (مصرف میانگین) + ذخیره ایمنی − موجودی − در راه` : `shortage over ${v.settings.MrpHorizonDays}-day horizon`}>
             {v.mrp.length === 0 ? (
               <p className="text-[9px] tx4">{rtl ? "کسری‌ای شناسایی نشد." : "No shortage."}</p>
             ) : (
@@ -950,7 +981,7 @@ function Tabs({ rtl, lang, tab, ws, v, perm, busy, client, act }: { rtl: boolean
             <Kpi label={rtl ? "بودجهٔ متعهدنشده" : "Uncommitted budget"} value={fmtB(v.uncommitted, rtl)} />
           </div>
 
-          <Section title={rtl ? "زنجیره تعهد: PR ← PO ← رسید ← فاکتور ← پرداخت" : "Commitment chain"} note={rtl ? "فاکتور = هزینهٔ واقعی خودکار؛ پرداخت فقط با تطابق سه‌جانبه" : "invoice auto-posts actual; payment gated by 3-way match"}>
+          <Section anchor="d5s-commitment" title={rtl ? "زنجیره تعهد: PR ← PO ← رسید ← فاکتور ← پرداخت" : "Commitment chain"} note={rtl ? "فاکتور = هزینهٔ واقعی خودکار؛ پرداخت فقط با تطابق سه‌جانبه" : "invoice auto-posts actual; payment gated by 3-way match"}>
             <div className="overflow-x-auto">
               <table className="w-full text-[9.5px]">
                 <thead className="tx3">
@@ -1042,7 +1073,7 @@ function Tabs({ rtl, lang, tab, ws, v, perm, busy, client, act }: { rtl: boolean
             )}
           </Section>
 
-          <Section title={rtl ? "تطابق سه‌جانبهٔ تجمعی پیش از پرداخت" : "Cumulative 3-way match gate"} note={rtl ? "تلورانس ۵٪؛ فاکتور بیش از رسید یا سفارش، یا انحراف قیمت = پرداخت مسدود" : "5% tolerance"}>
+          <Section anchor="d5s-match3" title={rtl ? "تطابق سه‌جانبهٔ تجمعی پیش از پرداخت" : "Cumulative 3-way match gate"} note={rtl ? "تلورانس ۵٪؛ فاکتور بیش از رسید یا سفارش، یا انحراف قیمت = پرداخت مسدود" : "5% tolerance"}>
             {v.commitments.filter((c) => c.match).length === 0 ? (
               <p className="text-[9px] tx4">{rtl ? "هنوز فاکتوری برای تطبیق ثبت نشده." : "No invoices to match yet."}</p>
             ) : (
@@ -1072,7 +1103,7 @@ function Tabs({ rtl, lang, tab, ws, v, perm, busy, client, act }: { rtl: boolean
             <Kpi label={rtl ? "اقلام کلاس A" : "Class A items"} value={String(Object.values(v.abc).filter((x) => x === "A").length)} />
           </div>
 
-          <Section title={rtl ? "کنترل موجودی — ذخیره ایمنی، نقطه سفارش و EOQ" : "Inventory control"} note={rtl ? "موجودی را مستقیم ویرایش کنید؛ اسناد رسمی انبار در فاز P6" : "edit on-hand directly; formal warehouse docs in P6"}>
+          <Section anchor="d5s-inventory-control" title={rtl ? "کنترل موجودی — ذخیره ایمنی، نقطه سفارش و EOQ" : "Inventory control"} note={rtl ? "موجودی را مستقیم ویرایش کنید؛ اسناد رسمی انبار در فاز P6" : "edit on-hand directly; formal warehouse docs in P6"}>
             <div className="overflow-x-auto">
               <table className="w-full text-[9.5px]">
                 <thead className="tx3">
@@ -1107,7 +1138,7 @@ function Tabs({ rtl, lang, tab, ws, v, perm, busy, client, act }: { rtl: boolean
             )}
           </Section>
 
-          <Section title={rtl ? "گردش انبار" : "Warehouse flow"} note={rtl ? "شمارش‌ها از دادهٔ واقعی؛ اسناد رسید (MRS)، حواله (MIV) و عودت (MRV) در فاز P6" : "counts from live data; formal docs in P6"}>
+          <Section anchor="d5s-warehouse-flow" title={rtl ? "گردش انبار" : "Warehouse flow"} note={rtl ? "شمارش‌ها از دادهٔ واقعی؛ اسناد رسید (MRS)، حواله (MIV) و عودت (MRV) در فاز P6" : "counts from live data; formal docs in P6"}>
             <div className="grid gap-2 md:grid-cols-3">
               {[
                 { fa: "POهای در انتظار رسید کامل", en: "POs awaiting full receipt", v: String(ws.pos.filter((p) => p.Status === "issued" || p.Status === "acknowledged" || p.Status === "partially_received").length), icon: "📥" },

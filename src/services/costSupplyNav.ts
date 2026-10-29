@@ -70,6 +70,106 @@ export function d5ScmProcesses(section: string): Process[] {
   }));
 }
 
+/* ───────────── نگاشت‌های d5 (پیش‌تر در ModuleDetail.tsx) ───────────── */
+
+/** Extra submodules only on the d5 inner page — main sidebar untouched. */
+export const D5_PAGE_SUBS: Record<string, { id: string; title: Bi; tab: FinTab; sql: string[] }[]> = {
+  "d5-p1": [
+    { id: "d5-p1-cbs", title: { fa: "ساختار شکست هزینه و PMB", en: "CBS & PMB" }, tab: "cost", sql: ["fin_cbs_node", "fin_pmb_period"] },
+    { id: "d5-p1-res", title: { fa: "ذخیره احتیاطی و اختیار برداشت", en: "Reserve & DoA" }, tab: "cost", sql: ["fin_reserve_ledger"] },
+  ],
+  "d5-p2": [
+    { id: "d5-p2-evm", title: { fa: "EVM و پنج روش EAC", en: "EVM & five EACs" }, tab: "control", sql: ["fin_evm_snapshot"] },
+    { id: "d5-p2-snap", title: { fa: "Snapshot تغییرناپذیر و نسخه فرمول", en: "Immutable snapshots" }, tab: "control", sql: ["fin_evm_snapshot"] },
+  ],
+  "d5-p3": [
+    { id: "d5-p3-age", title: { fa: "سن مطالبات و سرمایه در گردش", en: "AR aging & working capital" }, tab: "cash", sql: ["fin_receivable", "fin_payable"] },
+    { id: "d5-p3-ipc", title: { fa: "صورت‌وضعیت و کسورات", en: "Progress invoice" }, tab: "cash", sql: ["fin_progress_invoice"] },
+  ],
+  "d5-p4": [
+    { id: "d5-p4-mrp", title: { fa: "پیشنهاد تجدید سفارش و تاریخ نیاز کالا", en: "Reorder suggestions & material need date" }, tab: "pr", sql: ["fin_mrp_run"] },
+    { id: "d5-p4-bud", title: { fa: "کنترل بودجه و مسیر تأیید", en: "Budget check & approval route" }, tab: "pr", sql: ["fin_pr_line"] },
+  ],
+  "d5-p5": [
+    { id: "d5-p5-com", title: { fa: "زنجیره تعهد و عملکرد تأمین‌کننده", en: "Commitment & vendor scoring" }, tab: "po", sql: ["fin_commitment", "fin_vendor_score"] },
+    { id: "d5-p5-3wm", title: { fa: "تطابق سه‌جانبه پیش از پرداخت", en: "3-way match gate" }, tab: "po", sql: ["fin_invoice_match"] },
+  ],
+  "d5-p6": [
+    { id: "d5-p6-rop", title: { fa: "نقطه سفارش، EOQ و طبقه‌بندی ABC", en: "ROP, EOQ & ABC" }, tab: "inventory", sql: ["fin_stock_balance"] },
+    { id: "d5-p6-trc", title: { fa: "ردیابی بچ و گردش انبار", en: "Batch traceability & flow" }, tab: "inventory", sql: ["fin_grn", "fin_issuance"] },
+  ],
+};
+
+export const D5_TAB_BY_SUB: Record<string, FinTab> = {
+  "d5-p1-s1": "cost",
+  "d5-p1-cbs": "cost",
+  "d5-p1-res": "cost",
+  "d5-p2-s1": "control",
+  "d5-p2-evm": "control",
+  "d5-p2-snap": "control",
+  "d5-p3-s1": "cash",
+  "d5-p3-age": "cash",
+  "d5-p3-ipc": "cash",
+  "d5-p4-s1": "pr",
+  "d5-p4-mrp": "pr",
+  "d5-p4-bud": "pr",
+  "d5-p5-s1": "po",
+  "d5-p5-com": "po",
+  "d5-p5-3wm": "po",
+  "d5-p6-s1": "inventory",
+  "d5-p6-rop": "inventory",
+  "d5-p6-trc": "inventory",
+  "d5-p7-s1": "quantities",
+  "d5-p7-s2": "quantities",
+  "d5-p8-s1": "balance",
+  "d5-p8-s2": "balance",
+  "d5-p9-s1": "pnl",
+  "d5-p9-s2": "pnl",
+};
+
+/** مقصد تب برای هر زیرماژول d5، شامل ردیف‌های رسمی، افزوده و تأمین/لجستیک. */
+export function d5TabForSub(subId?: string): FinTab | undefined {
+  if (!subId) return undefined;
+  return D5_TAB_BY_SUB[subId] ?? D5_SCM_TAB_BY_SUB[subId];
+}
+
+/**
+ * بخشِ داخل تب که هر زیرماژول باید به آن برسد. `top` یعنی ابتدای تب.
+ * شناسه‌ها با `anchor` روی `<Section>` در CostSupplyWorkspace.tsx یکی‌اند.
+ * تب‌های مستقل (p7 تا p9) و تأمین/لجستیک تک‌صفحه‌ای‌اند و به ابتدای تب می‌روند.
+ */
+export const D5_SECTION_BY_SUB: Record<string, string> = {
+  "d5-p1-s1": "top",
+  "d5-p1-cbs": "cbs",
+  "d5-p1-res": "reserve",
+  "d5-p2-s1": "actuals",
+  "d5-p2-evm": "eac",
+  "d5-p2-snap": "snapshots",
+  "d5-p3-s1": "cash-curve",
+  "d5-p3-age": "ar-aging",
+  "d5-p3-ipc": "ipc-calc",
+  "d5-p4-s1": "top",
+  "d5-p4-mrp": "reorder",
+  "d5-p4-bud": "budget-check",
+  "d5-p5-s1": "top",
+  "d5-p5-com": "commitment",
+  "d5-p5-3wm": "match3",
+  "d5-p6-s1": "inventory-control",
+  "d5-p6-rop": "inventory-control",
+  "d5-p6-trc": "warehouse-flow",
+};
+
+/** بخش مقصد؛ زیرماژولِ بی‌بخش (p7 تا p9، تأمین/لجستیک) → ابتدای تب. */
+export function d5SectionForSub(subId?: string): string | undefined {
+  if (!subId) return undefined;
+  return D5_SECTION_BY_SUB[subId] ?? (d5TabForSub(subId) ? "top" : undefined);
+}
+
+/** همهٔ شناسه‌های بخش (به‌جز top) که باید روی <Section anchor> باشند. */
+export const D5_SECTION_ANCHORS: readonly string[] = [
+  ...new Set(Object.values(D5_SECTION_BY_SUB).filter((a) => a !== "top")),
+];
+
 export type CostSupplyNavReport = {
   /** شناسه‌های تکراری میان خود ردیف‌ها. */
   duplicateIds: string[];
@@ -77,6 +177,12 @@ export type CostSupplyNavReport = {
   collisions: string[];
   /** تب‌های scm-* که هیچ ردیفی ندارند (باید خالی باشد). */
   uncoveredScmTabs: string[];
+  /** زیرماژول‌های d5 (رسمی + افزوده + تأمین/لجستیک) بدون نگاشت تب. */
+  noTab: string[];
+  /** همان‌ها بدون بخش مقصد. */
+  noSection: string[];
+  /** زیرماژول‌هایی که فقط در D5_SECTION_BY_SUB هستند و هیچ جا تعریف نشده‌اند. */
+  orphanSections: string[];
 };
 
 export const SCM_TAB_IDS: readonly FinTab[] = [
@@ -101,5 +207,12 @@ export function costSupplyNavReport(): CostSupplyNavReport {
   const collisions = [...seen].filter((id) => official.has(id));
   const covered = new Set(D5_SCM_NAV.map((e) => e.tab));
   const uncoveredScmTabs = SCM_TAB_IDS.filter((t) => !covered.has(t));
-  return { duplicateIds, collisions, uncoveredScmTabs };
+  const allSubs = new Set<string>();
+  for (const p of d5?.processes ?? []) for (const sub of p.subs) allSubs.add(sub.id);
+  for (const list of Object.values(D5_PAGE_SUBS)) for (const sub of list) allSubs.add(sub.id);
+  for (const e of D5_SCM_NAV) allSubs.add(e.subId);
+  const noTab = [...allSubs].filter((id) => !d5TabForSub(id));
+  const noSection = [...allSubs].filter((id) => !d5SectionForSub(id));
+  const orphanSections = Object.keys(D5_SECTION_BY_SUB).filter((id) => !allSubs.has(id));
+  return { duplicateIds, collisions, uncoveredScmTabs, noTab, noSection, orphanSections };
 }
