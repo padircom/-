@@ -27,8 +27,8 @@ import ContractRiskWorkspace, { type ContractRiskSection } from "./ContractRiskW
 import CostSupplyWorkspace, { type FinTab } from "./CostSupplyWorkspace";
 import QualityWorkspace, { type QmsTab } from "./QualityWorkspace";
 import WorkforceWorkspace from "./WorkforceWorkspace";
-import { eqmTabForSub, hrmTargetForSub, isNotImplementedSub } from "../services/resourceNav";
-import { D5_PAGE_SUBS, d5ScmProcesses, d5SectionForSub, d5TabForSub } from "../services/costSupplyNav";
+import { eqmTabForSub, hrmTargetForSub, isNotImplementedSub, isTcoSub } from "../services/resourceNav";
+import { D5_PAGE_SUBS, d5ScmProcesses, d5SectionForSub, d5TabForSub, d5ViewForSub } from "../services/costSupplyNav";
 import CommunicationWorkspace, { type CkmTab } from "./CommunicationWorkspace";
 import MachineryWorkspace from "./MachineryWorkspace";
 import ManufacturingWorkspace from "./ManufacturingWorkspace";
@@ -1137,7 +1137,7 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
                       : "This section is not implemented in this release. The closest related tab is shown below."}
                   </p>
                 )}
-                <MachineryWorkspace projectId={target.projectId} lang={lang} initialTab={d9Tab} hideTabs />
+                <MachineryWorkspace projectId={target.projectId} lang={lang} initialTab={d9Tab} hideTabs showTco={isTcoSub(d9SubKey)} />
               </>
             )}
           </div>
@@ -1378,7 +1378,7 @@ function ModuleDetailView({ lang, target, onBack, onOpenFlowNet, onNavigate }: P
         </div>
         <div className="workspace-columns flex min-h-0 flex-1 gap-3 overflow-hidden">
           <div dir={rtl ? "rtl" : "ltr"} className="glass flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl p-3">
-            <CostSupplyWorkspace lang={lang} initialTab={d5Tab} hideTabs hideHeader focusSection={d5SectionForSub(selected?.sId ?? target.subId)} focusNonce={d5Nonce} />
+            <CostSupplyWorkspace lang={lang} initialTab={d5Tab} hideTabs hideHeader focusSection={d5SectionForSub(selected?.sId ?? target.subId)} focusNonce={d5Nonce} panelView={d5ViewForSub(selected?.sId ?? target.subId)} />
           </div>
           <DomainAside
             lang={lang}

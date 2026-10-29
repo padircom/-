@@ -127,6 +127,16 @@ export const D5_TAB_BY_SUB: Record<string, FinTab> = {
   "d5-p9-s2": "pnl",
 };
 
+/**
+ * زیرماژول‌های دومِ p7 تا p9 که محتوای جدا دارند (نمای «detail» همان پنل).
+ * بقیهٔ زیرماژول‌ها نمای «main» را نشان می‌دهند.
+ */
+export const D5_DETAIL_VIEW_SUBS: readonly string[] = ["d5-p7-s2", "d5-p8-s2", "d5-p9-s2"];
+
+export function d5ViewForSub(subId?: string): "main" | "detail" {
+  return subId && D5_DETAIL_VIEW_SUBS.includes(subId) ? "detail" : "main";
+}
+
 /** مقصد تب برای هر زیرماژول d5، شامل ردیف‌های رسمی، افزوده و تأمین/لجستیک. */
 export function d5TabForSub(subId?: string): FinTab | undefined {
   if (!subId) return undefined;

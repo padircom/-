@@ -50,14 +50,20 @@ export const D9_TAB_BY_SUB: Record<string, EqmTab> = {
  * زیرماژول‌های d9 که در EQM هنوز قابلیت اختصاصی ندارند و به نزدیک‌ترین تب می‌روند.
  * سایدبار کنارشان نشان «پیاده‌سازی نشده» می‌گذارد و بالای تب پیام می‌آید.
  * تاکسونومی/اسکن، RCA و OEE با CMMS هم‌پوشان‌اند (CMMS مستقل و اختیاری است)؛
- * TCO کار خود EQM است و رابطش هنوز ساخته نشده.
+ * TCO کار خود EQM است و ماشین‌حسابش ساخته شده (`D9_TCO_SUB`)، پس در این فهرست نیست.
  */
 export const D9_NOT_IMPLEMENTED_SUBS: ReadonlySet<string> = new Set([
   "d9-p1-s2", // تاکسونومی ISO 14224 و شناسهٔ اسکن
   "d9-p4-s3", // تحلیل ریشه‌ای خرابی
   "d9-p5-s2", // تابلوی هشت شاخص و OEE
-  "d9-p5-s3", // TCO و خرید در برابر اجاره
 ]);
+
+/** زیرماژولی که ماشین‌حساب TCO و خرید/اجاره را نشان می‌دهد (در تب «بهره‌وری»). */
+export const D9_TCO_SUB = "d9-p5-s3";
+
+export function isTcoSub(subId?: string): boolean {
+  return subId === D9_TCO_SUB;
+}
 
 export function isNotImplementedSub(subId?: string): boolean {
   return Boolean(subId) && D9_NOT_IMPLEMENTED_SUBS.has(subId as string);

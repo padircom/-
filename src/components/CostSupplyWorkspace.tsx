@@ -133,6 +133,7 @@ export default function CostSupplyWorkspace({
   hideHeader = false,
   focusSection,
   focusNonce = 0,
+  panelView = "main",
 }: {
   lang: Lang;
   initialTab?: FinTab;
@@ -142,6 +143,8 @@ export default function CostSupplyWorkspace({
   focusSection?: string;
   /** با هر کلیک روی زیرماژول زیاد می‌شود تا کلیک دوباره روی همان ردیف هم اسکرول کند. */
   focusNonce?: number;
+  /** نمای پنل‌های مستقل (p7 تا p9): `detail` = زیرماژول دوم. */
+  panelView?: "main" | "detail";
 }) {
   /* شناسهٔ پروژه از «پروژهٔ جاری» می‌آید (SystemContext) — نه ثابتِ ماژول. */
   const projectId = useCurrentProjectId();
@@ -328,9 +331,9 @@ export default function CostSupplyWorkspace({
   if (independent) {
     body = (
       <>
-        {tab === "quantities" && <QuantityBalancePanel lang={lang} mode="quantities" />}
-        {tab === "balance" && <QuantityBalancePanel lang={lang} mode="balance" />}
-        {tab === "pnl" && <ProfitLossPanel lang={lang} />}
+        {tab === "quantities" && <QuantityBalancePanel lang={lang} mode="quantities" view={panelView} />}
+        {tab === "balance" && <QuantityBalancePanel lang={lang} mode="balance" view={panelView} />}
+        {tab === "pnl" && <ProfitLossPanel lang={lang} view={panelView} />}
       </>
     );
   } else if (loading && !ws) {

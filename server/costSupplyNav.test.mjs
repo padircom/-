@@ -5,6 +5,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
+  D5_DETAIL_VIEW_SUBS,
   D5_SCM_NAV,
   D5_SCM_TAB_BY_SUB,
   D5_SECTION_ANCHORS,
@@ -14,6 +15,7 @@ import {
   d5ScmProcesses,
   d5SectionForSub,
   d5TabForSub,
+  d5ViewForSub,
 } from "./csNavLogic.js";
 
 test("هر شش تب scm-* دقیقاً یک ردیف سایدبار دارند", () => {
@@ -85,4 +87,24 @@ test("هر بخش مقصد در CostSupplyWorkspace.tsx یک <Section anchor> د
   for (const a of D5_SECTION_ANCHORS) {
     assert.ok(inSource.includes(a), `anchor «${a}» در کامپوننت نیست`);
   }
+});
+
+test("p7-s2، p8-s2 و p9-s2 نمای جدا دارند و s1ها نمای اصلی", () => {
+  assert.deepEqual([...D5_DETAIL_VIEW_SUBS].sort(), ["d5-p7-s2", "d5-p8-s2", "d5-p9-s2"]);
+  for (const p of ["p7", "p8", "p9"]) {
+    assert.equal(d5ViewForSub(`d5-${p}-s1`), "main");
+    assert.equal(d5ViewForSub(`d5-${p}-s2`), "detail");
+    // هر دو زیرماژول روی یک تبِ مستقل می‌مانند؛ فقط نمایشان فرق می‌کند.
+    assert.equal(d5TabForSub(`d5-${p}-s1`), d5TabForSub(`d5-${p}-s2`));
+  }
+  assert.equal(d5ViewForSub(undefined), "main");
+  assert.equal(d5ViewForSub("d5-p1-cbs"), "main");
+});
+
+test("پنل‌های p7 تا p9 هر دو نما را پشتیبانی می‌کنند و ModuleDetail نما را می‌فرستد", () => {
+  const panels = ["QuantityBalancePanel", "ProfitLossPanel"].map((f) =>
+    readFileSync(new URL(`../src/components/${f}.tsx`, import.meta.url), "utf8"));
+  for (const src of panels) assert.match(src, /view === "detail"/);
+  const md = readFileSync(new URL("../src/components/ModuleDetail.tsx", import.meta.url), "utf8");
+  assert.match(md, /panelView=\{d5ViewForSub\(/);
 });

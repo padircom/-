@@ -8,6 +8,7 @@ import {
   D10_TARGET_BY_SUB,
   D9_TAB_BY_SUB,
   D9_NOT_IMPLEMENTED_SUBS,
+  isTcoSub,
   eqmTabForSub,
   isNotImplementedSub,
   hrmTargetForSub,
@@ -67,9 +68,24 @@ test("d9: فهرست «پیاده‌سازی نشده» فقط شناسه‌ها
   assert.deepEqual(badNotImplemented, [], `نامعتبر: ${badNotImplemented.join(", ")}`);
   assert.deepEqual(
     [...D9_NOT_IMPLEMENTED_SUBS].sort(),
-    ["d9-p1-s2", "d9-p4-s3", "d9-p5-s2", "d9-p5-s3"],
+    ["d9-p1-s2", "d9-p4-s3", "d9-p5-s2"],
   );
-  assert.equal(isNotImplementedSub("d9-p5-s3"), true);
+  /* TCO ساخته شده؛ دیگر «پیاده‌سازی نشده» نیست و ماشین‌حساب خودش را دارد. */
+  assert.equal(isNotImplementedSub("d9-p5-s3"), false);
+  assert.equal(isTcoSub("d9-p5-s3"), true);
+  assert.equal(isTcoSub("d9-p5-s2"), false);
+  assert.equal(isTcoSub(undefined), false);
   assert.equal(isNotImplementedSub("d9-p1-s1"), false);
   assert.equal(isNotImplementedSub(undefined), false);
+});
+
+test("d9-p5-s3: ModuleDetail نمای TCO را می‌فرستد و MachineryWorkspace آن را در تب بهره‌وری رندر می‌کند", async () => {
+  const { readFileSync } = await import("node:fs");
+  const read = (f) => readFileSync(new URL(`../src/components/${f}.tsx`, import.meta.url), "utf8");
+  assert.match(read("ModuleDetail"), /showTco=\{isTcoSub\(d9SubKey\)\}/);
+  const mw = read("MachineryWorkspace");
+  assert.match(mw, /tab==='productivity'&&showTco\?<EquipmentTcoPanel/);
+  /* ماشین‌حساب باید همان توابعِ سرور را به کار ببرد، نه فرمول جداگانه. */
+  const panel = read("EquipmentTcoPanel");
+  assert.match(panel, /import \{[^}]*buyVsRent[^}]*tco[^}]*\} from "..\/services\/equipment"/);
 });
